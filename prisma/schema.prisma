@@ -1,0 +1,702 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["erp"]
+}
+
+enum AppRole {
+  SUPER_ADMIN
+  OWNER
+  ADMIN
+  SALES
+  FINANCE
+  TEACHER
+  AUDITOR
+
+  @@schema("erp")
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  TRIAL_CONSULTATION
+  REGISTERED
+  LOST
+  NURTURE
+
+  @@schema("erp")
+}
+
+enum StudentLifecycleStatus {
+  GROUP_WAITING
+  ACTIVE
+  DEBT
+  FROZEN
+  STOPPED
+  COMPLETED
+
+  @@schema("erp")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+
+  @@schema("erp")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+
+  @@schema("erp")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  ONLINE
+  OTHER
+
+  @@schema("erp")
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+
+  @@schema("erp")
+}
+
+enum ApprovalStatus {
+  DRAFT
+  REQUESTED
+  FINANCE_APPROVED
+  OWNER_APPROVED
+  APPROVED
+  REJECTED
+  PAID
+
+  @@schema("erp")
+}
+
+enum PaymentAllocationMode {
+  OLDEST_FIRST
+  SELECTED_INVOICE
+  ADVANCE_TO_NEXT
+  MANUAL
+
+  @@schema("erp")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  authUserId String? @unique @map("auth_user_id") @db.Uuid
+  fullName  String   @map("full_name")
+  email     String   @unique
+  phone     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  roles                         UserRole[]
+  managedLeads                  Lead[]                     @relation("LeadManager")
+  managedStudents               Student[]                  @relation("StudentManager")
+  leadStageChanges              LeadStageHistory[]          @relation("LeadStageChanger")
+  statusChanges                 StudentStatusHistory[]      @relation("StatusChanger")
+  createdPricingVersions        ProgramPricingVersion[]     @relation("PricingCreator")
+  teacherAssignmentChanges      TeacherAssignmentHistory[]  @relation("TeacherAssignmentChanger")
+  createdPayments               Payment[]                   @relation("PaymentCreator")
+  requestedRefundAdjustments    RefundAdjustment[]          @relation("RefundRequestedBy")
+  financeApprovedAdjustments    RefundAdjustment[]          @relation("RefundFinanceApprovedBy")
+  ownerApprovedAdjustments      RefundAdjustment[]          @relation("RefundOwnerApprovedBy")
+  createdTeacherRules           TeacherContractRule[]       @relation("TeacherRuleCreator")
+  generatedPayouts              TeacherPayout[]             @relation("PayoutGeneratedBy")
+  approvedPayouts               TeacherPayout[]             @relation("PayoutApprovedBy")
+  ownedTasks                    Task[]                      @relation("TaskOwner")
+  createdTasks                  Task[]                      @relation("TaskCreator")
+  ownedTargets                  Target[]                    @relation("TargetOwner")
+  managedTargets                Target[]                    @relation("TargetManager")
+  auditLogs                     AuditLog[]                  @relation("AuditActor")
+  exports                       DataExport[]                @relation("ExportRequestedBy")
+
+  @@map("users")
+  @@schema("erp")
+}
+
+model Role {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      AppRole  @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+  @@schema("erp")
+}
+
+model UserRole {
+  userId     String   @map("user_id") @db.Uuid
+  roleId     String   @map("role_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+  @@schema("erp")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+  @@schema("erp")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+  @@schema("erp")
+}
+
+model Contact {
+  id              String   @id @default(uuid()) @db.Uuid
+  fullName        String   @map("full_name")
+  phoneDisplay    String?  @map("phone_display")
+  phoneNormalized String?  @unique @map("phone_normalized")
+  email           String?
+  source          String?
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  leads                Lead[]
+  students             Student[]
+  teacherProfiles      Teacher[]
+  studentRelationships StudentRelationship[]
+
+  @@index([fullName])
+  @@map("contacts")
+  @@schema("erp")
+}
+
+model Lead {
+  id                String    @id @default(uuid()) @db.Uuid
+  contactId         String    @map("contact_id") @db.Uuid
+  stage             LeadStage @default(NEW)
+  source            String?
+  sourceRef         String?   @unique @map("source_ref")
+  managerId         String?   @map("manager_id") @db.Uuid
+  programInterestId String?   @map("program_interest_id") @db.Uuid
+  nextFollowUpAt    DateTime? @map("next_follow_up_at")
+  lostReason        String?   @map("lost_reason")
+  convertedStudentId String?  @unique @map("converted_student_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  contact          Contact  @relation(fields: [contactId], references: [id])
+  manager          User?    @relation("LeadManager", fields: [managerId], references: [id])
+  programInterest  Program? @relation(fields: [programInterestId], references: [id])
+  convertedStudent Student? @relation("LeadConvertedStudent", fields: [convertedStudentId], references: [id])
+  stageHistory     LeadStageHistory[]
+
+  @@index([contactId])
+  @@index([stage])
+  @@index([managerId, stage])
+  @@index([programInterestId])
+  @@index([nextFollowUpAt])
+  @@map("leads")
+  @@schema("erp")
+}
+
+model LeadStageHistory {
+  id        String    @id @default(uuid()) @db.Uuid
+  leadId    String    @map("lead_id") @db.Uuid
+  oldStage  LeadStage? @map("old_stage")
+  newStage  LeadStage @map("new_stage")
+  reason    String?
+  changedById String? @map("changed_by_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  lead      Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  changedBy User? @relation("LeadStageChanger", fields: [changedById], references: [id])
+
+  @@index([leadId, createdAt])
+  @@index([changedById])
+  @@map("lead_stage_history")
+  @@schema("erp")
+}
+
+model Program {
+  id                       String   @id @default(uuid()) @db.Uuid
+  name                     String   @unique
+  code                     String?  @unique
+  defaultMonthlyFee        Decimal  @default(0) @map("default_monthly_fee") @db.Decimal(12, 2)
+  defaultLessonsPerMonth   Int?     @map("default_lessons_per_month")
+  isActive                 Boolean  @default(true) @map("is_active")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  leads           Lead[]
+  pricingVersions ProgramPricingVersion[]
+  enrollments     Enrollment[]
+  targets         Target[]
+
+  @@map("programs")
+  @@schema("erp")
+}
+
+model ProgramPricingVersion {
+  id              String   @id @default(uuid()) @db.Uuid
+  programId       String   @map("program_id") @db.Uuid
+  monthlyFee      Decimal  @map("monthly_fee") @db.Decimal(12, 2)
+  lessonsPerMonth Int?     @map("lessons_per_month")
+  validFrom       DateTime @map("valid_from") @db.Date
+  validTo         DateTime? @map("valid_to") @db.Date
+  createdById     String?  @map("created_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("PricingCreator", fields: [createdById], references: [id])
+
+  @@index([programId, validFrom])
+  @@index([createdById])
+  @@map("program_pricing_versions")
+  @@schema("erp")
+}
+
+model Teacher {
+  id        String   @id @default(uuid()) @db.Uuid
+  contactId String?  @unique @map("contact_id") @db.Uuid
+  fullName  String   @unique @map("full_name")
+  phone     String?
+  capacity  Int?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  contact             Contact?                  @relation(fields: [contactId], references: [id])
+  enrollments         Enrollment[]
+  oldAssignments      TeacherAssignmentHistory[] @relation("OldTeacher")
+  newAssignments      TeacherAssignmentHistory[] @relation("NewTeacher")
+  contractRules       TeacherContractRule[]
+  payouts             TeacherPayout[]
+
+  @@map("teachers")
+  @@schema("erp")
+}
+
+model Student {
+  id              String                 @id @default(uuid()) @db.Uuid
+  code            String                 @unique
+  contactId       String                 @map("contact_id") @db.Uuid
+  managerId       String?                @map("manager_id") @db.Uuid
+  sourceLead      Lead?                  @relation("LeadConvertedStudent")
+  lifecycleStatus StudentLifecycleStatus @default(GROUP_WAITING) @map("lifecycle_status")
+  educationLevel  String?                @map("education_level")
+  registeredAt    DateTime               @map("registered_at") @db.Date
+  stoppedAt       DateTime?              @map("stopped_at") @db.Date
+  completedAt     DateTime?              @map("completed_at") @db.Date
+  freezeReturnAt  DateTime?              @map("freeze_return_at") @db.Date
+  billingPaused   Boolean                @default(false) @map("billing_paused")
+  notes           String?
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  contact        Contact                @relation(fields: [contactId], references: [id])
+  manager        User?                  @relation("StudentManager", fields: [managerId], references: [id])
+  relationships  StudentRelationship[]
+  statusHistory  StudentStatusHistory[]
+  enrollments    Enrollment[]
+  invoices       Invoice[]
+  payments       Payment[]
+  refundAdjustments RefundAdjustment[]
+
+  @@index([contactId])
+  @@index([lifecycleStatus])
+  @@index([managerId, lifecycleStatus])
+  @@index([registeredAt])
+  @@map("students")
+  @@schema("erp")
+}
+
+model StudentRelationship {
+  id               String   @id @default(uuid()) @db.Uuid
+  studentId        String   @map("student_id") @db.Uuid
+  relatedContactId String   @map("related_contact_id") @db.Uuid
+  relationshipType String   @map("relationship_type")
+  isPayer          Boolean  @default(false) @map("is_payer")
+  isPrimaryContact Boolean  @default(false) @map("is_primary_contact")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  student        Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  relatedContact Contact @relation(fields: [relatedContactId], references: [id])
+
+  @@index([studentId])
+  @@index([relatedContactId])
+  @@map("student_relationships")
+  @@schema("erp")
+}
+
+model StudentStatusHistory {
+  id          String                 @id @default(uuid()) @db.Uuid
+  studentId   String                 @map("student_id") @db.Uuid
+  oldStatus   StudentLifecycleStatus? @map("old_status")
+  newStatus   StudentLifecycleStatus @map("new_status")
+  reason      String
+  note        String?
+  effectiveAt DateTime               @default(now()) @map("effective_at") @db.Date
+  changedById String?                @map("changed_by_id") @db.Uuid
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation("StatusChanger", fields: [changedById], references: [id])
+
+  @@index([studentId, createdAt])
+  @@index([changedById])
+  @@map("student_status_history")
+  @@schema("erp")
+}
+
+model Enrollment {
+  id              String           @id @default(uuid()) @db.Uuid
+  studentId       String           @map("student_id") @db.Uuid
+  programId       String           @map("program_id") @db.Uuid
+  teacherId       String?          @map("teacher_id") @db.Uuid
+  status          EnrollmentStatus @default(ACTIVE)
+  startDate       DateTime         @map("start_date") @db.Date
+  firstLessonAt   DateTime?        @map("first_lesson_at") @db.Date
+  monthlyFee      Decimal          @map("monthly_fee") @db.Decimal(12, 2)
+  lessonsPerMonth Int?             @map("lessons_per_month")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  student           Student                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program           Program                    @relation(fields: [programId], references: [id])
+  teacher           Teacher?                   @relation(fields: [teacherId], references: [id])
+  invoices          Invoice[]
+  assignmentHistory TeacherAssignmentHistory[]
+  payoutLines       TeacherPayoutLine[]
+
+  @@index([studentId])
+  @@index([teacherId, status])
+  @@index([programId, status])
+  @@map("enrollments")
+  @@schema("erp")
+}
+
+model TeacherAssignmentHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  enrollmentId String   @map("enrollment_id") @db.Uuid
+  oldTeacherId String?  @map("old_teacher_id") @db.Uuid
+  newTeacherId String?  @map("new_teacher_id") @db.Uuid
+  reason       String?
+  changedById  String?  @map("changed_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  oldTeacher Teacher?   @relation("OldTeacher", fields: [oldTeacherId], references: [id])
+  newTeacher Teacher?   @relation("NewTeacher", fields: [newTeacherId], references: [id])
+  changedBy  User?      @relation("TeacherAssignmentChanger", fields: [changedById], references: [id])
+
+  @@index([enrollmentId, createdAt])
+  @@index([oldTeacherId])
+  @@index([newTeacherId])
+  @@index([changedById])
+  @@map("teacher_assignment_history")
+  @@schema("erp")
+}
+
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  studentId      String        @map("student_id") @db.Uuid
+  enrollmentId   String?       @map("enrollment_id") @db.Uuid
+  periodMonth    DateTime      @map("period_month") @db.Date
+  issueDate      DateTime      @default(now()) @map("issue_date") @db.Date
+  dueDate        DateTime      @map("due_date") @db.Date
+  amount         Decimal       @db.Decimal(12, 2)
+  balanceDue     Decimal       @map("balance_due") @db.Decimal(12, 2)
+  status         InvoiceStatus @default(OPEN)
+  idempotencyKey String?       @unique @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  student           Student             @relation(fields: [studentId], references: [id])
+  enrollment        Enrollment?         @relation(fields: [enrollmentId], references: [id])
+  paymentAllocations PaymentAllocation[]
+  refundAdjustments RefundAdjustment[]
+
+  @@index([studentId, periodMonth])
+  @@index([enrollmentId])
+  @@index([dueDate, status])
+  @@index([balanceDue])
+  @@map("invoices")
+  @@schema("erp")
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  studentId      String        @map("student_id") @db.Uuid
+  amount         Decimal       @db.Decimal(12, 2)
+  paidAt         DateTime      @map("paid_at") @db.Date
+  paymentMonth   DateTime      @map("payment_month") @db.Date
+  method         PaymentMethod @default(CASH)
+  note           String?
+  idempotencyKey String?       @unique @map("idempotency_key")
+  createdById    String?       @map("created_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  student           Student             @relation(fields: [studentId], references: [id])
+  createdBy         User?               @relation("PaymentCreator", fields: [createdById], references: [id])
+  allocations       PaymentAllocation[]
+  refundAdjustments RefundAdjustment[]
+  payoutLines       TeacherPayoutLine[]
+
+  @@index([studentId, paidAt])
+  @@index([paymentMonth])
+  @@index([createdById])
+  @@map("payments")
+  @@schema("erp")
+}
+
+model PaymentAllocation {
+  id              String                @id @default(uuid()) @db.Uuid
+  paymentId       String                @map("payment_id") @db.Uuid
+  invoiceId       String                @map("invoice_id") @db.Uuid
+  amountAllocated Decimal               @map("amount_allocated") @db.Decimal(12, 2)
+  mode            PaymentAllocationMode @default(SELECTED_INVOICE)
+  createdAt       DateTime              @default(now()) @map("created_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@map("payment_allocations")
+  @@schema("erp")
+}
+
+model RefundAdjustment {
+  id                  String         @id @default(uuid()) @db.Uuid
+  studentId           String         @map("student_id") @db.Uuid
+  invoiceId           String?        @map("invoice_id") @db.Uuid
+  paymentId           String?        @map("payment_id") @db.Uuid
+  amount              Decimal        @db.Decimal(12, 2)
+  reason              String
+  status              ApprovalStatus @default(REQUESTED)
+  requestedById       String?        @map("requested_by_id") @db.Uuid
+  financeApprovedById String?        @map("finance_approved_by_id") @db.Uuid
+  ownerApprovedById   String?        @map("owner_approved_by_id") @db.Uuid
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  student           Student  @relation(fields: [studentId], references: [id])
+  invoice           Invoice? @relation(fields: [invoiceId], references: [id])
+  payment           Payment? @relation(fields: [paymentId], references: [id])
+  requestedBy       User?    @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+  financeApprovedBy User?    @relation("RefundFinanceApprovedBy", fields: [financeApprovedById], references: [id])
+  ownerApprovedBy   User?    @relation("RefundOwnerApprovedBy", fields: [ownerApprovedById], references: [id])
+
+  @@index([studentId, status])
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@index([requestedById])
+  @@index([financeApprovedById])
+  @@index([ownerApprovedById])
+  @@map("refund_adjustments")
+  @@schema("erp")
+}
+
+model TeacherContractRule {
+  id                    String   @id @default(uuid()) @db.Uuid
+  teacherId             String   @map("teacher_id") @db.Uuid
+  salaryPercent         Decimal  @map("salary_percent") @db.Decimal(5, 2)
+  teacherBroughtPercent Decimal? @map("teacher_brought_percent") @db.Decimal(5, 2)
+  validFrom             DateTime @map("valid_from") @db.Date
+  validTo               DateTime? @map("valid_to") @db.Date
+  createdById           String?  @map("created_by_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("TeacherRuleCreator", fields: [createdById], references: [id])
+
+  @@index([teacherId, validFrom])
+  @@index([createdById])
+  @@map("teacher_contract_rules")
+  @@schema("erp")
+}
+
+model TeacherPayout {
+  id                String         @id @default(uuid()) @db.Uuid
+  teacherId         String         @map("teacher_id") @db.Uuid
+  periodMonth       DateTime       @map("period_month") @db.Date
+  eligibleRevenue   Decimal        @default(0) @map("eligible_revenue") @db.Decimal(12, 2)
+  adjustmentAmount  Decimal        @default(0) @map("adjustment_amount") @db.Decimal(12, 2)
+  payoutAmount      Decimal        @default(0) @map("payout_amount") @db.Decimal(12, 2)
+  status            ApprovalStatus @default(DRAFT)
+  generatedById     String?        @map("generated_by_id") @db.Uuid
+  approvedById      String?        @map("approved_by_id") @db.Uuid
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  teacher     Teacher             @relation(fields: [teacherId], references: [id])
+  generatedBy User?               @relation("PayoutGeneratedBy", fields: [generatedById], references: [id])
+  approvedBy  User?               @relation("PayoutApprovedBy", fields: [approvedById], references: [id])
+  lines       TeacherPayoutLine[]
+
+  @@unique([teacherId, periodMonth])
+  @@index([generatedById])
+  @@index([approvedById])
+  @@map("teacher_payouts")
+  @@schema("erp")
+}
+
+model TeacherPayoutLine {
+  id             String   @id @default(uuid()) @db.Uuid
+  payoutId       String   @map("payout_id") @db.Uuid
+  enrollmentId   String?  @map("enrollment_id") @db.Uuid
+  paymentId      String?  @map("payment_id") @db.Uuid
+  eligibleRevenue Decimal @map("eligible_revenue") @db.Decimal(12, 2)
+  payoutAmount    Decimal @map("payout_amount") @db.Decimal(12, 2)
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  payout     TeacherPayout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  enrollment Enrollment?   @relation(fields: [enrollmentId], references: [id])
+  payment    Payment?      @relation(fields: [paymentId], references: [id])
+
+  @@index([payoutId])
+  @@index([enrollmentId])
+  @@index([paymentId])
+  @@map("teacher_payout_lines")
+  @@schema("erp")
+}
+
+model Task {
+  id            String     @id @default(uuid()) @db.Uuid
+  title         String
+  description   String?
+  type          String
+  entityType    String?    @map("entity_type")
+  entityId      String?    @map("entity_id") @db.Uuid
+  ownerUserId   String?    @map("owner_user_id") @db.Uuid
+  status        TaskStatus @default(OPEN)
+  dueAt         DateTime?  @map("due_at")
+  completedAt   DateTime?  @map("completed_at")
+  idempotencyKey String?   @unique @map("idempotency_key")
+  createdById   String?    @map("created_by_id") @db.Uuid
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  ownerUser User? @relation("TaskOwner", fields: [ownerUserId], references: [id])
+  createdBy User? @relation("TaskCreator", fields: [createdById], references: [id])
+
+  @@index([ownerUserId, status, dueAt])
+  @@index([createdById])
+  @@index([entityType, entityId])
+  @@map("tasks")
+  @@schema("erp")
+}
+
+model Target {
+  id           String   @id @default(uuid()) @db.Uuid
+  periodMonth  DateTime @map("period_month") @db.Date
+  targetAmount Decimal  @map("target_amount") @db.Decimal(12, 2)
+  ownerUserId  String?  @map("owner_user_id") @db.Uuid
+  programId    String?  @map("program_id") @db.Uuid
+  managerId    String?  @map("manager_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ownerUser User?    @relation("TargetOwner", fields: [ownerUserId], references: [id])
+  program   Program? @relation(fields: [programId], references: [id])
+  manager   User?    @relation("TargetManager", fields: [managerId], references: [id])
+
+  @@index([ownerUserId])
+  @@index([programId])
+  @@index([managerId])
+  @@index([periodMonth])
+  @@map("targets")
+  @@schema("erp")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id") @db.Uuid
+  beforeJson  Json?    @map("before_json")
+  afterJson   Json?    @map("after_json")
+  reason      String?
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
+  @@schema("erp")
+}
+
+model JobRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  jobName      String    @map("job_name")
+  status       String
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  affectedRows Int       @default(0) @map("affected_rows")
+  errorMessage String?   @map("error_message")
+
+  @@index([jobName, startedAt])
+  @@map("job_runs")
+  @@schema("erp")
+}
+
+model DataExport {
+  id           String   @id @default(uuid()) @db.Uuid
+  exportType   String   @map("export_type")
+  filtersJson  Json?    @map("filters_json")
+  rowCount     Int?     @map("row_count")
+  filePath     String?  @map("file_path")
+  requestedById String? @map("requested_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  requestedBy User? @relation("ExportRequestedBy", fields: [requestedById], references: [id])
+
+  @@index([requestedById])
+  @@index([exportType, createdAt])
+  @@map("exports")
+  @@schema("erp")
+}

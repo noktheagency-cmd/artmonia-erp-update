@@ -1,0 +1,74 @@
+import { cache } from "react";
+import { AppRole, Prisma } from "@/generated/prisma/client";
+import { getPrisma } from "@/server/db/prisma";
+import {
+  getPermissionsForRoles,
+  type PermissionCode,
+} from "@/server/rbac/permissions";
+import { hasSupabasePublicEnv } from "@/server/env";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+
+export type CurrentErpUser = {
+  id: string;
+  authUserId: string | null;
+  fullName: string;
+  email: string;
+  roles: AppRole[];
+  permissions: Set<PermissionCode>;
+};
+
+export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> => {
+  if (!hasSupabasePublicEnv()) {
+    return null;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getClaims();
+
+  if (error || !data?.claims?.sub) {
+    return null;
+  }
+
+  const [user] = await getPrisma().$queryRaw<CurrentErpUserRow[]>(Prisma.sql`
+    select
+      u.id::text as "id",
+      u.auth_user_id::text as "authUserId",
+      u.full_name as "fullName",
+      u.email,
+      coalesce(array_agg(r.code::text) filter (where r.code is not null), array[]::text[]) as "roles"
+    from erp.users u
+    left join erp.user_roles ur on ur.user_id = u.id
+    left join erp.roles r on r.id = ur.role_id
+    where u.auth_user_id = ${data.claims.sub}::uuid
+      and u.is_active = true
+    group by u.id
+    limit 1
+  `);
+
+  if (!user) {
+    return null;
+  }
+
+  const roles = normalizeRoles(user.roles);
+
+  return {
+    id: user.id,
+    authUserId: user.authUserId,
+    fullName: user.fullName,
+    email: user.email,
+    roles,
+    permissions: getPermissionsForRoles(roles),
+  };
+});
+
+type CurrentErpUserRow = Omit<CurrentErpUser, "permissions" | "roles"> & {
+  roles: unknown;
+};
+
+function normalizeRoles(value: unknown): AppRole[] {
+  return Array.isArray(value)
+    ? value.filter((role): role is AppRole =>
+        (Object.values(AppRole) as string[]).includes(String(role))
+      )
+    : [];
+}
