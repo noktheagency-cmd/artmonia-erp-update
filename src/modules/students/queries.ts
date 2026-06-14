@@ -3,6 +3,7 @@ import {
   Prisma,
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
+import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
 import { formFilterString } from "@/modules/shared/form-values";
@@ -12,6 +13,7 @@ import {
   formatShortDate,
   toNumber,
 } from "@/modules/shared/format";
+import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 
 type SummaryTone = "blue" | "coral" | "yellow" | "mint";
@@ -138,6 +140,20 @@ export type StudentListData = {
 
 const UNASSIGNED_TEACHER = "unassigned";
 
+type StudentListCacheInput = {
+  search: string;
+  statusFilter: StudentLifecycleStatus | "";
+  programFilter: string;
+  teacherFilter: string;
+  paymentFilter: StudentPaymentFilter;
+  today: string;
+};
+
+type StudentListRawData = {
+  rows: StudentListQueryRow[];
+  options: StudentCreateOptionRows;
+};
+
 const lifecycleMeta: Record<
   StudentLifecycleStatus,
   { label: string; tone: StudentTone }
@@ -209,25 +225,20 @@ export async function getStudentListData(
   input: StudentListFilters = {}
 ): Promise<StudentListData> {
   const actor = await requireErpActor("student.read");
-  const prisma = getPrisma();
   const search = (input.q ?? "").trim();
   const statusFilter = normalizeLifecycleStatus(input.status);
   const programFilter = formFilterString(input.program);
   const teacherFilter = formFilterString(input.teacher);
   const paymentFilter = normalizePaymentFilter(input.payment);
   const today = startOfToday();
-  const [rows, options] =
-    await Promise.all([
-    getStudentRows(prisma, {
-      search,
-      statusFilter,
-      programFilter,
-      teacherFilter,
-      paymentFilter,
-      today,
-    }),
-    getStudentCreateOptions(prisma),
-  ]);
+  const { rows, options } = await readStudentListRawData({
+    search,
+    statusFilter,
+    programFilter,
+    teacherFilter,
+    paymentFilter,
+    today: today.toISOString(),
+  });
   const { programs, teachers, managers, leads: convertibleLeads } = options;
 
   const summaryCounts = new Map(
@@ -653,6 +664,48 @@ type StudentCreateOptionsRawRow = {
   leads: unknown;
 };
 
+const getCachedStudentListRawData = unstable_cache(
+  async (input: StudentListCacheInput) => getStudentListRawData(input),
+  ["student-list-data"],
+  {
+    revalidate: 30,
+    tags: [erpCacheTags.students],
+  }
+);
+
+async function readStudentListRawData(
+  input: StudentListCacheInput
+): Promise<StudentListRawData> {
+  try {
+    return await getCachedStudentListRawData(input);
+  } catch (error) {
+    if (!isMissingIncrementalCacheError(error)) {
+      throw error;
+    }
+
+    return getStudentListRawData(input);
+  }
+}
+
+async function getStudentListRawData(
+  input: StudentListCacheInput
+): Promise<StudentListRawData> {
+  const prisma = getPrisma();
+  const [rows, options] = await Promise.all([
+    getStudentRows(prisma, {
+      search: input.search,
+      statusFilter: input.statusFilter,
+      programFilter: input.programFilter,
+      teacherFilter: input.teacherFilter,
+      paymentFilter: input.paymentFilter,
+      today: new Date(input.today),
+    }),
+    getStudentCreateOptions(prisma),
+  ]);
+
+  return { rows, options };
+}
+
 async function getStudentCreateOptions(
   prisma: ReturnType<typeof getPrisma>
 ): Promise<StudentCreateOptionRows> {
@@ -997,6 +1050,10 @@ function addDays(value: Date, amount: number) {
 function startOfToday() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function isMissingIncrementalCacheError(error: unknown) {
+  return error instanceof Error && error.message.includes("incrementalCache missing");
 }
 
 export async function getStudentDetailData(studentId: string) {

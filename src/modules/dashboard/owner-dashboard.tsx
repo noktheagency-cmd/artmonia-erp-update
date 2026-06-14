@@ -75,14 +75,25 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
                 background: buildDebtGradient(data.debtAging),
               }}
             >
-              <span>{data.debtCenter}</span>
+              <div className="donut-center-content">
+                <span className="donut-center-label">Cəmi Borc</span>
+                <span className="donut-center-amount">
+                  {data.debtCenter.split(" ")[0]}
+                </span>
+                <span className="donut-center-currency">
+                  {data.debtCenter.split(" ")[1] ?? "AZN"}
+                </span>
+              </div>
             </div>
             <div className="legend-stack">
               {data.debtAging.map((item) => (
-                <span key={item.label}>
-                  <i style={{ backgroundColor: item.color }} />
-                  {item.label}
-                </span>
+                <div className="legend-item" key={item.label}>
+                  <div className="legend-label-group">
+                    <i style={{ backgroundColor: item.color }} />
+                    <span className="legend-label">{item.label}</span>
+                  </div>
+                  <strong className="legend-amount">{item.amount}</strong>
+                </div>
               ))}
             </div>
           </div>

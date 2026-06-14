@@ -1,8 +1,6 @@
 import { AppRole, LeadStage, Prisma } from "@/generated/prisma/client";
-import {
-  canAssignLeadOwner,
-  getCrmScopeLabel,
-} from "@/modules/crm/access";
+import { unstable_cache } from "next/cache";
+import { getCrmScopeLabel } from "@/modules/crm/access";
 import { getPrisma } from "@/server/db/prisma";
 import {
   isPrivilegedActor,
@@ -31,6 +29,7 @@ import {
   leadStageOptions,
   leadStageTones,
 } from "@/modules/crm/stage";
+import { erpCacheTags } from "@/modules/shared/cache-tags";
 
 export type CrmFollowUpFilter =
   | "all"
@@ -127,6 +126,24 @@ export type CrmData = {
 };
 
 type CrmPeriodRange = ReturnType<typeof getCrmPeriodRange>;
+type CrmCacheActor = Pick<ErpActor, "id" | "roles">;
+type CrmCachePeriodRange = { gte: string; lt?: string } | null;
+
+type CrmCacheInput = {
+  actor: CrmCacheActor;
+  search: string;
+  searchDigits: string;
+  stageFilter: LeadStageValue | "";
+  ownerFilter: string;
+  programFilter: string;
+  sourceFilter: string;
+  followUpFilter: CrmFollowUpFilter;
+  periodRange: CrmCachePeriodRange;
+  monthStart: string;
+  today: string;
+  todayStart: string;
+  tomorrowStart: string;
+};
 
 type CrmRawRow = {
   stageCounts: unknown;
@@ -166,7 +183,6 @@ type CrmLeadTimelineRawRow = {
 };
 
 export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> {
-  const prisma = getPrisma();
   const actor = await requireErpActor("crm.lead.read");
   const search = normalizeText(input.q);
   const stageFilter = normalizeStage(input.stage);
@@ -178,6 +194,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const searchDigits = search.replace(/\D/g, "");
   const monthStart = startOfMonth();
   const today = new Date();
+  const cachedToday = getCacheTimeBucket(today);
   const periodRange = getCrmPeriodRange(periodFilter, today);
   const todayStart = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
@@ -185,20 +202,23 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setUTCDate(todayStart.getUTCDate() + 1);
 
-  const [row] = await getCrmRawData(prisma, {
-    actor,
+  const [row] = await readCrmRawData({
+    actor: {
+      id: actor.id,
+      roles: actor.roles,
+    },
     search,
     searchDigits,
-    stageFilter,
+    stageFilter: stageFilter ?? "",
     ownerFilter,
     programFilter,
     sourceFilter,
     followUpFilter,
-    periodRange,
-    monthStart,
-    today,
-    todayStart,
-    tomorrowStart,
+    periodRange: serializePeriodRange(periodRange),
+    monthStart: monthStart.toISOString(),
+    today: cachedToday.toISOString(),
+    todayStart: todayStart.toISOString(),
+    tomorrowStart: tomorrowStart.toISOString(),
   });
   const stageCounts = asJsonRecord(row?.stageCounts);
   const totalLeads = toNumber(row?.totalLeads);
@@ -287,10 +307,43 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   };
 }
 
+const getCachedCrmRawData = unstable_cache(
+  async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
+  ["crm-pipeline-data"],
+  {
+    revalidate: 30,
+    tags: [erpCacheTags.crm],
+  }
+);
+
+async function readCrmRawData(input: CrmCacheInput) {
+  try {
+    return await getCachedCrmRawData(input);
+  } catch (error) {
+    if (!isMissingIncrementalCacheError(error)) {
+      throw error;
+    }
+
+    return getCrmRawData(getPrisma(), toCrmRawDataInput(input));
+  }
+}
+
+function toCrmRawDataInput(input: CrmCacheInput) {
+  return {
+    ...input,
+    stageFilter: input.stageFilter || undefined,
+    periodRange: deserializePeriodRange(input.periodRange),
+    monthStart: new Date(input.monthStart),
+    today: new Date(input.today),
+    todayStart: new Date(input.todayStart),
+    tomorrowStart: new Date(input.tomorrowStart),
+  };
+}
+
 function getCrmRawData(
   prisma: ReturnType<typeof getPrisma>,
   input: {
-    actor: ErpActor;
+    actor: CrmCacheActor;
     search: string;
     searchDigits: string;
     stageFilter: LeadStageValue | undefined;
@@ -453,7 +506,7 @@ function getCrmRawData(
   `);
 }
 
-function buildLeadScopeSql(actor: ErpActor) {
+function buildLeadScopeSql(actor: CrmCacheActor) {
   if (isPrivilegedActor(actor)) {
     return Prisma.sql`true`;
   }
@@ -465,8 +518,8 @@ function buildLeadScopeSql(actor: ErpActor) {
   return Prisma.sql`false`;
 }
 
-function buildManagerScopeSql(actor: ErpActor) {
-  if (canAssignLeadOwner(actor)) {
+function buildManagerScopeSql(actor: CrmCacheActor) {
+  if (isPrivilegedActor(actor)) {
     return Prisma.sql`
       u.is_active = true
       and exists (
@@ -497,7 +550,7 @@ function buildLeadPeriodSql(periodRange: CrmPeriodRange) {
 }
 
 function buildCrmListWhereSql(input: {
-  actor: ErpActor;
+  actor: CrmCacheActor;
   search: string;
   searchDigits: string;
   stageFilter: LeadStageValue | undefined;
@@ -648,6 +701,39 @@ function normalizeFollowUp(value: string | undefined): CrmFollowUpFilter {
   ];
 
   return allowed.find((item) => item === value) ?? "all";
+}
+
+function getCacheTimeBucket(value: Date) {
+  const bucketMs = 30_000;
+  return new Date(Math.floor(value.getTime() / bucketMs) * bucketMs);
+}
+
+function serializePeriodRange(periodRange: CrmPeriodRange): CrmCachePeriodRange {
+  if (!periodRange) {
+    return null;
+  }
+
+  return {
+    gte: periodRange.gte.toISOString(),
+    ...("lt" in periodRange && periodRange.lt
+      ? { lt: periodRange.lt.toISOString() }
+      : {}),
+  };
+}
+
+function deserializePeriodRange(periodRange: CrmCachePeriodRange): CrmPeriodRange {
+  if (!periodRange) {
+    return null;
+  }
+
+  return {
+    gte: new Date(periodRange.gte),
+    ...(periodRange.lt ? { lt: new Date(periodRange.lt) } : {}),
+  };
+}
+
+function isMissingIncrementalCacheError(error: unknown) {
+  return error instanceof Error && error.message.includes("incrementalCache missing");
 }
 
 function buildReturnTo(filters: {

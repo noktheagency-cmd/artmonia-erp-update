@@ -5,15 +5,20 @@ import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  type MouseEvent,
+  type SyntheticEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
   Bell,
-  CalendarDays,
   CreditCard,
   Gauge,
   GraduationCap,
   LayoutGrid,
   LogOut,
   Paintbrush,
-  Search,
   Settings,
   UsersRound,
 } from "lucide-react";
@@ -42,23 +47,19 @@ const navItems: NavItem[] = [
 export function AppShell({
   children,
   currentUser,
-  todayLabel,
   signOutAction,
 }: {
   children: React.ReactNode;
   currentUser: ShellUser;
-  todayLabel: string;
   signOutAction: () => void | Promise<void>;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentQuery = searchParams.get("q") ?? "";
-  const searchTargetPath = pathname.startsWith("/students") ? "/students" : "/crm";
-  const preservedSearchParams =
-    pathname === searchTargetPath
-      ? Array.from(searchParams.entries()).filter(([key, value]) => key !== "q" && value)
-      : [];
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const prefetchedHrefs = useRef<Set<string>>(new Set());
+  const currentParams = searchParams.toString();
+  const currentHref = currentParams ? `${pathname}?${currentParams}` : pathname;
   const initials = currentUser.fullName
     .split(" ")
     .filter(Boolean)
@@ -66,21 +67,118 @@ export function AppShell({
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+  const activePendingHref = pendingHref && pendingHref !== currentHref ? pendingHref : null;
+  const isNavigating = Boolean(activePendingHref);
 
-  function openTodayFollowUps() {
-    const params = pathname.startsWith("/crm")
-      ? new URLSearchParams(searchParams.toString())
-      : new URLSearchParams();
+  useEffect(() => {
+    for (const item of navItems) {
+      router.prefetch(item.href);
+      prefetchedHrefs.current.add(item.href);
+    }
+  }, [router]);
 
-    params.set("followUp", "today");
-    router.push(`/crm?${params.toString()}` as Route);
+  function markNavigation(href: string | null) {
+    if (href && href !== currentHref) {
+      setPendingHref(href);
+      return;
+    }
+
+    setPendingHref(null);
+  }
+
+  function handleNavClick(href: Route, event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    markNavigation(href);
+  }
+
+  function handleNavHover(href: Route) {
+    router.prefetch(href);
+    prefetchedHrefs.current.add(href);
+  }
+
+  function getEventAnchor(target: EventTarget | null) {
+    return target instanceof Element
+      ? (target.closest("a[href]") as HTMLAnchorElement | null)
+      : null;
+  }
+
+  function getInternalAnchorHref(anchor: HTMLAnchorElement) {
+    const rawHref = anchor.getAttribute("href");
+
+    if (
+      !rawHref ||
+      rawHref.startsWith("#") ||
+      rawHref.startsWith("mailto:") ||
+      rawHref.startsWith("tel:") ||
+      anchor.hasAttribute("download") ||
+      (anchor.target && anchor.target !== "_self")
+    ) {
+      return null;
+    }
+
+    const nextUrl = new URL(anchor.href, window.location.href);
+
+    if (nextUrl.origin !== window.location.origin) {
+      return null;
+    }
+
+    return `${nextUrl.pathname}${nextUrl.search}`;
+  }
+
+  function prefetchInternalHref(href: string | null) {
+    if (!href || prefetchedHrefs.current.has(href)) {
+      return;
+    }
+
+    router.prefetch(href as Route);
+    prefetchedHrefs.current.add(href);
+  }
+
+  function handleContentLinkClick(event: MouseEvent<HTMLDivElement>) {
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    const anchor = getEventAnchor(event.target);
+    markNavigation(anchor ? getInternalAnchorHref(anchor) : null);
+  }
+
+  function handleContentLinkIntent(event: SyntheticEvent<HTMLDivElement>) {
+    const anchor = getEventAnchor(event.target);
+    prefetchInternalHref(anchor ? getInternalAnchorHref(anchor) : null);
   }
 
   return (
-    <div className="app-stage">
+    <div className={cx("app-stage", isNavigating && "is-navigating")}>
       <div className="studio-wash" aria-hidden="true" />
+      <div className="route-progress" aria-hidden={!isNavigating} data-visible={isNavigating} />
       <aside className="side-rail" aria-label="Əsas naviqasiya">
-        <Link href="/dashboard" className="brand-mark" aria-label="Artmonia ERP">
+        <Link
+          href="/dashboard"
+          className="brand-mark"
+          aria-label="Artmonia ERP"
+          onClick={(event) => handleNavClick("/dashboard", event)}
+          onMouseEnter={() => handleNavHover("/dashboard")}
+          onFocus={() => handleNavHover("/dashboard")}
+          prefetch
+        >
           <Image className="brand-logo" src="/logo.png" alt="" width={34} height={34} priority />
         </Link>
 
@@ -93,8 +191,17 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={cx("nav-icon", active && "is-active")}
+                className={cx(
+                  "nav-icon",
+                  active && "is-active",
+                  activePendingHref === item.href && "is-pending"
+                )}
                 aria-label={item.label}
+                aria-current={active ? "page" : undefined}
+                onClick={(event) => handleNavClick(item.href, event)}
+                onMouseEnter={() => handleNavHover(item.href)}
+                onFocus={() => handleNavHover(item.href)}
+                prefetch
               >
                 <Icon size={18} strokeWidth={1.9} />
               </Link>
@@ -109,34 +216,8 @@ export function AppShell({
         </form>
       </aside>
 
-      <main className="erp-frame">
+      <main className="erp-frame" aria-busy={isNavigating}>
         <header className="topbar">
-          <form className="search-box topbar-search" action={searchTargetPath} method="get">
-            {preservedSearchParams.map(([key, value]) => (
-              <input key={`${key}-${value}`} type="hidden" name={key} value={value} />
-            ))}
-            <button className="search-submit" type="submit" aria-label="Axtar">
-              <Search size={16} />
-            </button>
-            <span className="sr-only">Axtar</span>
-            <input
-              key={`${pathname}-${currentQuery}`}
-              name="q"
-              defaultValue={currentQuery}
-              placeholder="Tələbə, müraciət və ödəniş axtar"
-            />
-          </form>
-
-          <button
-            className="today-chip"
-            type="button"
-            onClick={openTodayFollowUps}
-            aria-label="Bugünkü CRM izləmələrini göstər"
-          >
-            <CalendarDays size={15} />
-            {todayLabel}
-          </button>
-
           <div className="topbar-actions">
             <button className="icon-button" type="button" aria-label="Studiya rejimi">
               <Paintbrush size={16} />
@@ -157,7 +238,17 @@ export function AppShell({
           </div>
         </header>
 
-        {children}
+        <div
+          className="route-content-shell"
+          onClickCapture={handleContentLinkClick}
+          onMouseOverCapture={handleContentLinkIntent}
+          onFocusCapture={handleContentLinkIntent}
+        >
+          {children}
+        </div>
+        <div className="route-pending-overlay" data-visible={isNavigating} aria-hidden={!isNavigating}>
+          <span />
+        </div>
       </main>
     </div>
   );

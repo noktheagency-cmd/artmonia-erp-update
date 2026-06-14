@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { normalizePhone } from "@/modules/crm/duplicate-phone";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { toNumber } from "@/modules/shared/format";
+import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
 
 const optionalText = (max: number) =>
@@ -277,6 +278,7 @@ export async function createStudentAction(formData: FormData) {
   revalidatePath("/crm");
   revalidatePath("/dashboard");
   revalidatePath("/finance");
+  invalidateStudentCaches();
   redirectToStudents(input.returnTo);
 }
 
@@ -311,6 +313,7 @@ export async function recordStudentPaymentAction(formData: FormData) {
   revalidatePath("/students");
   revalidatePath("/dashboard");
   revalidatePath("/finance");
+  invalidatePaymentCaches();
   redirectToStudents(input.returnTo);
 }
 
@@ -694,4 +697,17 @@ function safeStudentsRedirect(value: string | undefined) {
 
 function redirectToStudents(value: string | undefined): never {
   redirect(safeStudentsRedirect(value) as Route);
+}
+
+function invalidateStudentCaches() {
+  updateTag(erpCacheTags.students);
+  updateTag(erpCacheTags.crm);
+  updateTag(erpCacheTags.dashboard);
+  updateTag(erpCacheTags.finance);
+}
+
+function invalidatePaymentCaches() {
+  updateTag(erpCacheTags.students);
+  updateTag(erpCacheTags.dashboard);
+  updateTag(erpCacheTags.finance);
 }

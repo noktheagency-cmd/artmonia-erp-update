@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -26,6 +26,7 @@ import {
 import { leadStageOptions } from "@/modules/crm/stage";
 import { addMonths, startOfMonth, toNumber } from "@/modules/shared/format";
 import { optionalFormString } from "@/modules/shared/form-values";
+import { erpCacheTags } from "@/modules/shared/cache-tags";
 
 const optionalText = (max: number) =>
   z.preprocess(
@@ -159,6 +160,7 @@ export async function createLeadAction(formData: FormData) {
 
   revalidatePath("/crm");
   revalidatePath("/dashboard");
+  invalidateCrmCaches();
   redirect("/crm");
 }
 
@@ -317,6 +319,7 @@ export async function updateLeadAction(formData: FormData) {
 
   revalidatePath("/crm");
   revalidatePath("/dashboard");
+  invalidateCrmCaches();
   redirectToCrm(input.returnTo);
 }
 
@@ -497,6 +500,8 @@ export async function convertLeadToStudentAction(formData: FormData) {
   revalidatePath("/crm");
   revalidatePath("/students");
   revalidatePath("/dashboard");
+  invalidateCrmCaches();
+  updateTag(erpCacheTags.students);
   redirectToCrm(input.returnTo);
 }
 
@@ -554,6 +559,7 @@ export async function updateLeadStageAction(formData: FormData) {
 
   revalidatePath("/crm");
   revalidatePath("/dashboard");
+  invalidateCrmCaches();
   redirectToCrm(input.returnTo);
 }
 
@@ -584,6 +590,11 @@ function safeCrmRedirect(value: string | undefined) {
 
 function redirectToCrm(value: string | undefined): never {
   redirect(safeCrmRedirect(value) as Route);
+}
+
+function invalidateCrmCaches() {
+  updateTag(erpCacheTags.crm);
+  updateTag(erpCacheTags.dashboard);
 }
 
 function parseFollowUpAt(value: string | undefined) {

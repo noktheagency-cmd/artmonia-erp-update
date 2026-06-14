@@ -1,4 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
+import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
 import {
   addMonths,
@@ -9,6 +10,7 @@ import {
   startOfMonth,
   toNumber,
 } from "@/modules/shared/format";
+import { erpCacheTags } from "@/modules/shared/cache-tags";
 
 export type DashboardKpi = {
   label: string;
@@ -27,6 +29,7 @@ export type DashboardData = {
   }>;
   debtAging: Array<{
     label: string;
+    amount: string;
     value: number;
     color: string;
   }>;
@@ -110,20 +113,22 @@ type RawStudentStatusCount = {
 };
 
 const agingBuckets = [
-  { label: "0-3 gün", min: 0, max: 3, color: "#90adff" },
-  { label: "4-7 gün", min: 4, max: 7, color: "#ffe28a" },
-  { label: "8-14 gün", min: 8, max: 14, color: "#f7a36f" },
-  { label: "15+ gün", min: 15, max: Number.POSITIVE_INFINITY, color: "#ff7972" },
+  { label: "0-3 gün", min: 0, max: 3, color: "#3158ff" },
+  { label: "4-7 gün", min: 4, max: 7, color: "#fbbf24" },
+  { label: "8-14 gün", min: 8, max: 14, color: "#f97316" },
+  { label: "15+ gün", min: 15, max: Number.POSITIVE_INFINITY, color: "#f43f5e" },
 ] as const;
 
 export async function getOwnerDashboardData(): Promise<DashboardData> {
   const prisma = getPrisma();
   const today = new Date();
+  const cachedToday = getCacheTimeBucket(today);
   const monthStart = startOfMonth(today);
   const nextMonthStart = addMonths(monthStart, 1);
   const firstRevenueMonth = addMonths(monthStart, -6);
   
-  const [row] = await prisma.$queryRaw<DashboardRawRow[]>(Prisma.sql`
+  const fetchDashboardRawData = async () =>
+    prisma.$queryRaw<DashboardRawRow[]>(Prisma.sql`
     select
       coalesce((
         select count(*)::int
@@ -202,7 +207,7 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
             'TRIAL_CONSULTATION'::"erp"."LeadStage",
             'NURTURE'::"erp"."LeadStage"
           )
-          and (l.next_follow_up_at is null or l.next_follow_up_at <= ${today})
+          and (l.next_follow_up_at is null or l.next_follow_up_at <= ${cachedToday})
       ), 0) as "waitingLeads",
       coalesce((
         select jsonb_agg(
@@ -227,7 +232,7 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
               greatest(
                 0,
                 floor(
-                  extract(epoch from (${today}::timestamp - i.due_date::timestamp))
+                  extract(epoch from (${cachedToday}::timestamp - i.due_date::timestamp))
                   / 86400
                 )::int
               ) as age_days
@@ -308,6 +313,33 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
         ) status_counts
       ), '[]'::jsonb) as "studentStatusCounts"
   `);
+  const getDashboardRawData = unstable_cache(
+    fetchDashboardRawData,
+    [
+      "owner-dashboard-data",
+      monthStart.toISOString(),
+      nextMonthStart.toISOString(),
+      firstRevenueMonth.toISOString(),
+      cachedToday.toISOString(),
+    ],
+    {
+      revalidate: 30,
+      tags: [erpCacheTags.dashboard],
+    }
+  );
+  let rows: DashboardRawRow[];
+
+  try {
+    rows = await getDashboardRawData();
+  } catch (error) {
+    if (!isMissingIncrementalCacheError(error)) {
+      throw error;
+    }
+
+    rows = await fetchDashboardRawData();
+  }
+
+  const [row] = rows;
 
   const revenueRows = asJsonArray<DashboardRevenueRawRow>(row?.revenueRows);
   const taskRows = asJsonArray<DashboardTaskRawRow>(row?.taskRows);
@@ -427,7 +459,8 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
       amount: formatAmount(item.amount),
     })),
     debtAging: debtByBucket.map((item) => ({
-      label: `${item.label} · ${formatAmount(item.value)}`,
+      label: item.label,
+      amount: formatAmount(item.value),
       value: totalAging > 0 ? Math.round((item.value / totalAging) * 100) : 0,
       color: item.color,
     })),
@@ -476,6 +509,15 @@ function mapLifecycleStatus(status: string): { label: string; tone: "success" | 
     default:
       return { label: status, tone: "neutral" };
   }
+}
+
+function getCacheTimeBucket(value: Date) {
+  const bucketMs = 30_000;
+  return new Date(Math.floor(value.getTime() / bucketMs) * bucketMs);
+}
+
+function isMissingIncrementalCacheError(error: unknown) {
+  return error instanceof Error && error.message.includes("incrementalCache missing");
 }
 
 function asJsonArray<T>(value: unknown): T[] {
