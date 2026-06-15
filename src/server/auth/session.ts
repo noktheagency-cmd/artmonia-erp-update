@@ -1,11 +1,13 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import {
   getPermissionsForRoles,
   type PermissionCode,
 } from "@/server/rbac/permissions";
-import { hasSupabasePublicEnv } from "@/server/env";
+import { getEnv, hasSupabasePublicEnv } from "@/server/env";
+import { hasSupabaseAuthCookie } from "@/server/supabase/auth-cookies";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 export type CurrentErpUser = {
@@ -22,7 +24,19 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
     return null;
   }
 
-  const supabase = await createSupabaseServerClient();
+  const env = getEnv();
+  const cookieStore = await cookies();
+
+  if (
+    !hasSupabaseAuthCookie(
+      cookieStore.getAll(),
+      env.NEXT_PUBLIC_SUPABASE_URL
+    )
+  ) {
+    return null;
+  }
+
+  const supabase = await createSupabaseServerClient(cookieStore);
   const { data, error } = await supabase.auth.getClaims();
 
   if (error || !data?.claims?.sub) {

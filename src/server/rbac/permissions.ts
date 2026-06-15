@@ -137,8 +137,22 @@ export const rolePermissionMap: Record<AppRole, PermissionCode[]> = {
   ],
 };
 
+const permissionCache = new Map<string, Set<PermissionCode>>();
+
 export function getPermissionsForRoles(roles: AppRole[]) {
-  return new Set(roles.flatMap((role) => rolePermissionMap[role] ?? []));
+  const cacheKey = [...new Set(roles)].sort().join("|");
+  const cachedPermissions = permissionCache.get(cacheKey);
+
+  if (cachedPermissions) {
+    return cachedPermissions;
+  }
+
+  const permissions = new Set(
+    roles.flatMap((role) => rolePermissionMap[role] ?? [])
+  );
+  permissionCache.set(cacheKey, permissions);
+
+  return permissions;
 }
 
 export function hasPermission(roles: AppRole[], permission: PermissionCode) {

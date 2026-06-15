@@ -66,7 +66,6 @@ type DashboardRawRow = {
   activeStudents: unknown;
   activeMrr: unknown;
   debtAmount: unknown;
-  newLeadsThisMonth: unknown;
   revenueRows: unknown;
   taskRows: unknown;
   payoutPreview: unknown;
@@ -148,12 +147,6 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
         where i.balance_due > 0
           and i.status <> 'VOID'::"erp"."InvoiceStatus"
       ), 0) as "debtAmount",
-      coalesce((
-        select count(*)::int
-        from erp.leads l
-        where l.created_at >= ${monthStart}
-          and l.created_at < ${nextMonthStart}
-      ), 0) as "newLeadsThisMonth",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -380,7 +373,6 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
   const activeStudents = toNumber(row?.activeStudents);
   const activeMrr = toNumber(row?.activeMrr);
   const totalDebt = toNumber(row?.debtAmount);
-  const newLeadsThisMonth = toNumber(row?.newLeadsThisMonth);
   const payoutPreview = toNumber(row?.payoutPreview);
   const waitingLeads = toNumber(row?.waitingLeads);
   const totalAging = debtByBucket.reduce((sum, bucket) => sum + bucket.value, 0);
@@ -449,7 +441,7 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
         label: "Müraciət çevrilməsi",
         value: conversionRate,
         delta: "Konversiya",
-        helper: `${newLeadsThisMonth} yeni müraciət daxil olub`,
+        helper: `${totalLeadsThisMonth} yeni müraciət daxil olub`,
         tone: "light",
       },
     ],

@@ -537,7 +537,10 @@ async function getStudentRows(
       join erp.programs p on p.id = e.program_id
       left join erp.teachers t on t.id = e.teacher_id
       where e.student_id = ps.id
-        and e.status::text in ('ACTIVE', 'PAUSED')
+        and e.status in (
+          'ACTIVE'::"erp"."EnrollmentStatus",
+          'PAUSED'::"erp"."EnrollmentStatus"
+        )
       order by e.start_date desc, e.created_at desc
       limit 1
     ) ae on true
@@ -547,14 +550,14 @@ async function getStudentRows(
           select sum(i.balance_due)
           from erp.invoices i
           where i.student_id = ps.id
-            and i.status::text <> 'VOID'
+            and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
         ), 0) as balance_due,
         (
           select i.due_date
           from erp.invoices i
           where i.student_id = ps.id
-            and i.status::text <> 'VOID'
+            and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
           order by i.due_date asc, i.created_at asc
           limit 1
@@ -575,7 +578,7 @@ async function getStudentRows(
             select i.id, i.amount, i.balance_due, i.due_date, i.period_month, i.status, i.created_at
             from erp.invoices i
             where i.student_id = ps.id
-              and i.status::text <> 'VOID'
+              and i.status <> 'VOID'::"erp"."InvoiceStatus"
             order by i.due_date asc, i.created_at asc
             limit 6
           ) ordered
@@ -788,7 +791,7 @@ async function getStudentCreateOptions(
             limit 1
           ) last_history on true
           where l.converted_student_id is null
-            and l.stage::text <> 'REGISTERED'
+            and l.stage <> 'REGISTERED'::"erp"."LeadStage"
           order by l.updated_at desc, l.created_at desc
           limit 60
         ) ordered
@@ -844,7 +847,9 @@ function buildStudentWhereSql({
   }
 
   if (statusFilter) {
-    conditions.push(Prisma.sql`s.lifecycle_status::text = ${statusFilter}`);
+    conditions.push(
+      Prisma.sql`s.lifecycle_status = ${statusFilter}::"erp"."StudentLifecycleStatus"`
+    );
   }
 
   if (programFilter) {
@@ -852,7 +857,10 @@ function buildStudentWhereSql({
       select 1
       from erp.enrollments e
       where e.student_id = s.id
-        and e.status::text in ('ACTIVE', 'PAUSED')
+        and e.status in (
+          'ACTIVE'::"erp"."EnrollmentStatus",
+          'PAUSED'::"erp"."EnrollmentStatus"
+        )
         and e.program_id = ${programFilter}::uuid
     )`);
   }
@@ -867,7 +875,10 @@ function buildStudentWhereSql({
       select 1
       from erp.enrollments e
       where e.student_id = s.id
-        and e.status::text in ('ACTIVE', 'PAUSED')
+        and e.status in (
+          'ACTIVE'::"erp"."EnrollmentStatus",
+          'PAUSED'::"erp"."EnrollmentStatus"
+        )
         and ${teacherCondition}
     )`);
   }
@@ -877,7 +888,7 @@ function buildStudentWhereSql({
       select 1
       from erp.invoices i
       where i.student_id = s.id
-        and i.status::text <> 'VOID'
+        and i.status <> 'VOID'::"erp"."InvoiceStatus"
         and i.balance_due > 0
     )`);
   }
@@ -887,7 +898,7 @@ function buildStudentWhereSql({
       select 1
       from erp.invoices i
       where i.student_id = s.id
-        and i.status::text <> 'VOID'
+        and i.status <> 'VOID'::"erp"."InvoiceStatus"
         and i.balance_due > 0
     )`);
   }
@@ -897,7 +908,7 @@ function buildStudentWhereSql({
       select 1
       from erp.invoices i
       where i.student_id = s.id
-        and i.status::text <> 'VOID'
+        and i.status <> 'VOID'::"erp"."InvoiceStatus"
         and i.balance_due > 0
         and i.due_date < ${today}
     )`);
@@ -1109,7 +1120,10 @@ export async function getStudentDetailData(studentId: string) {
       join erp.programs p on p.id = e.program_id
       left join erp.teachers t on t.id = e.teacher_id
       where e.student_id = ps.id
-        and e.status::text in ('ACTIVE', 'PAUSED')
+        and e.status in (
+          'ACTIVE'::"erp"."EnrollmentStatus",
+          'PAUSED'::"erp"."EnrollmentStatus"
+        )
       order by e.start_date desc, e.created_at desc
       limit 1
     ) ae on true
@@ -1119,14 +1133,14 @@ export async function getStudentDetailData(studentId: string) {
           select sum(i.balance_due)
           from erp.invoices i
           where i.student_id = ps.id
-            and i.status::text <> 'VOID'
+            and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
         ), 0) as balance_due,
         (
           select i.due_date
           from erp.invoices i
           where i.student_id = ps.id
-            and i.status::text <> 'VOID'
+            and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
           order by i.due_date asc, i.created_at asc
           limit 1
@@ -1147,7 +1161,7 @@ export async function getStudentDetailData(studentId: string) {
             select i.id, i.amount, i.balance_due, i.due_date, i.period_month, i.status, i.created_at
             from erp.invoices i
             where i.student_id = ps.id
-              and i.status::text <> 'VOID'
+              and i.status <> 'VOID'::"erp"."InvoiceStatus"
             order by i.due_date asc, i.created_at asc
             limit 6
           ) ordered

@@ -2,8 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { requireEnv } from "@/server/env";
 
-export async function createSupabaseServerClient() {
-  const cookieStore = await cookies();
+type CookieStore = Awaited<ReturnType<typeof cookies>>;
+
+export async function createSupabaseServerClient(cookieStore?: CookieStore) {
+  const resolvedCookieStore = cookieStore ?? (await cookies());
 
   return createServerClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -11,12 +13,12 @@ export async function createSupabaseServerClient() {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return resolvedCookieStore.getAll();
         },
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
+              resolvedCookieStore.set(name, value, options);
             });
           } catch {
             // Server Components cannot set cookies. Middleware/Route Handlers will refresh sessions.

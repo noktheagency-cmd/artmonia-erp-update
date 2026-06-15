@@ -7,12 +7,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type MouseEvent,
   type SyntheticEvent,
-  useEffect,
   useRef,
   useState,
 } from "react";
 import {
   Bell,
+  BriefcaseBusiness,
   CreditCard,
   Gauge,
   GraduationCap,
@@ -40,6 +40,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard", label: "İdarə paneli", icon: Gauge },
   { href: "/students", label: "Tələbələr", icon: GraduationCap },
   { href: "/crm", label: "CRM", icon: UsersRound },
+  { href: "/hr" as Route, label: "HR panel", icon: BriefcaseBusiness },
   { href: "/finance", label: "Maliyyə", icon: CreditCard },
   { href: "/reports", label: "Hesabatlar", icon: LayoutGrid },
 ];
@@ -70,13 +71,6 @@ export function AppShell({
   const activePendingHref = pendingHref && pendingHref !== currentHref ? pendingHref : null;
   const isNavigating = Boolean(activePendingHref);
 
-  useEffect(() => {
-    for (const item of navItems) {
-      router.prefetch(item.href);
-      prefetchedHrefs.current.add(item.href);
-    }
-  }, [router]);
-
   function markNavigation(href: string | null) {
     if (href && href !== currentHref) {
       setPendingHref(href);
@@ -102,8 +96,7 @@ export function AppShell({
   }
 
   function handleNavHover(href: Route) {
-    router.prefetch(href);
-    prefetchedHrefs.current.add(href);
+    prefetchInternalHref(href);
   }
 
   function getEventAnchor(target: EventTarget | null) {
@@ -177,7 +170,7 @@ export function AppShell({
           onClick={(event) => handleNavClick("/dashboard", event)}
           onMouseEnter={() => handleNavHover("/dashboard")}
           onFocus={() => handleNavHover("/dashboard")}
-          prefetch
+          prefetch={false}
         >
           <Image className="brand-logo" src="/logo.png" alt="" width={34} height={34} priority />
         </Link>
@@ -201,7 +194,7 @@ export function AppShell({
                 onClick={(event) => handleNavClick(item.href, event)}
                 onMouseEnter={() => handleNavHover(item.href)}
                 onFocus={() => handleNavHover(item.href)}
-                prefetch
+                prefetch={false}
               >
                 <Icon size={18} strokeWidth={1.9} />
               </Link>
