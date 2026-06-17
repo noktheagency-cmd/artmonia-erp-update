@@ -27,7 +27,6 @@ import {
   UsersRound,
   WalletCards,
   Clock,
-  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +40,21 @@ import {
 import { StatusChip } from "@/components/ui/status-chip";
 import { cx } from "@/components/ui/cx";
 import { EmployeeCrud } from "@/modules/hr/employee-crud";
+import {
+  HrCompactChip,
+  HrEmptyState,
+  HrFunnelBand,
+  HrInspector,
+  HrMetricTile,
+  HrPageHeader,
+  HrPanel,
+  HrPanelHeader,
+  HrScoreBar,
+  HrSparkline,
+  HrTabs,
+  HrToolbar,
+  type HrTone,
+} from "@/modules/hr/hr-ui";
 import type {
   HrExcelCellValue,
   HrExcelTable,
@@ -115,6 +129,13 @@ const metricIcons: Record<string, LucideIcon> = {
   "İş saatı": Clock3,
 };
 
+const metricToneMap: Record<HrPerformanceMetric["tone"], HrTone> = {
+  blue: "info",
+  coral: "danger",
+  yellow: "warning",
+  mint: "success",
+};
+
 export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
   const initialWorkspace = useMemo(() => createWorkspaceState(data), [data]);
   const [workspace, setWorkspace] = useState(initialWorkspace);
@@ -141,34 +162,13 @@ export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
 
   return (
     <section className="page-stack hr-page">
-      <div className="page-heading list-heading hr-page-heading hr-modern-heading">
-        <div>
-          <p className="eyeless-label">Artmonia HR</p>
-          <h1>HR idarəetmə paneli</h1>
-          <p>
-            İşçi bazası, gündəlik aktivlik, performans analitikası və rəy axınını bir yerdə
-            idarə edən daxili ERP workspace.
-          </p>
-        </div>
-      </div>
+      <HrPageHeader
+        label="Artmonia HR"
+        title="HR idarəetmə paneli"
+        description="İşçi bazası, gündəlik aktivlik, performans analitikası və rəy axını bir yerdə."
+      />
 
-      <nav className="hr-tabs" aria-label="HR panel bölmələri">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-
-          return (
-            <button
-              className={cx("hr-tab-button", activeTab === tab.id && "is-active")}
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <Icon size={16} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      <HrTabs tabs={tabs} activeTab={activeTab} onSelect={setActiveTab} />
 
       {activeTab === "overview" && (
         <OverviewTab
@@ -176,7 +176,6 @@ export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
           managerSummaries={managerSummaries}
           metrics={metrics}
           weeklyRows={workspace.weeklyRows}
-          onOpenTab={setActiveTab}
         />
       )}
       {activeTab === "employees" && <EmployeeCrud />}
@@ -229,13 +228,11 @@ function OverviewTab({
   metrics,
   managerSummaries,
   weeklyRows,
-  onOpenTab,
 }: {
   data: HrPerformanceData;
   metrics: HrPerformanceMetric[];
   managerSummaries: ManagerSummary[];
   weeklyRows: HrWeeklyFeedbackRow[];
-  onOpenTab: (tab: HrTabId) => void;
 }) {
   const topRevenue = managerSummaries[0];
   const bestConversion = [...managerSummaries].sort((first, second) => second.conversion - first.conversion)[0];
@@ -249,14 +246,12 @@ function OverviewTab({
     <div className="hr-tab-content">
       <HrCommandCenter metrics={metrics} />
 
-      <HrLifecycleRoadmap onOpenTab={onOpenTab} />
-
       <div className="hr-overview-grid">
-        <article className="panel hr-decision-panel">
-          <SectionHead
+        <HrPanel className="hr-decision-panel" as="article">
+          <HrPanelHeader
             icon={BarChart3}
-            eyebrow={`${data.daily.totalRows} gündəlik qeyd əsasında`}
-            title="Qərar icmalı"
+            eyebrow={`${data.daily.totalRows} gündəlik qeyd`}
+            title="Qərar mərkəzi"
             description="Komandanın cari vəziyyəti, diqqət nöqtələri və növbəti əməliyyat addımları."
           />
 
@@ -302,10 +297,10 @@ function OverviewTab({
               description="Həftəlik müşahidələr inkişaf bölməsində fəaliyyət planı kimi idarə olunur."
             />
           </div>
-        </article>
+        </HrPanel>
 
-        <article className="panel hr-manager-board">
-          <SectionHead
+        <HrPanel className="hr-manager-board" as="article">
+          <HrPanelHeader
             icon={UsersRound}
             eyebrow="Komanda icmalı"
             title="Menecer performansı"
@@ -317,59 +312,53 @@ function OverviewTab({
               <ManagerScoreRow key={summary.manager} summary={summary} />
             ))}
           </div>
-        </article>
-      </div>
-    </div>
-  );
-}
+        </HrPanel>
 
-function HrLifecycleRoadmap({ onOpenTab }: { onOpenTab: (tab: HrTabId) => void }) {
-  const steps: Array<{ tab: HrTabId; icon: LucideIcon; label: string; title: string; desc: string }> = [
-    { tab: "employees", icon: UsersRound, label: "01", title: "İşçilər", desc: "Məlumat bazası" },
-    { tab: "daily", icon: Table2, label: "02", title: "Gündəlik", desc: "Aktivlik jurnalı" },
-    { tab: "performance", icon: Gauge, label: "03", title: "Performans", desc: "KPI hesablaması" },
-    { tab: "feedback", icon: Sparkles, label: "04", title: "İnkişaf", desc: "Həftəlik analiz" },
-    { tab: "targets", icon: Target, label: "05", title: "Nəticələr", desc: "Bonus və qərarlar" },
-  ];
-
-  return (
-    <div className="hr-roadmap-banner" aria-label="HR idarəetmə gedişatı">
-      {steps.map((step, idx) => {
-        const Icon = step.icon;
-        return (
-          <div key={step.label} className="hr-roadmap-step-wrap">
-            <button
-              className="hr-roadmap-step"
-              type="button"
-              aria-label={`${step.label}. ${step.title}. ${step.desc}`}
-              onClick={() => onOpenTab(step.tab)}
-            >
-              <span className="hr-roadmap-step-number">{step.label}</span>
-              <div className="hr-roadmap-step-icon">
-                <Icon size={16} />
+        <HrPanel className="hr-overview-chart-panel" as="article">
+          <HrPanelHeader
+            icon={LineChart}
+            eyebrow="Mikro trend"
+            title="Komanda siqnalları"
+            description="Zəng, dəvət, satış və gəlir ritmi yalnız icmal səviyyəsində göstərilir."
+          />
+          <div className="hr-signal-list">
+            {managerSummaries.map((summary) => (
+              <div className="hr-signal-row" key={summary.manager}>
+                <div>
+                  <strong>{summary.manager}</strong>
+                  <span>{summary.status}</span>
+                </div>
+                <HrSparkline
+                  tone={summary.tone}
+                  values={[summary.calls, summary.answered, summary.invites, summary.sales, summary.revenuePerHour]}
+                  label={`${summary.manager} mikro trend`}
+                />
+                <HrCompactChip tone={summary.tone}>{summary.score}/100</HrCompactChip>
               </div>
-              <div className="hr-roadmap-step-info">
-                <strong>{step.title}</strong>
-                <small>{step.desc}</small>
-              </div>
-            </button>
-            {idx < steps.length - 1 && <div className="hr-roadmap-arrow"><ArrowRight size={14} /></div>}
+            ))}
           </div>
-        );
-      })}
+        </HrPanel>
+      </div>
     </div>
   );
 }
 
 function HrCommandCenter({ metrics }: { metrics: HrPerformanceMetric[] }) {
   return (
-    <article className="hr-command-center" aria-label="HR icmal göstəriciləri">
+    <section className="hr-command-center" aria-label="HR icmal göstəriciləri">
       <div className="hr-metric-grid" aria-label="HR icmal göstəriciləri">
         {metrics.map((item) => (
-          <MetricCard item={item} key={item.label} />
+          <HrMetricTile
+            key={item.label}
+            icon={metricIcons[item.label] ?? BarChart3}
+            label={item.label}
+            value={item.value}
+            helper={item.helper}
+            tone={metricToneMap[item.tone]}
+          />
         ))}
       </div>
-    </article>
+    </section>
   );
 }
 
@@ -464,7 +453,7 @@ function DailyTab({
   };
 
   return (
-    <article className="panel hr-sheet-panel hr-workspace-panel hr-daily-workspace">
+    <HrPanel className="hr-sheet-panel hr-workspace-panel hr-daily-workspace" as="article">
       <SectionHead
         icon={Table2}
         eyebrow={`${filteredRows.length} / ${workspace.dailyRows.length} qeyd göstərilir`}
@@ -482,9 +471,7 @@ function DailyTab({
         setMonthFilter={setMonthFilter}
       />
 
-      <DailySourcePanel />
-
-      <div className="hr-data-toolbar">
+      <HrToolbar className="hr-data-toolbar">
         <label className="table-search hr-data-search">
           <Search size={15} />
           <span className="sr-only">Cədvəldə axtar</span>
@@ -504,7 +491,7 @@ function DailyTab({
             Gündəlik qeyd əlavə et
           </Button>
         </div>
-      </div>
+      </HrToolbar>
 
       <div className="hr-employee-layout">
         <div className="data-table-wrap hr-excel-table-wrap">
@@ -526,21 +513,44 @@ function DailyTab({
                   <tr
                     key={row.id}
                     className={cx(row.id === selectedRow?.id && "is-selected")}
+                    aria-selected={row.id === selectedRow?.id}
                     onClick={() => setSelectedRowId(row.id)}
                   >
-                    <td>{formatCell(row.cells[0], "Tarix")}</td>
-                    <td><strong>{getText(row.cells[1])}</strong></td>
-                    <td>{formatCell(row.cells[4], "İş Saatı")}</td>
-                    <td>{formatCell(row.cells[5], "Zəng (total)")}</td>
-                    <td>{formatCell(row.cells[10], "Satış")}</td>
-                    <td><strong>{formatCell(row.cells[11], "Gəlir (AZN)")}</strong></td>
-                    <td className="is-long-text">{getText(row.cells[12]) || "-"}</td>
+                    <td>
+                      <span className="hr-table-date">{formatCell(row.cells[0], "Tarix")}</span>
+                    </td>
+                    <td>
+                      <div className="hr-table-person">
+                        <span className="hr-table-avatar">{getInitials(getText(row.cells[1])) || "HR"}</span>
+                        <div>
+                          <strong>{getText(row.cells[1]) || "-"}</strong>
+                          <small>{getText(row.cells[2]) || "--:--"} - {getText(row.cells[3]) || "--:--"}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="hr-table-pill is-hours">{formatCell(row.cells[4], "İş Saatı")} saat</span>
+                    </td>
+                    <td>
+                      <span className="hr-table-pill is-info">{formatCell(row.cells[5], "Zəng (total)")}</span>
+                    </td>
+                    <td>
+                      <span className={cx("hr-table-pill", toNumber(row.cells[10]) > 0 ? "is-success" : "is-muted")}>
+                        {formatCell(row.cells[10], "Satış")}
+                      </span>
+                    </td>
+                    <td>
+                      <strong className="hr-table-money">{formatCell(row.cells[11], "Gəlir (AZN)")}</strong>
+                    </td>
+                    <td className="is-long-text">
+                      <span className="hr-table-note">{getText(row.cells[12]) || "Qeyd yoxdur"}</span>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan={7}>
-                    <div className="empty-state">Qeyd tapılmadı</div>
+                    <HrEmptyState>Qeyd tapılmadı</HrEmptyState>
                   </td>
                 </tr>
               )}
@@ -563,7 +573,7 @@ function DailyTab({
         managers={managers}
         onSave={handleSaveDaily}
       />
-    </article>
+    </HrPanel>
   );
 }
 
@@ -578,16 +588,16 @@ function DailyDetailCard({
 }) {
   if (!row) {
     return (
-      <aside className="hr-employee-detail empty">
-        <div className="empty-state">Seçilmiş qeyd yoxdur</div>
-      </aside>
+      <HrInspector className="hr-employee-detail empty">
+        <HrEmptyState>Seçilmiş qeyd yoxdur</HrEmptyState>
+      </HrInspector>
     );
   }
 
   const getVal = (idx: number) => row.cells[idx] ?? null;
 
   return (
-    <aside className="hr-employee-detail hr-daily-detail-panel">
+    <HrInspector className="hr-employee-detail hr-daily-detail-panel">
       <div className="hr-detail-top">
         <span className="hr-detail-avatar">{getInitials(getText(getVal(1)))}</span>
         <div>
@@ -657,7 +667,7 @@ function DailyDetailCard({
           Sil
         </Button>
       </div>
-    </aside>
+    </HrInspector>
   );
 }
 
@@ -819,7 +829,7 @@ function PerformanceTab({
 
   return (
     <div className="hr-performance-layout">
-      <article className="panel hr-performance-focus">
+      <HrPanel className="hr-performance-focus" as="article">
         <SectionHead
           icon={TrendingUp}
           eyebrow="Hesablanan göstəricilər"
@@ -835,9 +845,9 @@ function PerformanceTab({
         </div>
 
         <KpiFormulaPanel summaries={managerSummaries} />
-      </article>
+      </HrPanel>
 
-      <article className="panel hr-funnel-panel-modern">
+      <HrPanel className="hr-funnel-panel-modern" as="article">
         <PanelTitle
           icon={BarChart3}
           title="Satış hunisi"
@@ -848,9 +858,9 @@ function PerformanceTab({
             <FunnelPerson key={row.id} row={row} />
           ))}
         </div>
-      </article>
+      </HrPanel>
 
-      <article className="panel hr-efficiency-panel">
+      <HrPanel className="hr-efficiency-panel" as="article">
         <PanelTitle
           icon={Gauge}
           title="Saat səmərəliliyi"
@@ -861,9 +871,9 @@ function PerformanceTab({
             <EfficiencyCard key={row.id} row={row} />
           ))}
         </div>
-      </article>
+      </HrPanel>
 
-      <article className="panel hr-trend-panel-modern">
+      <HrPanel className="hr-trend-panel-modern" as="article">
         <PanelTitle
           icon={LineChart}
           title="Həftəlik trend"
@@ -880,28 +890,7 @@ function PerformanceTab({
             <TrendRow key={row.id} row={row} />
           ))}
         </div>
-      </article>
-    </div>
-  );
-}
-
-function DailySourcePanel() {
-  const sourceItems = [
-    { metric: "İş saatı", source: "Davamiyyət / vaxt cədvəli", formula: "gündəlik saat" },
-    { metric: "Zəng və cavab", source: "CRM / telefoniya", formula: "cavab / zəng" },
-    { metric: "Dəvət və canlı", source: "CRM status", formula: "dəvət / cavab, canlı / dəvət" },
-    { metric: "Satış və gəlir", source: "CRM + maliyyə", formula: "gəlir, satış və orta çek" },
-  ];
-
-  return (
-    <div className="hr-source-flow">
-      {sourceItems.map((item) => (
-        <div key={item.metric}>
-          <span>{item.metric}</span>
-          <strong>{item.source}</strong>
-          <small>{item.formula}</small>
-        </div>
-      ))}
+      </HrPanel>
     </div>
   );
 }
@@ -989,7 +978,7 @@ function FeedbackTab({
   };
 
   return (
-    <article className="panel hr-sheet-panel hr-workspace-panel">
+    <HrPanel className="hr-sheet-panel hr-workspace-panel" as="article">
       <SectionHead
         icon={Sparkles}
         eyebrow={`${rows.length} / ${workspace.weeklyRows.length} inkişaf qeydi`}
@@ -1009,7 +998,7 @@ function FeedbackTab({
 
       <FeedbackInsightPanel summaries={managerSummaries} rows={rows} />
 
-      <div className="hr-data-toolbar">
+      <HrToolbar className="hr-data-toolbar">
         <div><strong>Həftəlik Rəylər</strong></div>
         <div className="hr-data-actions">
           <Button type="button" variant="outline" size="sm" onClick={handleResetFeedback}>
@@ -1021,7 +1010,7 @@ function FeedbackTab({
             Rəy yaz
           </Button>
         </div>
-      </div>
+      </HrToolbar>
 
       <div className="hr-feedback-command hr-feedback-grid-container">
         {rows.length > 0 ? (
@@ -1034,7 +1023,7 @@ function FeedbackTab({
             />
           ))
         ) : (
-          <div className="empty-state">Uyğun inkişaf rəyi tapılmadı</div>
+          <HrEmptyState>Uyğun inkişaf rəyi tapılmadı</HrEmptyState>
         )}
       </div>
 
@@ -1046,7 +1035,7 @@ function FeedbackTab({
         managers={managers}
         onSave={handleSaveFeedback}
       />
-    </article>
+    </HrPanel>
   );
 }
 
@@ -1108,7 +1097,7 @@ function TargetsTab({
   const bonusEligible = managerSummaries.filter((summary) => summary.score >= 68).length;
 
   return (
-    <article className="panel hr-sheet-panel hr-workspace-panel">
+    <HrPanel className="hr-sheet-panel hr-workspace-panel" as="article">
       <SectionHead
         icon={Target}
         eyebrow="Ay sonu bağlanış"
@@ -1167,22 +1156,7 @@ function TargetsTab({
           tone="warning"
         />
       </div>
-    </article>
-  );
-}
-
-function MetricCard({ item }: { item: HrPerformanceMetric }) {
-  const Icon = metricIcons[item.label] ?? BarChart3;
-
-  return (
-    <article className={`hr-metric-card summary-${item.tone}`}>
-      <div className="hr-metric-icon">
-        <Icon size={18} />
-      </div>
-      <span>{item.label}</span>
-      <strong>{item.value}</strong>
-      <small>{item.helper}</small>
-    </article>
+    </HrPanel>
   );
 }
 
@@ -1225,9 +1199,7 @@ function ManagerScoreRow({ summary }: { summary: ManagerSummary }) {
         </div>
         <StatusChip tone={summary.tone}>{summary.status}</StatusChip>
       </div>
-      <div className="hr-score-track" aria-label={`${summary.manager} performans balı`}>
-        <span style={{ width: `${summary.score}%` }} />
-      </div>
+      <HrScoreBar value={summary.score} tone={summary.tone} label={`${summary.manager} performans balı`} />
       <div className="hr-manager-score-metrics">
         <small>{summary.score}/100 bal</small>
         <small>{formatNumber(summary.conversion * 100, 1)}% konv.</small>
@@ -1247,9 +1219,7 @@ function PerformanceRankRow({ summary, index }: { summary: ManagerSummary; index
           {formatNumber(summary.revenue, 0)} AZN · {formatNumber(summary.revenuePerHour, 1)} AZN / saat
         </small>
       </div>
-      <div className="hr-score-track">
-        <span style={{ width: `${Math.min(100, summary.score)}%` }} />
-      </div>
+      <HrScoreBar value={summary.score} tone={summary.tone} />
       <StatusChip tone={summary.tone}>{summary.score}/100</StatusChip>
     </div>
   );
@@ -1297,12 +1267,17 @@ function FunnelPerson({ row }: { row: HrExcelTableRow }) {
   const invites = toNumber(row.cells[4]);
   const live = toNumber(row.cells[6]);
   const sales = toNumber(row.cells[8]);
-  const steps = [
+  const steps: Array<{ label: string; value: number; base: number; tone: HrTone }> = [
     { label: "Cavab", value: answered, base: calls, tone: "info" },
     { label: "Dəvət", value: invites, base: answered, tone: "success" },
     { label: "Canlı", value: live, base: invites, tone: "warning" },
     { label: "Satış", value: sales, base: live || invites, tone: "danger" },
   ];
+  const funnelSteps = steps.map((step) => ({
+    label: step.label,
+    value: Math.min(100, divide(step.value, step.base) * 100),
+    tone: step.tone,
+  }));
 
   return (
     <div className="hr-funnel-person">
@@ -1310,23 +1285,7 @@ function FunnelPerson({ row }: { row: HrExcelTableRow }) {
         <strong>{manager}</strong>
         <span>{formatNumber(calls, 0)} zəng</span>
       </div>
-      <div className="hr-funnel-steps">
-        {steps.map((step) => {
-          const percent = Math.min(100, divide(step.value, step.base) * 100);
-
-          return (
-            <div key={step.label}>
-              <div className="hr-funnel-meta">
-                <span>{step.label}</span>
-                <strong>{formatNumber(percent, 1)}%</strong>
-              </div>
-              <div className="hr-progress">
-                <span className={`is-${step.tone}`} style={{ width: `${percent}%` }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <HrFunnelBand steps={funnelSteps} />
     </div>
   );
 }
@@ -1366,6 +1325,7 @@ function EfficiencyCard({ row }: { row: HrExcelTableRow }) {
 function TrendRow({ row }: { row: HrExcelTableRow }) {
   const manager = getText(row.cells[0]);
   const trendCells = row.cells.slice(1).map((cell) => getText(cell));
+  const trendValues = trendCells.map((cell) => Number(cell.match(/^\d+/)?.[0] ?? 0));
   const trendDirection = getTrendDirection(trendCells);
   const DirectionIcon = trendDirection >= 0 ? TrendingUp : TrendingDown;
 
@@ -1378,6 +1338,11 @@ function TrendRow({ row }: { row: HrExcelTableRow }) {
           {trendDirection >= 0 ? "artım" : "azalma"}
         </span>
       </div>
+      <HrSparkline
+        values={trendValues}
+        tone={trendDirection >= 0 ? "success" : "danger"}
+        label={`${manager} həftəlik trend`}
+      />
       <div className="hr-trend-lines">
         {trendCells.map((cell, index) => (
           <span className="hr-trend-pill" key={`${row.id}-${index}`}>

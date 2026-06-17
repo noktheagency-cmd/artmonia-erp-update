@@ -26,6 +26,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
 import { cx } from "@/components/ui/cx";
+import {
+  HrEmptyState,
+  HrInspector,
+  HrPanel,
+  HrPanelHeader,
+  HrToolbar,
+} from "@/modules/hr/hr-ui";
 
 type EmployeeStatus = "ACTIVE" | "PROBATION" | "ON_LEAVE" | "INACTIVE";
 type ContractType = "FULL_TIME" | "PART_TIME" | "CONTRACTOR";
@@ -323,15 +330,13 @@ export function EmployeeCrud() {
   }
 
   return (
-    <article className="panel crm-table-panel hr-employee-workspace">
-      <div className="hr-section-head">
-        <div>
-          <p className="eyeless-label">HR əməliyyatları</p>
-          <h2>İşçi bazası</h2>
-          <p>İşçi əlavə et, məlumatları redaktə et, statusları izlə və lazım olduqda sil.</p>
-        </div>
-
-        <div className="hr-employee-actions">
+    <HrPanel className="crm-table-panel hr-employee-workspace" as="article">
+      <HrPanelHeader
+        eyebrow="HR əməliyyatları"
+        title="İşçi bazası"
+        description="İşçi əlavə et, məlumatları redaktə et, statusları izlə və lazım olduqda sil."
+        action={
+          <div className="hr-employee-actions">
           <Button type="button" variant="outline" size="sm" onClick={resetEmployees}>
             <RotateCcw data-icon="inline-start" />
             Sıfırla
@@ -340,8 +345,9 @@ export function EmployeeCrud() {
             <Plus data-icon="inline-start" />
             İşçi əlavə et
           </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <div className="hr-employee-metrics" aria-label="İşçi göstəriciləri">
         <CompactMetric label="İşçi" value={summary.total.toString()} helper="ümumi qeyd" />
@@ -352,7 +358,7 @@ export function EmployeeCrud() {
 
       <div className="hr-employee-layout">
         <div className="hr-employee-main">
-          <div className="hr-employee-toolbar">
+          <HrToolbar className="hr-employee-toolbar">
             <label className="table-search hr-employee-search">
               <Search size={15} />
               <span className="sr-only">İşçi axtar</span>
@@ -392,13 +398,13 @@ export function EmployeeCrud() {
                 ))}
               </select>
             </label>
-          </div>
+          </HrToolbar>
 
-          <div className="hr-employee-grid-view">
+          <div className="hr-employee-roster">
             {filteredEmployees.length > 0 ? (
               filteredEmployees.map((employee) => (
                 <div
-                  className={cx("hr-employee-card-item", employee.id === selectedEmployee?.id && "is-selected")}
+                  className={cx("hr-employee-roster-row", employee.id === selectedEmployee?.id && "is-selected")}
                   key={employee.id}
                   onClick={() => setSelectedEmployeeId(employee.id)}
                 >
@@ -449,7 +455,7 @@ export function EmployeeCrud() {
                 </div>
               ))
             ) : (
-              <div className="empty-state">İşçi tapılmadı</div>
+              <HrEmptyState>İşçi tapılmadı</HrEmptyState>
             )}
           </div>
         </div>
@@ -486,7 +492,7 @@ export function EmployeeCrud() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </article>
+    </HrPanel>
   );
 }
 
@@ -517,14 +523,14 @@ function EmployeeDetail({
 }) {
   if (!employee) {
     return (
-      <aside className="hr-employee-detail">
-        <div className="empty-state">Seçilmiş işçi yoxdur</div>
-      </aside>
+      <HrInspector className="hr-employee-detail">
+        <HrEmptyState>Seçilmiş işçi yoxdur</HrEmptyState>
+      </HrInspector>
     );
   }
 
   return (
-    <aside className="hr-employee-detail">
+    <HrInspector className="hr-employee-detail">
       <div className="hr-detail-top">
         <span className="hr-detail-avatar">{getInitials(employee.fullName)}</span>
         <div>
@@ -559,7 +565,7 @@ function EmployeeDetail({
         <Pencil data-icon="inline-start" />
         Redaktə et
       </Button>
-    </aside>
+    </HrInspector>
   );
 }
 
