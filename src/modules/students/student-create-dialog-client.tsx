@@ -55,11 +55,9 @@ export function StudentCreateDialogClient({
     managerId: "",
     lifecycleStatus: "GROUP_WAITING",
     registeredDate: createOptions.defaultRegisteredDate,
-    startDate: createOptions.defaultStartDate,
     firstLessonDate: "",
     monthlyFee: "",
     lessonsPerMonth: "",
-    dueDate: createOptions.defaultDueDate,
     notes: "",
     paymentAmount: "",
     paymentDate: createOptions.defaultPaymentDate,
@@ -311,34 +309,12 @@ export function StudentCreateDialogClient({
                 />
               </label>
               <label className="form-field">
-                <span>Başlama tarixi</span>
-                <Input
-                  name="startDate"
-                  value={values.startDate}
-                  onChange={(event) => updateValue("startDate", event.target.value)}
-                  inputMode="numeric"
-                  required
-                />
-              </label>
-            </div>
-            <div className="field-grid">
-              <label className="form-field">
                 <span>İlk dərs tarixi</span>
                 <Input
                   name="firstLessonDate"
                   value={values.firstLessonDate}
                   onChange={(event) => updateValue("firstLessonDate", event.target.value)}
                   inputMode="numeric"
-                />
-              </label>
-              <label className="form-field">
-                <span>Ödəniş son tarixi</span>
-                <Input
-                  name="dueDate"
-                  value={values.dueDate}
-                  onChange={(event) => updateValue("dueDate", event.target.value)}
-                  inputMode="numeric"
-                  required
                 />
               </label>
             </div>
@@ -391,6 +367,9 @@ export function StudentCreateDialogClient({
                 <Banknote />
                 <span>İlkin ödəniş</span>
               </div>
+              <p className="payment-policy-note">
+                İmtina zamanı qəbul edilən ödəniş geri qaytarılmır.
+              </p>
               <div className="field-grid">
                 <label className="form-field">
                   <span>Məbləğ</span>

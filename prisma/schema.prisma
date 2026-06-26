@@ -32,12 +32,30 @@ enum LeadStage {
   @@schema("erp")
 }
 
+enum LeadPriority {
+  NORMAL
+  MEDIUM
+  CRITICAL
+
+  @@schema("erp")
+}
+
+enum LeadNextActionType {
+  CALL
+  CONSULTATION_REMINDER
+  PAYMENT_REMINDER
+  FOLLOW_UP
+
+  @@schema("erp")
+}
+
 enum StudentLifecycleStatus {
   GROUP_WAITING
   ACTIVE
   DEBT
   FROZEN
   STOPPED
+  DECLINED
   COMPLETED
 
   @@schema("erp")
@@ -219,6 +237,8 @@ model Lead {
   managerId         String?   @map("manager_id") @db.Uuid
   programInterestId String?   @map("program_interest_id") @db.Uuid
   nextFollowUpAt    DateTime? @map("next_follow_up_at")
+  nextActionType    LeadNextActionType? @map("next_action_type")
+  priority          LeadPriority @default(NORMAL)
   lostReason        String?   @map("lost_reason")
   convertedStudentId String?  @unique @map("converted_student_id") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at")
@@ -235,6 +255,7 @@ model Lead {
   @@index([managerId, stage])
   @@index([programInterestId])
   @@index([nextFollowUpAt])
+  @@index([priority, nextFollowUpAt])
   @@map("leads")
   @@schema("erp")
 }

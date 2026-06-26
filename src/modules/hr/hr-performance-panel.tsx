@@ -5,14 +5,16 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   AlertTriangle,
+  BadgeCheck,
   BarChart3,
   CalendarDays,
+  CircleDollarSign,
   CheckCircle2,
-  Clock3,
   Gauge,
   LineChart,
   Pencil,
   PhoneCall,
+  PhoneIncoming,
   Plus,
   RefreshCcw,
   Save,
@@ -27,8 +29,10 @@ import {
   UsersRound,
   WalletCards,
   Clock,
+  TimerReset,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +50,6 @@ import {
   HrFunnelBand,
   HrInspector,
   HrMetricTile,
-  HrPageHeader,
   HrPanel,
   HrPanelHeader,
   HrScoreBar,
@@ -123,10 +126,10 @@ const tabs: Array<{ id: HrTabId; label: string; icon: LucideIcon }> = [
 ];
 
 const metricIcons: Record<string, LucideIcon> = {
-  Gəlir: WalletCards,
-  Satış: CheckCircle2,
-  Zəng: PhoneCall,
-  "İş saatı": Clock3,
+  Gəlir: CircleDollarSign,
+  Satış: BadgeCheck,
+  Zəng: PhoneIncoming,
+  "İş saatı": TimerReset,
 };
 
 const metricToneMap: Record<HrPerformanceMetric["tone"], HrTone> = {
@@ -142,6 +145,8 @@ export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
   const [activeTab, setActiveTab] = useState<HrTabId>("overview");
   const [managerFilter, setManagerFilter] = useState(data.filters.manager);
   const [monthFilter, setMonthFilter] = useState(data.filters.month);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const metrics = useMemo(
     () => buildOverviewMetrics(workspace.dashboardSections[2]?.rows ?? data.dashboard.sections[2]?.rows ?? []),
@@ -151,29 +156,84 @@ export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
     () => buildManagerSummaries(workspace.dashboardSections[2]?.rows ?? [], workspace.weeklyRows),
     [workspace.dashboardSections, workspace.weeklyRows]
   );
+  const visibleManagerSummaries = useMemo(
+    () =>
+      managerFilter
+        ? managerSummaries.filter((summary) => summary.manager === managerFilter)
+        : managerSummaries,
+    [managerFilter, managerSummaries]
+  );
   const filteredDailyRows = useMemo(
-    () => filterRows(workspace.dailyRows, managerFilter, monthFilter),
-    [managerFilter, monthFilter, workspace.dailyRows]
+    () => filterRows(workspace.dailyRows, managerFilter, monthFilter, dateFrom, dateTo),
+    [dateFrom, dateTo, managerFilter, monthFilter, workspace.dailyRows]
   );
   const filteredWeeklyRows = useMemo(
-    () => filterRows(workspace.weeklyRows, managerFilter, monthFilter),
-    [managerFilter, monthFilter, workspace.weeklyRows]
+    () => filterRows(workspace.weeklyRows, managerFilter, monthFilter, dateFrom, dateTo),
+    [dateFrom, dateTo, managerFilter, monthFilter, workspace.weeklyRows]
   );
+  const visibleRowCount =
+    activeTab === "daily"
+      ? filteredDailyRows.length
+      : activeTab === "feedback"
+        ? filteredWeeklyRows.length
+        : dateFrom || dateTo
+          ? filteredDailyRows.length
+          : visibleManagerSummaries.length;
+  const activePeriodLabel =
+    data.monthOptions.find((option) => option.value === monthFilter)?.label ?? "Bütün dövr";
+  const activeDateLabel =
+    dateFrom || dateTo
+      ? `${dateFrom || "Başlanğıc"} - ${dateTo || "Son tarix"}`
+      : activePeriodLabel;
 
   return (
-    <section className="page-stack hr-page">
-      <HrPageHeader
-        label="Artmonia HR"
-        title="HR idarəetmə paneli"
-        description="İşçi bazası, gündəlik aktivlik, performans analitikası və rəy axını bir yerdə."
-      />
+    <section className="page-stack hr-page hr-redesign-page">
+      <div className="crm-unified-filter-panel hr-unified-command-panel">
+        <div className="student-header-compact hr-redesign-header" style={{ marginBottom: 0 }}>
+          <div className="header-title-wrapper-compact">
+            <div className="crm-eyebrow-compact">
+              <span className="eyebrow-pill pill-primary">Artmonia HR</span>
+              <span className="eyebrow-pill pill-date">{activeDateLabel}</span>
+            </div>
+            <div className="title-row-compact">
+              <h1>HR idarəetmə paneli</h1>
+            </div>
+            <p className="crm-header-desc" style={{ marginBottom: 0 }}>
+              İşçi bazası, gündəlik aktivlik, performans analitikası və inkişaf qeydləri eyni əməliyyat ritmində görünür.
+            </p>
+          </div>
+
+          <div className="header-actions-wrapper-compact">
+            <div className="financial-summary-badge-compact hr-summary-badge">
+              <Clock size={14} className="text-tone-primary" />
+              <span className="label-text">Son yenilənmə:</span>
+              <strong className="value-text">{data.labels.latestUpdate}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="filter-header-divider" />
+
+        <FilterBar
+          data={data}
+          managerFilter={managerFilter}
+          monthFilter={monthFilter}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          rowCount={visibleRowCount}
+          setManagerFilter={setManagerFilter}
+          setMonthFilter={setMonthFilter}
+          setDateFrom={setDateFrom}
+          setDateTo={setDateTo}
+        />
+      </div>
 
       <HrTabs tabs={tabs} activeTab={activeTab} onSelect={setActiveTab} />
 
       {activeTab === "overview" && (
         <OverviewTab
           data={data}
-          managerSummaries={managerSummaries}
+          managerSummaries={visibleManagerSummaries}
           metrics={metrics}
           weeklyRows={workspace.weeklyRows}
         />
@@ -185,37 +245,28 @@ export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
           rows={filteredDailyRows}
           workspace={workspace}
           initialWorkspace={initialWorkspace}
-          managerFilter={managerFilter}
-          monthFilter={monthFilter}
-          setManagerFilter={setManagerFilter}
-          setMonthFilter={setMonthFilter}
           setWorkspace={setWorkspace}
         />
       )}
       {activeTab === "performance" && (
         <PerformanceTab
-          managerSummaries={managerSummaries}
+          managerSummaries={visibleManagerSummaries}
           monthlyTables={workspace.monthlyTables}
           onOpenTargets={() => setActiveTab("targets")}
         />
       )}
       {activeTab === "feedback" && (
         <FeedbackTab
-          data={data}
-          managerSummaries={managerSummaries}
+          managerSummaries={visibleManagerSummaries}
           rows={filteredWeeklyRows}
           workspace={workspace}
           initialWorkspace={initialWorkspace}
-          managerFilter={managerFilter}
-          monthFilter={monthFilter}
-          setManagerFilter={setManagerFilter}
-          setMonthFilter={setMonthFilter}
           setWorkspace={setWorkspace}
         />
       )}
       {activeTab === "targets" && (
         <TargetsTab
-          managerSummaries={managerSummaries}
+          managerSummaries={visibleManagerSummaries}
           workspace={workspace}
         />
       )}
@@ -367,20 +418,12 @@ function DailyTab({
   rows,
   workspace,
   initialWorkspace,
-  managerFilter,
-  monthFilter,
-  setManagerFilter,
-  setMonthFilter,
   setWorkspace,
 }: {
   data: HrPerformanceData;
   rows: HrExcelTableRow[];
   workspace: WorkspaceState;
   initialWorkspace: WorkspaceState;
-  managerFilter: string;
-  monthFilter: string;
-  setManagerFilter: (value: string) => void;
-  setMonthFilter: (value: string) => void;
   setWorkspace: TableRowsSetter;
 }) {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(rows[0]?.id ?? null);
@@ -460,15 +503,6 @@ function DailyTab({
         title="Gündəlik aktivlik"
         description="İş saatı, zəng, dəvət, satış və gəlir qeydləri KPI hesablamasına bağlanır."
         meta="Məlumat girişi"
-      />
-
-      <FilterBar
-        data={data}
-        managerFilter={managerFilter}
-        monthFilter={monthFilter}
-        rowCount={filteredRows.length}
-        setManagerFilter={setManagerFilter}
-        setMonthFilter={setMonthFilter}
       />
 
       <HrToolbar className="hr-data-toolbar">
@@ -896,26 +930,16 @@ function PerformanceTab({
 }
 
 function FeedbackTab({
-  data,
   managerSummaries,
   rows,
   workspace,
   initialWorkspace,
-  managerFilter,
-  monthFilter,
-  setManagerFilter,
-  setMonthFilter,
   setWorkspace,
 }: {
-  data: HrPerformanceData;
   managerSummaries: ManagerSummary[];
   rows: HrWeeklyFeedbackRow[];
   workspace: WorkspaceState;
   initialWorkspace: WorkspaceState;
-  managerFilter: string;
-  monthFilter: string;
-  setManagerFilter: (value: string) => void;
-  setMonthFilter: (value: string) => void;
   setWorkspace: TableRowsSetter;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -985,15 +1009,6 @@ function FeedbackTab({
         title="İnkişaf qeydləri və fəaliyyət planı"
         description="Həftəlik güclü tərəf, çətinlik və problem qeydləri kartlarla izlənir."
         meta="İnkişaf jurnalı"
-      />
-
-      <FilterBar
-        data={data}
-        managerFilter={managerFilter}
-        monthFilter={monthFilter}
-        rowCount={rows.length}
-        setManagerFilter={setManagerFilter}
-        setMonthFilter={setMonthFilter}
       />
 
       <FeedbackInsightPanel summaries={managerSummaries} rows={rows} />
@@ -1433,21 +1448,30 @@ function FilterBar({
   data,
   managerFilter,
   monthFilter,
+  dateFrom,
+  dateTo,
   rowCount,
   setManagerFilter,
   setMonthFilter,
+  setDateFrom,
+  setDateTo,
 }: {
   data: HrPerformanceData;
   managerFilter: string;
   monthFilter: string;
+  dateFrom: string;
+  dateTo: string;
   rowCount: number;
   setManagerFilter: (value: string) => void;
   setMonthFilter: (value: string) => void;
+  setDateFrom: (value: string) => void;
+  setDateTo: (value: string) => void;
 }) {
   return (
-    <div className="hr-filter-strip">
-      <label>
-        <span>İşçi</span>
+    <div className="hr-filter-strip hr-redesign-filter">
+      <div className="hr-filter-main-row">
+        <label>
+          <span>İşçi</span>
         <select
           value={managerFilter || allFilterValue}
           onChange={(event) =>
@@ -1480,6 +1504,35 @@ function FilterBar({
         </select>
       </label>
 
+      <div className="hr-date-range-fields">
+        <DatePicker
+          name="hr-from"
+          value={dateFrom}
+          onValueChange={(nextValue) => {
+            setDateFrom(nextValue);
+            if (nextValue) {
+              setMonthFilter("");
+            }
+          }}
+          placeholder="Başlanğıc"
+          aria-label="Başlanğıc tarixi"
+          popoverPlacement="floating"
+        />
+        <DatePicker
+          name="hr-to"
+          value={dateTo}
+          onValueChange={(nextValue) => {
+            setDateTo(nextValue);
+            if (nextValue) {
+              setMonthFilter("");
+            }
+          }}
+          placeholder="Son tarix"
+          aria-label="Son tarix"
+          popoverPlacement="floating"
+        />
+      </div>
+
       <div className="hr-filter-count">
         <strong>{rowCount}</strong>
         {" "}
@@ -1493,11 +1546,32 @@ function FilterBar({
         onClick={() => {
           setManagerFilter("");
           setMonthFilter("");
+          setDateFrom("");
+          setDateTo("");
         }}
       >
         <RefreshCcw data-icon="inline-start" />
-        Filteri təmizlə
+        Filtrləri təmizlə
       </Button>
+      </div>
+
+      <div className="hr-calendar-quick-row" aria-label="Sürətli dövr seçimi">
+        {data.monthOptions.map((option) => (
+          <button
+            type="button"
+            key={option.value}
+            className={cx("period-quick-btn", monthFilter === option.value && !dateFrom && !dateTo && "is-active")}
+            onClick={() => {
+              setMonthFilter(option.value);
+              setDateFrom("");
+              setDateTo("");
+            }}
+          >
+            <Clock size={13} className="text-tone-warning" />
+            <span>{option.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1882,12 +1956,31 @@ function buildRowFromCells(cells: HrExcelCellValue[], headers: string[], id = cr
   };
 }
 
-function filterRows<T extends HrExcelTableRow>(rows: T[], manager: string, month: string) {
+function filterRows<T extends HrExcelTableRow>(
+  rows: T[],
+  manager: string,
+  month: string,
+  dateFrom = "",
+  dateTo = ""
+) {
   return rows.filter(
     (row) =>
       (!manager || row.manager === manager) &&
-      (!month || row.month === month)
+      (!month || row.month === month) &&
+      isWithinDateRange(row.date, dateFrom, dateTo)
   );
+}
+
+function isWithinDateRange(value: string | undefined, from: string, to: string) {
+  if (!from && !to) {
+    return true;
+  }
+
+  if (!value) {
+    return false;
+  }
+
+  return (!from || value >= from) && (!to || value <= to);
 }
 
 function calculateDailyCells(cells: HrExcelCellValue[], headers: string[]) {

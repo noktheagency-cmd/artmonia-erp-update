@@ -23,6 +23,11 @@ import {
   findDuplicatePhoneMatches,
   normalizePhone,
 } from "@/modules/crm/duplicate-phone";
+import {
+  formatNextActionTypeLabel,
+  leadPriorityOptions,
+  nextActionTypeOptions,
+} from "@/modules/crm/follow-up";
 import { leadStageOptions } from "@/modules/crm/stage";
 import { addMonths, startOfMonth, toNumber } from "@/modules/shared/format";
 import { optionalFormString } from "@/modules/shared/form-values";
@@ -39,6 +44,11 @@ const optionalUuid = z.preprocess(
   z.string().uuid().optional()
 );
 
+const optionalNextActionType = z.preprocess(
+  optionalFormString,
+  z.enum(nextActionTypeOptions).optional()
+);
+
 const createLeadSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   phone: optionalText(40),
@@ -46,6 +56,8 @@ const createLeadSchema = z.object({
   programId: optionalUuid,
   managerId: optionalUuid,
   stage: z.enum(leadStageOptions).default(LeadStage.NEW),
+  priority: z.enum(leadPriorityOptions).default("NORMAL"),
+  nextActionType: optionalNextActionType,
   nextFollowUpDate: optionalText(20),
   note: optionalText(180),
 });
@@ -65,6 +77,8 @@ const updateLeadSchema = z.object({
   programId: optionalUuid,
   managerId: optionalUuid,
   stage: z.enum(leadStageOptions),
+  priority: z.enum(leadPriorityOptions).default("NORMAL"),
+  nextActionType: optionalNextActionType,
   nextFollowUpDate: optionalText(20),
   note: optionalText(240),
   returnTo: optionalText(260),
@@ -117,6 +131,8 @@ export async function createLeadAction(formData: FormData) {
         managerId,
         programInterestId: input.programId ?? null,
         nextFollowUpAt: followUpAt,
+        nextActionType: input.nextActionType ?? null,
+        priority: input.priority,
         stageHistory: {
           create: {
             newStage: input.stage,
@@ -136,7 +152,7 @@ export async function createLeadAction(formData: FormData) {
     if (followUpAt) {
       await tx.task.create({
         data: {
-          title: `İzləmə: ${input.fullName}`,
+          title: buildFollowUpTaskTitle(input.fullName, input.nextActionType),
           type: "lead_follow_up",
           entityType: "lead",
           entityId: lead.id,
@@ -180,6 +196,8 @@ export async function updateLeadAction(formData: FormData) {
         managerId: true,
         stage: true,
         source: true,
+        priority: true,
+        nextActionType: true,
         programInterestId: true,
         nextFollowUpAt: true,
         contactId: true,
@@ -231,6 +249,8 @@ export async function updateLeadAction(formData: FormData) {
         managerId,
         programInterestId: input.programId ?? null,
         nextFollowUpAt: followUpAt,
+        nextActionType: input.nextActionType ?? null,
+        priority: input.priority,
       },
       select: {
         id: true,
@@ -239,6 +259,8 @@ export async function updateLeadAction(formData: FormData) {
         managerId: true,
         programInterestId: true,
         nextFollowUpAt: true,
+        nextActionType: true,
+        priority: true,
       },
     });
 
@@ -269,7 +291,7 @@ export async function updateLeadAction(formData: FormData) {
         await tx.task.update({
           where: { id: existingTask.id },
           data: {
-            title: `İzləmə: ${input.fullName}`,
+            title: buildFollowUpTaskTitle(input.fullName, input.nextActionType),
             ownerUserId: managerId,
             dueAt: followUpAt,
           },
@@ -277,7 +299,7 @@ export async function updateLeadAction(formData: FormData) {
       } else {
         await tx.task.create({
           data: {
-            title: `İzləmə: ${input.fullName}`,
+            title: buildFollowUpTaskTitle(input.fullName, input.nextActionType),
             type: "lead_follow_up",
             entityType: "lead",
             entityId: input.leadId,
@@ -299,6 +321,8 @@ export async function updateLeadAction(formData: FormData) {
         id: current.id,
         stage: current.stage,
         source: current.source,
+        priority: current.priority,
+        nextActionType: current.nextActionType,
         managerId: current.managerId,
         programInterestId: current.programInterestId,
         nextFollowUpAt: current.nextFollowUpAt?.toISOString() ?? null,
@@ -595,6 +619,13 @@ function redirectToCrm(value: string | undefined): never {
 function invalidateCrmCaches() {
   updateTag(erpCacheTags.crm);
   updateTag(erpCacheTags.dashboard);
+}
+
+function buildFollowUpTaskTitle(
+  fullName: string,
+  nextActionType: (typeof nextActionTypeOptions)[number] | undefined
+) {
+  return `${formatNextActionTypeLabel(nextActionType)}: ${fullName}`;
 }
 
 function parseFollowUpAt(value: string | undefined) {

@@ -128,6 +128,7 @@ export function FormSelect({
   disabled,
   required,
   "aria-label": ariaLabel,
+  icon: Icon,
 }: {
   name: string;
   options: readonly SelectOption[];
@@ -142,6 +143,7 @@ export function FormSelect({
   disabled?: boolean;
   required?: boolean;
   "aria-label"?: string;
+  icon?: React.ComponentType<{ className?: string; size?: number }>;
 }) {
   const items = emptyLabel
     ? [{ value: emptyValue, label: emptyLabel }, ...options]
@@ -160,7 +162,10 @@ export function FormSelect({
       required={required}
     >
       <SelectTrigger className={className} aria-label={ariaLabel}>
-        <SelectValue placeholder={placeholder ?? emptyLabel ?? "Seçin"} />
+        <span className="ui-select-trigger-content">
+          {Icon && <Icon className="ui-select-trigger-inline-icon" size={14} />}
+          <SelectValue placeholder={placeholder ?? emptyLabel ?? "Seçin"} />
+        </span>
       </SelectTrigger>
       <SelectContent className={contentClassName}>
         {items.map((item) => (

@@ -27,6 +27,16 @@ export type DashboardData = {
     value: number;
     amount: string;
   }>;
+  revenueStats: Array<{
+    label: string;
+    value: string;
+    helper: string;
+  }>;
+  bestRevenueMonth: {
+    label: string;
+    amount: string;
+    reason: string;
+  };
   debtAging: Array<{
     label: string;
     amount: string;
@@ -36,6 +46,8 @@ export type DashboardData = {
   tasks: string[];
   payoutPreview: string;
   payoutHelper: string;
+  revenueForecast: string;
+  revenueForecastHelper: string;
   waitingFamilies: number;
   waitingHelper: string;
   debtCenter: string;
@@ -53,6 +65,14 @@ export type DashboardData = {
     name: string;
     count: number;
     percentage: number;
+  }>;
+  teamPerformance: Array<{
+    name: string;
+    leads: number;
+    sales: number;
+    revenue: string;
+    conversion: string;
+    score: number;
   }>;
   conversionRate: string;
   studentStatusCounts: Array<{
@@ -76,6 +96,7 @@ type DashboardRawRow = {
   totalLeadsThisMonth: unknown;
   convertedLeadsThisMonth: unknown;
   studentStatusCounts: unknown;
+  teamPerformance: unknown;
 };
 
 type DashboardRevenueRawRow = {
@@ -109,6 +130,13 @@ type RawProgramStat = {
 type RawStudentStatusCount = {
   status: string;
   count: unknown;
+};
+
+type RawTeamPerformance = {
+  name: string;
+  leads: unknown;
+  sales: unknown;
+  revenue: unknown;
 };
 
 const agingBuckets = [
@@ -304,7 +332,38 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
           from erp.students s2
           group by s2.lifecycle_status
         ) status_counts
-      ), '[]'::jsonb) as "studentStatusCounts"
+      ), '[]'::jsonb) as "studentStatusCounts",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'name', team_rows.name,
+            'leads', team_rows.leads,
+            'sales', team_rows.sales,
+            'revenue', team_rows.revenue
+          )
+          order by team_rows.sales desc, team_rows.revenue desc, team_rows.leads desc
+        )
+        from (
+          select
+            coalesce(u.full_name, 'Menecer təyin edilməyib') as name,
+            count(distinct l.id)::int as leads,
+            count(distinct l.id) filter (
+              where l.converted_student_id is not null
+                or l.stage = 'REGISTERED'::"erp"."LeadStage"
+            )::int as sales,
+            coalesce(sum(p.amount), 0) as revenue
+          from erp.leads l
+          left join erp.users u on u.id = l.manager_id
+          left join erp.payments p
+            on p.student_id = l.converted_student_id
+            and p.paid_at >= ${monthStart}
+            and p.paid_at < ${nextMonthStart}
+          where l.created_at >= ${monthStart}
+            and l.created_at < ${nextMonthStart}
+          group by coalesce(u.full_name, 'Menecer təyin edilməyib')
+          limit 5
+        ) team_rows
+      ), '[]'::jsonb) as "teamPerformance"
   `);
   const getDashboardRawData = unstable_cache(
     fetchDashboardRawData,
@@ -340,6 +399,7 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
   const recentPaymentRows = asJsonArray<RawPaymentRow>(row?.recentPayments);
   const rawProgramStats = asJsonArray<RawProgramStat>(row?.programStats);
   const rawStatusCounts = asJsonArray<RawStudentStatusCount>(row?.studentStatusCounts);
+  const rawTeamPerformance = asJsonArray<RawTeamPerformance>(row?.teamPerformance);
 
   const revenueByMonth = new Map(
     revenueRows.map((item) => [
@@ -359,6 +419,22 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
   });
   
   const maxRevenue = Math.max(...revenueAmounts.map((item) => item.amount), 1);
+  const totalRevenuePeriod = revenueAmounts.reduce((sum, item) => sum + item.amount, 0);
+  const averageMonthlyRevenue = totalRevenuePeriod / revenueAmounts.length;
+  const currentMonthRevenue = revenueAmounts.at(-1)?.amount ?? 0;
+  const bestRevenue = revenueAmounts.reduce(
+    (best, item) => (item.amount > best.amount ? item : best),
+    revenueAmounts[0] ?? { month: monthStart, amount: 0 }
+  );
+  const bestRevenueIndex = revenueAmounts.findIndex(
+    (item) => item.month.getTime() === bestRevenue.month.getTime()
+  );
+  const previousBestRevenue = bestRevenueIndex > 0 ? revenueAmounts[bestRevenueIndex - 1]?.amount ?? 0 : 0;
+  const bestRevenueLift = bestRevenue.amount - previousBestRevenue;
+  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const daysElapsed = Math.max(1, todayUtc.getUTCDate());
+  const daysInMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).getUTCDate();
+  const forecastAmount = Math.round((currentMonthRevenue / daysElapsed) * daysInMonth);
   
   const debtByBucket = agingBuckets.map((bucket) => {
     const rawBucket = debtBucketRows.find((item) => item.label === bucket.label);
@@ -414,6 +490,21 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
     };
   }).sort((a, b) => b.count - a.count);
 
+  const teamPerformance = rawTeamPerformance.map((item) => {
+    const leads = toNumber(item.leads);
+    const sales = toNumber(item.sales);
+    const conversion = leads > 0 ? Math.round((sales / leads) * 100) : 0;
+
+    return {
+      name: item.name,
+      leads,
+      sales,
+      revenue: formatAmount(item.revenue),
+      conversion: `${conversion}%`,
+      score: Math.min(100, Math.max(8, conversion)),
+    };
+  });
+
   return {
     kpis: [
       {
@@ -450,6 +541,31 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
       value: Math.max(8, Math.round((item.amount / maxRevenue) * 100)),
       amount: formatAmount(item.amount),
     })),
+    revenueStats: [
+      {
+        label: "Dövr üzrə gəlir",
+        value: formatAmount(totalRevenuePeriod),
+        helper: "Son 7 ayın ümumi ödənişi",
+      },
+      {
+        label: "Aylıq orta",
+        value: formatAmount(averageMonthlyRevenue),
+        helper: "Aylar üzrə orta göstərici",
+      },
+      {
+        label: "Cari ay",
+        value: formatAmount(currentMonthRevenue),
+        helper: `${daysElapsed}/${daysInMonth} gün tamamlanıb`,
+      },
+    ],
+    bestRevenueMonth: {
+      label: formatMonth(bestRevenue.month),
+      amount: formatAmount(bestRevenue.amount),
+      reason:
+        bestRevenueLift > 0
+          ? `Əvvəlki aya nisbətən ${formatAmount(bestRevenueLift)} daha çox ödəniş daxil olub.`
+          : "Bu ay seçilən dövrdə ən yüksək ödəniş həcminə sahibdir.",
+    },
     debtAging: debtByBucket.map((item) => ({
       label: item.label,
       amount: formatAmount(item.value),
@@ -458,12 +574,17 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
     })),
     tasks: taskRows.map((task) => task.title),
     payoutPreview: formatAmount(payoutPreview),
+    revenueForecast: formatAmount(forecastAmount),
+    revenueForecastHelper: `Cari temp qorunsa, ay sonuna qədər təxminən ${formatAmount(
+      Math.max(0, forecastAmount - currentMonthRevenue)
+    )} əlavə gəlir gözlənilir.`,
     payoutHelper: "Müəllimlərin cari ay üzrə hesablanmış maaşı.",
     waitingFamilies: waitingLeads,
     waitingHelper: "Növbəti əlaqə tarixi gəlmiş və ya yeni müraciətlər.",
     debtCenter: formatAmount(totalDebt),
     recentPayments,
     programStats,
+    teamPerformance,
     conversionRate,
     studentStatusCounts,
   };
@@ -496,6 +617,8 @@ function mapLifecycleStatus(status: string): { label: string; tone: "success" | 
       return { label: "Dondurulub", tone: "warning" };
     case "STOPPED":
       return { label: "Dayandırılıb", tone: "neutral" };
+    case "DECLINED":
+      return { label: "İmtina edib", tone: "danger" };
     case "COMPLETED":
       return { label: "Məzun", tone: "neutral" };
     default:

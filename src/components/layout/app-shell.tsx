@@ -13,6 +13,7 @@ import {
 import {
   Bell,
   BriefcaseBusiness,
+  CalendarDays,
   CreditCard,
   Gauge,
   GraduationCap,
@@ -39,7 +40,8 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "İdarə paneli", icon: Gauge },
   { href: "/students", label: "Tələbələr", icon: GraduationCap },
-  { href: "/crm", label: "CRM", icon: UsersRound },
+  { href: "/bookings" as Route, label: "Bronlar", icon: CalendarDays },
+  { href: "/crm", label: "Follow-up", icon: UsersRound },
   { href: "/hr" as Route, label: "HR panel", icon: BriefcaseBusiness },
   { href: "/finance", label: "Maliyyə", icon: CreditCard },
   { href: "/reports", label: "Hesabatlar", icon: LayoutGrid },
@@ -61,6 +63,7 @@ export function AppShell({
   const prefetchedHrefs = useRef<Set<string>>(new Set());
   const currentParams = searchParams.toString();
   const currentHref = currentParams ? `${pathname}?${currentParams}` : pathname;
+  const sectionId = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
   const initials = currentUser.fullName
     .split(" ")
     .filter(Boolean)
@@ -202,34 +205,36 @@ export function AppShell({
           })}
         </nav>
 
-        <form action={signOutAction} className="rail-bottom">
-          <button className="nav-icon" type="submit" aria-label="Çıxış">
-            <LogOut size={18} strokeWidth={1.9} />
+        <div className="rail-bottom-stack">
+          <button className="nav-icon only-desktop" type="button" aria-label="Studiya rejimi">
+            <Paintbrush size={18} strokeWidth={1.9} />
           </button>
-        </form>
+          <button className="nav-icon only-desktop" type="button" aria-label="Tənzimləmələr">
+            <Settings size={18} strokeWidth={1.9} />
+          </button>
+          <button className="nav-icon only-desktop" type="button" aria-label="Bildirişlər">
+            <Bell size={18} strokeWidth={1.9} />
+          </button>
+          <div
+            className="nav-icon"
+            aria-label={`${currentUser.fullName} (${currentUser.roles.join(", ")})`}
+          >
+            <div className="sidebar-avatar">{initials || "A"}</div>
+          </div>
+          <form action={signOutAction}>
+            <button className="nav-icon" type="submit" aria-label="Çıxış">
+              <LogOut size={18} strokeWidth={1.9} />
+            </button>
+          </form>
+        </div>
       </aside>
 
-      <main className="erp-frame" aria-busy={isNavigating}>
-        <header className="topbar">
-          <div className="topbar-actions">
-            <button className="icon-button" type="button" aria-label="Studiya rejimi">
-              <Paintbrush size={16} />
-            </button>
-            <button className="icon-button" type="button" aria-label="Tənzimləmələr">
-              <Settings size={16} />
-            </button>
-            <button className="icon-button" type="button" aria-label="Bildirişlər">
-              <Bell size={16} />
-            </button>
-            <div className="user-pill" aria-label="Cari istifadəçi">
-              <div className="avatar">{initials || "A"}</div>
-              <div>
-                <strong>{currentUser.fullName}</strong>
-                <span>{currentUser.roles.join(", ")}</span>
-              </div>
-            </div>
-          </div>
-        </header>
+      <main
+        className="erp-frame"
+        data-section={sectionId}
+        data-dashboard-section={sectionId === "dashboard" ? "true" : "false"}
+        aria-busy={isNavigating}
+      >
 
         <div
           className="route-content-shell"

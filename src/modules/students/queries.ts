@@ -27,6 +27,8 @@ export type StudentListFilters = {
   program?: string;
   teacher?: string;
   payment?: string;
+  from?: string;
+  to?: string;
 };
 
 export type StudentListData = {
@@ -37,6 +39,7 @@ export type StudentListData = {
     canCreateStudent: boolean;
     canConvertLead: boolean;
     canRecordPayment: boolean;
+    canChangeStatus: boolean;
   };
   createOptions: {
     leads: Array<{
@@ -57,8 +60,6 @@ export type StudentListData = {
     teachers: Array<{ id: string; fullName: string }>;
     managers: Array<{ id: string; fullName: string }>;
     defaultRegisteredDate: string;
-    defaultStartDate: string;
-    defaultDueDate: string;
     defaultPaymentDate: string;
     defaultPaymentMonth: string;
   };
@@ -68,6 +69,8 @@ export type StudentListData = {
     teacher: string;
     payment: StudentPaymentFilter;
     activeCount: number;
+    dateFrom: string;
+    dateTo: string;
   };
   filterLabels: {
     status: string;
@@ -96,6 +99,7 @@ export type StudentListData = {
     teacher: string;
     dueDate: string;
     balance: string;
+    lifecycleStatusValue: StudentLifecycleStatus;
     lifecycleStatus: string;
     lifecycleTone: StudentTone;
     paymentStatus: string;
@@ -147,6 +151,8 @@ type StudentListCacheInput = {
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
   today: string;
+  dateFrom: string;
+  dateTo: string;
 };
 
 type StudentListRawData = {
@@ -166,6 +172,7 @@ const lifecycleMeta: Record<
   },
   [StudentLifecycleStatus.FROZEN]: { label: "Dondurulub", tone: "info" },
   [StudentLifecycleStatus.STOPPED]: { label: "Dayandırılıb", tone: "neutral" },
+  [StudentLifecycleStatus.DECLINED]: { label: "İmtina edib", tone: "danger" },
   [StudentLifecycleStatus.COMPLETED]: { label: "Tamamlayıb", tone: "success" },
 };
 
@@ -197,6 +204,11 @@ const summaryMeta: Record<
     label: "Dayandırılıb",
     tone: "coral",
     delta: "Arxiv",
+  },
+  [StudentLifecycleStatus.DECLINED]: {
+    label: "İmtina edənlər",
+    tone: "coral",
+    delta: "Ödəniş geri qaytarılmır",
   },
   [StudentLifecycleStatus.COMPLETED]: {
     label: "Tamamlayıb",
@@ -230,6 +242,8 @@ export async function getStudentListData(
   const programFilter = formFilterString(input.program);
   const teacherFilter = formFilterString(input.teacher);
   const paymentFilter = normalizePaymentFilter(input.payment);
+  const dateFromFilter = normalizeDateFilter(input.from);
+  const dateToFilter = normalizeDateFilter(input.to);
   const today = startOfToday();
   const { rows, options } = await readStudentListRawData({
     search,
@@ -238,6 +252,8 @@ export async function getStudentListData(
     teacherFilter,
     paymentFilter,
     today: today.toISOString(),
+    dateFrom: dateFromFilter.input,
+    dateTo: dateToFilter.input,
   });
   const { programs, teachers, managers, leads: convertibleLeads } = options;
 
@@ -252,6 +268,8 @@ export async function getStudentListData(
     StudentLifecycleStatus.DEBT,
     StudentLifecycleStatus.GROUP_WAITING,
     StudentLifecycleStatus.FROZEN,
+    StudentLifecycleStatus.STOPPED,
+    StudentLifecycleStatus.DECLINED,
   ];
   const programOptions = programs.map((program) => ({
     value: program.id,
@@ -270,6 +288,8 @@ export async function getStudentListData(
     programFilter,
     teacherFilter,
     paymentFilter !== "all" ? paymentFilter : "",
+    dateFromFilter.input,
+    dateToFilter.input,
   ].filter(Boolean).length;
 
   return {
@@ -280,12 +300,15 @@ export async function getStudentListData(
       program: programFilter,
       teacher: teacherFilter,
       payment: paymentFilter,
+      from: dateFromFilter.input,
+      to: dateToFilter.input,
     }),
     total: rows[0]?.totalCount ?? 0,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
+      canChangeStatus: actor.permissions.has("student.status.change"),
     },
     createOptions: {
       leads: convertibleLeads,
@@ -298,8 +321,6 @@ export async function getStudentListData(
       teachers,
       managers,
       defaultRegisteredDate: formatDateInput(new Date()),
-      defaultStartDate: formatDateInput(new Date()),
-      defaultDueDate: formatDateInput(addDays(new Date(), 7)),
       defaultPaymentDate: formatDateInput(new Date()),
       defaultPaymentMonth: formatMonthInput(new Date()),
     },
@@ -309,6 +330,8 @@ export async function getStudentListData(
       teacher: teacherFilter,
       payment: paymentFilter,
       activeCount,
+      dateFrom: dateFromFilter.input,
+      dateTo: dateToFilter.input,
     },
     filterLabels: {
       status: statusFilter ? lifecycleMeta[statusFilter].label : "Bütün statuslar",
@@ -361,6 +384,7 @@ export async function getStudentListData(
         teacher: student.teacherName ?? "Təyin edilməyib",
         dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate) : "Ödənilib",
         balance: formatAmount(balance),
+        lifecycleStatusValue: student.lifecycleStatus,
         lifecycleStatus: lifecycleStatus.label,
         lifecycleTone: lifecycleStatus.tone,
         paymentStatus: paymentStatus.label,
@@ -478,6 +502,8 @@ async function getStudentRows(
     teacherFilter: string;
     paymentFilter: StudentPaymentFilter;
     today: Date;
+    dateFrom: Date | null;
+    dateTo: Date | null;
   }
 ): Promise<StudentListQueryRow[]> {
   const whereSql = buildStudentWhereSql(input);
@@ -702,6 +728,8 @@ async function getStudentListRawData(
       teacherFilter: input.teacherFilter,
       paymentFilter: input.paymentFilter,
       today: new Date(input.today),
+      dateFrom: input.dateFrom ? new Date(input.dateFrom) : null,
+      dateTo: input.dateTo ? new Date(input.dateTo) : null,
     }),
     getStudentCreateOptions(prisma),
   ]);
@@ -820,6 +848,8 @@ function buildStudentWhereSql({
   teacherFilter,
   paymentFilter,
   today,
+  dateFrom,
+  dateTo,
 }: {
   search: string;
   statusFilter: StudentLifecycleStatus | "";
@@ -827,6 +857,8 @@ function buildStudentWhereSql({
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
   today: Date;
+  dateFrom: Date | null;
+  dateTo: Date | null;
 }) {
   const conditions: Prisma.Sql[] = [Prisma.sql`true`];
 
@@ -914,6 +946,12 @@ function buildStudentWhereSql({
     )`);
   }
 
+  if (dateFrom || dateTo) {
+    const fromCond = dateFrom ? Prisma.sql`s.registered_at >= ${dateFrom}::date` : Prisma.sql`true`;
+    const toCond = dateTo ? Prisma.sql`s.registered_at <= ${dateTo}::date` : Prisma.sql`true`;
+    conditions.push(Prisma.sql`(${fromCond} AND ${toCond})`);
+  }
+
   return Prisma.sql`where ${Prisma.join(conditions, " AND ")}`;
 }
 
@@ -997,18 +1035,55 @@ function getPaymentStatus(
   return { label: "Açıq borc", tone: "warning" };
 }
 
+function normalizeDateFilter(value: string | undefined) {
+  const normalized = normalizeDateValue(value);
+
+  return {
+    input: normalized ? normalized.toISOString().slice(0, 10) : "",
+    date: normalized,
+  };
+}
+
+function normalizeDateValue(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return new Date(`${trimmed}T00:00:00.000Z`);
+  }
+
+  const azMatch = trimmed.match(/^(\d{2})[./](\d{2})[./](\d{4})$/);
+  if (azMatch) {
+    const day = parseInt(azMatch[1], 10);
+    const month = parseInt(azMatch[2], 10) - 1;
+    const year = parseInt(azMatch[3], 10);
+    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+  }
+
+  const parsed = new Date(trimmed);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function buildStudentsUrl({
   q,
   status,
   program,
   teacher,
   payment,
+  from,
+  to,
 }: {
   q: string;
   status: StudentLifecycleStatus | "";
   program: string;
   teacher: string;
   payment: StudentPaymentFilter;
+  from?: string;
+  to?: string;
 }) {
   const params = new URLSearchParams();
 
@@ -1032,6 +1107,14 @@ function buildStudentsUrl({
     params.set("payment", payment);
   }
 
+  if (from) {
+    params.set("from", from);
+  }
+
+  if (to) {
+    params.set("to", to);
+  }
+
   return params.size > 0 ? `/students?${params.toString()}` : "/students";
 }
 
@@ -1050,12 +1133,6 @@ function formatMonthInput(value: Date | string) {
 function formatDecimalInput(value: unknown) {
   const amount = toNumber(value);
   return amount > 0 ? amount.toFixed(2) : "";
-}
-
-function addDays(value: Date, amount: number) {
-  const next = new Date(value);
-  next.setDate(next.getDate() + amount);
-  return next;
 }
 
 function startOfToday() {
@@ -1239,6 +1316,7 @@ export async function getStudentDetailData(studentId: string) {
       canCreateStudent: actor.permissions.has("student.create"),
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
+      canChangeStatus: actor.permissions.has("student.status.change"),
     },
     createOptions: {
       leads: options.leads,
@@ -1251,8 +1329,6 @@ export async function getStudentDetailData(studentId: string) {
       teachers: options.teachers,
       managers: options.managers,
       defaultRegisteredDate: formatDateInput(new Date()),
-      defaultStartDate: formatDateInput(new Date()),
-      defaultDueDate: formatDateInput(addDays(new Date(), 7)),
       defaultPaymentDate: formatDateInput(new Date()),
       defaultPaymentMonth: formatMonthInput(new Date()),
     },
@@ -1265,6 +1341,7 @@ export async function getStudentDetailData(studentId: string) {
       teacher: student.teacherName ?? "Təyin edilməyib",
       dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate as Date) : "Ödənilib",
       balance: formatAmount(balance),
+      lifecycleStatusValue: student.lifecycleStatus as StudentLifecycleStatus,
       lifecycleStatus: lifecycleStatus.label,
       lifecycleTone: lifecycleStatus.tone,
       paymentStatus: paymentStatus.label,

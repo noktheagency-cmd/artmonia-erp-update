@@ -19,6 +19,15 @@ import {
   formatCrmSourceLabel,
 } from "@/modules/crm/source-options";
 import {
+  formatLeadPriorityLabel,
+  formatNextActionTypeLabel,
+  leadPriorityOptions,
+  leadPriorityTones,
+  type LeadPriorityValue,
+  nextActionTypeOptions,
+  type NextActionTypeValue,
+} from "@/modules/crm/follow-up";
+import {
   type CrmPeriodValue,
   getCrmPeriodRange,
   normalizeCrmPeriod,
@@ -44,8 +53,11 @@ export type CrmFiltersInput = {
   owner?: string;
   program?: string;
   source?: string;
+  priority?: string;
   followUp?: string;
   period?: string;
+  from?: string;
+  to?: string;
 };
 
 export type CrmData = {
@@ -56,8 +68,11 @@ export type CrmData = {
     owner: string;
     program: string;
     source: string;
+    priority: LeadPriorityValue | "";
     followUp: CrmFollowUpFilter;
     period: CrmPeriodValue;
+    dateFrom: string;
+    dateTo: string;
     activeCount: number;
   };
   access: {
@@ -82,6 +97,24 @@ export type CrmData = {
     value: string;
     tone: "success" | "warning" | "danger" | "neutral" | "info";
   }>;
+  followUpFocus: CrmLeadFocusRow[];
+  criticalFocus: CrmLeadFocusRow[];
+  dashboardStats: {
+    salesCount: string;
+    conversionRate: string;
+    consultationCount: string;
+    directSales: string;
+    consultationSales: string;
+    lossRate: string;
+    teamPerformance: Array<{
+      manager: string;
+      leads: string;
+      sales: string;
+      conversionRate: string;
+    }>;
+    sourceStats: Array<{ label: string; value: string }>;
+    programStats: Array<{ label: string; value: string }>;
+  };
   leads: Array<{
     id: string;
     name: string;
@@ -95,8 +128,14 @@ export type CrmData = {
     stage: LeadStage;
     stageLabel: string;
     stageTone: "success" | "warning" | "danger" | "neutral" | "info";
+    priority: LeadPriorityValue;
+    priorityLabel: string;
+    priorityTone: "success" | "warning" | "danger" | "neutral" | "info";
+    nextActionType: NextActionTypeValue | "";
+    nextActionTypeLabel: string;
     createdAt: string;
     nextFollowUpAt: string;
+    nextFollowUpIso: string | null;
     latestNote: string;
     canConvert: boolean;
     conversionLabel: string;
@@ -108,6 +147,8 @@ export type CrmData = {
       programId: string;
       managerId: string;
       stage: LeadStageValue;
+      priority: LeadPriorityValue;
+      nextActionType: NextActionTypeValue | "";
       nextFollowUpDate: string;
       createdAt: string;
       convertedStudentCode: string;
@@ -125,9 +166,20 @@ export type CrmData = {
   sourceOptions: string[];
 };
 
-type CrmPeriodRange = ReturnType<typeof getCrmPeriodRange>;
+type CrmLeadFocusRow = {
+  id: string;
+  name: string;
+  phone: string;
+  priorityLabel: string;
+  priorityTone: "success" | "warning" | "danger" | "neutral" | "info";
+  nextActionTypeLabel: string;
+  nextFollowUpAt: string;
+  manager: string;
+};
+
+type CrmPeriodRange = { gte?: Date; lt?: Date } | null;
 type CrmCacheActor = Pick<ErpActor, "id" | "roles">;
-type CrmCachePeriodRange = { gte: string; lt?: string } | null;
+type CrmCachePeriodRange = { gte?: string; lt?: string } | null;
 
 type CrmCacheInput = {
   actor: CrmCacheActor;
@@ -137,6 +189,7 @@ type CrmCacheInput = {
   ownerFilter: string;
   programFilter: string;
   sourceFilter: string;
+  priorityFilter: LeadPriorityValue | "";
   followUpFilter: CrmFollowUpFilter;
   periodRange: CrmCachePeriodRange;
   monthStart: string;
@@ -151,6 +204,10 @@ type CrmRawRow = {
   createdThisMonth: unknown;
   openFollowUps: unknown;
   qualifiedCount: unknown;
+  conversionStats: unknown;
+  teamPerformance: unknown;
+  sourceStats: unknown;
+  programStats: unknown;
   leads: unknown;
   programs: unknown;
   managers: unknown;
@@ -161,6 +218,8 @@ type CrmLeadRawRow = {
   id: string;
   stage: string;
   source: string | null;
+  priority: string | null;
+  nextActionType: string | null;
   createdAt: string;
   nextFollowUpAt: string | null;
   contactId: string;
@@ -172,6 +231,25 @@ type CrmLeadRawRow = {
   programName: string | null;
   convertedStudentCode: string | null;
   timeline: unknown;
+};
+
+type CrmConversionStatsRaw = {
+  salesCount: unknown;
+  consultationCount: unknown;
+  directSales: unknown;
+  consultationSales: unknown;
+  lostCount: unknown;
+};
+
+type CrmTeamPerformanceRaw = {
+  manager: string | null;
+  leads: unknown;
+  sales: unknown;
+};
+
+type CrmBreakdownRaw = {
+  label: string | null;
+  value: unknown;
 };
 
 type CrmLeadTimelineRawRow = {
@@ -189,13 +267,21 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const ownerFilter = normalizeText(input.owner);
   const programFilter = normalizeText(input.program);
   const sourceFilter = normalizeText(input.source);
+  const priorityFilter = normalizePriority(input.priority);
   const followUpFilter = normalizeFollowUp(input.followUp);
   const periodFilter = normalizeCrmPeriod(input.period);
+  const dateFromFilter = normalizeDateFilter(input.from);
+  const dateToFilter = normalizeDateFilter(input.to);
   const searchDigits = search.replace(/\D/g, "");
   const monthStart = startOfMonth();
   const today = new Date();
   const cachedToday = getCacheTimeBucket(today);
-  const periodRange = getCrmPeriodRange(periodFilter, today);
+  const periodRange = resolveCrmPeriodRange({
+    period: periodFilter,
+    dateFrom: dateFromFilter.date,
+    dateTo: dateToFilter.date,
+    reference: today,
+  });
   const todayStart = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
   );
@@ -213,6 +299,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     ownerFilter,
     programFilter,
     sourceFilter,
+    priorityFilter: priorityFilter ?? "",
     followUpFilter,
     periodRange: serializePeriodRange(periodRange),
     monthStart: monthStart.toISOString(),
@@ -226,15 +313,30 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const openFollowUps = toNumber(row?.openFollowUps);
   const qualifiedCount = toNumber(row?.qualifiedCount);
   const leadRows = asJsonArray<CrmLeadRawRow>(row?.leads);
+  const conversionStats = asJsonObject<CrmConversionStatsRaw>(row?.conversionStats);
+  const teamPerformanceRows = asJsonArray<CrmTeamPerformanceRaw>(row?.teamPerformance);
+  const sourceStatsRows = asJsonArray<CrmBreakdownRaw>(row?.sourceStats);
+  const programStatsRows = asJsonArray<CrmBreakdownRaw>(row?.programStats);
   const programs = asJsonArray<{ id: string; name: string }>(row?.programs);
   const managers = asJsonArray<{ id: string; fullName: string }>(row?.managers);
   const sourceValues = asJsonArray<string>(row?.sources);
+  const formattedLeads = leadRows.map((lead) => formatLeadRow(lead));
+  const salesCount = toNumber(conversionStats?.salesCount);
+  const consultationCount = toNumber(conversionStats?.consultationCount);
+  const directSales = toNumber(conversionStats?.directSales);
+  const consultationSales = toNumber(conversionStats?.consultationSales);
+  const lostCount = toNumber(conversionStats?.lostCount);
   const activeCount = [
     stageFilter,
     ownerFilter,
     programFilter,
     sourceFilter,
-    periodFilter !== "this_month" ? periodFilter : "",
+    priorityFilter,
+    dateFromFilter.input,
+    dateToFilter.input,
+    !dateFromFilter.input && !dateToFilter.input && periodFilter !== "this_month"
+      ? periodFilter
+      : "",
     followUpFilter !== "all" ? followUpFilter : "",
   ].filter(Boolean).length;
 
@@ -246,16 +348,22 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       owner: ownerFilter,
       program: programFilter,
       source: sourceFilter,
+      priority: priorityFilter,
       followUp: followUpFilter,
       period: periodFilter,
+      dateFrom: dateFromFilter.input,
+      dateTo: dateToFilter.input,
     }),
     filters: {
       stage: stageFilter ?? "",
       owner: ownerFilter,
       program: programFilter,
       source: sourceFilter,
+      priority: priorityFilter ?? "",
       followUp: followUpFilter,
       period: periodFilter,
+      dateFrom: dateFromFilter.input,
+      dateTo: dateToFilter.input,
       activeCount,
     },
     access: {
@@ -282,15 +390,15 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
         tone: "mint",
       },
       {
-        label: "Cavab gözləyir",
+        label: "Bugünkü follow-up",
         value: formatCount(openFollowUps),
         helper: "Vaxtı çatmış və ya planlanmamış izləmələr",
         tone: "coral",
       },
       {
-        label: "Uyğun müraciətlər",
-        value: formatCount(qualifiedCount),
-        helper: "Sınaq görüşü üçün hazır",
+        label: "Konversiya",
+        value: formatPercent(salesCount, totalLeads),
+        helper: `${formatCount(salesCount)} satış / ${formatCount(qualifiedCount)} uyğun müraciət`,
         tone: "yellow",
       },
     ],
@@ -300,7 +408,42 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       value: formatCount(stageCounts[stage] ?? 0),
       tone: leadStageTones[stage],
     })),
-    leads: leadRows.map((lead) => formatLeadRow(lead)),
+    followUpFocus: formattedLeads
+      .filter((lead) => isIsoDateInRange(lead.nextFollowUpIso, todayStart, tomorrowStart))
+      .slice(0, 6)
+      .map(toFocusRow),
+    criticalFocus: formattedLeads
+      .filter((lead) => lead.priority === "CRITICAL" && lead.stage !== LeadStage.REGISTERED)
+      .slice(0, 6)
+      .map(toFocusRow),
+    dashboardStats: {
+      salesCount: formatCount(salesCount),
+      conversionRate: formatPercent(salesCount, totalLeads),
+      consultationCount: formatCount(consultationCount),
+      directSales: formatCount(directSales),
+      consultationSales: formatCount(consultationSales),
+      lossRate: formatPercent(lostCount, totalLeads),
+      teamPerformance: teamPerformanceRows.map((item) => {
+        const leads = toNumber(item.leads);
+        const sales = toNumber(item.sales);
+
+        return {
+          manager: item.manager ?? "Təyin edilməyib",
+          leads: formatCount(leads),
+          sales: formatCount(sales),
+          conversionRate: formatPercent(sales, leads),
+        };
+      }),
+      sourceStats: sourceStatsRows.map((item) => ({
+        label: formatCrmSourceLabel(item.label),
+        value: formatCount(toNumber(item.value)),
+      })),
+      programStats: programStatsRows.map((item) => ({
+        label: item.label ?? "Proqram seçilməyib",
+        value: formatCount(toNumber(item.value)),
+      })),
+    },
+    leads: formattedLeads,
     programs,
     managers,
     sourceOptions: buildCrmSourceOptions(sourceValues),
@@ -350,6 +493,7 @@ function getCrmRawData(
     ownerFilter: string;
     programFilter: string;
     sourceFilter: string;
+    priorityFilter: LeadPriorityValue | "";
     followUpFilter: CrmFollowUpFilter;
     periodRange: CrmPeriodRange;
     monthStart: Date;
@@ -409,11 +553,122 @@ function getCrmRawData(
           )
       ), 0) as "qualifiedCount",
       coalesce((
+        select jsonb_build_object(
+          'salesCount', count(*) filter (
+            where stat_leads.converted_student_id is not null
+              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
+          ),
+          'consultationCount', count(*) filter (
+            where stat_leads.had_consultation
+              or stat_leads.stage in (
+                'QUALIFIED'::"erp"."LeadStage",
+                'TRIAL_CONSULTATION'::"erp"."LeadStage"
+              )
+          ),
+          'directSales', count(*) filter (
+            where (
+              stat_leads.converted_student_id is not null
+              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
+            )
+              and not stat_leads.had_consultation
+          ),
+          'consultationSales', count(*) filter (
+            where (
+              stat_leads.converted_student_id is not null
+              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
+            )
+              and stat_leads.had_consultation
+          ),
+          'lostCount', count(*) filter (
+            where stat_leads.stage = 'LOST'::"erp"."LeadStage"
+          )
+        )
+        from (
+          select
+            l.id,
+            l.stage,
+            l.converted_student_id,
+            exists (
+              select 1
+              from erp.lead_stage_history h
+              where h.lead_id = l.id
+                and h.new_stage in (
+                  'QUALIFIED'::"erp"."LeadStage",
+                  'TRIAL_CONSULTATION'::"erp"."LeadStage"
+                )
+            ) as had_consultation
+          from erp.leads l
+          where ${summarySql}
+        ) stat_leads
+      ), '{}'::jsonb) as "conversionStats",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'manager', team.manager_name,
+            'leads', team.total_count,
+            'sales', team.sales_count
+          )
+          order by team.sales_count desc, team.total_count desc, team.manager_name asc
+        )
+        from (
+          select
+            coalesce(m.full_name, 'Təyin edilməyib') as manager_name,
+            count(*)::int as total_count,
+            count(*) filter (
+              where l.converted_student_id is not null
+                or l.stage = 'REGISTERED'::"erp"."LeadStage"
+            )::int as sales_count
+          from erp.leads l
+          left join erp.users m on m.id = l.manager_id
+          where ${summarySql}
+          group by coalesce(m.full_name, 'Təyin edilməyib')
+          order by sales_count desc, total_count desc, manager_name asc
+          limit 6
+        ) team
+      ), '[]'::jsonb) as "teamPerformance",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'label', source_rows.source,
+            'value', source_rows.total_count
+          )
+          order by source_rows.total_count desc, source_rows.source asc
+        )
+        from (
+          select coalesce(l.source, 'Manual') as source, count(*)::int as total_count
+          from erp.leads l
+          where ${summarySql}
+          group by coalesce(l.source, 'Manual')
+          order by total_count desc, source asc
+          limit 6
+        ) source_rows
+      ), '[]'::jsonb) as "sourceStats",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'label', program_rows.program_name,
+            'value', program_rows.total_count
+          )
+          order by program_rows.total_count desc, program_rows.program_name asc
+        )
+        from (
+          select coalesce(p.name, 'Proqram seçilməyib') as program_name, count(*)::int as total_count
+          from erp.leads l
+          left join erp.programs p on p.id = l.program_interest_id
+          where ${summarySql}
+          group by coalesce(p.name, 'Proqram seçilməyib')
+          order by total_count desc, program_name asc
+          limit 6
+        ) program_rows
+      ), '[]'::jsonb) as "programStats",
+      coalesce((
         select jsonb_agg(
           jsonb_build_object(
             'id', lead_rows.id::text,
             'stage', lead_rows.stage::text,
             'source', lead_rows.source,
+            'priority', lead_rows.priority::text,
+            'nextActionType', lead_rows.next_action_type::text,
             'createdAt', lead_rows.created_at,
             'nextFollowUpAt', lead_rows.next_follow_up_at,
             'contactId', lead_rows.contact_id::text,
@@ -433,6 +688,8 @@ function getCrmRawData(
             l.id,
             l.stage,
             l.source,
+            l.priority,
+            l.next_action_type,
             l.created_at,
             l.next_follow_up_at,
             l.contact_id,
@@ -449,7 +706,14 @@ function getCrmRawData(
           left join erp.programs p on p.id = l.program_interest_id
           left join erp.students s on s.id = l.converted_student_id
           where ${listWhereSql}
-          order by l.next_follow_up_at asc nulls last, l.created_at desc
+          order by
+            case l.priority
+              when 'CRITICAL'::"erp"."LeadPriority" then 0
+              when 'MEDIUM'::"erp"."LeadPriority" then 1
+              else 2
+            end asc,
+            l.next_follow_up_at asc nulls last,
+            l.created_at desc
           limit 50
         ) lead_rows
         left join lateral (
@@ -473,7 +737,6 @@ function getCrmRawData(
             from erp.lead_stage_history h
             where h.lead_id = lead_rows.id
             order by h.created_at desc
-            limit 8
           ) h
           left join erp.users changed_by on changed_by.id = h.changed_by_id
         ) history on true
@@ -538,12 +801,12 @@ function buildManagerScopeSql(actor: CrmCacheActor) {
 function buildLeadPeriodSql(periodRange: CrmPeriodRange) {
   const conditions: Prisma.Sql[] = [Prisma.sql`true`];
 
-  if (periodRange) {
+  if (periodRange?.gte) {
     conditions.push(Prisma.sql`l.created_at >= ${periodRange.gte}`);
+  }
 
-    if ("lt" in periodRange && periodRange.lt) {
-      conditions.push(Prisma.sql`l.created_at < ${periodRange.lt}`);
-    }
+  if (periodRange?.lt) {
+    conditions.push(Prisma.sql`l.created_at < ${periodRange.lt}`);
   }
 
   return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
@@ -557,6 +820,7 @@ function buildCrmListWhereSql(input: {
   ownerFilter: string;
   programFilter: string;
   sourceFilter: string;
+  priorityFilter: LeadPriorityValue | "";
   followUpFilter: CrmFollowUpFilter;
   periodRange: CrmPeriodRange;
   todayStart: Date;
@@ -603,6 +867,10 @@ function buildCrmListWhereSql(input: {
     conditions.push(Prisma.sql`l.source = ${input.sourceFilter}`);
   }
 
+  if (input.priorityFilter) {
+    conditions.push(Prisma.sql`l.priority = ${input.priorityFilter}::"erp"."LeadPriority"`);
+  }
+
   if (input.followUpFilter === "overdue") {
     conditions.push(Prisma.sql`l.next_follow_up_at < ${input.todayStart}`);
   } else if (input.followUpFilter === "today") {
@@ -621,6 +889,8 @@ function buildCrmListWhereSql(input: {
 
 function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
   const stage = normalizeLeadStageValue(lead.stage);
+  const priority = normalizeLeadPriorityValue(lead.priority);
+  const nextActionType = normalizeNextActionTypeValue(lead.nextActionType);
   const timeline = asJsonArray<CrmLeadTimelineRawRow>(lead.timeline);
   const programId = lead.programId ?? "";
   const managerId = lead.managerId ?? "";
@@ -639,10 +909,18 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
     stage,
     stageLabel: leadStageLabels[stage],
     stageTone: leadStageTones[stage],
+    priority,
+    priorityLabel: formatLeadPriorityLabel(priority),
+    priorityTone: leadPriorityTones[priority],
+    nextActionType,
+    nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),
     createdAt: formatShortDate(lead.createdAt),
     nextFollowUpAt: lead.nextFollowUpAt
       ? formatShortDate(lead.nextFollowUpAt)
       : "Tarix yoxdur",
+    nextFollowUpIso: lead.nextFollowUpAt
+      ? new Date(lead.nextFollowUpAt).toISOString()
+      : null,
     latestNote: formatLeadHistoryReason(timeline[0]?.reason),
     canConvert:
       Boolean(programId) &&
@@ -661,6 +939,8 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
       programId,
       managerId,
       stage,
+      priority,
+      nextActionType,
       nextFollowUpDate: formatDateInput(lead.nextFollowUpAt),
       createdAt: formatShortDate(lead.createdAt),
       convertedStudentCode,
@@ -691,6 +971,19 @@ function normalizeLeadStageValue(value: string): LeadStageValue {
   return leadStageOptions.find((stage) => stage === value) ?? "NEW";
 }
 
+function normalizePriority(value: string | undefined): LeadPriorityValue | undefined {
+  const normalized = formFilterString(value);
+  return leadPriorityOptions.find((priority) => priority === normalized);
+}
+
+function normalizeLeadPriorityValue(value: string | null | undefined): LeadPriorityValue {
+  return leadPriorityOptions.find((priority) => priority === value) ?? "NORMAL";
+}
+
+function normalizeNextActionTypeValue(value: string | null | undefined): NextActionTypeValue | "" {
+  return nextActionTypeOptions.find((actionType) => actionType === value) ?? "";
+}
+
 function normalizeFollowUp(value: string | undefined): CrmFollowUpFilter {
   const allowed: CrmFollowUpFilter[] = [
     "all",
@@ -701,6 +994,66 @@ function normalizeFollowUp(value: string | undefined): CrmFollowUpFilter {
   ];
 
   return allowed.find((item) => item === value) ?? "all";
+}
+
+function normalizeDateFilter(value: string | undefined) {
+  const normalized = normalizeDateValue(value);
+
+  return {
+    input: normalized ? normalized.toISOString().slice(0, 10) : "",
+    date: normalized,
+  };
+}
+
+function resolveCrmPeriodRange({
+  period,
+  dateFrom,
+  dateTo,
+  reference,
+}: {
+  period: CrmPeriodValue;
+  dateFrom: Date | null;
+  dateTo: Date | null;
+  reference: Date;
+}): CrmPeriodRange {
+  if (dateFrom || dateTo) {
+    return {
+      ...(dateFrom ? { gte: dateFrom } : {}),
+      ...(dateTo ? { lt: addUtcDays(dateTo, 1) } : {}),
+    };
+  }
+
+  return getCrmPeriodRange(period, reference);
+}
+
+function isIsoDateInRange(value: string | null, start: Date, end: Date) {
+  if (!value) {
+    return false;
+  }
+
+  const date = new Date(value);
+  return date >= start && date < end;
+}
+
+function toFocusRow(lead: CrmData["leads"][number]): CrmLeadFocusRow {
+  return {
+    id: lead.id,
+    name: lead.name,
+    phone: lead.phone,
+    priorityLabel: lead.priorityLabel,
+    priorityTone: lead.priorityTone,
+    nextActionTypeLabel: lead.nextActionTypeLabel,
+    nextFollowUpAt: lead.nextFollowUpAt,
+    manager: lead.manager,
+  };
+}
+
+function formatPercent(numerator: number, denominator: number) {
+  if (denominator <= 0) {
+    return "0%";
+  }
+
+  return `${Math.round((numerator / denominator) * 100)}%`;
 }
 
 function getCacheTimeBucket(value: Date) {
@@ -714,10 +1067,8 @@ function serializePeriodRange(periodRange: CrmPeriodRange): CrmCachePeriodRange 
   }
 
   return {
-    gte: periodRange.gte.toISOString(),
-    ...("lt" in periodRange && periodRange.lt
-      ? { lt: periodRange.lt.toISOString() }
-      : {}),
+    ...(periodRange.gte ? { gte: periodRange.gte.toISOString() } : {}),
+    ...(periodRange.lt ? { lt: periodRange.lt.toISOString() } : {}),
   };
 }
 
@@ -727,7 +1078,7 @@ function deserializePeriodRange(periodRange: CrmCachePeriodRange): CrmPeriodRang
   }
 
   return {
-    gte: new Date(periodRange.gte),
+    ...(periodRange.gte ? { gte: new Date(periodRange.gte) } : {}),
     ...(periodRange.lt ? { lt: new Date(periodRange.lt) } : {}),
   };
 }
@@ -742,7 +1093,10 @@ function buildReturnTo(filters: {
   owner: string;
   program: string;
   source: string;
+  priority?: string;
   period: CrmPeriodValue;
+  dateFrom: string;
+  dateTo: string;
   followUp: CrmFollowUpFilter;
 }) {
   const params = new URLSearchParams();
@@ -752,7 +1106,10 @@ function buildReturnTo(filters: {
   if (filters.owner) params.set("owner", filters.owner);
   if (filters.program) params.set("program", filters.program);
   if (filters.source) params.set("source", filters.source);
+  if (filters.priority) params.set("priority", filters.priority);
   if (filters.period !== "this_month") params.set("period", filters.period);
+  if (filters.dateFrom) params.set("from", filters.dateFrom);
+  if (filters.dateTo) params.set("to", filters.dateTo);
   if (filters.followUp !== "all") params.set("followUp", filters.followUp);
 
   const query = params.toString();
@@ -770,6 +1127,33 @@ function formatDateInput(value: Date | string | null | undefined) {
   const year = date.getUTCFullYear().toString();
 
   return `${day}.${month}.${year}`;
+}
+
+function normalizeDateValue(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return new Date(`${trimmed}T00:00:00.000Z`);
+  }
+
+  const azMatch = trimmed.match(/^(\d{2})[./](\d{2})[./](\d{4})$/);
+  if (azMatch) {
+    const [, day, month, year] = azMatch;
+    return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+  }
+
+  return null;
+}
+
+function addUtcDays(value: Date, amount: number) {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + amount);
+  return next;
 }
 
 function formatLeadHistoryReason(value: string | null | undefined) {
@@ -807,6 +1191,17 @@ function asJsonArray<T>(value: unknown): T[] {
   }
 
   return [];
+}
+
+function asJsonObject<T>(value: unknown): T | null {
+  const parsed =
+    typeof value === "string"
+      ? parseJsonObject(value)
+      : value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : null;
+
+  return parsed ? (parsed as T) : null;
 }
 
 function asJsonRecord(value: unknown): Record<string, number> {

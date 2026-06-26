@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Plus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
+import {
+  leadPrioritySelectOptions,
+  nextActionTypeSelectOptions,
+} from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { formatLeadStageLabel, leadStageSelectOptions } from "@/modules/crm/stage";
 
@@ -72,8 +76,10 @@ export function NewLeadDialogClient({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button className="crm-primary-button" type="button">
-          <Plus data-icon="inline-start" />
+        <Button className="crm-primary-button crm-new-lead-trigger" type="button">
+          <span className="crm-new-lead-icon" aria-hidden="true">
+            <UserPlus size={16} />
+          </span>
           Yeni müraciət
         </Button>
       </DialogTrigger>
@@ -168,7 +174,7 @@ export function NewLeadDialogClient({
 
           <div className="field-grid">
             <label className="form-field">
-              <span>Mərhələ</span>
+              <span>Status</span>
               <FormSelect
                 name="stage"
                 defaultValue="NEW"
@@ -176,7 +182,26 @@ export function NewLeadDialogClient({
               />
             </label>
             <label className="form-field">
-              <span>İzləmə tarixi</span>
+              <span>Prioritet</span>
+              <FormSelect
+                name="priority"
+                defaultValue="NORMAL"
+                options={leadPrioritySelectOptions}
+              />
+            </label>
+          </div>
+
+          <div className="field-grid">
+            <label className="form-field">
+              <span>Növbəti addım</span>
+              <FormSelect
+                name="nextActionType"
+                defaultValue="CALL"
+                options={nextActionTypeSelectOptions}
+              />
+            </label>
+            <label className="form-field">
+              <span>Növbəti addım tarixi</span>
               <Input
                 name="nextFollowUpDate"
                 inputMode="numeric"

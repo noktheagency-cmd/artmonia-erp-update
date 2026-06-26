@@ -12,8 +12,11 @@ export default async function CrmPage({
     owner?: string;
     program?: string;
     source?: string;
+    priority?: string;
     followUp?: string;
     period?: string;
+    from?: string;
+    to?: string;
   }>;
 }) {
   const params = await searchParams;

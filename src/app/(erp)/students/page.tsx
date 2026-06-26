@@ -12,6 +12,8 @@ export default async function StudentsPage({
     program?: string;
     teacher?: string;
     payment?: string;
+    from?: string;
+    to?: string;
   }>;
 }) {
   const filters = await searchParams;

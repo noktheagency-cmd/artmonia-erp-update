@@ -11,10 +11,10 @@ export const leadStageOptions = [
 export type LeadStageValue = (typeof leadStageOptions)[number];
 
 export const leadStageLabels: Record<LeadStageValue, string> = {
-  NEW: "Yeni",
-  CONTACTED: "Əlaqə saxlanılıb",
-  QUALIFIED: "Uyğundur",
-  TRIAL_CONSULTATION: "Sınaq görüşü",
+  NEW: "Zəng gözləyir",
+  CONTACTED: "Xatırlatma",
+  QUALIFIED: "Konsultasiya təyin olundu",
+  TRIAL_CONSULTATION: "Ödəniş gözlənilir",
   REGISTERED: "Qeydiyyata alınıb",
   LOST: "İtirilib",
   NURTURE: "İzləmədə",

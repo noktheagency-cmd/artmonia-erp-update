@@ -16,6 +16,10 @@ import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { CrmData } from "@/modules/crm/queries";
+import {
+  leadPrioritySelectOptions,
+  nextActionTypeSelectOptions,
+} from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { leadStageSelectOptions } from "@/modules/crm/stage";
 
@@ -67,7 +71,7 @@ export function LeadDetailDialogClient({
           </div>
           <div>
             <Clock3 />
-            <span>Yaradıldı: {lead.detail.createdAt}</span>
+            <span>{lead.nextActionTypeLabel}</span>
           </div>
         </div>
 
@@ -130,7 +134,7 @@ export function LeadDetailDialogClient({
               />
             </label>
             <label className="form-field">
-              <span>Mərhələ</span>
+              <span>Status</span>
               <FormSelect
                 name="stage"
                 defaultValue={lead.detail.stage}
@@ -141,7 +145,27 @@ export function LeadDetailDialogClient({
 
           <div className="field-grid">
             <label className="form-field">
-              <span>İzləmə tarixi</span>
+              <span>Prioritet</span>
+              <FormSelect
+                name="priority"
+                defaultValue={lead.detail.priority}
+                options={leadPrioritySelectOptions}
+              />
+            </label>
+            <label className="form-field">
+              <span>Növbəti addım</span>
+              <FormSelect
+                name="nextActionType"
+                defaultValue={lead.detail.nextActionType}
+                emptyLabel="Təyin edilməyib"
+                options={nextActionTypeSelectOptions}
+              />
+            </label>
+          </div>
+
+          <div className="field-grid">
+            <label className="form-field">
+              <span>Növbəti addım tarixi</span>
               <Input
                 name="nextFollowUpDate"
                 inputMode="numeric"
@@ -158,8 +182,9 @@ export function LeadDetailDialogClient({
           <div className="lead-history">
             <div className="lead-history-title">
               <History />
-              <span>Tarixçə</span>
+              <span>Müraciət tarixçəsi</span>
               <StatusChip tone={lead.stageTone}>{lead.stageLabel}</StatusChip>
+              <StatusChip tone={lead.priorityTone}>{lead.priorityLabel}</StatusChip>
             </div>
             {lead.detail.timeline.length > 0 ? (
               <ol>

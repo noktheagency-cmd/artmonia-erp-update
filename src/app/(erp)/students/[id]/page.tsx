@@ -1,7 +1,10 @@
 import { ChevronLeft, Banknote, Phone, ReceiptText, UserRound, CalendarDays, History, Clock3 } from "lucide-react";
 import Link from "next/link";
 import { getStudentDetailData } from "@/modules/students/queries";
-import { recordStudentPaymentAction } from "@/modules/students/actions";
+import {
+  recordStudentPaymentAction,
+  updateStudentStatusAction,
+} from "@/modules/students/actions";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StudentDetailActions } from "@/modules/students/student-detail-actions";
 
@@ -29,7 +32,7 @@ export default async function StudentDetailPage({
         <div className="student-header-back-col">
           <Link href="/students" className="back-link">
             <ChevronLeft size={16} />
-            <span>Tələbələrə qayıt</span>
+            <span>CRM-ə qayıt</span>
           </Link>
           <div className="student-header-title-row">
             <h1>{student.name}</h1>
@@ -43,6 +46,7 @@ export default async function StudentDetailPage({
           student={student}
           permissions={permissions}
           recordPaymentAction={recordStudentPaymentAction}
+          updateStudentStatusAction={updateStudentStatusAction}
         />
       </div>
 

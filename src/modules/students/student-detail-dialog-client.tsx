@@ -167,6 +167,10 @@ export function StudentDetailDialogClient({
                 />
               </label>
 
+              <p className="payment-policy-note">
+                İmtina zamanı qəbul edilən ödəniş geri qaytarılmır.
+              </p>
+
               <DialogFooter>
                 <DialogClose asChild>
                   <Button type="button" variant="ghost">

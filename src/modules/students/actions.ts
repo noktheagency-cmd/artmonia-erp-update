@@ -39,6 +39,16 @@ const optionalAmount = z.preprocess((value) => {
   return normalized ? parseAmountInput(normalized) : undefined;
 }, z.number().positive().max(100_000).optional());
 
+const studentLifecycleStatusValues = [
+  StudentLifecycleStatus.GROUP_WAITING,
+  StudentLifecycleStatus.ACTIVE,
+  StudentLifecycleStatus.DEBT,
+  StudentLifecycleStatus.FROZEN,
+  StudentLifecycleStatus.STOPPED,
+  StudentLifecycleStatus.DECLINED,
+  StudentLifecycleStatus.COMPLETED,
+] as const;
+
 const createStatusValues = [
   StudentLifecycleStatus.GROUP_WAITING,
   StudentLifecycleStatus.ACTIVE,
@@ -56,11 +66,9 @@ const createStudentSchema = z.object({
   managerId: optionalUuid,
   lifecycleStatus: z.enum(createStatusValues).default(StudentLifecycleStatus.GROUP_WAITING),
   registeredDate: z.string().trim().min(1).max(20),
-  startDate: z.string().trim().min(1).max(20),
   firstLessonDate: optionalText(20),
   monthlyFee: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
   lessonsPerMonth: optionalInteger,
-  dueDate: z.string().trim().min(1).max(20),
   notes: optionalText(500),
   acceptPayment: z.preprocess(
     (value) => value === "on" || value === "true",
@@ -80,6 +88,14 @@ const recordPaymentSchema = z.object({
   paidDate: z.string().trim().min(1).max(20),
   paymentMonth: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
+  note: optionalText(240),
+  returnTo: optionalText(260),
+});
+
+const updateStudentStatusSchema = z.object({
+  studentId: z.string().uuid(),
+  lifecycleStatus: z.enum(studentLifecycleStatusValues),
+  firstLessonDate: optionalText(20),
   note: optionalText(240),
   returnTo: optionalText(260),
 });
@@ -111,11 +127,16 @@ export async function createStudentAction(formData: FormData) {
   }
 
   const registeredAt = parseDateInput(input.registeredDate, "Qeydiyyat tarixi");
-  const startDate = parseDateInput(input.startDate, "Başlama tarixi");
-  const firstLessonAt = input.firstLessonDate
+  const requestedFirstLessonAt = input.firstLessonDate
     ? parseDateInput(input.firstLessonDate, "İlk dərs tarixi")
     : null;
-  const dueDate = parseDateInput(input.dueDate, "Ödəniş son tarixi");
+  const firstLessonAt = resolveInitialFirstLessonAt({
+    lifecycleStatus: input.lifecycleStatus,
+    registeredAt,
+    requestedFirstLessonAt,
+  });
+  const enrollmentStartDate = firstLessonAt ?? registeredAt;
+  const billingStartAt = firstLessonAt ?? (input.acceptPayment ? registeredAt : null);
   const paymentDate = input.acceptPayment
     ? parseDateInput(input.paymentDate ?? "", "Ödəniş tarixi")
     : null;
@@ -160,6 +181,7 @@ export async function createStudentAction(formData: FormData) {
         lifecycleStatus: input.lifecycleStatus,
         educationLevel: input.educationLevel ?? null,
         registeredAt,
+        billingPaused: isBillingPausedStatus(input.lifecycleStatus),
         notes: input.notes ?? null,
         statusHistory: {
           create: {
@@ -169,7 +191,7 @@ export async function createStudentAction(formData: FormData) {
                 ? "Müraciətdən tələbə yaradıldı"
                 : "Tələbə sıfırdan yaradıldı",
             note: input.notes ?? null,
-            effectiveAt: registeredAt,
+            effectiveAt: firstLessonAt ?? registeredAt,
             changedById: actor.id,
           },
         },
@@ -183,7 +205,7 @@ export async function createStudentAction(formData: FormData) {
         programId: input.programId,
         teacherId: input.teacherId ?? null,
         status: EnrollmentStatus.ACTIVE,
-        startDate,
+        startDate: enrollmentStartDate,
         firstLessonAt,
         monthlyFee: input.monthlyFee,
         lessonsPerMonth: input.lessonsPerMonth ?? null,
@@ -191,24 +213,26 @@ export async function createStudentAction(formData: FormData) {
       select: { id: true },
     });
 
-    const invoice = await tx.invoice.create({
-      data: {
-        studentId: student.id,
-        enrollmentId: enrollment.id,
-        periodMonth: startOfMonth(dueDate),
-        issueDate: registeredAt,
-        dueDate,
-        amount: input.monthlyFee,
-        balanceDue: input.monthlyFee,
-        status: resolveInvoiceStatus({
-          amount: input.monthlyFee,
-          balanceDue: input.monthlyFee,
-          dueDate,
-        }),
-        idempotencyKey: `student-create-${student.code}-${startOfMonth(dueDate).toISOString().slice(0, 10)}`,
-      },
-      select: { id: true },
-    });
+    const invoice = billingStartAt
+      ? await tx.invoice.create({
+          data: {
+            studentId: student.id,
+            enrollmentId: enrollment.id,
+            periodMonth: startOfMonth(billingStartAt),
+            issueDate: registeredAt,
+            dueDate: billingStartAt,
+            amount: input.monthlyFee,
+            balanceDue: input.monthlyFee,
+            status: resolveInvoiceStatus({
+              amount: input.monthlyFee,
+              balanceDue: input.monthlyFee,
+              dueDate: billingStartAt,
+            }),
+            idempotencyKey: `student-create-${student.code}-${startOfMonth(billingStartAt).toISOString().slice(0, 10)}`,
+          },
+          select: { id: true },
+        })
+      : null;
 
     let paymentResult: Awaited<ReturnType<typeof createPaymentAndAllocate>> | null = null;
 
@@ -256,7 +280,7 @@ export async function createStudentAction(formData: FormData) {
         mode: input.mode,
         leadId: lead?.id ?? null,
         enrollmentId: enrollment.id,
-        invoiceId: invoice.id,
+        invoiceId: invoice?.id ?? null,
         paymentId: paymentResult?.payment.id ?? null,
       } satisfies Prisma.InputJsonValue,
       reason: input.notes ?? null,
@@ -317,6 +341,82 @@ export async function recordStudentPaymentAction(formData: FormData) {
   redirectToStudents(input.returnTo);
 }
 
+export async function updateStudentStatusAction(formData: FormData) {
+  const actor = await requireMutationActor("student.status.change");
+  const input = updateStudentStatusSchema.parse(Object.fromEntries(formData));
+  const effectiveAt = input.firstLessonDate
+    ? parseDateInput(input.firstLessonDate, "İlk dərs tarixi")
+    : startOfToday();
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.student.findUnique({
+      where: { id: input.studentId },
+      select: {
+        id: true,
+        code: true,
+        lifecycleStatus: true,
+        billingPaused: true,
+      },
+    });
+
+    if (!current) {
+      throw new Error("Tələbə tapılmadı");
+    }
+
+    const updateData = buildStudentStatusUpdateData(input.lifecycleStatus, effectiveAt);
+
+    await tx.student.update({
+      where: { id: current.id },
+      data: updateData,
+    });
+
+    await tx.studentStatusHistory.create({
+      data: {
+        studentId: current.id,
+        oldStatus: current.lifecycleStatus,
+        newStatus: input.lifecycleStatus,
+        reason: getStatusChangeReason(input.lifecycleStatus),
+        note: input.note ?? null,
+        effectiveAt,
+        changedById: actor.id,
+      },
+    });
+
+    if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
+      await syncActivationBilling(tx, {
+        studentId: current.id,
+        studentCode: current.code,
+        effectiveAt,
+      });
+    }
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "student.status.change",
+      entityType: "student",
+      entityId: current.id,
+      before: {
+        lifecycleStatus: current.lifecycleStatus,
+        billingPaused: current.billingPaused,
+      },
+      after: {
+        lifecycleStatus: input.lifecycleStatus,
+        billingPaused: isBillingPausedStatus(input.lifecycleStatus),
+        effectiveAt: effectiveAt.toISOString(),
+      },
+      reason: input.note ?? getStatusChangeReason(input.lifecycleStatus),
+    });
+  });
+
+  revalidatePath("/students");
+  revalidatePath(`/students/${input.studentId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/finance");
+  invalidateStudentCaches();
+  redirectToStudents(input.returnTo);
+}
+
 async function resolveLeadForStudentCreation(
   tx: Prisma.TransactionClient,
   mode: "lead" | "manual",
@@ -359,6 +459,167 @@ async function resolveLeadForStudentCreation(
   }
 
   return lead;
+}
+
+function resolveInitialFirstLessonAt({
+  lifecycleStatus,
+  registeredAt,
+  requestedFirstLessonAt,
+}: {
+  lifecycleStatus: StudentLifecycleStatus;
+  registeredAt: Date;
+  requestedFirstLessonAt: Date | null;
+}) {
+  if (requestedFirstLessonAt) {
+    return requestedFirstLessonAt;
+  }
+
+  return lifecycleStatus === StudentLifecycleStatus.ACTIVE ? registeredAt : null;
+}
+
+function isBillingPausedStatus(status: StudentLifecycleStatus) {
+  switch (status) {
+    case StudentLifecycleStatus.GROUP_WAITING:
+    case StudentLifecycleStatus.FROZEN:
+    case StudentLifecycleStatus.STOPPED:
+    case StudentLifecycleStatus.DECLINED:
+    case StudentLifecycleStatus.COMPLETED:
+      return true;
+    default:
+      return false;
+  }
+}
+
+function buildStudentStatusUpdateData(
+  status: StudentLifecycleStatus,
+  effectiveAt: Date
+): Prisma.StudentUpdateInput {
+  const data: Prisma.StudentUpdateInput = {
+    lifecycleStatus: status,
+    billingPaused: isBillingPausedStatus(status),
+  };
+
+  if (status === StudentLifecycleStatus.ACTIVE) {
+    data.stoppedAt = null;
+    data.completedAt = null;
+    data.freezeReturnAt = null;
+  }
+
+  if (status === StudentLifecycleStatus.STOPPED || status === StudentLifecycleStatus.DECLINED) {
+    data.stoppedAt = effectiveAt;
+  }
+
+  if (status === StudentLifecycleStatus.COMPLETED) {
+    data.completedAt = effectiveAt;
+  }
+
+  return data;
+}
+
+function getStatusChangeReason(status: StudentLifecycleStatus) {
+  if (status === StudentLifecycleStatus.ACTIVE) {
+    return "Tələbə aktiv edildi";
+  }
+
+  if (status === StudentLifecycleStatus.GROUP_WAITING) {
+    return "Tələbə qrup gözləyir statusuna keçirildi";
+  }
+
+  if (status === StudentLifecycleStatus.DECLINED) {
+    return "Tələbə imtina etdi";
+  }
+
+  if (status === StudentLifecycleStatus.STOPPED) {
+    return "Tələbə dayandırıldı";
+  }
+
+  return "Tələbə statusu yeniləndi";
+}
+
+async function syncActivationBilling(
+  tx: Prisma.TransactionClient,
+  input: {
+    studentId: string;
+    studentCode: string;
+    effectiveAt: Date;
+  }
+) {
+  const enrollment = await tx.enrollment.findFirst({
+    where: {
+      studentId: input.studentId,
+      status: {
+        in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED],
+      },
+    },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      monthlyFee: true,
+    },
+  });
+
+  if (!enrollment) {
+    throw new Error("Aktiv etmək üçün tələbənin enrollment məlumatı tapılmadı");
+  }
+
+  await tx.enrollment.update({
+    where: { id: enrollment.id },
+    data: {
+      status: EnrollmentStatus.ACTIVE,
+      startDate: input.effectiveAt,
+      firstLessonAt: input.effectiveAt,
+    },
+  });
+
+  const existingInvoice = await tx.invoice.findFirst({
+    where: {
+      studentId: input.studentId,
+      status: { not: InvoiceStatus.VOID },
+      balanceDue: { gt: 0 },
+    },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      amount: true,
+      balanceDue: true,
+    },
+  });
+
+  if (existingInvoice) {
+    await tx.invoice.update({
+      where: { id: existingInvoice.id },
+      data: {
+        periodMonth: startOfMonth(input.effectiveAt),
+        dueDate: input.effectiveAt,
+        status: resolveInvoiceStatus({
+          amount: toNumber(existingInvoice.amount),
+          balanceDue: toNumber(existingInvoice.balanceDue),
+          dueDate: input.effectiveAt,
+        }),
+      },
+    });
+    return;
+  }
+
+  const amount = toNumber(enrollment.monthlyFee);
+
+  await tx.invoice.create({
+    data: {
+      studentId: input.studentId,
+      enrollmentId: enrollment.id,
+      periodMonth: startOfMonth(input.effectiveAt),
+      issueDate: input.effectiveAt,
+      dueDate: input.effectiveAt,
+      amount,
+      balanceDue: amount,
+      status: resolveInvoiceStatus({
+        amount,
+        balanceDue: amount,
+        dueDate: input.effectiveAt,
+      }),
+      idempotencyKey: `student-activation-${input.studentCode}-${startOfMonth(input.effectiveAt).toISOString().slice(0, 10)}`,
+    },
+  });
 }
 
 async function updateLeadContact(

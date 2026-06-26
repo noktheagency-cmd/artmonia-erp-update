@@ -1,13 +1,18 @@
 "use client";
 
 import type { Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   BriefcaseBusiness,
+  CalendarDays,
+  Eye,
   Mail,
   Pencil,
   Phone,
   Plus,
+  Percent,
   RotateCcw,
   Save,
   Search,
@@ -36,6 +41,7 @@ import {
 
 type EmployeeStatus = "ACTIVE" | "PROBATION" | "ON_LEAVE" | "INACTIVE";
 type ContractType = "FULL_TIME" | "PART_TIME" | "CONTRACTOR";
+type SalaryMode = "STATIC" | "PERCENT";
 
 type Employee = {
   id: string;
@@ -47,6 +53,8 @@ type Employee = {
   manager: string;
   hireDate: string;
   salary: number;
+  salaryMode: SalaryMode;
+  salaryPercent: number;
   status: EmployeeStatus;
   contractType: ContractType;
   note: string;
@@ -82,6 +90,8 @@ const seedEmployees: Employee[] = [
     manager: "Artmonia Owner",
     hireDate: "2026-04-15",
     salary: 950,
+    salaryMode: "STATIC",
+    salaryPercent: 45,
     status: "ACTIVE",
     contractType: "FULL_TIME",
     note: "Komanda performansında ən yüksək gəlir göstəricisi ilə izlənir.",
@@ -96,6 +106,8 @@ const seedEmployees: Employee[] = [
     manager: "Artmonia Owner",
     hireDate: "2026-04-20",
     salary: 850,
+    salaryMode: "STATIC",
+    salaryPercent: 45,
     status: "ACTIVE",
     contractType: "FULL_TIME",
     note: "Güclü dialoq və konsultasiya follow-up sahəsində izlənir.",
@@ -110,6 +122,8 @@ const seedEmployees: Employee[] = [
     manager: "Ayşən Məmmədova",
     hireDate: "2026-05-09",
     salary: 650,
+    salaryMode: "STATIC",
+    salaryPercent: 45,
     status: "PROBATION",
     contractType: "PART_TIME",
     note: "Empatiya və satış skriptləri üzrə inkişaf planındadır.",
@@ -124,9 +138,27 @@ const seedEmployees: Employee[] = [
     manager: "Artmonia Owner",
     hireDate: "2026-03-01",
     salary: 1200,
+    salaryMode: "STATIC",
+    salaryPercent: 45,
     status: "ACTIVE",
     contractType: "FULL_TIME",
     note: "Ödəniş, borc və aylıq bağlanış proseslərinə baxır.",
+  },
+  {
+    id: "emp-teacher-demo",
+    fullName: "Aysel Əliyeva",
+    email: "aysel.teacher@artmonia.az",
+    phone: "+994 50 214 09 18",
+    department: "Tədris",
+    position: "Rəsm müəllimi",
+    manager: "Artmonia Owner",
+    hireDate: "2026-05-01",
+    salary: 0,
+    salaryMode: "PERCENT",
+    salaryPercent: 45,
+    status: "ACTIVE",
+    contractType: "CONTRACTOR",
+    note: "Faizli müəllim nümunəsi: maaş tələbə müəllimə assign olunanda və bronlarda “Gəldi” statusu yazılanda arxa planda hesablanır.",
   },
 ];
 
@@ -139,6 +171,8 @@ const emptyForm: EmployeeFormState = {
   manager: "",
   hireDate: new Date().toISOString().slice(0, 10),
   salary: 0,
+  salaryMode: "STATIC",
+  salaryPercent: 45,
   status: "ACTIVE",
   contractType: "FULL_TIME",
   note: "",
@@ -152,6 +186,7 @@ export function EmployeeCrud() {
   const [statusFilter, setStatusFilter] = useState<"all" | EmployeeStatus>("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(seedEmployees[0]?.id ?? "");
+  const [detailEmployeeId, setDetailEmployeeId] = useState<string | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [formState, setFormState] = useState<EmployeeFormState>(emptyForm);
   const [formOpen, setFormOpen] = useState(false);
@@ -171,7 +206,9 @@ export function EmployeeCrud() {
         const parsed: unknown = JSON.parse(stored);
 
         if (Array.isArray(parsed)) {
-          const restored = parsed.filter(isEmployee);
+          const restored = parsed
+            .map(normalizeStoredEmployee)
+            .filter((employee): employee is Employee => Boolean(employee));
           employeesLoadedRef.current = true;
           setEmployees(restored);
           setSelectedEmployeeId(restored[0]?.id ?? "");
@@ -229,11 +266,14 @@ export function EmployeeCrud() {
     filteredEmployees[0] ??
     employees[0] ??
     null;
+  const detailEmployee = detailEmployeeId
+    ? employees.find((employee) => employee.id === detailEmployeeId) ?? null
+    : null;
 
   const summary = useMemo(() => {
     const activeCount = employees.filter((employee) => employee.status === "ACTIVE").length;
     const probationCount = employees.filter((employee) => employee.status === "PROBATION").length;
-    const payroll = employees.reduce((sum, employee) => sum + employee.salary, 0);
+    const payroll = employees.reduce((sum, employee) => sum + calculateEmployeePayroll(employee), 0);
 
     return {
       total: employees.length,
@@ -245,7 +285,7 @@ export function EmployeeCrud() {
 
   function openCreateDialog() {
     setEditingEmployee(null);
-    setFormState(emptyForm);
+    setFormState({ ...emptyForm, hireDate: new Date().toISOString().slice(0, 10) });
     setFormOpen(true);
   }
 
@@ -260,6 +300,8 @@ export function EmployeeCrud() {
       manager: employee.manager,
       hireDate: employee.hireDate,
       salary: employee.salary,
+      salaryMode: employee.salaryMode,
+      salaryPercent: employee.salaryPercent,
       status: employee.status,
       contractType: employee.contractType,
       note: employee.note,
@@ -279,6 +321,8 @@ export function EmployeeCrud() {
       manager: formState.manager.trim(),
       department: formState.department.trim() || departments[0],
       salary: Number.isFinite(Number(formState.salary)) ? Number(formState.salary) : 0,
+      salaryMode: formState.salaryMode,
+      salaryPercent: clampNumber(formState.salaryPercent, 0, 100),
       note: formState.note.trim(),
     };
 
@@ -312,6 +356,9 @@ export function EmployeeCrud() {
     }
 
     setEmployees((current) => current.filter((employee) => employee.id !== employeeToDelete.id));
+    if (detailEmployeeId === employeeToDelete.id) {
+      setDetailEmployeeId(null);
+    }
 
     if (selectedEmployeeId === employeeToDelete.id) {
       const nextEmployee = employees.find((employee) => employee.id !== employeeToDelete.id);
@@ -327,6 +374,7 @@ export function EmployeeCrud() {
     setQuery("");
     setStatusFilter("all");
     setDepartmentFilter("all");
+    setDetailEmployeeId(null);
   }
 
   return (
@@ -356,6 +404,14 @@ export function EmployeeCrud() {
         <CompactMetric label="Maaş fondu" value={formatAmount(summary.payroll)} helper="aylıq plan" />
       </div>
 
+      {detailEmployee ? (
+        <EmployeeDetailPage
+          employee={detailEmployee}
+          onBack={() => setDetailEmployeeId(null)}
+          onEdit={openEditDialog}
+          onDelete={setEmployeeToDelete}
+        />
+      ) : (
       <div className="hr-employee-layout">
         <div className="hr-employee-main">
           <HrToolbar className="hr-employee-toolbar">
@@ -428,10 +484,20 @@ export function EmployeeCrud() {
                   </div>
                   <div className="hr-employee-card-footer">
                     <div className="hr-employee-card-salary">
-                      <span>Maaş</span>
-                      <strong>{formatAmount(employee.salary)}</strong>
+                      <span>{getSalaryModeLabel(employee.salaryMode)}</span>
+                      <strong>{getSalaryDisplayValue(employee)}</strong>
+                      <small>{getSalarySummary(employee)}</small>
                     </div>
                     <div className="hr-employee-card-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        aria-label={`${employee.fullName} ətraflı bax`}
+                        title="Ətraflı bax"
+                        onClick={() => setDetailEmployeeId(employee.id)}
+                      >
+                        <Eye size={14} />
+                      </button>
                       <button
                         className="icon-button"
                         type="button"
@@ -462,6 +528,7 @@ export function EmployeeCrud() {
 
         <EmployeeDetail employee={selectedEmployee} onEdit={openEditDialog} />
       </div>
+      )}
 
       <EmployeeFormDialog
         employee={editingEmployee}
@@ -514,6 +581,101 @@ function CompactMetric({
   );
 }
 
+function EmployeeDetailPage({
+  employee,
+  onBack,
+  onEdit,
+  onDelete,
+}: {
+  employee: Employee;
+  onBack: () => void;
+  onEdit: (employee: Employee) => void;
+  onDelete: (employee: Employee) => void;
+}) {
+  return (
+    <section className="hr-employee-profile-page">
+      <div className="hr-profile-hero">
+        <button type="button" className="hr-profile-back" onClick={onBack}>
+          <ArrowLeft size={16} />
+          <span>İşçi siyahısına qayıt</span>
+        </button>
+
+        <div className="hr-profile-identity">
+          <span className="hr-profile-avatar">{getInitials(employee.fullName)}</span>
+          <div>
+            <div className="hr-profile-status-row">
+              <StatusChip tone={getEmployeeStatusTone(employee.status)}>
+                {getEmployeeStatusLabel(employee.status)}
+              </StatusChip>
+              <span>{getContractLabel(employee.contractType)}</span>
+            </div>
+            <h2>{employee.fullName}</h2>
+            <p>{employee.position} · {employee.department}</p>
+          </div>
+        </div>
+
+        <div className="hr-profile-actions">
+          <Button type="button" variant="outline" size="sm" onClick={() => onEdit(employee)}>
+            <Pencil data-icon="inline-start" />
+            Redaktə et
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="hr-delete-button" onClick={() => onDelete(employee)}>
+            <Trash2 data-icon="inline-start" />
+            Sil
+          </Button>
+        </div>
+      </div>
+
+      <div className="hr-profile-grid">
+        <ProfileInfoCard icon={BriefcaseBusiness} label="Departament" value={employee.department} helper={employee.position} />
+        <ProfileInfoCard icon={UserRound} label="Menecer" value={employee.manager || "-"} helper="hesabat xətti" />
+        <ProfileInfoCard icon={CalendarDays} label="Başlama tarixi" value={formatDate(employee.hireDate)} helper="işçi lifecycle" />
+        <ProfileInfoCard icon={Mail} label="Email" value={employee.email || "-"} helper="iş əlaqəsi" />
+        <ProfileInfoCard icon={Phone} label="Telefon" value={employee.phone || "-"} helper="birbaşa əlaqə" />
+        <ProfileInfoCard
+          icon={employee.salaryMode === "PERCENT" ? Percent : BriefcaseBusiness}
+          label="Maaş"
+          value={getSalaryDisplayValue(employee)}
+          helper={getSalarySummary(employee)}
+        />
+      </div>
+
+      <div className="hr-profile-note-panel">
+        <div>
+          <span>İşçi qeydi</span>
+          <h3>Profil qeydi və idarəetmə konteksti</h3>
+        </div>
+        <p>{employee.note || "Qeyd yoxdur"}</p>
+      </div>
+    </section>
+  );
+}
+
+function ProfileInfoCard({
+  icon: Icon,
+  label,
+  value,
+  helper,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <article className="hr-profile-info-card">
+      <span className="hr-profile-info-icon">
+        <Icon size={18} />
+      </span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{helper}</small>
+      </div>
+    </article>
+  );
+}
+
 function EmployeeDetail({
   employee,
   onEdit,
@@ -554,9 +716,9 @@ function EmployeeDetail({
       </div>
 
       <div className="hr-detail-payroll">
-        <span>Maaş</span>
-        <strong>{formatAmount(employee.salary)}</strong>
-        <small>Başlama: {formatDate(employee.hireDate)}</small>
+        <span>{getSalaryModeLabel(employee.salaryMode)}</span>
+        <strong>{getSalaryDisplayValue(employee)}</strong>
+        <small>{getSalaryBreakdown(employee)} · Başlama: {formatDate(employee.hireDate)}</small>
       </div>
 
       <p className="hr-detail-note">{employee.note || "Qeyd yoxdur"}</p>
@@ -696,17 +858,9 @@ function EmployeeFormDialog({
                 }
               />
             </Field>
-            <Field label="Maaş">
-              <Input
-                min={0}
-                type="number"
-                value={formState.salary}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, salary: Number(event.target.value) }))
-                }
-              />
-            </Field>
           </div>
+
+          <SalarySection formState={formState} setFormState={setFormState} />
 
           <div className="field-grid">
             <Field label="Status">
@@ -770,6 +924,81 @@ function EmployeeFormDialog({
   );
 }
 
+function SalarySection({
+  formState,
+  setFormState,
+}: {
+  formState: EmployeeFormState;
+  setFormState: Dispatch<SetStateAction<EmployeeFormState>>;
+}) {
+  const isPercent = formState.salaryMode === "PERCENT";
+
+  return (
+    <section className="hr-salary-panel" aria-label="Maaş hesablaması">
+      <div className="hr-salary-panel-head">
+        <div>
+          <span>Maaş tipi</span>
+          <strong>{isPercent ? "Faizlə maaş" : "Statik maaş"}</strong>
+        </div>
+        <div className="hr-salary-toggle" role="group" aria-label="Maaş tipi seçimi">
+          <button
+            type="button"
+            className={cx(formState.salaryMode === "STATIC" && "is-active")}
+            onClick={() => setFormState((current) => ({ ...current, salaryMode: "STATIC" }))}
+          >
+            Statik
+          </button>
+          <button
+            type="button"
+            className={cx(isPercent && "is-active")}
+            onClick={() => setFormState((current) => ({ ...current, salaryMode: "PERCENT" }))}
+          >
+            Faizlə
+          </button>
+        </div>
+      </div>
+
+      {isPercent ? (
+        <>
+          <div className="field-grid">
+          <Field label="Müəllim faizi">
+            <Input
+              min={0}
+              max={100}
+              type="number"
+              value={formState.salaryPercent}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  salaryPercent: Number(event.target.value),
+                }))
+              }
+            />
+          </Field>
+          </div>
+
+          <div className="hr-salary-preview">
+            <span>Avtomatik hesablama</span>
+            <strong>{formState.salaryPercent}%</strong>
+            <small>Bronlarda tələbə “Gəldi” olduqda və tələbə müəllimə assign edildikdə maaş arxa planda bu faizlə hesablanır.</small>
+          </div>
+        </>
+      ) : (
+        <Field label="Statik maaş (AZN)">
+          <Input
+            min={0}
+            type="number"
+            value={formState.salary}
+            onChange={(event) =>
+              setFormState((current) => ({ ...current, salary: Number(event.target.value) }))
+            }
+          />
+        </Field>
+      )}
+    </section>
+  );
+}
+
 function Field({
   label,
   children,
@@ -785,6 +1014,31 @@ function Field({
   );
 }
 
+function normalizeStoredEmployee(value: unknown): Employee | null {
+  if (!isEmployee(value)) {
+    return null;
+  }
+
+  const employee = value as Partial<Employee>;
+
+  return {
+    id: String(employee.id),
+    fullName: String(employee.fullName),
+    email: typeof employee.email === "string" ? employee.email : "",
+    phone: typeof employee.phone === "string" ? employee.phone : "",
+    department: typeof employee.department === "string" ? employee.department : departments[0],
+    position: String(employee.position),
+    manager: typeof employee.manager === "string" ? employee.manager : "",
+    hireDate: typeof employee.hireDate === "string" ? employee.hireDate : new Date().toISOString().slice(0, 10),
+    salary: Math.max(0, toFiniteNumber(employee.salary, 0)),
+    salaryMode: employee.salaryMode === "PERCENT" ? "PERCENT" : "STATIC",
+    salaryPercent: clampNumber(toFiniteNumber(employee.salaryPercent, 45), 0, 100),
+    status: isEmployeeStatus(employee.status) ? employee.status : "ACTIVE",
+    contractType: isContractType(employee.contractType) ? employee.contractType : "FULL_TIME",
+    note: typeof employee.note === "string" ? employee.note : "",
+  };
+}
+
 function isEmployee(value: unknown): value is Employee {
   if (!value || typeof value !== "object") {
     return false;
@@ -792,6 +1046,14 @@ function isEmployee(value: unknown): value is Employee {
 
   const employee = value as Partial<Employee>;
   return Boolean(employee.id && employee.fullName && employee.department && employee.position);
+}
+
+function isEmployeeStatus(value: unknown): value is EmployeeStatus {
+  return employeeStatuses.some((status) => status.value === value);
+}
+
+function isContractType(value: unknown): value is ContractType {
+  return contractTypes.some((contract) => contract.value === value);
 }
 
 function createEmployeeId() {
@@ -821,6 +1083,52 @@ function getEmployeeStatusTone(status: EmployeeStatus) {
 
 function getContractLabel(contractType: ContractType) {
   return contractTypes.find((item) => item.value === contractType)?.label ?? contractType;
+}
+
+function getSalaryModeLabel(salaryMode: SalaryMode) {
+  return salaryMode === "PERCENT" ? "Faizlə maaş" : "Statik maaş";
+}
+
+function getSalarySummary(employee: Employee | EmployeeFormState) {
+  if (employee.salaryMode === "PERCENT") {
+    return "bron və davamiyyətə görə avtomatik";
+  }
+
+  return "aylıq sabit məbləğ";
+}
+
+function getSalaryBreakdown(employee: Employee | EmployeeFormState) {
+  if (employee.salaryMode !== "PERCENT") {
+    return "Statik maaş";
+  }
+
+  return "Bronlarda gələn tələbələrə görə avtomatik hesablanır";
+}
+
+function calculateEmployeePayroll(employee: Employee | EmployeeFormState) {
+  if (employee.salaryMode !== "PERCENT") {
+    return Math.max(0, toFiniteNumber(employee.salary, 0));
+  }
+
+  return 0;
+}
+
+function getSalaryDisplayValue(employee: Employee | EmployeeFormState) {
+  if (employee.salaryMode === "PERCENT") {
+    return `${employee.salaryPercent}%`;
+  }
+
+  return formatAmount(employee.salary);
+}
+
+function toFiniteNumber(value: unknown, fallback: number) {
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function getInitials(value: string) {
