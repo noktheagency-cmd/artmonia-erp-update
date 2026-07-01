@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
+  AlertCircle,
   BarChart3,
-  Calendar,
   CalendarCheck,
-  CalendarDays,
   CheckCircle2,
   Clock3,
   Filter,
@@ -13,12 +13,8 @@ import {
   List,
   MapPin,
   Plus,
-  RefreshCw,
   Search,
-  SlidersHorizontal,
   Sparkles,
-  UserRound,
-  X,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -35,57 +31,20 @@ import {
 } from "@/components/ui/dialog";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
+import type {
+  AttendanceStatus,
+  BookingData,
+  BookingRow,
+} from "@/modules/bookings/queries";
 
-type AttendanceStatus = "reserved" | "attended" | "absent";
 type BookingView = "schedule" | "list" | "journal";
 type BookingStatusFilter = "all" | AttendanceStatus;
-
-type StudentOption = {
-  id: string;
-  name: string;
-  code: string;
-  program: string;
-  teacher: string;
-};
-
-type BookingDay = {
-  id: string;
-  label: string;
-  shortLabel: string;
-  dateLabel: string;
-};
-
-type Booking = {
-  id: string;
-  studentId: string;
-  studentName: string;
-  studentCode: string;
-  program: string;
-  teacher: string;
-  room: string;
-  date: string;
-  dayId: string;
-  time: string;
-  duration: string;
-  note: string;
-  status: AttendanceStatus;
-  createdAt: string;
-};
-
-type HistoryEvent = {
-  id: string;
-  kind: "created" | "attended" | "absent" | "updated";
-  title: string;
-  description: string;
-  time: string;
-};
 
 type DraftState = {
   studentId: string;
   date: string;
-  dayId: string;
   time: string;
-  duration: string;
+  durationMinutes: string;
   room: string;
   note: string;
 };
@@ -96,103 +55,6 @@ type BookingFilters = {
   dateTo: string;
   status: BookingStatusFilter;
   room: string;
-};
-
-type StoredWorkspace = {
-  bookings: Booking[];
-  history: HistoryEvent[];
-  selectedBookingId?: string;
-};
-
-const storageKey = "artmonia-booking-workspace-v1";
-
-const students: StudentOption[] = [
-  {
-    id: "stu-001",
-    name: "Aylin Həsənli",
-    code: "ART-1042",
-    program: "Rəsm əsasları",
-    teacher: "Nigar M.",
-  },
-  {
-    id: "stu-002",
-    name: "Murad Əliyev",
-    code: "ART-1057",
-    program: "Digital Art",
-    teacher: "Rauf S.",
-  },
-  {
-    id: "stu-003",
-    name: "Leyla Məmmədova",
-    code: "ART-1061",
-    program: "Akademik rəsm",
-    teacher: "Aysel H.",
-  },
-  {
-    id: "stu-004",
-    name: "Tunar Qasımov",
-    code: "ART-1070",
-    program: "Heykəltəraşlıq",
-    teacher: "Kamal B.",
-  },
-  {
-    id: "stu-005",
-    name: "Zəhra Nuriyeva",
-    code: "ART-1084",
-    program: "İllüstrasiya",
-    teacher: "Nigar M.",
-  },
-  {
-    id: "stu-006",
-    name: "Səid Rzayev",
-    code: "ART-1092",
-    program: "Portret",
-    teacher: "Rauf S.",
-  },
-];
-
-const days: BookingDay[] = [
-  { id: "mon", label: "Bazar ertəsi", shortLabel: "B.e", dateLabel: "Plan" },
-  { id: "tue", label: "Çərşənbə axşamı", shortLabel: "Ç.a", dateLabel: "Plan" },
-  { id: "wed", label: "Çərşənbə", shortLabel: "Ç", dateLabel: "Plan" },
-  { id: "thu", label: "Cümə axşamı", shortLabel: "C.a", dateLabel: "Plan" },
-  { id: "fri", label: "Cümə", shortLabel: "C", dateLabel: "Plan" },
-  { id: "sat", label: "Şənbə", shortLabel: "Ş", dateLabel: "Studio" },
-];
-
-const dayOrder = new Map(days.map((day, index) => [day.id, index]));
-
-const timeSlots = ["10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00"];
-const roomOptions = ["A Studio", "B Studio", "Digital otaq", "Portret zalı", "Workshop"];
-const durationOptions = ["60 dəq", "90 dəq", "120 dəq"];
-const studentSelectOptions = students.map((student) => ({
-  value: student.id,
-  label: `${student.name} - ${student.code}`,
-}));
-const durationSelectOptions = durationOptions.map((duration) => ({
-  value: duration,
-  label: duration,
-}));
-const roomSelectOptions = roomOptions.map((room) => ({ value: room, label: room }));
-const roomFilterOptions = [
-  { value: "all", label: "Bütün otaqlar" },
-  ...roomSelectOptions,
-];
-const statusFilterOptions: { value: BookingStatusFilter; label: string }[] = [
-  { value: "all", label: "Bütün statuslar" },
-  { value: "reserved", label: "Bron" },
-  { value: "attended", label: "Gəldi" },
-  { value: "absent", label: "Gəlmədi" },
-];
-
-const initialDraft: DraftState = {
-  studentId: students[0]?.id ?? "",
-  date: getDateForDayId("mon"),
-  dayId: "mon",
-  time: "10:00",
-  duration: "90 dəq",
-  room: "A Studio",
-  note: "",
 };
 
 const initialFilters: BookingFilters = {
@@ -215,850 +77,349 @@ const statusMeta: Record<
   reserved: { label: "Bron", className: "is-reserved", tone: "info", icon: Clock3 },
   attended: { label: "Gəldi", className: "is-attended", tone: "success", icon: CheckCircle2 },
   absent: { label: "Gəlmədi", className: "is-absent", tone: "danger", icon: XCircle },
+  cancelled: { label: "Ləğv", className: "is-cancelled", tone: "neutral", icon: XCircle },
 };
 
-const initialBookings: Booking[] = [
-  createSeedBooking({
-    id: "booking-seed-1",
-    student: students[0],
-    dayId: "mon",
-    time: "10:00",
-    room: "A Studio",
-    status: "attended",
-  }),
-  createSeedBooking({
-    id: "booking-seed-2",
-    student: students[2],
-    dayId: "mon",
-    time: "13:00",
-    room: "Portret zalı",
-    status: "reserved",
-  }),
-  createSeedBooking({
-    id: "booking-seed-3",
-    student: students[1],
-    dayId: "tue",
-    time: "16:00",
-    room: "Digital otaq",
-    status: "absent",
-  }),
-  createSeedBooking({
-    id: "booking-seed-4",
-    student: students[4],
-    dayId: "wed",
-    time: "11:30",
-    room: "B Studio",
-    status: "reserved",
-  }),
-  createSeedBooking({
-    id: "booking-seed-5",
-    student: students[3],
-    dayId: "fri",
-    time: "17:30",
-    room: "Workshop",
-    status: "reserved",
-  }),
+const statusFilterOptions: { value: BookingStatusFilter; label: string }[] = [
+  { value: "all", label: "Bütün statuslar" },
+  { value: "reserved", label: "Bron" },
+  { value: "attended", label: "Gəldi" },
+  { value: "absent", label: "Gəlmədi" },
+  { value: "cancelled", label: "Ləğv" },
 ];
 
-const initialHistory: HistoryEvent[] = [
-  {
-    id: "history-seed-1",
-    kind: "attended",
-    title: "Aylin Həsənli jurnalda Gəldi edildi",
-    description: "Bazar ertəsi, 10:00 dərsi tamamlandı.",
-    time: "09:58",
-  },
-  {
-    id: "history-seed-2",
-    kind: "absent",
-    title: "Murad Əliyev üçün Gəlmədi qeyd olundu",
-    description: "Çərşənbə axşamı, 16:00 bronu jurnal statusu dəyişdi.",
-    time: "Dünən",
-  },
-  {
-    id: "history-seed-3",
-    kind: "created",
-    title: "Zəhra Nuriyeva üçün bron yaradıldı",
-    description: "Çərşənbə, 11:30 - B Studio.",
-    time: "Dünən",
-  },
+const tabs: Array<{ id: BookingView; label: string; icon: LucideIcon }> = [
+  { id: "schedule", label: "Gün planı", icon: CalendarCheck },
+  { id: "list", label: "Bron siyahısı", icon: List },
+  { id: "journal", label: "Tarixçə", icon: History },
 ];
 
-export function BookingWorkspace() {
-  const nextIdRef = useRef(initialBookings.length + initialHistory.length + 1);
-  const canPersistRef = useRef(false);
-  const [bookings, setBookings] = useState(initialBookings);
-  const [history, setHistory] = useState(initialHistory);
-  const [draft, setDraft] = useState<DraftState>(initialDraft);
-  const [selectedDayId, setSelectedDayId] = useState("mon");
-  const [selectedDate, setSelectedDate] = useState(getDateForDayId("mon"));
-  const [selectedBookingId, setSelectedBookingId] = useState(initialBookings[0]?.id ?? "");
-  const [notice, setNotice] = useState("Günlük bron rejimi aktivdir.");
+export function BookingWorkspace({
+  data,
+  createLessonReservationAction,
+  markLessonAttendanceAction,
+}: {
+  data: BookingData;
+  createLessonReservationAction: (formData: FormData) => void | Promise<void>;
+  markLessonAttendanceAction: (formData: FormData) => void | Promise<void>;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [activeView, setActiveView] = useState<BookingView>("schedule");
+  const [selectedDate, setSelectedDate] = useState(data.defaultDate);
+  const [selectedBookingId, setSelectedBookingId] = useState(data.bookings[0]?.id ?? "");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [notice, setNotice] = useState("");
   const [filters, setFilters] = useState<BookingFilters>(initialFilters);
-  const [reservationOpen, setReservationOpen] = useState(false);
+  const [draft, setDraft] = useState<DraftState>(() => buildInitialDraft(data, data.defaultDate));
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      const storedWorkspace = readStoredWorkspace();
-      const firstBooking = storedWorkspace.bookings[0];
+  const activeSelectedBookingId =
+    selectedBookingId && data.bookings.some((booking) => booking.id === selectedBookingId)
+      ? selectedBookingId
+      : data.bookings[0]?.id ?? "";
 
-      setBookings(storedWorkspace.bookings);
-      setHistory(storedWorkspace.history);
-      setSelectedBookingId(storedWorkspace.selectedBookingId ?? firstBooking?.id ?? "");
-      setSelectedDayId(firstBooking?.dayId ?? "mon");
-      setSelectedDate(firstBooking?.date ?? getDateForDayId(firstBooking?.dayId ?? "mon"));
-      setDraft((current) => ({
-        ...current,
-        date: firstBooking?.date ?? current.date,
-        dayId: firstBooking?.dayId ?? current.dayId,
-      }));
-      nextIdRef.current =
-        storedWorkspace.bookings.length + storedWorkspace.history.length + 1;
-      canPersistRef.current = true;
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  useEffect(() => {
-    if (!canPersistRef.current) {
-      return;
-    }
-
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({ bookings, history, selectedBookingId })
-    );
-  }, [bookings, history, selectedBookingId]);
-
+  const roomFilterOptions = useMemo(
+    () => [{ value: "all", label: "Bütün otaqlar" }, ...data.rooms.map((room) => ({ value: room, label: room }))],
+    [data.rooms]
+  );
   const bookingBySlot = useMemo(() => {
-    return new Map(bookings.map((booking) => [slotKey(booking.date, booking.time), booking]));
-  }, [bookings]);
-
-  const selectedDayBookings = useMemo(() => {
-    return bookings
-      .filter((booking) => booking.date === selectedDate)
-      .sort(compareBookingsBySlot);
-  }, [bookings, selectedDate]);
-
-  const filteredBookings = useMemo(() => {
-    const hasDateRange = filters.dateFrom || filters.dateTo;
-
-    return bookings
-      .filter((booking) =>
-        hasDateRange ? matchesBookingDateRange(booking, filters) : booking.date === selectedDate
-      )
-      .filter((booking) => matchesBookingFilters(booking, filters))
-      .sort(compareBookingsBySlot);
-  }, [bookings, filters, selectedDate]);
-
-  const selectedDay = getDay(selectedDayId);
-  const selectedDayCapacity = timeSlots.length;
-  const selectedDayUtilization = Math.round((selectedDayBookings.length / selectedDayCapacity) * 100);
-  const activeFiltersCount = countActiveFilters(filters);
-
-  const stats = useMemo(() => {
-    const attended = bookings.filter((booking) => booking.status === "attended").length;
-    const absent = bookings.filter((booking) => booking.status === "absent").length;
-    const reserved = bookings.filter((booking) => booking.status === "reserved").length;
-    const utilization = Math.round((bookings.length / (days.length * timeSlots.length)) * 100);
-    const attendanceBase = attended + absent;
-    const attendanceRate =
-      attendanceBase > 0 ? Math.round((attended / attendanceBase) * 100) : 100;
-    const activeRooms = new Set(bookings.map((booking) => booking.room)).size;
-
-    return { attended, absent, reserved, utilization, attendanceRate, activeRooms };
-  }, [bookings]);
-
-  function updateDraft(key: keyof DraftState, value: string) {
-    if (key === "date") {
-      const nextDayId = getDayIdFromDate(value);
-
-      setDraft((current) => ({ ...current, date: value, dayId: nextDayId }));
-      return;
+    const map = new Map<string, BookingRow>();
+    for (const booking of data.bookings) {
+      if (booking.status !== "cancelled") {
+        map.set(slotKey(booking.date, booking.time, booking.room), booking);
+      }
     }
+    return map;
+  }, [data.bookings]);
+  const selectedDateBookings = useMemo(
+    () =>
+      data.bookings
+        .filter((booking) => booking.date === selectedDate)
+        .sort((left, right) => `${left.time} ${left.room}`.localeCompare(`${right.time} ${right.room}`)),
+    [data.bookings, selectedDate]
+  );
+  const filteredBookings = useMemo(
+    () => data.bookings.filter((booking) => matchesBookingFilters(booking, filters, selectedDate)),
+    [data.bookings, filters, selectedDate]
+  );
+  const selectedBooking =
+    data.bookings.find((booking) => booking.id === activeSelectedBookingId) ??
+    selectedDateBookings[0] ??
+    data.bookings[0];
+  const stats = useMemo(() => buildStats(data.bookings), [data.bookings]);
+  const activeFilterCount = countActiveFilters(filters);
 
+  function updateDraft<K extends keyof DraftState>(key: K, value: DraftState[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
-
-    if (key === "dayId") {
-      setSelectedDayId(value);
-    }
   }
 
-  function updateFilter(key: keyof BookingFilters, value: string) {
-    setFilters((current) => ({ ...current, [key]: value } as BookingFilters));
-  }
-
-  function selectDate(date: string) {
-    if (!date) {
-      return;
-    }
-
-    const nextDayId = getDayIdFromDate(date);
-
-    setSelectedDate(date);
-    setSelectedDayId(nextDayId);
-    setDraft((current) => ({ ...current, date, dayId: nextDayId }));
-    setActiveView("schedule");
-    setNotice(`${formatDateDisplay(date)} üçün canlı saatlar göstərilir.`);
-  }
-
-  function clearFilters() {
-    setFilters(initialFilters);
-    setActiveView("schedule");
-    setNotice("Bron filtrləri sıfırlandı.");
-  }
-
-  function clearFilter(key: keyof BookingFilters) {
-    setFilters((current) => ({
-      ...current,
-      [key]: key === "query" || key === "dateFrom" || key === "dateTo" ? "" : "all",
-    } as BookingFilters));
-  }
-
-  function updateDateFilter(key: "dateFrom" | "dateTo", value: string) {
-    updateFilter(key, value);
-
-    if (key === "dateFrom" && value) {
-      selectDate(value);
-    }
-  }
-
-  function setQuickDateRange(periodType: "today" | "month" | "thirty") {
-    const today = new Date();
-    const todayValue = toIsoDate(today);
-
-    if (periodType === "today") {
-      setFilters((current) => ({ ...current, dateFrom: todayValue, dateTo: todayValue }));
-      selectDate(todayValue);
-      return;
-    }
-
-    if (periodType === "month") {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      setFilters((current) => ({
-        ...current,
-        dateFrom: toIsoDate(firstDay),
-        dateTo: toIsoDate(lastDay),
-      }));
-      selectDate(todayValue);
-      return;
-    }
-
-    const thirtyDaysAgo = addDays(today, -30);
-    setFilters((current) => ({
-      ...current,
-      dateFrom: toIsoDate(thirtyDaysAgo),
-      dateTo: todayValue,
-    }));
-    selectDate(todayValue);
-  }
-
-  function applyFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setActiveView(activeFiltersCount > 0 ? "list" : "schedule");
-    setNotice(
-      activeFiltersCount > 0
-        ? `${filteredBookings.length} bron filtrə uyğun göstərilir.`
-        : `${selectedDay.label} üçün saatlar göstərilir.`
-    );
-  }
-
-  function openReservationDialog(overrides: Partial<Pick<DraftState, "date" | "dayId" | "time">> = {}) {
-    const nextDate = overrides.date ?? selectedDate;
-    const nextDayId = overrides.dayId ?? getDayIdFromDate(nextDate);
-    const nextTime =
-      overrides.time ?? getFirstAvailableTime(nextDate, draft.time) ?? timeSlots[0];
-
+  function openReservation(date = selectedDate, time = data.timeSlots[0] ?? "10:00") {
+    const room = data.rooms[0] ?? "";
     setDraft((current) => ({
       ...current,
-      date: nextDate,
-      dayId: nextDayId,
-      time: nextTime,
+      studentId: current.studentId || data.students[0]?.id || "",
+      date,
+      time,
+      room,
+      note: "",
     }));
-    setSelectedDayId(nextDayId);
-    setSelectedDate(nextDate);
-    setReservationOpen(true);
+    setDialogOpen(true);
   }
 
-  function addHistory(event: Omit<HistoryEvent, "id" | "time">) {
-    setHistory((current) => [
-      {
-        ...event,
-        id: getNextId("history"),
-        time: new Intl.DateTimeFormat("az-AZ", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date()),
-      },
-      ...current,
-    ].slice(0, 16));
-  }
-
-  function createBooking() {
-    const selectedStudent = students.find((student) => student.id === draft.studentId);
-
-    if (!selectedStudent) {
-      setNotice("Bron üçün tələbə seçin.");
-      return;
-    }
-
-    const existing = bookingBySlot.get(slotKey(draft.date, draft.time));
+  function createReservation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const existing = bookingBySlot.get(slotKey(draft.date, draft.time, draft.room));
 
     if (existing) {
-      setSelectedBookingId(existing.id);
-      setNotice(`${formatDateDisplay(draft.date)} ${draft.time} artıq bron olunub.`);
+      setNotice(`${draft.room} otağında ${formatDateDisplay(draft.date)} ${draft.time} artıq doludur.`);
       return;
     }
 
-    const nextBooking: Booking = {
-      id: getNextId("booking"),
-      studentId: selectedStudent.id,
-      studentName: selectedStudent.name,
-      studentCode: selectedStudent.code,
-      program: selectedStudent.program,
-      teacher: selectedStudent.teacher,
-      room: draft.room,
-      date: draft.date,
-      dayId: draft.dayId,
-      time: draft.time,
-      duration: draft.duration,
-      note: draft.note.trim(),
-      status: "reserved",
-      createdAt: new Date().toISOString(),
-    };
+    const formData = new FormData();
+    formData.set("studentId", draft.studentId);
+    formData.set("bookingDate", draft.date);
+    formData.set("bookingTime", draft.time);
+    formData.set("durationMinutes", draft.durationMinutes);
+    formData.set("room", draft.room);
+    formData.set("note", draft.note);
 
-    setBookings((current) => [nextBooking, ...current]);
-    setSelectedBookingId(nextBooking.id);
-    setSelectedDayId(nextBooking.dayId);
-    setSelectedDate(nextBooking.date);
-    setFilters(initialFilters);
-    setActiveView("schedule");
-    setReservationOpen(false);
-    setNotice(`${selectedStudent.name} üçün ${formatDateDisplay(nextBooking.date)} ${nextBooking.time} bron edildi.`);
-    addHistory({
-      kind: "created",
-      title: `${selectedStudent.name} üçün bron yaradıldı`,
-      description: `${formatDateDisplay(nextBooking.date)}, ${nextBooking.time} - ${draft.room}.`,
+    startTransition(() => {
+      void (async () => {
+        try {
+          await createLessonReservationAction(formData);
+          setDialogOpen(false);
+          setNotice("Bron yaradıldı. Tələbə qrup gözləyirdisə aktiv statusa keçirildi.");
+          router.refresh();
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "Bron yaratmaq mümkün olmadı");
+        }
+      })();
     });
   }
 
-  function handleSlotClick(dayId: string, time: string) {
-    const booking = bookingBySlot.get(slotKey(selectedDate, time));
+  function markAttendance(bookingId: string, status: "attended" | "absent") {
+    const formData = new FormData();
+    formData.set("lessonId", bookingId);
+    formData.set("status", status);
 
-    if (booking) {
-      setSelectedBookingId(booking.id);
-      setNotice(`${booking.studentName} bronu: ${formatDateDisplay(booking.date)} ${time}, ${booking.room}.`);
-      return;
-    }
-
-    openReservationDialog({ date: selectedDate, dayId, time });
-  }
-
-  function handleMetricClick(status: BookingStatusFilter) {
-    setFilters((current) => ({ ...current, status }));
-    setActiveView(status === "all" ? "schedule" : "list");
-    setNotice(status === "all" ? "Günlük saatlar göstərilir." : `${getStatusLabel(status)} bronları süzgəcdədir.`);
-  }
-
-  function markAttendance(bookingId: string, status: Exclude<AttendanceStatus, "reserved">) {
-    const target = bookings.find((booking) => booking.id === bookingId);
-
-    if (!target) {
-      return;
-    }
-
-    setBookings((current) =>
-      current.map((booking) =>
-        booking.id === bookingId ? { ...booking, status } : booking
-      )
-    );
-    setSelectedBookingId(bookingId);
-    setNotice(`${target.studentName} jurnalda "${statusMeta[status].label}" edildi.`);
-    addHistory({
-      kind: status,
-      title: `${target.studentName} jurnalda ${statusMeta[status].label} edildi`,
-      description: `${formatDateDisplay(target.date)}, ${target.time} bron statusu yeniləndi.`,
+    startTransition(() => {
+      void (async () => {
+        try {
+          await markLessonAttendanceAction(formData);
+          setSelectedBookingId(bookingId);
+          setNotice(status === "attended" ? "Davamiyyət gəldi kimi saxlanıldı." : "Davamiyyət gəlmədi kimi saxlanıldı.");
+          router.refresh();
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "Davamiyyəti yeniləmək mümkün olmadı");
+        }
+      })();
     });
   }
 
-  function resetWorkspace() {
-    setBookings(initialBookings);
-    setHistory(initialHistory);
-    setSelectedBookingId(initialBookings[0]?.id ?? "");
-    setSelectedDayId("mon");
-    setSelectedDate(getDateForDayId("mon"));
-    setDraft(initialDraft);
+  function resetFilters() {
     setFilters(initialFilters);
-    setActiveView("schedule");
-    setReservationOpen(false);
-    setNotice("Demo bronlar bərpa olundu.");
-    window.localStorage.removeItem(storageKey);
-  }
-
-  function getNextId(prefix: string) {
-    const nextId = `${prefix}-${nextIdRef.current}`;
-    nextIdRef.current += 1;
-    return nextId;
-  }
-
-  function getFirstAvailableTime(date: string, preferredTime?: string) {
-    if (preferredTime && !bookingBySlot.has(slotKey(date, preferredTime))) {
-      return preferredTime;
-    }
-
-    return timeSlots.find((time) => !bookingBySlot.has(slotKey(date, time)));
   }
 
   return (
     <section className="page-stack operational-page booking-redesign-page booking-day-redesign-page">
       <div className="crm-unified-filter-panel booking-command-panel booking-day-command-panel">
         <div className="student-header-compact booking-header-compact" style={{ marginBottom: 0 }}>
-          <div className="header-title-wrapper-compact">
-            <div className="crm-eyebrow-compact">
-              <span className="eyebrow-pill pill-primary">Artmonia ERP</span>
-              <span className="eyebrow-pill pill-date">Günlük bron</span>
-            </div>
-            <div className="title-row-compact">
-              <h1>Bronlar və Dərs Jurnalı</h1>
-            </div>
-            <p className="crm-header-desc" style={{ marginBottom: 0 }}>
-              Seçilmiş günün saatları, doluluğu və rezerv statusları.
-            </p>
+          <div>
+            <p className="eyebrow">Dərs bronları</p>
+            <h1>Real rezervasiya planı</h1>
+            <p>Bron yarandıqda qrup gözləyən tələbə aktivləşir, dərs və davamiyyət DB-də saxlanılır.</p>
           </div>
-
-          <div className="header-actions-wrapper-compact">
+          <div className="booking-header-actions">
             <div className="financial-summary-badge-compact booking-summary-badge-compact">
-              <Sparkles size={14} className="text-tone-success" />
-              <span className="label-text">Canlı status:</span>
-              <strong className="value-text">{notice}</strong>
+              <Sparkles size={15} />
+              <div>
+                <span>Bugünkü fokus</span>
+                <strong>{selectedDateBookings.length} bron</strong>
+              </div>
             </div>
-            <Button type="button" variant="default" size="sm" onClick={() => openReservationDialog()}>
-              <Plus size={15} />
+            <Button type="button" onClick={() => openReservation()} disabled={!data.permissions.canCreateReservation || data.students.length === 0}>
+              <Plus data-icon="inline-start" />
               Bron yarat
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={resetWorkspace}>
-              <RefreshCw size={15} />
-              Sıfırla
             </Button>
           </div>
         </div>
 
-        <div className="filter-header-divider" />
-
-        <form className="student-unified-filter-panel-inner booking-filter-panel" onSubmit={applyFilters}>
+        <div className="student-unified-filter-panel-inner booking-filter-panel">
           <div className="filter-main-row booking-day-filter-row">
-            <div className="search-input-wrapper booking-search-input-wrapper">
-              <Search size={18} className="search-icon" />
+            <label className="search-input-wrapper booking-search-input-wrapper">
+              <Search size={16} />
               <input
-                name="q"
                 value={filters.query}
-                onChange={(event) => updateFilter("query", event.target.value)}
-                onInput={(event) => updateFilter("query", event.currentTarget.value)}
-                placeholder="Tələbə, kod, müəllim, otaq..."
-                className="filter-search-input"
+                onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+                placeholder="Tələbə, kod, müəllim, proqram və otaq üzrə axtar"
               />
-              {filters.query && (
-                <button
-                  type="button"
-                  className="clear-search-btn"
-                  aria-label="Axtarışı təmizlə"
-                  onClick={() => clearFilter("query")}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            <DatePicker
-              name="from"
-              value={filters.dateFrom}
-              onValueChange={(nextValue) => updateDateFilter("dateFrom", nextValue)}
-              placeholder="Başlanğıc"
-              aria-label="Başlanğıc tarixi"
-              className="booking-date-input-container"
-            />
-
-            <DatePicker
-              name="to"
-              value={filters.dateTo}
-              onValueChange={(nextValue) => updateDateFilter("dateTo", nextValue)}
-              placeholder="Son tarix"
-              aria-label="Son tarix"
-              className="booking-date-input-container"
-            />
-
+            </label>
+            <label className="booking-date-input-container">
+              <span>Gün</span>
+              <DatePicker name="selectedDate" value={selectedDate} onValueChange={setSelectedDate} allowClear={false} />
+            </label>
+            <label className="booking-date-input-container">
+              <span>Başlanğıc</span>
+              <DatePicker name="bookingFrom" value={filters.dateFrom} onValueChange={(value) => setFilters((current) => ({ ...current, dateFrom: value }))} />
+            </label>
+            <label className="booking-date-input-container">
+              <span>Son</span>
+              <DatePicker name="bookingTo" value={filters.dateTo} onValueChange={(value) => setFilters((current) => ({ ...current, dateTo: value }))} />
+            </label>
             <label className="booking-filter-select">
               <span>Status</span>
               <FormSelect
-                name="status"
+                name="bookingStatusFilter"
                 value={filters.status}
-                onValueChange={(value) => updateFilter("status", value as BookingStatusFilter)}
+                onValueChange={(value) => setFilters((current) => ({ ...current, status: value as BookingStatusFilter }))}
                 options={statusFilterOptions}
-                icon={CheckCircle2}
                 className="booking-filter-trigger"
                 contentClassName="booking-select-content"
-                aria-label="Status seç"
               />
             </label>
-
             <label className="booking-filter-select">
               <span>Otaq</span>
               <FormSelect
-                name="room"
+                name="bookingRoomFilter"
                 value={filters.room}
-                onValueChange={(value) => updateFilter("room", value)}
+                onValueChange={(value) => setFilters((current) => ({ ...current, room: value }))}
                 options={roomFilterOptions}
-                icon={MapPin}
                 className="booking-filter-trigger"
                 contentClassName="booking-select-content"
-                aria-label="Otaq seç"
               />
             </label>
-
-            <div className="filter-actions-group" style={{ marginTop: 0 }}>
-              <Button type="submit" variant="default" size="sm" className="crm-search-submit-btn">
-                <Filter size={16} />
-                Göstər
+            {activeFilterCount > 0 ? (
+              <Button type="button" size="sm" variant="outline" onClick={resetFilters}>
+                <Filter data-icon="inline-start" />
+                Sıfırla
               </Button>
-              <button type="button" onClick={clearFilters} className="advanced-toggle-btn">
-                Təmizlə
-              </button>
+            ) : null}
+          </div>
+          {notice ? (
+            <div className="booking-notice" role="status">
+              <AlertCircle size={14} />
+              <span>{notice}</span>
             </div>
-          </div>
-
-          <div className="period-quick-row booking-period-quick-row">
-            <button type="button" onClick={() => setQuickDateRange("today")} className="period-quick-btn">
-              <Calendar size={13} className="text-tone-primary" />
-              <span>Bugün</span>
-            </button>
-            <button type="button" onClick={() => setQuickDateRange("month")} className="period-quick-btn">
-              <CalendarDays size={13} className="text-tone-success" />
-              <span>Bu ay</span>
-            </button>
-            <button type="button" onClick={() => setQuickDateRange("thirty")} className="period-quick-btn">
-              <Clock3 size={13} className="text-tone-warning" />
-              <span>Son 30 gün</span>
-            </button>
-          </div>
-        </form>
+          ) : null}
+        </div>
       </div>
 
       <div className="metrics-grid-premium booking-metrics-premium" aria-label="Bron statistika kartları">
-        <MetricSummaryCard
-          label="Cəmi bronlar"
-          value={bookings.length.toString()}
-          delta={`${stats.utilization}% həftəlik`}
-          tone="blue"
-          icon={CalendarDays}
-          onClick={() => handleMetricClick("all")}
-        />
-        <MetricSummaryCard
-          label="Seçilmiş gün"
-          value={selectedDayBookings.length.toString()}
-          delta={`${selectedDayUtilization}% dolu`}
-          tone={selectedDayUtilization > 65 ? "coral" : selectedDayUtilization > 30 ? "yellow" : "mint"}
-          icon={Clock3}
-          onClick={() => setActiveView("schedule")}
-        />
-        <MetricSummaryCard
-          label="Gəldi"
-          value={stats.attended.toString()}
-          delta={`${stats.attendanceRate}% iştirak`}
-          tone="mint"
-          icon={CheckCircle2}
-          onClick={() => handleMetricClick("attended")}
-        />
-        <MetricSummaryCard
-          label="Gözləyir"
-          value={stats.reserved.toString()}
-          delta="Bron statusunda"
-          tone="yellow"
-          icon={Clock3}
-          onClick={() => handleMetricClick("reserved")}
-        />
-        <MetricSummaryCard
-          label="Gəlmədi"
-          value={stats.absent.toString()}
-          delta="Jurnal riski"
-          tone="coral"
-          icon={XCircle}
-          onClick={() => handleMetricClick("absent")}
-        />
+        <MetricCard icon={CalendarCheck} label="Cəmi bron" value={data.bookings.length.toString()} helper={`${selectedDateBookings.length} seçilən gündə`} />
+        <MetricCard icon={CheckCircle2} label="Gəldi" value={stats.attended.toString()} helper={`${stats.attendanceRate}% davamiyyət`} />
+        <MetricCard icon={XCircle} label="Gəlmədi" value={stats.absent.toString()} helper="DB-də saxlanılır" />
+        <MetricCard icon={MapPin} label="Otaqlar" value={stats.activeRooms.toString()} helper="aktiv istifadə" />
       </div>
 
       <div className="crm-tabs-navigation student-tabs-navigation booking-tabs-navigation">
-        <div className="tabs-segmented-container">
-          <button
-            type="button"
-            onClick={() => setActiveView("schedule")}
-            className={cx("tab-segmented-item", activeView === "schedule" && "is-active")}
-          >
-            <CalendarDays size={15} />
-            <span>Günlük saatlar</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveView("list")}
-            className={cx("tab-segmented-item", activeView === "list" && "is-active")}
-          >
-            <List size={15} />
-            <span>Bron siyahısı</span>
-            <span className="tab-segmented-badge">{filteredBookings.length}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveView("journal")}
-            className={cx("tab-segmented-item", activeView === "journal" && "is-active")}
-          >
-            <History size={15} />
-            <span>Jurnal</span>
-          </button>
-        </div>
-
-        {activeFiltersCount > 0 && (
-          <button type="button" onClick={clearFilters} className="crm-reset-filters-btn">
-            <SlidersHorizontal size={14} />
-            <span>Filtrləri sıfırla ({activeFiltersCount})</span>
-          </button>
-        )}
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              className={cx(activeView === tab.id && "is-active")}
+              onClick={() => setActiveView(tab.id)}
+            >
+              <Icon size={16} />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {activeFiltersCount > 0 && (
-        <div className="crm-active-chips-wrapper booking-active-chips" aria-label="Aktiv filtrlər">
-          <span className="chips-title">Aktiv süzgəclər:</span>
-          <div className="chips-container">
-            <span>{filteredBookings.length} / {selectedDayBookings.length} bron</span>
-            {filters.query && (
-              <span className="filter-chip-item">
-                Axtarış: {filters.query}
-                <button type="button" onClick={() => clearFilter("query")}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {filters.dateFrom && (
-              <span className="filter-chip-item">
-                Başlanğıc: {formatDateDisplay(filters.dateFrom)}
-                <button type="button" onClick={() => clearFilter("dateFrom")}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {filters.dateTo && (
-              <span className="filter-chip-item">
-                Son: {formatDateDisplay(filters.dateTo)}
-                <button type="button" onClick={() => clearFilter("dateTo")}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {filters.status !== "all" && (
-              <span className="filter-chip-item">
-                Status: {getStatusLabel(filters.status)}
-                <button type="button" onClick={() => clearFilter("status")}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {filters.room !== "all" && (
-              <span className="filter-chip-item">
-                Otaq: {filters.room}
-                <button type="button" onClick={() => clearFilter("room")}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            <button type="button" onClick={clearFilters} className="clear-all-chips-btn">
-              Hamısını təmizlə
-            </button>
-          </div>
-        </div>
-      )}
-
-      {activeView === "schedule" && (
+      {activeView === "schedule" ? (
         <article className="booking-day-schedule-panel animate-fade-in">
           <div className="booking-day-schedule-head">
-            <div>
-              <h2>{selectedDay.label} saatları</h2>
-              <p>
-                Seçilmiş gün üçün canlı slotlar və doluluq vəziyyəti.
-              </p>
+            <div className="booking-panel-title">
+              <div className="booking-panel-icon">
+                <Clock3 size={17} />
+              </div>
+              <div>
+                <h2>{formatDateDisplay(selectedDate)}</h2>
+                <p>{selectedDateBookings.length} bron, {data.rooms.length} otaq</p>
+              </div>
             </div>
-            <div className="booking-day-head-actions">
-              <span className={cx("booking-density", getDensityClass(selectedDayUtilization))}>
-                {selectedDayUtilization}% doluluq
-              </span>
-              <Button type="button" size="sm" onClick={() => openReservationDialog()}>
-                <Plus size={15} />
-                Bron yarat
-              </Button>
-            </div>
-          </div>
-
-          <div className="booking-selected-day-card">
-            <div>
-              <span>{selectedDay.shortLabel}</span>
-              <strong>{selectedDay.label}</strong>
-              <small>{formatDateDisplay(selectedDate)}</small>
-            </div>
-            <b className={cx("booking-density", getDensityClass(selectedDayUtilization))}>
-              {selectedDayBookings.length} bron · {selectedDayUtilization}% dolu
-            </b>
-          </div>
-
-          <div className="booking-day-summary-row">
-            <div>
-              <span className="dot dot-info" />
-              <strong>{selectedDayCapacity - selectedDayBookings.length}</strong>
-              <small>boş saat</small>
-            </div>
-            <div>
-              <span className="dot dot-warning" />
-              <strong>{selectedDayBookings.length}</strong>
-              <small>rezerv</small>
-            </div>
-            <div>
-              <span className="dot dot-success" />
-              <strong>{selectedDayBookings.filter((booking) => booking.status === "attended").length}</strong>
-              <small>gəldi</small>
-            </div>
-            <div>
-              <span className="dot dot-danger" />
-              <strong>{selectedDayBookings.filter((booking) => booking.status === "absent").length}</strong>
-              <small>gəlmədi</small>
-            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => openReservation()}>
+              <Plus data-icon="inline-start" />
+              Slot əlavə et
+            </Button>
           </div>
 
           <div className="booking-day-slots-grid">
-            {timeSlots.map((time) => {
-              const booking = bookingBySlot.get(slotKey(selectedDate, time));
-              const StatusIcon = booking ? statusMeta[booking.status].icon : Plus;
+            {data.timeSlots.flatMap((time) =>
+              data.rooms.map((room) => {
+                const booking = bookingBySlot.get(slotKey(selectedDate, time, room));
+                const StatusIcon = booking ? statusMeta[booking.status].icon : Plus;
 
-              return (
-                <button
-                  key={`${selectedDate}-${time}`}
-                  type="button"
-                  className={cx(
-                    "booking-day-slot-card",
-                    booking ? statusMeta[booking.status].className : "is-free",
-                    selectedBookingId === booking?.id && "is-selected"
-                  )}
-                  onClick={() => handleSlotClick(selectedDayId, time)}
-                  aria-label={booking ? `${booking.studentName} bronu` : `${selectedDay.label} ${time} boş slot`}
-                >
-                  <span className="booking-slot-status-icon">
-                    <StatusIcon size={16} />
-                  </span>
-                  <span className="booking-day-slot-time">{time}</span>
-                  <strong>{booking ? booking.studentName : "Boş saat"}</strong>
-                  <small>{booking ? `${booking.room} · ${statusMeta[booking.status].label}` : "Müsait"}</small>
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={`${time}-${room}`}
+                    type="button"
+                    className={cx(
+                      "booking-day-slot-card",
+                      booking ? statusMeta[booking.status].className : "is-free",
+                      activeSelectedBookingId === booking?.id && "is-selected"
+                    )}
+                    onClick={() => {
+                      if (booking) {
+                        setSelectedBookingId(booking.id);
+                        setNotice(`${booking.studentName}: ${formatDateDisplay(booking.date)} ${booking.time}, ${booking.room}.`);
+                        return;
+                      }
+
+                      openReservation(selectedDate, time);
+                      setDraft((current) => ({ ...current, room }));
+                    }}
+                  >
+                    <span className="booking-slot-status-icon">
+                      <StatusIcon size={15} />
+                    </span>
+                    <span className="booking-day-slot-time">{time}</span>
+                    <strong>{booking ? booking.studentName : "Boş saat"}</strong>
+                    <small>{booking ? `${room} · ${statusMeta[booking.status].label}` : room}</small>
+                  </button>
+                );
+              })
+            )}
           </div>
         </article>
-      )}
+      ) : null}
 
-      {activeView === "list" && (
+      {activeView === "list" ? (
         <article className="panel table-panel crm-table-panel-redesign booking-table-panel-redesign animate-fade-in">
-          <div className="table-panel-header-new">
-            <h2>Bron məlumatları və slot ledger-i</h2>
-            <span className="table-count-indicator">{filteredBookings.length} / {selectedDayBookings.length} bron</span>
-          </div>
-
-          <div className="data-table-wrap-redesign">
+          <div className="table-wrap">
             <table className="data-table-redesign booking-table-redesign">
               <thead>
                 <tr>
                   <th>Tələbə</th>
-                  <th>Gün / Saat</th>
+                  <th>Tarix / Saat</th>
                   <th>Proqram</th>
                   <th>Müəllim</th>
                   <th>Otaq</th>
                   <th>Status</th>
                   <th>Qeyd</th>
-                  <th>Jurnal</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {filteredBookings.length > 0 ? (
                   filteredBookings.map((booking) => (
-                    <tr key={booking.id} className="table-row-interactive">
-                      <td>
-                        <button
-                          type="button"
-                          className="booking-open-row-button"
-                          onClick={() => {
-                            setSelectedBookingId(booking.id);
-                            selectDate(booking.date);
-                          }}
-                        >
-                          <strong>{booking.studentName}</strong>
-                          <span>{booking.studentCode} · {booking.room}</span>
-                        </button>
-                      </td>
-                      <td>
-                        <div className="student-date-cell booking-table-time">
-                          <CalendarDays size={12} className="date-calendar-icon" />
-                          <span>{formatDateDisplay(booking.date)} / {booking.time}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="student-program-cell">
-                          <strong>{booking.program}</strong>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="student-teacher-cell">
-                          <UserRound size={12} className="teacher-avatar-icon" />
-                          <span>{booking.teacher}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="booking-room-tag">{booking.room}</span>
-                      </td>
-                      <td>
-                        <StatusChip tone={statusMeta[booking.status].tone}>
-                          {statusMeta[booking.status].label}
-                        </StatusChip>
-                      </td>
-                      <td>
-                        <span className="booking-note-preview">{booking.note || "Qeyd yoxdur"}</span>
-                      </td>
-                      <td>
-                        <div className="booking-row-actions">
-                          <button
-                            className={cx(booking.status === "attended" && "is-active")}
-                            type="button"
-                            onClick={() => markAttendance(booking.id, "attended")}
-                          >
-                            Gəldi
-                          </button>
-                          <button
-                            className={cx("is-absent-action", booking.status === "absent" && "is-active")}
-                            type="button"
-                            onClick={() => markAttendance(booking.id, "absent")}
-                          >
-                            Gəlmədi
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <BookingTableRow
+                      booking={booking}
+                      key={booking.id}
+                      disabled={isPending || !data.permissions.canMarkAttendance}
+                      onOpen={() => {
+                        setSelectedBookingId(booking.id);
+                        setSelectedDate(booking.date);
+                      }}
+                      onMark={markAttendance}
+                    />
                   ))
                 ) : (
                   <tr>
                     <td colSpan={8}>
-                      <div className="empty-state-redesign">
-                        <CalendarCheck size={40} className="empty-icon" />
-                        <h3>Bron tapılmadı</h3>
-                        <p>Seçilmiş filtrlərə uyğun bron yoxdur. Süzgəcləri dəyişərək yenidən yoxlayın.</p>
-                        <button type="button" onClick={clearFilters} className="ui-button ui-button-secondary ui-button-sm">
-                          Filtrləri təmizlə
-                        </button>
-                      </div>
+                      <div className="empty-state compact">Filtrlərə uyğun bron tapılmadı</div>
                     </td>
                   </tr>
                 )}
@@ -1066,214 +427,245 @@ export function BookingWorkspace() {
             </table>
           </div>
         </article>
-      )}
+      ) : null}
 
-      {activeView === "journal" && (
+      {activeView === "journal" ? (
         <div className="student-dashboard-details-grid booking-journal-dashboard booking-journal-dashboard-modern animate-fade-in">
-          <div className="student-dashboard-column">
-            <div className="shadcn-card">
-              <div className="shadcn-card-header">
-                <div className="shadcn-card-title-area">
-                  <BarChart3 size={18} className="text-primary" />
-                  <h3>Jurnal icmalı</h3>
-                </div>
-                <span className="shadcn-card-badge bg-primary-light">{stats.attendanceRate}% iştirak</span>
-              </div>
-              <div className="shadcn-card-content">
-                <div className="booking-status-distribution">
-                  <StatusLine label="Gəldi" value={stats.attended} total={bookings.length} tone="success" />
-                  <StatusLine label="Bron" value={stats.reserved} total={bookings.length} tone="info" />
-                  <StatusLine label="Gəlmədi" value={stats.absent} total={bookings.length} tone="danger" />
-                </div>
-              </div>
-            </div>
-
-            <article className="booking-journal-panel">
-              <PanelTitle icon={CalendarCheck} title="Dərs jurnalı" subtitle="Filtrə uyğun iştirak statusları" />
-              <div className="booking-journal-list">
-                {filteredBookings.map((booking) => (
-                  <div className="booking-journal-row" key={booking.id}>
-                    <div className="booking-journal-person">
-                      <div className="booking-mini-avatar">{getInitials(booking.studentName)}</div>
-                      <div>
-                        <strong>{booking.studentName}</strong>
-                        <span>
-                          {formatDateDisplay(booking.date)} - {booking.time} · {booking.room}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="booking-journal-actions">
-                      <button
-                        className={cx(booking.status === "attended" && "is-active")}
-                        type="button"
-                        onClick={() => markAttendance(booking.id, "attended")}
-                      >
-                        Gəldi
-                      </button>
-                      <button
-                        className={cx("is-absent-action", booking.status === "absent" && "is-active")}
-                        type="button"
-                        onClick={() => markAttendance(booking.id, "absent")}
-                      >
-                        Gəlmədi
-                      </button>
-                    </div>
+          <article className="booking-journal-panel">
+            <PanelTitle icon={BarChart3} title="Seçilən bron" subtitle={selectedBooking ? selectedBooking.studentName : "Bron seçilməyib"} />
+            {selectedBooking ? (
+              <div className="booking-journal-row">
+                <div className="booking-journal-person">
+                  <div className="booking-mini-avatar">{getInitials(selectedBooking.studentName)}</div>
+                  <div>
+                    <strong>{selectedBooking.studentName}</strong>
+                    <span>{selectedBooking.studentCode} · {selectedBooking.program}</span>
+                    <small>{formatDateDisplay(selectedBooking.date)} - {selectedBooking.time} · {selectedBooking.room}</small>
                   </div>
-                ))}
+                </div>
+                <div className="booking-journal-actions">
+                  <StatusChip tone={statusMeta[selectedBooking.status].tone}>{statusMeta[selectedBooking.status].label}</StatusChip>
+                  <Button type="button" size="sm" variant="outline" disabled={isPending || !data.permissions.canMarkAttendance} onClick={() => markAttendance(selectedBooking.id, "attended")}>
+                    Gəldi
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" disabled={isPending || !data.permissions.canMarkAttendance} onClick={() => markAttendance(selectedBooking.id, "absent")}>
+                    Gəlmədi
+                  </Button>
+                </div>
               </div>
-            </article>
-          </div>
+            ) : (
+              <div className="empty-state compact">Dərs bronu yoxdur</div>
+            )}
+          </article>
 
           <article className="booking-history-panel">
-            <PanelTitle icon={History} title="Tarixçə" subtitle="Bron və jurnal qeydləri" />
+            <PanelTitle icon={History} title="Dərs tarixçəsi" subtitle={`${data.history.length} son əməliyyat`} />
             <div className="booking-history-list">
-              {history.map((event) => (
-                <div className={cx("booking-history-row", `is-${event.kind}`)} key={event.id}>
-                  <span />
-                  <div>
-                    <strong>{event.title}</strong>
-                    <p>{event.description}</p>
+              {data.history.length > 0 ? (
+                data.history.map((event) => (
+                  <div className={cx("booking-history-row", `is-${event.kind}`)} key={event.id}>
+                    <span />
+                    <div>
+                      <strong>{event.title}</strong>
+                      <small>{event.description}</small>
+                    </div>
+                    <time>{event.time}</time>
                   </div>
-                  <time>{event.time}</time>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="empty-state compact">Tarixçə yoxdur</div>
+              )}
             </div>
           </article>
         </div>
-      )}
+      ) : null}
 
       <ReservationDialog
-        bookingBySlot={bookingBySlot}
+        data={data}
         draft={draft}
-        isOpen={reservationOpen}
-        onCreate={createBooking}
-        onOpenChange={setReservationOpen}
-        onUpdateDraft={updateDraft}
+        isPending={isPending}
+        open={dialogOpen}
+        bookingBySlot={bookingBySlot}
+        onOpenChange={setDialogOpen}
+        onSubmit={createReservation}
+        onDraftChange={updateDraft}
       />
     </section>
   );
 }
 
-function ReservationDialog({
-  bookingBySlot,
-  draft,
-  isOpen,
-  onCreate,
-  onOpenChange,
-  onUpdateDraft,
+function BookingTableRow({
+  booking,
+  disabled,
+  onOpen,
+  onMark,
 }: {
-  bookingBySlot: Map<string, Booking>;
-  draft: DraftState;
-  isOpen: boolean;
-  onCreate: () => void;
-  onOpenChange: (open: boolean) => void;
-  onUpdateDraft: (key: keyof DraftState, value: string) => void;
+  booking: BookingRow;
+  disabled: boolean;
+  onOpen: () => void;
+  onMark: (bookingId: string, status: "attended" | "absent") => void;
 }) {
-  const selectedStudent = students.find((student) => student.id === draft.studentId);
-  const selectedDayBookings = getBookingsForDate(Array.from(bookingBySlot.values()), draft.date);
-  const draftSlotBooking = bookingBySlot.get(slotKey(draft.date, draft.time));
+  return (
+    <tr className="table-row-interactive">
+      <td>
+        <button className="booking-open-row-button" type="button" onClick={onOpen}>
+          <strong>{booking.studentName}</strong>
+          <span>{booking.studentCode} · {booking.room}</span>
+        </button>
+      </td>
+      <td>
+        <div className="student-date-cell booking-table-time">
+          <Clock3 size={14} />
+          <span>{formatDateDisplay(booking.date)} / {booking.time}</span>
+        </div>
+      </td>
+      <td><strong>{booking.program}</strong></td>
+      <td><span>{booking.teacher}</span></td>
+      <td><span className="booking-room-tag">{booking.room}</span></td>
+      <td><StatusChip tone={statusMeta[booking.status].tone}>{statusMeta[booking.status].label}</StatusChip></td>
+      <td><span className="booking-note-preview">{booking.note || "Qeyd yoxdur"}</span></td>
+      <td>
+        <div className="booking-row-actions">
+          <button className={cx(booking.status === "attended" && "is-active")} type="button" disabled={disabled} onClick={() => onMark(booking.id, "attended")}>
+            Gəldi
+          </button>
+          <button className={cx("is-absent-action", booking.status === "absent" && "is-active")} type="button" disabled={disabled} onClick={() => onMark(booking.id, "absent")}>
+            Gəlmədi
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function ReservationDialog({
+  data,
+  draft,
+  isPending,
+  open,
+  bookingBySlot,
+  onOpenChange,
+  onSubmit,
+  onDraftChange,
+}: {
+  data: BookingData;
+  draft: DraftState;
+  isPending: boolean;
+  open: boolean;
+  bookingBySlot: Map<string, BookingRow>;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onDraftChange: <K extends keyof DraftState>(key: K, value: DraftState[K]) => void;
+}) {
+  const draftSlotBooking = bookingBySlot.get(slotKey(draft.date, draft.time, draft.room));
+  const studentOptions = data.students.map((student) => ({
+    value: student.id,
+    label: `${student.name} - ${student.code}`,
+    searchText: [student.phone, student.program, student.teacher, student.lifecycleStatus].join(" "),
+  }));
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="booking-reserve-dialog">
         <DialogHeader>
-          <DialogTitle>Bron yarat</DialogTitle>
+          <DialogTitle>Dərs bronu yarat</DialogTitle>
           <DialogDescription>
-            Tələbə, gün, saat və otaq məlumatları.
+            Tələbə, tarix, saat və otaq seçin. Qrup gözləyən tələbə bronla aktivləşəcək.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="booking-reserve-layout">
+        <form className="booking-reserve-layout" onSubmit={onSubmit}>
           <div className="booking-reserve-fields">
             <label className="booking-field">
               <span>Tələbə</span>
               <FormSelect
-                name="studentId"
+                name="bookingStudent"
                 value={draft.studentId}
-                onValueChange={(value) => onUpdateDraft("studentId", value)}
-                options={studentSelectOptions}
-                icon={UserRound}
+                onValueChange={(value) => onDraftChange("studentId", value)}
+                options={studentOptions}
+                emptyLabel={data.students.length > 0 ? "Tələbə seçin" : "Tələbə yoxdur"}
+                searchable
+                searchPlaceholder="Ad, kod, telefon, proqram, müəllim..."
                 className="booking-dialog-select"
                 contentClassName="booking-select-content"
-                aria-label="Tələbə seç"
               />
             </label>
-
             <label className="booking-field">
               <span>Tarix</span>
               <DatePicker
-                name="bookingDate"
+                name="bookingDateDraft"
                 value={draft.date}
-                onValueChange={(nextValue) => onUpdateDraft("date", nextValue)}
-                aria-label="Bron tarixi"
+                onValueChange={(value) => onDraftChange("date", value)}
                 allowClear={false}
                 className="booking-dialog-date-input"
               />
             </label>
-
+            <label className="booking-field">
+              <span>Saat</span>
+              <FormSelect
+                name="bookingTime"
+                value={draft.time}
+                onValueChange={(value) => onDraftChange("time", value)}
+                options={data.timeSlots.map((time) => ({ value: time, label: time }))}
+                className="booking-dialog-select"
+                contentClassName="booking-select-content"
+              />
+            </label>
             <label className="booking-field">
               <span>Müddət</span>
               <FormSelect
-                name="duration"
-                value={draft.duration}
-                onValueChange={(value) => onUpdateDraft("duration", value)}
-                options={durationSelectOptions}
-                icon={Clock3}
+                name="bookingDuration"
+                value={draft.durationMinutes}
+                onValueChange={(value) => onDraftChange("durationMinutes", value)}
+                options={data.durationOptions.map((duration) => ({
+                  value: duration.value,
+                  label: duration.label,
+                }))}
                 className="booking-dialog-select"
                 contentClassName="booking-select-content"
-                aria-label="Müddət seç"
               />
             </label>
-
             <label className="booking-field">
               <span>Otaq</span>
               <FormSelect
-                name="room"
+                name="bookingRoom"
                 value={draft.room}
-                onValueChange={(value) => onUpdateDraft("room", value)}
-                options={roomSelectOptions}
-                icon={MapPin}
+                onValueChange={(value) => onDraftChange("room", value)}
+                options={data.rooms.map((room) => ({ value: room, label: room }))}
                 className="booking-dialog-select"
                 contentClassName="booking-select-content"
-                aria-label="Otaq seç"
               />
             </label>
-
             <label className="booking-field booking-field-note">
               <span>Qeyd</span>
-              <input
+              <textarea
                 value={draft.note}
-                onChange={(event) => onUpdateDraft("note", event.target.value)}
-                placeholder="Məs: portfolio baxışı"
+                maxLength={500}
+                onChange={(event) => onDraftChange("note", event.target.value)}
+                placeholder="Dərs mövzusu, xüsusi qeyd və ya otaq qeydi"
               />
             </label>
           </div>
 
           <div className="booking-reserve-slots">
             <div className="booking-reserve-slots-head">
-              <div>
-                <strong>{formatDateDisplay(draft.date)} saatları</strong>
-                <span>{selectedDayBookings.length} / {timeSlots.length} dolu</span>
-              </div>
-              {selectedStudent && <small>{selectedStudent.program} · {selectedStudent.teacher}</small>}
+              <strong>{formatDateDisplay(draft.date)}</strong>
+              <span>{draft.room}</span>
             </div>
-
             <div className="booking-reserve-slot-grid">
-              {timeSlots.map((time) => {
-                const booking = bookingBySlot.get(slotKey(draft.date, time));
-                const selected = draft.time === time;
-
+              {data.timeSlots.map((time) => {
+                const booking = bookingBySlot.get(slotKey(draft.date, time, draft.room));
                 return (
                   <button
-                    key={time}
                     type="button"
+                    key={time}
                     className={cx(
                       "booking-reserve-slot-option",
                       booking ? statusMeta[booking.status].className : "is-free",
-                      selected && "is-selected"
+                      draft.time === time && "is-selected"
                     )}
                     disabled={Boolean(booking)}
-                    onClick={() => onUpdateDraft("time", time)}
+                    onClick={() => onDraftChange("time", time)}
                   >
                     <strong>{time}</strong>
                     <span>{booking ? booking.studentName : "Müsait"}</span>
@@ -1281,69 +673,65 @@ function ReservationDialog({
                 );
               })}
             </div>
-
             {draftSlotBooking ? (
               <div className="booking-slot-warning">
-                {draft.time} artıq {draftSlotBooking.studentName} üçün bron olunub.
+                <AlertCircle size={14} />
+                Bu slot artıq {draftSlotBooking.studentName} üçün bronlanıb.
               </div>
             ) : (
               <div className="booking-slot-ready">
-                {draft.time} saatı rezerv üçün hazırdır.
+                <CheckCircle2 size={14} />
+                Slot müsaitdir və DB-yə yazılacaq.
               </div>
             )}
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Bağla
-          </Button>
-          <Button type="button" onClick={onCreate} disabled={Boolean(draftSlotBooking)}>
-            <CalendarCheck size={16} />
-            Rezerv et
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Ləğv et
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                isPending ||
+                Boolean(draftSlotBooking) ||
+                !draft.studentId ||
+                data.students.length === 0 ||
+                !data.permissions.canCreateReservation
+              }
+            >
+              <Plus data-icon="inline-start" />
+              Bron yarat
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-function MetricSummaryCard({
+function MetricCard({
+  icon: Icon,
   label,
   value,
-  delta,
-  tone,
-  icon: Icon,
-  onClick,
+  helper,
 }: {
+  icon: LucideIcon;
   label: string;
   value: string;
-  delta: string;
-  tone: "blue" | "coral" | "yellow" | "mint" | "neutral";
-  icon: LucideIcon;
-  onClick: () => void;
+  helper: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`metric-card-premium tone-${tone}`}
-      title={`${label} - siyahıya bax`}
-    >
-      <div className="card-top-row">
-        <span className="card-label">{label}</span>
-        <div className="card-icon-square">
-          <Icon size={16} />
-        </div>
+    <article className="metric-card-premium booking-metric-card">
+      <div className="metric-card-head">
+        <span className="metric-card-icon">
+          <Icon size={18} />
+        </span>
+        <span>{label}</span>
       </div>
-      <div className="card-value-row">
-        <strong>{value}</strong>
-      </div>
-      <div className="card-bottom-row">
-        <span>{delta}</span>
-        <span className="card-action-text">Bax →</span>
-      </div>
-    </button>
+      <strong>{value}</strong>
+      <small>{helper}</small>
+    </article>
   );
 }
 
@@ -1369,110 +757,29 @@ function PanelTitle({
   );
 }
 
-function StatusLine({
-  label,
-  value,
-  total,
-  tone,
-}: {
-  label: string;
-  value: number;
-  total: number;
-  tone: "success" | "info" | "danger";
-}) {
-  const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-
-  return (
-    <div className={`booking-status-line is-${tone}`}>
-      <div>
-        <span>{label}</span>
-        <strong>{value} bron</strong>
-      </div>
-      <div className="booking-status-track">
-        <span style={{ width: `${percentage}%` }} />
-      </div>
-      <b>{percentage}%</b>
-    </div>
-  );
-}
-
-function readStoredWorkspace(): StoredWorkspace {
-  const fallback = getDefaultStoredWorkspace();
-
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  const saved = window.localStorage.getItem(storageKey);
-
-  if (!saved) {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(saved) as Partial<StoredWorkspace>;
-    const bookings =
-      Array.isArray(parsed.bookings) && parsed.bookings.length > 0
-        ? normalizeStoredBookings(parsed.bookings)
-        : fallback.bookings;
-    const history = Array.isArray(parsed.history) ? parsed.history : fallback.history;
-    const selectedBookingId =
-      typeof parsed.selectedBookingId === "string" &&
-      bookings.some((booking) => booking.id === parsed.selectedBookingId)
-        ? parsed.selectedBookingId
-        : bookings[0]?.id ?? "";
-
-    return { bookings, history, selectedBookingId };
-  } catch {
-    window.localStorage.removeItem(storageKey);
-    return fallback;
-  }
-}
-
-function getDefaultStoredWorkspace(): StoredWorkspace {
+function buildInitialDraft(data: BookingData, date: string): DraftState {
   return {
-    bookings: initialBookings,
-    history: initialHistory,
-    selectedBookingId: initialBookings[0]?.id ?? "",
+    studentId: data.students[0]?.id ?? "",
+    date,
+    time: data.timeSlots[0] ?? "10:00",
+    durationMinutes: data.durationOptions[1]?.value ?? data.durationOptions[0]?.value ?? "90",
+    room: data.rooms[0] ?? "",
+    note: "",
   };
 }
 
-function createSeedBooking({
-  id,
-  student,
-  dayId,
-  time,
-  room,
-  status,
-}: {
-  id: string;
-  student: StudentOption;
-  dayId: string;
-  time: string;
-  room: string;
-  status: AttendanceStatus;
-}): Booking {
-  return {
-    id,
-    studentId: student.id,
-    studentName: student.name,
-    studentCode: student.code,
-    program: student.program,
-    teacher: student.teacher,
-    room,
-    date: getDateForDayId(dayId),
-    dayId,
-    time,
-    duration: "90 dəq",
-    note: status === "reserved" ? "Hazırlıq materialı göndəriləcək" : "Dərs jurnala işlənib",
-    status,
-    createdAt: new Date().toISOString(),
-  };
+function buildStats(bookings: BookingRow[]) {
+  const attended = bookings.filter((booking) => booking.status === "attended").length;
+  const absent = bookings.filter((booking) => booking.status === "absent").length;
+  const activeRooms = new Set(bookings.map((booking) => booking.room)).size;
+  const attendanceRate = bookings.length > 0 ? Math.round((attended / bookings.length) * 100) : 0;
+
+  return { attended, absent, activeRooms, attendanceRate };
 }
 
-function matchesBookingFilters(booking: Booking, filters: BookingFilters) {
-  const query = normalizeSearch(filters.query);
-  const haystack = [
+function matchesBookingFilters(booking: BookingRow, filters: BookingFilters, selectedDate: string) {
+  const query = filters.query.trim().toLocaleLowerCase("az");
+  const searchable = [
     booking.studentName,
     booking.studentCode,
     booking.program,
@@ -1480,168 +787,44 @@ function matchesBookingFilters(booking: Booking, filters: BookingFilters) {
     booking.room,
     booking.note,
     formatDateDisplay(booking.date),
-    getDayLabel(booking.dayId),
   ]
-    .map(normalizeSearch)
-    .join(" ");
-
-  const matchesQuery = !query || haystack.includes(query);
+    .join(" ")
+    .toLocaleLowerCase("az");
+  const hasDateRange = Boolean(filters.dateFrom || filters.dateTo);
+  const matchesQuery = !query || searchable.includes(query);
+  const matchesDate = hasDateRange
+    ? (!filters.dateFrom || booking.date >= filters.dateFrom) && (!filters.dateTo || booking.date <= filters.dateTo)
+    : booking.date === selectedDate;
   const matchesStatus = filters.status === "all" || booking.status === filters.status;
   const matchesRoom = filters.room === "all" || booking.room === filters.room;
 
-  return matchesQuery && matchesStatus && matchesRoom;
-}
-
-function matchesBookingDateRange(booking: Booking, filters: BookingFilters) {
-  const bookingDate = booking.date;
-  const afterStart = !filters.dateFrom || bookingDate >= filters.dateFrom;
-  const beforeEnd = !filters.dateTo || bookingDate <= filters.dateTo;
-
-  return afterStart && beforeEnd;
-}
-
-function compareBookingsBySlot(a: Booking, b: Booking) {
-  const dateDiff = a.date.localeCompare(b.date);
-
-  if (dateDiff !== 0) {
-    return dateDiff;
-  }
-
-  return a.time.localeCompare(b.time);
+  return matchesQuery && matchesDate && matchesStatus && matchesRoom;
 }
 
 function countActiveFilters(filters: BookingFilters) {
   return [
-    filters.query.trim().length > 0,
-    filters.dateFrom.length > 0,
-    filters.dateTo.length > 0,
-    filters.status !== "all",
-    filters.room !== "all",
+    filters.query,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.status !== "all" ? filters.status : "",
+    filters.room !== "all" ? filters.room : "",
   ].filter(Boolean).length;
 }
 
-function getBookingsForDate(bookings: Booking[], date: string) {
-  return bookings
-    .filter((booking) => booking.date === date)
-    .sort(compareBookingsBySlot);
-}
-
-function getDay(dayId: string) {
-  return days.find((day) => day.id === dayId) ?? days[0];
-}
-
-function getDensityClass(utilization: number) {
-  if (utilization >= 70) {
-    return "is-high";
-  }
-
-  if (utilization >= 35) {
-    return "is-medium";
-  }
-
-  return "is-low";
-}
-
-function normalizeSearch(value: string) {
-  return value.trim().toLocaleLowerCase("az-AZ");
-}
-
-function getStatusLabel(status: BookingStatusFilter) {
-  return status === "all" ? "Bütün statuslar" : statusMeta[status].label;
-}
-
-function slotKey(date: string, time: string) {
-  return `${date}-${time}`;
-}
-
-function getDayLabel(dayId: string) {
-  return getDay(dayId).label;
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
-function normalizeStoredBookings(bookings: Booking[]) {
-  return bookings.map((booking) => {
-    const date = booking.date || getDateForDayId(booking.dayId || "mon");
-    const dayId = booking.dayId || getDayIdFromDate(date);
-
-    return { ...booking, date, dayId };
-  });
-}
-
-function getDayIdFromDate(value: string) {
-  const date = parseIsoDate(value);
-  const day = date.getDay();
-
-  if (day === 2) {
-    return "tue";
-  }
-
-  if (day === 3) {
-    return "wed";
-  }
-
-  if (day === 4) {
-    return "thu";
-  }
-
-  if (day === 5) {
-    return "fri";
-  }
-
-  if (day === 6) {
-    return "sat";
-  }
-
-  return "mon";
-}
-
-function getDateForDayId(dayId: string, anchorValue?: string) {
-  const anchor = anchorValue ? parseIsoDate(anchorValue) : new Date();
-  const monday = addDays(anchor, -((anchor.getDay() + 6) % 7));
-  const dayIndex = Math.max(dayOrder.get(dayId) ?? 0, 0);
-
-  return toIsoDate(addDays(monday, dayIndex));
+function slotKey(date: string, time: string, room: string) {
+  return `${date}|${time}|${room}`;
 }
 
 function formatDateDisplay(value: string) {
-  const date = parseIsoDate(value);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-
+  const [year, month, day] = value.split("-");
   return `${day}.${month}.${year}`;
 }
 
-function parseIsoDate(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-
-  if (!year || !month || !day) {
-    return new Date();
-  }
-
-  return new Date(year, month - 1, day);
-}
-
-function addDays(date: Date, daysCount: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + daysCount);
-
-  return nextDate;
-}
-
-function toIsoDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+function getInitials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }

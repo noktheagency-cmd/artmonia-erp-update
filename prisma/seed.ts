@@ -4,6 +4,7 @@ import {
   AppRole,
   ApprovalStatus,
   EnrollmentStatus,
+  FinanceSalaryMode,
   InvoiceStatus,
   LeadStage,
   PaymentAllocationMode,
@@ -50,6 +51,8 @@ function roleName(role: AppRole) {
 }
 
 async function resetDemoData() {
+  await prisma.financeExpense.deleteMany();
+  await prisma.financeExpenseCategory.deleteMany();
   await prisma.paymentAllocation.deleteMany();
   await prisma.refundAdjustment.deleteMany();
   await prisma.teacherPayoutLine.deleteMany();
@@ -543,6 +546,87 @@ async function seedStudentsAndFinance(input: {
   return students;
 }
 
+async function seedFinanceExpenseLedger(input: {
+  ownerId: string;
+  financeId: string;
+  teachers: Awaited<ReturnType<typeof seedTeachersAndPrograms>>["teachers"];
+}) {
+  const categorySeed = [
+    ["Maas", "Statik ve faizle hesablanan emekhaqqi xercleri"],
+    ["Icare", "Studiya, filial ve otaq icareleri"],
+    ["Kommunal", "Isiq, su, internet ve gundelik ofis xercleri"],
+    ["Marketing", "Reklam, kontent ve satis kampaniyalari"],
+    ["Material", "Ders materiallari ve inventar"],
+  ] as const;
+
+  const categories = await prisma.financeExpenseCategory.createManyAndReturn({
+    data: categorySeed.map(([name, description]) => ({
+      name,
+      description,
+      isSystem: true,
+    })),
+  });
+  const categoryByName = new Map(categories.map((category) => [category.name, category]));
+  const salaryCategory = categoryByName.get("Maas")!;
+  const rentCategory = categoryByName.get("Icare")!;
+  const marketingCategory = categoryByName.get("Marketing")!;
+  const [aysel] = input.teachers;
+
+  await prisma.financeExpense.createMany({
+    data: [
+      {
+        categoryId: salaryCategory.id,
+        amount: "1200.00",
+        expenseDate: date("2026-06-28"),
+        method: PaymentMethod.BANK_TRANSFER,
+        vendor: "Finance Manager",
+        description: "Finance komandasinin ayliq statik maasi",
+        employeeUserId: input.financeId,
+        salaryMode: FinanceSalaryMode.STATIC,
+        salaryBaseAmount: "1200.00",
+        salaryCalculatedAmount: "1200.00",
+        receiptReference: "PAYROLL-2026-06-FIN",
+        createdById: input.ownerId,
+      },
+      {
+        categoryId: salaryCategory.id,
+        amount: "211.50",
+        expenseDate: date("2026-06-28"),
+        method: PaymentMethod.BANK_TRANSFER,
+        vendor: aysel.fullName,
+        description: "Muellim payout qaydasina esasen 45% hesablanmis maas",
+        teacherId: aysel.id,
+        salaryMode: FinanceSalaryMode.PERCENT,
+        salaryPercent: "45.00",
+        salaryBaseAmount: "470.00",
+        salaryCalculatedAmount: "211.50",
+        receiptReference: "PAYROLL-2026-06-AYS",
+        createdById: input.financeId,
+      },
+      {
+        categoryId: rentCategory.id,
+        amount: "900.00",
+        expenseDate: date("2026-06-05"),
+        method: PaymentMethod.BANK_TRANSFER,
+        vendor: "Studio landlord",
+        description: "Iyun ayi studiya icaresi",
+        receiptReference: "RENT-2026-06",
+        createdById: input.financeId,
+      },
+      {
+        categoryId: marketingCategory.id,
+        amount: "280.00",
+        expenseDate: date("2026-06-14"),
+        method: PaymentMethod.CARD,
+        vendor: "Meta Ads",
+        description: "Instagram lead kampaniyası",
+        receiptReference: "ADS-2026-06-14",
+        createdById: input.financeId,
+      },
+    ],
+  });
+}
+
 async function seedTasksTargetsAndAudit(input: {
   ownerId: string;
   adminId: string;
@@ -624,6 +708,11 @@ async function main() {
     financeId: users.finance.id,
     teachers: catalog.teachers,
     programs: catalog.programs,
+  });
+  await seedFinanceExpenseLedger({
+    ownerId: users.owner.id,
+    financeId: users.finance.id,
+    teachers: catalog.teachers,
   });
 
   await seedTasksTargetsAndAudit({

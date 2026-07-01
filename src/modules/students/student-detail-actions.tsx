@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Banknote, Edit, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import {
@@ -95,10 +96,8 @@ export function StudentDetailActions({
               </label>
               <label className="form-field">
                 <span>İlk dərs / status tarixi</span>
-                <Input
+                <DatePicker
                   name="firstLessonDate"
-                  inputMode="numeric"
-                  placeholder="GG.AA.İİİİ"
                   defaultValue={student.detail.paymentDefaultDate}
                 />
               </label>
@@ -184,11 +183,10 @@ export function StudentDetailActions({
             <div className="field-grid">
               <label className="form-field">
                 <span>Ödəniş tarixi</span>
-                <Input
+                <DatePicker
                   name="paidDate"
-                  inputMode="numeric"
-                  placeholder="GG.AA.İİİİ"
                   defaultValue={student.detail.paymentDefaultDate}
+                  allowClear={false}
                   required
                 />
               </label>
@@ -196,8 +194,7 @@ export function StudentDetailActions({
                 <span>Ödəniş ayı</span>
                 <Input
                   name="paymentMonth"
-                  inputMode="numeric"
-                  placeholder="AAAA-AA"
+                  type="month"
                   defaultValue={student.detail.paymentDefaultMonth}
                   required
                 />

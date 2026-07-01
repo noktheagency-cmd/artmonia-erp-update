@@ -97,8 +97,7 @@ export type CrmData = {
     value: string;
     tone: "success" | "warning" | "danger" | "neutral" | "info";
   }>;
-  followUpFocus: CrmLeadFocusRow[];
-  criticalFocus: CrmLeadFocusRow[];
+  attentionFocus: CrmLeadFocusRow[];
   dashboardStats: {
     salesCount: string;
     conversionRate: string;
@@ -175,6 +174,7 @@ type CrmLeadFocusRow = {
   nextActionTypeLabel: string;
   nextFollowUpAt: string;
   manager: string;
+  reasonLabels: string[];
 };
 
 type CrmPeriodRange = { gte?: Date; lt?: Date } | null;
@@ -408,14 +408,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       value: formatCount(stageCounts[stage] ?? 0),
       tone: leadStageTones[stage],
     })),
-    followUpFocus: formattedLeads
-      .filter((lead) => isIsoDateInRange(lead.nextFollowUpIso, todayStart, tomorrowStart))
-      .slice(0, 6)
-      .map(toFocusRow),
-    criticalFocus: formattedLeads
-      .filter((lead) => lead.priority === "CRITICAL" && lead.stage !== LeadStage.REGISTERED)
-      .slice(0, 6)
-      .map(toFocusRow),
+    attentionFocus: buildAttentionFocus(formattedLeads, todayStart, tomorrowStart),
     dashboardStats: {
       salesCount: formatCount(salesCount),
       conversionRate: formatPercent(salesCount, totalLeads),
@@ -1035,7 +1028,46 @@ function isIsoDateInRange(value: string | null, start: Date, end: Date) {
   return date >= start && date < end;
 }
 
-function toFocusRow(lead: CrmData["leads"][number]): CrmLeadFocusRow {
+function buildAttentionFocus(
+  leads: CrmData["leads"],
+  todayStart: Date,
+  tomorrowStart: Date
+) {
+  return leads
+    .map((lead) => {
+      if (lead.stage === LeadStage.REGISTERED) {
+        return null;
+      }
+
+      const reasonLabels: string[] = [];
+      const followUpDate = lead.nextFollowUpIso ? new Date(lead.nextFollowUpIso) : null;
+
+      if (lead.nextFollowUpIso && isIsoDateInRange(lead.nextFollowUpIso, todayStart, tomorrowStart)) {
+        reasonLabels.push("Bugünkü");
+      }
+
+      if (followUpDate && followUpDate < todayStart) {
+        reasonLabels.push("Gecikmiş");
+      }
+
+      if (lead.priority === "CRITICAL") {
+        reasonLabels.push("Kritik");
+      }
+
+      if (reasonLabels.length === 0) {
+        return null;
+      }
+
+      return toFocusRow(lead, reasonLabels);
+    })
+    .filter((lead): lead is CrmLeadFocusRow => Boolean(lead))
+    .slice(0, 8);
+}
+
+function toFocusRow(
+  lead: CrmData["leads"][number],
+  reasonLabels: string[] = []
+): CrmLeadFocusRow {
   return {
     id: lead.id,
     name: lead.name,
@@ -1045,6 +1077,7 @@ function toFocusRow(lead: CrmData["leads"][number]): CrmLeadFocusRow {
     nextActionTypeLabel: lead.nextActionTypeLabel,
     nextFollowUpAt: lead.nextFollowUpAt,
     manager: lead.manager,
+    reasonLabels,
   };
 }
 

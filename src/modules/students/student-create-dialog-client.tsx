@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
@@ -21,11 +22,6 @@ import type { StudentListData } from "@/modules/students/queries";
 
 type CreateOptions = StudentListData["createOptions"];
 type CreateMode = "lead" | "manual";
-
-const createStatusOptions = [
-  { value: "GROUP_WAITING", label: "Qrup gözləyir" },
-  { value: "ACTIVE", label: "Aktiv" },
-];
 
 export function StudentCreateDialogClient({
   createOptions,
@@ -261,12 +257,11 @@ export function StudentCreateDialogClient({
               </label>
               <label className="form-field">
                 <span>Status</span>
-                <FormSelect
-                  name="lifecycleStatus"
-                  value={values.lifecycleStatus}
-                  onValueChange={(value) => updateValue("lifecycleStatus", value)}
-                  options={createStatusOptions}
-                />
+                <input name="lifecycleStatus" type="hidden" value="GROUP_WAITING" />
+                <div className="student-readonly-status" aria-label="Qrup gözləyir">
+                  <span />
+                  <strong>Qrup gözləyir</strong>
+                </div>
               </label>
             </div>
             <div className="field-grid">
@@ -277,6 +272,8 @@ export function StudentCreateDialogClient({
                   value={values.teacherId}
                   onValueChange={(value) => updateValue("teacherId", cleanSelectValue(value))}
                   emptyLabel="Müəllim seçilməyib"
+                  searchable
+                  searchPlaceholder="Müəllim axtar..."
                   options={createOptions.teachers.map((teacher) => ({
                     value: teacher.id,
                     label: teacher.fullName,
@@ -290,6 +287,8 @@ export function StudentCreateDialogClient({
                   value={values.managerId}
                   onValueChange={(value) => updateValue("managerId", cleanSelectValue(value))}
                   emptyLabel="Avtomatik"
+                  searchable
+                  searchPlaceholder="Menecer axtar..."
                   options={createOptions.managers.map((manager) => ({
                     value: manager.id,
                     label: manager.fullName,
@@ -300,21 +299,19 @@ export function StudentCreateDialogClient({
             <div className="field-grid">
               <label className="form-field">
                 <span>Qeydiyyat tarixi</span>
-                <Input
+                <DatePicker
                   name="registeredDate"
                   value={values.registeredDate}
-                  onChange={(event) => updateValue("registeredDate", event.target.value)}
-                  inputMode="numeric"
+                  onValueChange={(value) => updateValue("registeredDate", value)}
+                  allowClear={false}
                   required
                 />
               </label>
               <label className="form-field">
                 <span>İlk dərs tarixi</span>
-                <Input
+                <DatePicker
                   name="firstLessonDate"
                   value={values.firstLessonDate}
-                  onChange={(event) => updateValue("firstLessonDate", event.target.value)}
-                  inputMode="numeric"
                 />
               </label>
             </div>
@@ -394,11 +391,11 @@ export function StudentCreateDialogClient({
               <div className="field-grid">
                 <label className="form-field">
                   <span>Ödəniş tarixi</span>
-                  <Input
+                  <DatePicker
                     name="paymentDate"
                     value={values.paymentDate}
-                    onChange={(event) => updateValue("paymentDate", event.target.value)}
-                    inputMode="numeric"
+                    onValueChange={(value) => updateValue("paymentDate", value)}
+                    allowClear={false}
                     required
                   />
                 </label>
@@ -406,9 +403,9 @@ export function StudentCreateDialogClient({
                   <span>Ödəniş ayı</span>
                   <Input
                     name="paymentMonth"
+                    type="month"
                     value={values.paymentMonth}
                     onChange={(event) => updateValue("paymentMonth", event.target.value)}
-                    inputMode="numeric"
                     required
                   />
                 </label>

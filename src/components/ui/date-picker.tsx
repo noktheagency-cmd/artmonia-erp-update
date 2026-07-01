@@ -13,6 +13,7 @@ type DatePickerProps = {
   onValueChange?: (value: string) => void;
   placeholder?: string;
   allowClear?: boolean;
+  required?: boolean;
   "aria-label"?: string;
   className?: string;
   popoverPlacement?: "default" | "floating";
@@ -39,8 +40,9 @@ export function DatePicker({
   value,
   defaultValue = "",
   onValueChange,
-  placeholder = "mm/dd/yyyy",
+  placeholder = "DD.MM.YYYY",
   allowClear = true,
+  required,
   "aria-label": ariaLabel,
   className,
   popoverPlacement = "default",
@@ -218,7 +220,7 @@ export function DatePicker({
 
   return (
     <div ref={rootRef} className={cx("date-picker", className)}>
-      <input type="hidden" name={name} value={selectedValue} />
+      <input type="hidden" name={name} value={selectedValue} required={required} />
       <button
         type="button"
         className={cx("date-picker-trigger", isOpen && "is-open", selectedValue && "has-value")}
@@ -266,7 +268,12 @@ function parsePickerDate(value?: string) {
     return null;
   }
 
-  const [year, month, day] = value.split("-").map(Number);
+  const trimmedValue = value.trim();
+  const displayMatch = trimmedValue.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  const [year, month, day] = displayMatch
+    ? [Number(displayMatch[3]), Number(displayMatch[2]), Number(displayMatch[1])]
+    : trimmedValue.split("-").map(Number);
+
   if (!year || !month || !day) {
     return null;
   }
@@ -288,9 +295,9 @@ function formatPickerDisplay(value: string) {
     return value;
   }
 
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
   const day = String(parsed.getDate()).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
   const year = parsed.getFullYear();
 
-  return `${month}/${day}/${year}`;
+  return `${day}.${month}.${year}`;
 }

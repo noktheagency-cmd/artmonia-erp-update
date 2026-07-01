@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { cx } from "@/components/ui/cx";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 
@@ -10,6 +10,7 @@ export type SelectOption = {
   value: string;
   label: string;
   disabled?: boolean;
+  searchText?: string;
 };
 
 export const Select = SelectPrimitive.Root;
@@ -127,6 +128,8 @@ export function FormSelect({
   contentClassName,
   disabled,
   required,
+  searchable = false,
+  searchPlaceholder = "Axtar...",
   "aria-label": ariaLabel,
   icon: Icon,
 }: {
@@ -142,19 +145,61 @@ export function FormSelect({
   contentClassName?: string;
   disabled?: boolean;
   required?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
   "aria-label"?: string;
   icon?: React.ComponentType<{ className?: string; size?: number }>;
 }) {
-  const items = emptyLabel
-    ? [{ value: emptyValue, label: emptyLabel }, ...options]
-    : options;
+  const [open, setOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const items = React.useMemo(
+    () =>
+      emptyLabel
+        ? [{ value: emptyValue, label: emptyLabel }, ...options]
+        : options,
+    [emptyLabel, emptyValue, options]
+  );
   const normalizedDefaultValue = normalizeSelectValue(defaultValue, emptyValue);
   const controlledValue =
     value === undefined ? undefined : normalizeSelectValue(value, emptyValue);
+  const filteredItems = React.useMemo(() => {
+    const query = normalizeSearchText(searchQuery);
+
+    if (!query) {
+      return items;
+    }
+
+    return items.filter((item) =>
+      normalizeSearchText(`${item.label} ${item.searchText ?? ""}`).includes(query)
+    );
+  }, [items, searchQuery]);
+
+  React.useEffect(() => {
+    if (!open || !searchable) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [open, searchable]);
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+
+    if (!nextOpen) {
+      setSearchQuery("");
+    }
+  }
 
   return (
     <Select
       name={name}
+      open={open}
+      onOpenChange={handleOpenChange}
       defaultValue={controlledValue === undefined ? normalizedDefaultValue : undefined}
       value={controlledValue}
       onValueChange={onValueChange}
@@ -168,11 +213,31 @@ export function FormSelect({
         </span>
       </SelectTrigger>
       <SelectContent className={contentClassName}>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
-            {item.label}
-          </SelectItem>
-        ))}
+        {searchable ? (
+          <div
+            className="ui-select-search"
+            onKeyDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <Search aria-hidden="true" size={14} />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+            />
+          </div>
+        ) : null}
+        {filteredItems.length > 0 ? (
+          filteredItems.map((item) => (
+            <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+              {item.label}
+            </SelectItem>
+          ))
+        ) : (
+          <div className="ui-select-empty-state">Netice tapilmadi</div>
+        )}
       </SelectContent>
     </Select>
   );
@@ -180,4 +245,19 @@ export function FormSelect({
 
 function normalizeSelectValue(value: string | undefined, emptyValue: string) {
   return value && value.length > 0 ? value : emptyValue;
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLocaleLowerCase("az")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[ə]/g, "e")
+    .replace(/[ı]/g, "i")
+    .replace(/[ş]/g, "s")
+    .replace(/[ç]/g, "c")
+    .replace(/[ğ]/g, "g")
+    .replace(/[ö]/g, "o")
+    .replace(/[ü]/g, "u")
+    .trim();
 }

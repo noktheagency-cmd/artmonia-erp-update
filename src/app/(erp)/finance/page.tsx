@@ -1,21 +1,31 @@
-import { ModulePlaceholder } from "@/components/ui/module-placeholder";
+import { FinanceWorkspace } from "@/modules/finance/finance-workspace";
+import {
+  createFinanceExpenseAction,
+  recordFinancePaymentAction,
+} from "@/modules/finance/actions";
+import { getFinanceData } from "@/modules/finance/queries";
 
-export default function FinancePage() {
+export const dynamic = "force-dynamic";
+
+export default async function FinancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    q?: string;
+    category?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+  }>;
+}) {
+  const filters = await searchParams;
+  const data = await getFinanceData(filters);
+
   return (
-    <ModulePlaceholder
-      title="Maliyyə əməliyyatları"
-      description="Ödənişlər, borclar, avans bölgüsü, geri qaytarma və aylıq bağlanış üçün iş sahəsi."
-      metrics={[
-        { label: "Ödənişlər", value: "Ledger", helper: "Qəbz və metodlar", tone: "success" },
-        { label: "Gecikən borc", value: "Aging", helper: "Müddət üzrə nəzarət", tone: "warning" },
-        { label: "Təsdiq", value: "Owner + Finance", helper: "Refund və düzəlişlər", tone: "info" },
-      ]}
-      items={[
-        { label: "Ödəniş ledger-i", value: "Cədvəl strukturu hazırdır" },
-        { label: "Borcların yaşlanması", value: "Finance data layer sonrası" },
-        { label: "Avans bölgüsü", value: "Seçilən faktura qaydasına görə" },
-        { label: "Audit izi", value: "Kritik əməliyyatlarda məcburi" },
-      ]}
+    <FinanceWorkspace
+      data={data}
+      recordPaymentAction={recordFinancePaymentAction}
+      createExpenseAction={createFinanceExpenseAction}
     />
   );
 }

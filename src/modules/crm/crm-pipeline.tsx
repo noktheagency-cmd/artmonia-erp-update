@@ -409,19 +409,12 @@ export function CrmPipeline({ data }: { data: CrmData }) {
             </div>
           </div>
 
-          {/* Focus List Panels (Side-by-Side) */}
-          <div className="crm-focus-dashboard-grid">
+          {/* Unified attention focus */}
+          <div className="crm-focus-dashboard-grid crm-focus-dashboard-grid-single">
             <FocusPanelRedesign
-              title="Bugünkü Follow-up"
-              emptyText="Bu gün üçün planlaşdırılmış follow-up yoxdur"
-              items={data.followUpFocus}
-              icon={<Clock size={18} />}
-              onItemClick={(leadId) => handleQuickFilter("q", leadId)}
-            />
-            <FocusPanelRedesign
-              title="Kritik Prioritetlər"
-              emptyText="Kritik prioritetli müraciət yoxdur"
-              items={data.criticalFocus}
+              title="Bugünkü və kritik diqqət"
+              emptyText="Bugünkü, kritik və gecikmiş müraciət yoxdur"
+              items={data.attentionFocus}
               icon={<AlertCircle size={18} />}
               onItemClick={(leadId) => handleQuickFilter("q", leadId)}
             />
@@ -703,7 +696,7 @@ function FocusPanelRedesign({
 }: {
   title: string;
   emptyText: string;
-  items: CrmData["followUpFocus"];
+  items: CrmData["attentionFocus"];
   icon: React.ReactNode;
   onItemClick: (leadId: string) => void;
 }) {
@@ -730,6 +723,13 @@ function FocusPanelRedesign({
                 <span>{item.phone} • Məsul: {item.manager}</span>
               </div>
               <div className="focus-lead-meta">
+                {item.reasonLabels.length > 0 ? (
+                  <div className="crm-focus-reason-list">
+                    {item.reasonLabels.map((reason) => (
+                      <span key={reason}>{reason}</span>
+                    ))}
+                  </div>
+                ) : null}
                 <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
                 <div className="focus-next-action-tag">
                   <Clock size={10} />

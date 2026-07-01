@@ -1,0 +1,370 @@
+import { Prisma } from "@/generated/prisma/client";
+import { getPrisma } from "@/server/db/prisma";
+import { requireErpActor } from "@/server/auth/actor";
+import { formatAmount } from "@/modules/shared/format";
+
+export type TeacherDirectoryStudent = {
+  id: string;
+  code: string;
+  name: string;
+  program: string;
+  status: string;
+  balance: string;
+};
+
+export type TeacherDirectoryLesson = {
+  id: string;
+  student: string;
+  program: string;
+  date: string;
+  time: string;
+  room: string;
+  status: string;
+  note: string;
+};
+
+export type TeacherAssignmentFallback = {
+  id: string;
+  student: string;
+  program: string;
+  date: string;
+  direction: string;
+  reason: string;
+};
+
+export type TeacherDirectoryTeacher = {
+  id: string;
+  fullName: string;
+  phone: string;
+  capacity: number;
+  isActive: boolean;
+  activeStudentCount: number;
+  utilization: number;
+  nextLesson: string;
+  nextLessonStudent: string;
+  students: TeacherDirectoryStudent[];
+  lessons: TeacherDirectoryLesson[];
+  assignmentHistory: TeacherAssignmentFallback[];
+};
+
+export type TeacherDirectoryData = {
+  permissions: {
+    canReadTeachers: boolean;
+  };
+  teachers: TeacherDirectoryTeacher[];
+};
+
+type TeacherRawRow = {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  capacity: number | null;
+  isActive: boolean;
+  activeStudentCount: number;
+  nextLessonDate: Date | string | null;
+  nextLessonTime: string | null;
+  nextLessonStudent: string | null;
+  students: unknown;
+  lessons: unknown;
+  assignmentHistory: unknown;
+};
+
+type TeacherStudentRaw = {
+  id: string;
+  code: string;
+  name: string;
+  program: string | null;
+  status: string;
+  balance: number | string | null;
+};
+
+type TeacherLessonRaw = {
+  id: string;
+  student: string;
+  program: string | null;
+  lessonDate: Date | string;
+  startTime: string;
+  room: string;
+  status: string;
+  note: string | null;
+};
+
+type TeacherAssignmentRaw = {
+  id: string;
+  student: string;
+  program: string | null;
+  createdAt: Date | string;
+  direction: string;
+  reason: string | null;
+};
+
+export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
+  const actor = await requireErpActor();
+
+  if (!actor.permissions.has("teacher.read")) {
+    return {
+      permissions: {
+        canReadTeachers: false,
+      },
+      teachers: [],
+    };
+  }
+
+  const rows = await getPrisma().$queryRaw<TeacherRawRow[]>(Prisma.sql`
+    select
+      t.id::text as "id",
+      t.full_name as "fullName",
+      coalesce(t.phone, tc.phone_display) as "phone",
+      t.capacity,
+      t.is_active as "isActive",
+      coalesce(active_counts.active_student_count, 0)::int as "activeStudentCount",
+      next_lesson.lesson_date as "nextLessonDate",
+      next_lesson.start_time as "nextLessonTime",
+      next_lesson.student_name as "nextLessonStudent",
+      coalesce(students.items, '[]'::jsonb) as "students",
+      coalesce(lessons.items, '[]'::jsonb) as "lessons",
+      coalesce(assignments.items, '[]'::jsonb) as "assignmentHistory"
+    from erp.teachers t
+    left join erp.contacts tc on tc.id = t.contact_id
+    left join lateral (
+      select count(distinct s.id)::int as active_student_count
+      from erp.enrollments e
+      join erp.students s on s.id = e.student_id
+      where e.teacher_id = t.id
+        and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
+        and s.lifecycle_status in (
+          'ACTIVE'::"erp"."StudentLifecycleStatus",
+          'DEBT'::"erp"."StudentLifecycleStatus",
+          'GROUP_WAITING'::"erp"."StudentLifecycleStatus"
+        )
+    ) active_counts on true
+    left join lateral (
+      select
+        l.lesson_date,
+        l.start_time,
+        c.full_name as student_name
+      from erp.lessons l
+      join erp.students s on s.id = l.student_id
+      join erp.contacts c on c.id = s.contact_id
+      where l.teacher_id = t.id
+        and l.status = 'RESERVED'::"erp"."LessonStatus"
+        and l.lesson_date >= current_date
+      order by l.lesson_date asc, l.start_time asc
+      limit 1
+    ) next_lesson on true
+    left join lateral (
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', student_rows.id::text,
+          'code', student_rows.code,
+          'name', student_rows.full_name,
+          'program', student_rows.program_name,
+          'status', student_rows.lifecycle_status::text,
+          'balance', student_rows.balance_due
+        )
+        order by student_rows.full_name asc
+      ) as items
+      from (
+        select distinct on (s.id)
+          s.id,
+          s.code,
+          c.full_name,
+          p.name as program_name,
+          s.lifecycle_status,
+          coalesce(invoice_balance.balance_due, 0) as balance_due
+        from erp.enrollments e
+        join erp.students s on s.id = e.student_id
+        join erp.contacts c on c.id = s.contact_id
+        join erp.programs p on p.id = e.program_id
+        left join lateral (
+          select sum(i.balance_due) as balance_due
+          from erp.invoices i
+          where i.student_id = s.id
+            and i.status <> 'VOID'::"erp"."InvoiceStatus"
+        ) invoice_balance on true
+        where e.teacher_id = t.id
+          and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
+          and s.lifecycle_status in (
+            'ACTIVE'::"erp"."StudentLifecycleStatus",
+            'DEBT'::"erp"."StudentLifecycleStatus",
+            'GROUP_WAITING'::"erp"."StudentLifecycleStatus"
+          )
+        order by s.id, e.start_date desc, e.created_at desc
+      ) student_rows
+    ) students on true
+    left join lateral (
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', lesson_rows.id::text,
+          'student', lesson_rows.student_name,
+          'program', lesson_rows.program_name,
+          'lessonDate', lesson_rows.lesson_date,
+          'startTime', lesson_rows.start_time,
+          'room', lesson_rows.room,
+          'status', lesson_rows.status::text,
+          'note', lesson_rows.note
+        )
+        order by lesson_rows.lesson_date desc, lesson_rows.start_time desc
+      ) as items
+      from (
+        select
+          l.id,
+          c.full_name as student_name,
+          p.name as program_name,
+          l.lesson_date,
+          l.start_time,
+          l.room,
+          l.status,
+          l.note
+        from erp.lessons l
+        join erp.students s on s.id = l.student_id
+        join erp.contacts c on c.id = s.contact_id
+        join erp.enrollments e on e.id = l.enrollment_id
+        join erp.programs p on p.id = e.program_id
+        where l.teacher_id = t.id
+        order by l.lesson_date desc, l.start_time desc
+        limit 18
+      ) lesson_rows
+    ) lessons on true
+    left join lateral (
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', assignment_rows.id::text,
+          'student', assignment_rows.student_name,
+          'program', assignment_rows.program_name,
+          'createdAt', assignment_rows.created_at,
+          'direction', assignment_rows.direction,
+          'reason', assignment_rows.reason
+        )
+        order by assignment_rows.created_at desc
+      ) as items
+      from (
+        select
+          h.id,
+          c.full_name as student_name,
+          p.name as program_name,
+          h.created_at,
+          case
+            when h.new_teacher_id = t.id then 'assigned'
+            else 'removed'
+          end as direction,
+          h.reason
+        from erp.teacher_assignment_history h
+        join erp.enrollments e on e.id = h.enrollment_id
+        join erp.students s on s.id = e.student_id
+        join erp.contacts c on c.id = s.contact_id
+        join erp.programs p on p.id = e.program_id
+        where h.new_teacher_id = t.id or h.old_teacher_id = t.id
+        order by h.created_at desc
+        limit 12
+      ) assignment_rows
+    ) assignments on true
+    order by t.is_active desc, t.full_name asc
+  `);
+
+  return {
+    permissions: {
+      canReadTeachers: actor.permissions.has("teacher.read"),
+    },
+    teachers: rows.map(mapTeacherRow),
+  };
+}
+
+function mapTeacherRow(row: TeacherRawRow): TeacherDirectoryTeacher {
+  const capacity = Number(row.capacity ?? 0);
+  const activeStudentCount = Number(row.activeStudentCount ?? 0);
+
+  return {
+    id: row.id,
+    fullName: row.fullName,
+    phone: row.phone ?? "",
+    capacity,
+    isActive: row.isActive,
+    activeStudentCount,
+    utilization: capacity > 0 ? Math.round((activeStudentCount / capacity) * 100) : 0,
+    nextLesson:
+      row.nextLessonDate && row.nextLessonTime
+        ? `${formatDate(row.nextLessonDate)} / ${row.nextLessonTime}`
+        : "Plan yoxdur",
+    nextLessonStudent: row.nextLessonStudent ?? "Təyin edilməyib",
+    students: asJsonArray<TeacherStudentRaw>(row.students).map((student) => ({
+      id: student.id,
+      code: student.code,
+      name: student.name,
+      program: student.program ?? "Proqram seçilməyib",
+      status: formatStudentStatus(student.status),
+      balance: formatAmount(student.balance ?? 0),
+    })),
+    lessons: asJsonArray<TeacherLessonRaw>(row.lessons).map((lesson) => ({
+      id: lesson.id,
+      student: lesson.student,
+      program: lesson.program ?? "Proqram seçilməyib",
+      date: formatDate(lesson.lessonDate),
+      time: lesson.startTime,
+      room: lesson.room,
+      status: formatLessonStatus(lesson.status),
+      note: lesson.note ?? "",
+    })),
+    assignmentHistory: asJsonArray<TeacherAssignmentRaw>(row.assignmentHistory).map((assignment) => ({
+      id: assignment.id,
+      student: assignment.student,
+      program: assignment.program ?? "Proqram seçilməyib",
+      date: formatDate(assignment.createdAt),
+      direction: assignment.direction === "assigned" ? "Təyin edildi" : "Çıxarıldı",
+      reason: assignment.reason ?? "Qeyd yoxdur",
+    })),
+  };
+}
+
+function formatStudentStatus(value: string) {
+  switch (value) {
+    case "GROUP_WAITING":
+      return "Qrup gözləyir";
+    case "ACTIVE":
+      return "Aktiv";
+    case "DEBT":
+      return "Borc";
+    case "FROZEN":
+      return "Dondurulub";
+    default:
+      return value;
+  }
+}
+
+function formatLessonStatus(value: string) {
+  switch (value) {
+    case "ATTENDED":
+      return "Gəldi";
+    case "ABSENT":
+      return "Gəlmədi";
+    case "CANCELLED":
+      return "Ləğv";
+    default:
+      return "Bron";
+  }
+}
+
+function formatDate(value: Date | string) {
+  return new Intl.DateTimeFormat("az-AZ", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function asJsonArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}

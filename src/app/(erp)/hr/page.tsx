@@ -1,5 +1,6 @@
 import { HrPerformancePanel } from "@/modules/hr/hr-performance-panel";
 import { getHrPerformanceData } from "@/modules/hr/performance-data";
+import { getTeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 
 export default async function HrPage({
   searchParams,
@@ -10,7 +11,10 @@ export default async function HrPage({
   }>;
 }) {
   const filters = await searchParams;
-  const data = getHrPerformanceData(filters);
+  const [data, teacherData] = await Promise.all([
+    Promise.resolve(getHrPerformanceData(filters)),
+    getTeacherDirectoryData(),
+  ]);
 
-  return <HrPerformancePanel data={data} />;
+  return <HrPerformancePanel data={data} teacherData={teacherData} />;
 }

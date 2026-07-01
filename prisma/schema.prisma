@@ -121,6 +121,23 @@ enum PaymentAllocationMode {
   @@schema("erp")
 }
 
+enum FinanceSalaryMode {
+  NONE
+  STATIC
+  PERCENT
+
+  @@schema("erp")
+}
+
+enum LessonStatus {
+  RESERVED
+  ATTENDED
+  ABSENT
+  CANCELLED
+
+  @@schema("erp")
+}
+
 model User {
   id        String   @id @default(uuid()) @db.Uuid
   authUserId String? @unique @map("auth_user_id") @db.Uuid
@@ -151,6 +168,9 @@ model User {
   managedTargets                Target[]                    @relation("TargetManager")
   auditLogs                     AuditLog[]                  @relation("AuditActor")
   exports                       DataExport[]                @relation("ExportRequestedBy")
+  createdFinanceExpenses        FinanceExpense[]            @relation("FinanceExpenseCreator")
+  employeeFinanceExpenses       FinanceExpense[]            @relation("FinanceExpenseEmployee")
+  createdLessons                Lesson[]                    @relation("LessonCreator")
 
   @@map("users")
   @@schema("erp")
@@ -332,6 +352,8 @@ model Teacher {
   newAssignments      TeacherAssignmentHistory[] @relation("NewTeacher")
   contractRules       TeacherContractRule[]
   payouts             TeacherPayout[]
+  financeExpenses     FinanceExpense[] @relation("FinanceExpenseTeacher")
+  lessons             Lesson[]
 
   @@map("teachers")
   @@schema("erp")
@@ -362,6 +384,7 @@ model Student {
   invoices       Invoice[]
   payments       Payment[]
   refundAdjustments RefundAdjustment[]
+  lessons        Lesson[]
 
   @@index([contactId])
   @@index([lifecycleStatus])
@@ -428,6 +451,7 @@ model Enrollment {
   invoices          Invoice[]
   assignmentHistory TeacherAssignmentHistory[]
   payoutLines       TeacherPayoutLine[]
+  lessons           Lesson[]
 
   @@index([studentId])
   @@index([teacherId, status])
@@ -455,6 +479,35 @@ model TeacherAssignmentHistory {
   @@index([newTeacherId])
   @@index([changedById])
   @@map("teacher_assignment_history")
+  @@schema("erp")
+}
+
+model Lesson {
+  id              String       @id @default(uuid()) @db.Uuid
+  studentId       String       @map("student_id") @db.Uuid
+  enrollmentId    String       @map("enrollment_id") @db.Uuid
+  teacherId       String?      @map("teacher_id") @db.Uuid
+  lessonDate      DateTime     @map("lesson_date") @db.Date
+  startTime       String       @map("start_time")
+  durationMinutes Int          @map("duration_minutes")
+  room            String
+  note            String?
+  status          LessonStatus @default(RESERVED)
+  createdById     String?      @map("created_by_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  teacher    Teacher?   @relation(fields: [teacherId], references: [id])
+  createdBy  User?      @relation("LessonCreator", fields: [createdById], references: [id])
+
+  @@unique([lessonDate, startTime, room])
+  @@index([studentId, lessonDate])
+  @@index([teacherId, lessonDate])
+  @@index([enrollmentId])
+  @@index([status, lessonDate])
+  @@map("lessons")
   @@schema("erp")
 }
 
@@ -492,7 +545,11 @@ model Payment {
   paidAt         DateTime      @map("paid_at") @db.Date
   paymentMonth   DateTime      @map("payment_month") @db.Date
   method         PaymentMethod @default(CASH)
+  payerName      String?       @map("payer_name")
   note           String?
+  receiptFileName String?      @map("receipt_file_name")
+  receiptFilePath String?      @map("receipt_file_path")
+  receiptReference String?     @map("receipt_reference")
   idempotencyKey String?       @unique @map("idempotency_key")
   createdById    String?       @map("created_by_id") @db.Uuid
   createdAt      DateTime      @default(now()) @map("created_at")
@@ -524,6 +581,55 @@ model PaymentAllocation {
   @@index([invoiceId])
   @@index([paymentId])
   @@map("payment_allocations")
+  @@schema("erp")
+}
+
+model FinanceExpenseCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  expenses FinanceExpense[]
+
+  @@map("finance_expense_categories")
+  @@schema("erp")
+}
+
+model FinanceExpense {
+  id                     String            @id @default(uuid()) @db.Uuid
+  categoryId             String            @map("category_id") @db.Uuid
+  amount                 Decimal           @db.Decimal(12, 2)
+  expenseDate            DateTime          @map("expense_date") @db.Date
+  method                 PaymentMethod     @default(CASH)
+  vendor                 String?
+  description            String?
+  employeeUserId         String?           @map("employee_user_id") @db.Uuid
+  teacherId              String?           @map("teacher_id") @db.Uuid
+  salaryMode             FinanceSalaryMode @default(NONE) @map("salary_mode")
+  salaryPercent          Decimal?          @map("salary_percent") @db.Decimal(5, 2)
+  salaryBaseAmount       Decimal?          @map("salary_base_amount") @db.Decimal(12, 2)
+  salaryCalculatedAmount Decimal?          @map("salary_calculated_amount") @db.Decimal(12, 2)
+  receiptFileName        String?           @map("receipt_file_name")
+  receiptFilePath        String?           @map("receipt_file_path")
+  receiptReference       String?           @map("receipt_reference")
+  createdById            String?           @map("created_by_id") @db.Uuid
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+
+  category     FinanceExpenseCategory @relation(fields: [categoryId], references: [id])
+  employeeUser User?                  @relation("FinanceExpenseEmployee", fields: [employeeUserId], references: [id])
+  teacher      Teacher?               @relation("FinanceExpenseTeacher", fields: [teacherId], references: [id])
+  createdBy    User?                  @relation("FinanceExpenseCreator", fields: [createdById], references: [id])
+
+  @@index([categoryId, expenseDate])
+  @@index([employeeUserId])
+  @@index([teacherId])
+  @@index([createdById])
+  @@index([expenseDate])
+  @@map("finance_expenses")
   @@schema("erp")
 }
 

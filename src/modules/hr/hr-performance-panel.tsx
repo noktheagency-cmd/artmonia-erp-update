@@ -11,6 +11,7 @@ import {
   CircleDollarSign,
   CheckCircle2,
   Gauge,
+  GraduationCap,
   LineChart,
   Pencil,
   PhoneCall,
@@ -44,6 +45,7 @@ import {
 import { StatusChip } from "@/components/ui/status-chip";
 import { cx } from "@/components/ui/cx";
 import { EmployeeCrud } from "@/modules/hr/employee-crud";
+import { TeacherDirectoryPanel } from "@/modules/hr/teacher-directory-panel";
 import {
   HrCompactChip,
   HrEmptyState,
@@ -66,8 +68,9 @@ import type {
   HrPerformanceMetric,
   HrWeeklyFeedbackRow,
 } from "@/modules/hr/performance-data";
+import type { TeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 
-type HrTabId = "overview" | "employees" | "daily" | "performance" | "feedback" | "targets";
+type HrTabId = "overview" | "employees" | "teachers" | "daily" | "performance" | "feedback" | "targets";
 type TableRowsSetter = Dispatch<SetStateAction<WorkspaceState>>;
 
 type WorkspaceState = {
@@ -119,6 +122,7 @@ const monthlyKpiTargets = {
 const tabs: Array<{ id: HrTabId; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "İcmal", icon: Activity },
   { id: "employees", label: "İşçilər", icon: UsersRound },
+  { id: "teachers", label: "Müəllimlər", icon: GraduationCap },
   { id: "daily", label: "Gündəlik", icon: Table2 },
   { id: "performance", label: "Performans", icon: LineChart },
   { id: "feedback", label: "İnkişaf", icon: Sparkles },
@@ -139,7 +143,13 @@ const metricToneMap: Record<HrPerformanceMetric["tone"], HrTone> = {
   mint: "success",
 };
 
-export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
+export function HrPerformancePanel({
+  data,
+  teacherData,
+}: {
+  data: HrPerformanceData;
+  teacherData: TeacherDirectoryData;
+}) {
   const initialWorkspace = useMemo(() => createWorkspaceState(data), [data]);
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [activeTab, setActiveTab] = useState<HrTabId>("overview");
@@ -239,6 +249,7 @@ export function HrPerformancePanel({ data }: { data: HrPerformanceData }) {
         />
       )}
       {activeTab === "employees" && <EmployeeCrud />}
+      {activeTab === "teachers" && <TeacherDirectoryPanel data={teacherData} />}
       {activeTab === "daily" && (
         <DailyTab
           data={data}

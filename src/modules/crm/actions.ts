@@ -6,7 +6,6 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   EnrollmentStatus,
-  InvoiceStatus,
   LeadStage,
   StudentLifecycleStatus,
   TaskStatus,
@@ -29,9 +28,9 @@ import {
   nextActionTypeOptions,
 } from "@/modules/crm/follow-up";
 import { leadStageOptions } from "@/modules/crm/stage";
-import { addMonths, startOfMonth, toNumber } from "@/modules/shared/format";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { isBillingPausedStatus } from "@/modules/students/lifecycle-service";
 
 const optionalText = (max: number) =>
   z.preprocess(
@@ -352,9 +351,6 @@ export async function convertLeadToStudentAction(formData: FormData) {
   const input = convertLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const today = new Date();
-  const periodMonth = startOfMonth(today);
-  const dueDate = addMonths(today, 0);
-  dueDate.setUTCDate(today.getUTCDate() + 7);
 
   await prisma.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({
@@ -432,6 +428,7 @@ export async function convertLeadToStudentAction(formData: FormData) {
         contactId: lead.contactId,
         managerId: lead.managerId ?? actor.id,
         lifecycleStatus: StudentLifecycleStatus.GROUP_WAITING,
+        billingPaused: isBillingPausedStatus(StudentLifecycleStatus.GROUP_WAITING),
         registeredAt: today,
         notes: `CRM müraciətindən tələbəyə çevrildi: ${lead.id}`,
         statusHistory: {
@@ -461,21 +458,6 @@ export async function convertLeadToStudentAction(formData: FormData) {
       select: {
         id: true,
         monthlyFee: true,
-      },
-    });
-
-    const amount = toNumber(enrollment.monthlyFee);
-    await tx.invoice.create({
-      data: {
-        studentId: student.id,
-        enrollmentId: enrollment.id,
-        periodMonth,
-        issueDate: today,
-        dueDate,
-        amount,
-        balanceDue: amount,
-        status: amount > 0 ? InvoiceStatus.OPEN : InvoiceStatus.PAID,
-        idempotencyKey: `lead-conversion-${lead.id}-${periodMonth.toISOString().slice(0, 10)}`,
       },
     });
 

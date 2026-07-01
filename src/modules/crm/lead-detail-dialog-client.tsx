@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -166,10 +167,8 @@ export function LeadDetailDialogClient({
           <div className="field-grid">
             <label className="form-field">
               <span>Növbəti addım tarixi</span>
-              <Input
+              <DatePicker
                 name="nextFollowUpDate"
-                inputMode="numeric"
-                placeholder="GG.AA.İİİİ"
                 defaultValue={lead.detail.nextFollowUpDate}
               />
             </label>

@@ -1,4 +1,4 @@
-export const leadPriorityOptions = ["NORMAL", "MEDIUM", "CRITICAL"] as const;
+export const leadPriorityOptions = ["CRITICAL", "MEDIUM", "NORMAL"] as const;
 
 export type LeadPriorityValue = (typeof leadPriorityOptions)[number];
 

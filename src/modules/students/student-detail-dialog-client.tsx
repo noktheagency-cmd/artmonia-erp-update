@@ -21,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -138,11 +139,10 @@ export function StudentDetailDialogClient({
               <div className="field-grid">
                 <label className="form-field">
                   <span>Ödəniş tarixi</span>
-                  <Input
+                  <DatePicker
                     name="paidDate"
-                    inputMode="numeric"
-                    placeholder="GG.AA.İİİİ"
                     defaultValue={student.detail.paymentDefaultDate}
+                    allowClear={false}
                     required
                   />
                 </label>
@@ -150,8 +150,7 @@ export function StudentDetailDialogClient({
                   <span>Ödəniş ayı</span>
                   <Input
                     name="paymentMonth"
-                    inputMode="numeric"
-                    placeholder="AAAA-AA"
+                    type="month"
                     defaultValue={student.detail.paymentDefaultMonth}
                     required
                   />

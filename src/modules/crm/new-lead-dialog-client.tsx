@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import {
@@ -202,10 +203,8 @@ export function NewLeadDialogClient({
             </label>
             <label className="form-field">
               <span>Növbəti addım tarixi</span>
-              <Input
+              <DatePicker
                 name="nextFollowUpDate"
-                inputMode="numeric"
-                placeholder="GG.AA.İİİİ"
               />
             </label>
           </div>
