@@ -99,13 +99,59 @@ export async function findDuplicatePhoneAction(phone: string) {
   return findDuplicatePhoneMatches(input.phone);
 }
 
+export type CreateLeadFormState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+  leadId?: string;
+};
+
 export async function createLeadAction(formData: FormData) {
+  await createLead(formData);
+
+  revalidatePath("/crm");
+  revalidatePath("/dashboard");
+  invalidateCrmCaches();
+  redirect("/crm?tab=list&leadCreated=1" as Route);
+}
+
+export async function createLeadFormAction(
+  _previousState: CreateLeadFormState,
+  formData: FormData
+): Promise<CreateLeadFormState> {
+  return createLeadClientAction(formData);
+}
+
+export async function createLeadClientAction(
+  formData: FormData
+): Promise<CreateLeadFormState> {
+  try {
+    const leadId = await createLead(formData);
+
+    revalidatePath("/crm");
+    revalidatePath("/dashboard");
+    invalidateCrmCaches();
+
+    return {
+      status: "success",
+      message: "Yeni müraciət siyahıya əlavə olundu.",
+      leadId,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Müraciət yaradılmadı.",
+    };
+  }
+}
+
+async function createLead(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.create");
   const input = createLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const managerId = resolveLeadManagerId(actor, input.managerId);
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
+  let createdLeadId = "";
 
   await prisma.$transaction(async (tx) => {
     const existingContact = phoneNormalized
@@ -147,6 +193,7 @@ export async function createLeadAction(formData: FormData) {
         source: true,
       },
     });
+    createdLeadId = lead.id;
 
     if (followUpAt) {
       await tx.task.create({
@@ -173,10 +220,7 @@ export async function createLeadAction(formData: FormData) {
     });
   });
 
-  revalidatePath("/crm");
-  revalidatePath("/dashboard");
-  invalidateCrmCaches();
-  redirect("/crm");
+  return createdLeadId;
 }
 
 export async function updateLeadAction(formData: FormData) {

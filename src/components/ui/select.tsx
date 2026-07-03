@@ -15,7 +15,6 @@ export type SelectOption = {
 
 export const Select = SelectPrimitive.Root;
 export const SelectGroup = SelectPrimitive.Group;
-export const SelectValue = SelectPrimitive.Value;
 
 export const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
@@ -163,6 +162,13 @@ export function FormSelect({
   const normalizedDefaultValue = normalizeSelectValue(defaultValue, emptyValue);
   const controlledValue =
     value === undefined ? undefined : normalizeSelectValue(value, emptyValue);
+  const [internalValue, setInternalValue] = React.useState(normalizedDefaultValue);
+  const currentValue = controlledValue ?? internalValue;
+  const displayLabel =
+    items.find((item) => item.value === currentValue)?.label ??
+    placeholder ??
+    emptyLabel ??
+    "Seçin";
   const filteredItems = React.useMemo(() => {
     const query = normalizeSearchText(searchQuery);
 
@@ -187,6 +193,14 @@ export function FormSelect({
     return () => window.clearTimeout(focusTimer);
   }, [open, searchable]);
 
+  function handleValueChange(nextValue: string) {
+    if (controlledValue === undefined) {
+      setInternalValue(nextValue);
+    }
+
+    onValueChange?.(nextValue);
+  }
+
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
 
@@ -200,16 +214,15 @@ export function FormSelect({
       name={name}
       open={open}
       onOpenChange={handleOpenChange}
-      defaultValue={controlledValue === undefined ? normalizedDefaultValue : undefined}
-      value={controlledValue}
-      onValueChange={onValueChange}
+      value={currentValue}
+      onValueChange={handleValueChange}
       disabled={disabled}
       required={required}
     >
       <SelectTrigger className={className} aria-label={ariaLabel}>
         <span className="ui-select-trigger-content">
           {Icon && <Icon className="ui-select-trigger-inline-icon" size={14} />}
-          <SelectValue placeholder={placeholder ?? emptyLabel ?? "Seçin"} />
+          <span className="ui-select-display-value">{displayLabel}</span>
         </span>
       </SelectTrigger>
       <SelectContent className={contentClassName}>
@@ -236,7 +249,7 @@ export function FormSelect({
             </SelectItem>
           ))
         ) : (
-          <div className="ui-select-empty-state">Netice tapilmadi</div>
+          <div className="ui-select-empty-state">Nəticə tapılmadı</div>
         )}
       </SelectContent>
     </Select>

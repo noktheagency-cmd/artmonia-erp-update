@@ -3,8 +3,16 @@ import { getOwnerDashboardData } from "@/modules/dashboard/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
-  const data = await getOwnerDashboardData();
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+  }>;
+}) {
+  const filters = await searchParams;
+  const data = await getOwnerDashboardData(filters);
 
   return <OwnerDashboard data={data} />;
 }

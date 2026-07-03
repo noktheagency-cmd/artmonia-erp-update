@@ -5,7 +5,6 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { revalidatePath, updateTag } from "next/cache";
 import type { Route } from "next";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   FinanceSalaryMode,
@@ -53,6 +52,15 @@ const recordFinancePaymentSchema = z.object({
   returnTo: optionalText(320),
 });
 
+const updateFinancePaymentSchema = recordFinancePaymentSchema.extend({
+  paymentId: z.string().uuid(),
+});
+
+const deleteFinancePaymentSchema = z.object({
+  paymentId: z.string().uuid(),
+  returnTo: optionalText(320),
+});
+
 const createExpenseSchema = z.object({
   categoryId: optionalUuid,
   newCategoryName: optionalText(80),
@@ -76,11 +84,20 @@ const createExpenseSchema = z.object({
   returnTo: optionalText(320),
 });
 
+const updateExpenseSchema = createExpenseSchema.extend({
+  expenseId: z.string().uuid(),
+});
+
+const deleteExpenseSchema = z.object({
+  expenseId: z.string().uuid(),
+  returnTo: optionalText(320),
+});
+
 export async function recordFinancePaymentAction(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = recordFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
-  const paidAt = parseDateInput(input.paidDate, "Odenis tarixi");
+  const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
   const paymentMonth = parseMonthInput(input.paymentMonth);
   const prisma = getPrisma();
 
@@ -105,23 +122,26 @@ export async function recordFinancePaymentAction(formData: FormData) {
       entityType: "payment",
       entityId: paymentResult.payment.id,
       after: toPaymentAuditJson(paymentResult),
-      reason: input.note ?? `${paymentResult.studentCode} ucun odenis qebul edildi`,
+      reason: input.note ?? `${paymentResult.studentCode} üçün ödəniş qəbul edildi`,
     });
   });
 
   invalidateFinanceCaches();
-  redirectToFinance(input.returnTo);
+  return {
+    ok: true as const,
+    redirectTo: buildFinanceRedirect(input.returnTo, "payment-created"),
+  };
 }
 
 export async function createFinanceExpenseAction(formData: FormData) {
   const actor = await requireMutationActor("billing.expense.create");
   const input = createExpenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
-  const expenseDate = parseDateInput(input.expenseDate, "Xerc tarixi");
+  const expenseDate = parseDateInput(input.expenseDate, "Xərc tarixi");
   const staff = parseStaffTarget(input.staffTarget);
 
   if (!input.categoryId && !input.newCategoryName) {
-    throw new Error("Xerc kateqoriyasi secilmelidir");
+    throw new Error("Xərc kateqoriyası seçilməlidir");
   }
 
   const prisma = getPrisma();
@@ -132,7 +152,7 @@ export async function createFinanceExpenseAction(formData: FormData) {
           where: { name: input.newCategoryName },
           create: {
             name: input.newCategoryName,
-            description: "Finance modulundan elave edildi",
+            description: "Maliyyə modulundan əlavə edildi",
             isSystem: false,
           },
           update: {},
@@ -144,7 +164,7 @@ export async function createFinanceExpenseAction(formData: FormData) {
         });
 
     if (!category) {
-      throw new Error("Xerc kateqoriyasi tapilmadi");
+      throw new Error("Xərc kateqoriyası tapılmadı");
     }
 
     const usesPayrollFlow = isPayrollCategoryName(category.name);
@@ -199,12 +219,449 @@ export async function createFinanceExpenseAction(formData: FormData) {
         receiptFileName: receipt?.fileName ?? null,
         receiptReference: input.receiptReference ?? null,
       } satisfies Prisma.InputJsonValue,
-      reason: input.description ?? `${category.name} xerc qeydi yaradildi`,
+      reason: input.description ?? `${category.name} xərc qeydi yaradıldı`,
     });
   });
 
   invalidateFinanceCaches();
-  redirectToFinance(input.returnTo);
+  return {
+    ok: true as const,
+    redirectTo: buildFinanceRedirect(input.returnTo, "expense-created"),
+  };
+}
+
+export async function updateFinancePaymentAction(formData: FormData) {
+  const actor = await requireMutationActor("billing.payment.create");
+  const input = updateFinancePaymentSchema.parse(Object.fromEntries(formData));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
+  const paymentMonth = parseMonthInput(input.paymentMonth);
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.payment.findUnique({
+      where: { id: input.paymentId },
+      select: {
+        id: true,
+        studentId: true,
+        amount: true,
+        paidAt: true,
+        paymentMonth: true,
+        method: true,
+        payerName: true,
+        receiptFileName: true,
+        receiptFilePath: true,
+        receiptReference: true,
+        note: true,
+      },
+    });
+
+    if (!existing) {
+      throw new Error("Ödəniş tapılmadı");
+    }
+
+    await reversePaymentAllocations(tx, existing.id);
+
+    const payment = await tx.payment.update({
+      where: { id: existing.id },
+      data: {
+        amount: input.amount,
+        paidAt,
+        paymentMonth,
+        method: input.method as PaymentMethod,
+        payerName: input.payerName ?? null,
+        receiptFileName: receipt?.fileName ?? existing.receiptFileName,
+        receiptFilePath: receipt?.filePath ?? existing.receiptFilePath,
+        receiptReference: input.receiptReference ?? null,
+        note: input.note ?? null,
+      },
+      select: {
+        id: true,
+        studentId: true,
+        amount: true,
+        paidAt: true,
+        paymentMonth: true,
+        method: true,
+      },
+    });
+
+    const allocations = await allocateExistingPayment(tx, {
+      paymentId: payment.id,
+      studentId: payment.studentId,
+      amount: input.amount,
+      paidAt,
+    });
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "finance.payment.update",
+      entityType: "payment",
+      entityId: payment.id,
+      before: {
+        amount: toNumber(existing.amount),
+        paidAt: existing.paidAt.toISOString(),
+        paymentMonth: existing.paymentMonth.toISOString(),
+        method: existing.method,
+        payerName: existing.payerName,
+        receiptReference: existing.receiptReference,
+        note: existing.note,
+      } satisfies Prisma.InputJsonValue,
+      after: {
+        amount: toNumber(payment.amount),
+        paidAt: payment.paidAt.toISOString(),
+        paymentMonth: payment.paymentMonth.toISOString(),
+        method: payment.method,
+        allocations,
+      } satisfies Prisma.InputJsonValue,
+      reason: input.note ?? "Ödəniş düzəliş edildi",
+    });
+  });
+
+  invalidateFinanceCaches();
+  return {
+    ok: true as const,
+    redirectTo: buildFinanceRedirect(input.returnTo, "payment-updated"),
+  };
+}
+
+export async function deleteFinancePaymentAction(formData: FormData) {
+  const actor = await requireMutationActor("billing.payment.create");
+  const input = deleteFinancePaymentSchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const payment = await tx.payment.findUnique({
+      where: { id: input.paymentId },
+      select: {
+        id: true,
+        studentId: true,
+        amount: true,
+        paidAt: true,
+        paymentMonth: true,
+        method: true,
+        payerName: true,
+        receiptReference: true,
+      },
+    });
+
+    if (!payment) {
+      throw new Error("Ödəniş tapılmadı");
+    }
+
+    await reversePaymentAllocations(tx, payment.id);
+    await tx.payment.delete({ where: { id: payment.id } });
+    await markStudentDebtIfNeeded(tx, payment.studentId);
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "finance.payment.delete",
+      entityType: "payment",
+      entityId: payment.id,
+      before: {
+        amount: toNumber(payment.amount),
+        paidAt: payment.paidAt.toISOString(),
+        paymentMonth: payment.paymentMonth.toISOString(),
+        method: payment.method,
+        payerName: payment.payerName,
+        receiptReference: payment.receiptReference,
+      } satisfies Prisma.InputJsonValue,
+      reason: "Ödəniş silindi və faktura balansları yeniləndi",
+    });
+  });
+
+  invalidateFinanceCaches();
+  return {
+    ok: true as const,
+    redirectTo: buildFinanceRedirect(input.returnTo, "payment-deleted"),
+  };
+}
+
+export async function updateFinanceExpenseAction(formData: FormData) {
+  const actor = await requireMutationActor("billing.expense.create");
+  const input = updateExpenseSchema.parse(Object.fromEntries(formData));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const expenseDate = parseDateInput(input.expenseDate, "Xərc tarixi");
+  const staff = parseStaffTarget(input.staffTarget);
+
+  if (!input.categoryId && !input.newCategoryName) {
+    throw new Error("Xərc kateqoriyası seçilməlidir");
+  }
+
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.financeExpense.findUnique({
+      where: { id: input.expenseId },
+      select: {
+        id: true,
+        categoryId: true,
+        amount: true,
+        expenseDate: true,
+        method: true,
+        vendor: true,
+        description: true,
+        receiptFileName: true,
+        receiptFilePath: true,
+        receiptReference: true,
+      },
+    });
+
+    if (!existing) {
+      throw new Error("Xərc qeydi tapılmadı");
+    }
+
+    const category = input.newCategoryName
+      ? await tx.financeExpenseCategory.upsert({
+          where: { name: input.newCategoryName },
+          create: {
+            name: input.newCategoryName,
+            description: "Maliyyə modulundan əlavə edildi",
+            isSystem: false,
+          },
+          update: {},
+          select: { id: true, name: true },
+        })
+      : await tx.financeExpenseCategory.findUnique({
+          where: { id: input.categoryId },
+          select: { id: true, name: true },
+        });
+
+    if (!category) {
+      throw new Error("Xərc kateqoriyası tapılmadı");
+    }
+
+    const usesPayrollFlow = isPayrollCategoryName(category.name);
+    const expenseStaff = usesPayrollFlow
+      ? staff
+      : { employeeUserId: null, teacherId: null };
+    const salarySnapshot = usesPayrollFlow
+      ? await resolveStaffSalarySnapshot(tx, staff, expenseDate)
+      : emptySalarySnapshot();
+
+    const expense = await tx.financeExpense.update({
+      where: { id: existing.id },
+      data: {
+        categoryId: category.id,
+        amount: input.amount,
+        expenseDate,
+        method: input.method as PaymentMethod,
+        vendor: input.vendor ?? null,
+        description: input.description ?? null,
+        employeeUserId: expenseStaff.employeeUserId,
+        teacherId: expenseStaff.teacherId,
+        salaryMode: salarySnapshot.salaryMode,
+        salaryPercent: salarySnapshot.salaryPercent,
+        salaryBaseAmount: salarySnapshot.salaryBaseAmount,
+        salaryCalculatedAmount: salarySnapshot.salaryCalculatedAmount,
+        receiptFileName: receipt?.fileName ?? existing.receiptFileName,
+        receiptFilePath: receipt?.filePath ?? existing.receiptFilePath,
+        receiptReference: input.receiptReference ?? null,
+      },
+      select: { id: true, amount: true, expenseDate: true, method: true },
+    });
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "finance.expense.update",
+      entityType: "finance_expense",
+      entityId: expense.id,
+      before: {
+        categoryId: existing.categoryId,
+        amount: toNumber(existing.amount),
+        expenseDate: existing.expenseDate.toISOString(),
+        method: existing.method,
+      } satisfies Prisma.InputJsonValue,
+      after: {
+        category: category.name,
+        amount: toNumber(expense.amount),
+        expenseDate: expense.expenseDate.toISOString(),
+        method: expense.method,
+      } satisfies Prisma.InputJsonValue,
+      reason: input.description ?? "Xərc qeydi düzəliş edildi",
+    });
+  });
+
+  invalidateFinanceCaches();
+  return {
+    ok: true as const,
+    redirectTo: buildFinanceRedirect(input.returnTo, "expense-updated"),
+  };
+}
+
+export async function deleteFinanceExpenseAction(formData: FormData) {
+  const actor = await requireMutationActor("billing.expense.create");
+  const input = deleteExpenseSchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const expense = await tx.financeExpense.findUnique({
+      where: { id: input.expenseId },
+      select: {
+        id: true,
+        categoryId: true,
+        amount: true,
+        expenseDate: true,
+        method: true,
+        vendor: true,
+        description: true,
+      },
+    });
+
+    if (!expense) {
+      throw new Error("Xərc qeydi tapılmadı");
+    }
+
+    await tx.financeExpense.delete({ where: { id: expense.id } });
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "finance.expense.delete",
+      entityType: "finance_expense",
+      entityId: expense.id,
+      before: {
+        categoryId: expense.categoryId,
+        amount: toNumber(expense.amount),
+        expenseDate: expense.expenseDate.toISOString(),
+        method: expense.method,
+        vendor: expense.vendor,
+        description: expense.description,
+      } satisfies Prisma.InputJsonValue,
+      reason: "Xərc qeydi silindi",
+    });
+  });
+
+  invalidateFinanceCaches();
+  return {
+    ok: true as const,
+    redirectTo: buildFinanceRedirect(input.returnTo, "expense-deleted"),
+  };
+}
+
+async function reversePaymentAllocations(tx: Prisma.TransactionClient, paymentId: string) {
+  const allocations = await tx.paymentAllocation.findMany({
+    where: { paymentId },
+    select: {
+      id: true,
+      amountAllocated: true,
+      invoice: {
+        select: {
+          id: true,
+          amount: true,
+          balanceDue: true,
+          dueDate: true,
+        },
+      },
+    },
+  });
+
+  for (const allocation of allocations) {
+    const nextBalance = roundMoney(toNumber(allocation.invoice.balanceDue) + toNumber(allocation.amountAllocated));
+
+    await tx.invoice.update({
+      where: { id: allocation.invoice.id },
+      data: {
+        balanceDue: nextBalance,
+        status: resolveInvoiceStatus({
+          amount: toNumber(allocation.invoice.amount),
+          balanceDue: nextBalance,
+          dueDate: allocation.invoice.dueDate,
+        }),
+      },
+    });
+  }
+
+  if (allocations.length > 0) {
+    await tx.paymentAllocation.deleteMany({ where: { paymentId } });
+  }
+}
+
+async function allocateExistingPayment(
+  tx: Prisma.TransactionClient,
+  input: {
+    paymentId: string;
+    studentId: string;
+    amount: number;
+    paidAt: Date;
+  }
+) {
+  const invoices = await tx.invoice.findMany({
+    where: {
+      studentId: input.studentId,
+      status: { not: InvoiceStatus.VOID },
+      balanceDue: { gt: 0 },
+    },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      amount: true,
+      balanceDue: true,
+      dueDate: true,
+    },
+  });
+  let remainingAmount = input.amount;
+  const allocations: Array<{ invoiceId: string; amount: number }> = [];
+
+  for (const invoice of invoices) {
+    if (remainingAmount <= 0) {
+      break;
+    }
+
+    const currentBalance = toNumber(invoice.balanceDue);
+    const amountAllocated = Math.min(currentBalance, remainingAmount);
+    const nextBalance = roundMoney(currentBalance - amountAllocated);
+
+    await tx.paymentAllocation.create({
+      data: {
+        paymentId: input.paymentId,
+        invoiceId: invoice.id,
+        amountAllocated,
+        mode: PaymentAllocationMode.OLDEST_FIRST,
+      },
+    });
+
+    await tx.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        balanceDue: nextBalance,
+        status: resolveInvoiceStatus({
+          amount: toNumber(invoice.amount),
+          balanceDue: nextBalance,
+          dueDate: invoice.dueDate,
+        }),
+      },
+    });
+
+    allocations.push({ invoiceId: invoice.id, amount: amountAllocated });
+    remainingAmount = roundMoney(remainingAmount - amountAllocated);
+  }
+
+  await markStudentDebtIfNeeded(tx, input.studentId);
+  return allocations;
+}
+
+async function markStudentDebtIfNeeded(tx: Prisma.TransactionClient, studentId: string) {
+  const openBalance = await tx.invoice.findFirst({
+    where: {
+      studentId,
+      status: { not: InvoiceStatus.VOID },
+      balanceDue: { gt: 0 },
+    },
+    select: { id: true },
+  });
+
+  if (!openBalance) {
+    return;
+  }
+
+  await tx.student.updateMany({
+    where: {
+      id: studentId,
+      lifecycleStatus: StudentLifecycleStatus.ACTIVE,
+    },
+    data: {
+      lifecycleStatus: StudentLifecycleStatus.DEBT,
+    },
+  });
 }
 
 async function createPaymentAndAllocate(
@@ -332,7 +789,7 @@ async function createPaymentAndAllocate(
         studentId: student.id,
         oldStatus: student.lifecycleStatus,
         newStatus: StudentLifecycleStatus.ACTIVE,
-        reason: "Borc baglandigi ucun status aktiv edildi",
+        reason: "Alacaq bağlandığı üçün status aktiv edildi",
         note: input.note,
         effectiveAt: input.paidAt,
         changedById: input.actorId,
@@ -363,7 +820,7 @@ async function resolveStaffSalarySnapshot(
   expenseDate: Date
 ) {
   if (!staff.employeeUserId && !staff.teacherId) {
-    throw new Error("Maas xerci ucun isci secilmelidir");
+    throw new Error("Əməkhaqqı xərci üçün əməkdaş seçilməlidir");
   }
 
   if (staff.employeeUserId) {
@@ -373,7 +830,7 @@ async function resolveStaffSalarySnapshot(
     });
 
     if (!employee?.isActive) {
-      throw new Error("Secilmis isci tapilmadi ve ya aktiv deyil");
+      throw new Error("Seçilmiş əməkdaş tapılmadı və ya aktiv deyil");
     }
 
     const lastSalary = await tx.financeExpense.findFirst({
@@ -404,7 +861,7 @@ async function resolveStaffSalarySnapshot(
   });
 
   if (!teacher?.isActive) {
-    throw new Error("Secilmis muellim tapilmadi ve ya aktiv deyil");
+    throw new Error("Seçilmiş müəllim tapılmadı və ya aktiv deyil");
   }
 
   const [rule, payout, lastSalary] = await Promise.all([
@@ -471,7 +928,7 @@ function parseStaffTarget(value: string | undefined) {
   const [type, id] = value.split(":");
 
   if (!id) {
-    throw new Error("Isci secimi duzgun deyil");
+    throw new Error("Əməkdaş seçimi düzgün deyil");
   }
 
   if (type === "user") {
@@ -488,7 +945,7 @@ function parseStaffTarget(value: string | undefined) {
     };
   }
 
-  throw new Error("Isci secimi duzgun deyil");
+  throw new Error("Əməkdaş seçimi düzgün deyil");
 }
 
 function isPayrollCategoryName(value: string) {
@@ -500,6 +957,8 @@ function isPayrollCategoryName(value: string) {
     "salary",
     "payroll",
     "isci",
+    "işçi",
+    "əməkdaş",
     "employee",
     "staff",
     "worker",
@@ -526,7 +985,7 @@ async function persistReceiptFile(value: FormDataEntryValue | null) {
   }
 
   if (value.size > 8 * 1024 * 1024) {
-    throw new Error("Qebz fayli 8 MB-dan boyuk ola bilmez");
+    throw new Error("Qəbz faylı 8 MB-dan böyük ola bilməz");
   }
 
   const uploadDir = path.join(process.cwd(), "public", "uploads", "finance-receipts");
@@ -584,7 +1043,7 @@ function parseDateInput(value: string, fieldName: string) {
   const date = normalized ? new Date(`${normalized}T00:00:00.000Z`) : null;
 
   if (!date || Number.isNaN(date.getTime())) {
-    throw new Error(`${fieldName} duzgun deyil`);
+    throw new Error(`${fieldName} düzgün deyil`);
   }
 
   return date;
@@ -598,7 +1057,7 @@ function parseMonthInput(value: string) {
     return new Date(`${monthMatch[1]}-${monthMatch[2]}-01T00:00:00.000Z`);
   }
 
-  return parseDateInput(trimmed, "Odenis ayi");
+  return parseDateInput(trimmed, "Növbəti ödəniş tarixi");
 }
 
 function normalizeDateValue(value: string) {
@@ -619,7 +1078,7 @@ function normalizeDateValue(value: string) {
     return `${year}-${month}-${day}`;
   }
 
-  throw new Error("Tarix GG.AA.IIII ve ya YYYY-MM-DD formatinda olmalidir");
+  throw new Error("Tarix GG.AA.İİİİ və ya YYYY-MM-DD formatında olmalıdır");
 }
 
 function resolveInvoiceStatus({
@@ -655,8 +1114,16 @@ function safeFinanceRedirect(value: string | undefined) {
   return value?.startsWith("/finance") ? value : "/finance";
 }
 
-function redirectToFinance(value: string | undefined): never {
-  redirect(safeFinanceRedirect(value) as Route);
+function buildFinanceRedirect(value: string | undefined, notice?: string) {
+  const target = safeFinanceRedirect(value);
+
+  if (!notice) {
+    return target as Route;
+  }
+
+  const url = new URL(target, "http://local.artmonia");
+  url.searchParams.set("financeNotice", notice);
+  return `${url.pathname}${url.search}` as Route;
 }
 
 function invalidateFinanceCaches() {

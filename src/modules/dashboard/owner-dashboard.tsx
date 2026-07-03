@@ -1,6 +1,16 @@
+import Link from "next/link";
+import type { Route } from "next";
 import { ArrowUpRight, CheckCircle2, CircleDollarSign, TrendingUp, UsersRound } from "lucide-react";
 import type { DashboardData } from "@/modules/dashboard/queries";
+import { DashboardDateFilter } from "@/modules/dashboard/dashboard-date-filter";
 import { StatusChip } from "@/components/ui/status-chip";
+
+const kpiRoutes = [
+  "/students?status=ACTIVE",
+  "/finance?type=payments",
+  "/finance?type=debts",
+  "/crm",
+] as const satisfies readonly Route[];
 
 export function OwnerDashboard({ data }: { data: DashboardData }) {
   return (
@@ -12,38 +22,39 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
           <p>Bugünkü fəaliyyət, müraciətlər, borclar və tapşırıqların cari vəziyyəti.</p>
         </div>
 
-        <button className="dark-action" type="button">
-          Bu ay
-          <ArrowUpRight size={16} />
-        </button>
+        <DashboardDateFilter from={data.filters.from} to={data.filters.to} label={data.filters.label} />
       </div>
 
       <div className="dashboard-grid">
         <div className="kpi-grid">
-          {data.kpis.map((item) => (
-            <article className={`metric-card ${item.tone === "primary" ? "metric-primary" : ""}`} key={item.label}>
-              <button className="corner-action" type="button" aria-label={`${item.label} aç`}>
+          {data.kpis.map((item, index) => (
+            <Link
+              className={`metric-card dashboard-link-card ${item.tone === "primary" ? "metric-primary" : ""}`}
+              href={kpiRoutes[index] ?? "/dashboard"}
+              key={item.label}
+            >
+              <span className="corner-action" aria-label={`${item.label} aç`}>
                 <ArrowUpRight size={16} />
-              </button>
+              </span>
               <span>{item.label}</span>
               <strong>{item.value}</strong>
               <div className="metric-footer">
                 <em>{item.delta}</em>
                 <small>{item.helper}</small>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
 
-        <article className="panel chart-panel revenue-overview-panel">
+        <Link className="panel chart-panel revenue-overview-panel dashboard-link-card" href="/finance?type=payments">
           <div className="panel-head">
             <div>
               <h2>Gəlir dinamikası</h2>
               <p>Aylar üzrə ümumi statistika və ən produktiv ayın səbəbi</p>
             </div>
-            <button className="round-dark" type="button" aria-label="Gəlir hesabatı aç">
+            <span className="round-dark" aria-label="Gəlir hesabatı aç">
               <ArrowUpRight size={16} />
-            </button>
+            </span>
           </div>
 
           <div className="bar-chart" aria-label="Gəlir bar qrafiki">
@@ -76,9 +87,9 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
               <p>{data.bestRevenueMonth.reason}</p>
             </div>
           </div>
-        </article>
+        </Link>
 
-        <article className="panel team-performance-panel">
+        <Link className="panel team-performance-panel dashboard-link-card" href="/crm">
           <div className="panel-head">
             <div>
               <h2>Team performance</h2>
@@ -108,9 +119,9 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
               <div className="program-stats-empty">Bu ay üçün komanda göstəricisi yoxdur</div>
             )}
           </div>
-        </article>
+        </Link>
 
-        <article className="panel status-breakdown-panel">
+        <Link className="panel status-breakdown-panel dashboard-link-card" href="/students">
           <div className="panel-head">
             <div>
               <h2>Tələbə statusları</h2>
@@ -125,9 +136,9 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
               </div>
             ))}
           </div>
-        </article>
+        </Link>
 
-        <article className="panel task-panel">
+        <Link className="panel task-panel dashboard-link-card" href="/crm?followUp=today">
           <div className="mini-icon">
             <CheckCircle2 size={18} />
           </div>
@@ -141,22 +152,22 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
               <li className="tasks-empty">Tapşırıq tapılmadı</li>
             )}
           </ul>
-        </article>
+        </Link>
 
-        <article className="panel payout-panel">
+        <Link className="panel payout-panel dashboard-link-card" href="/finance?type=payroll">
           <div className="mini-icon">
             <CircleDollarSign size={18} />
           </div>
           <strong>Ay sonu gəlir proqnozu</strong>
           <div className="big-number">{data.revenueForecast}</div>
           <p>{data.revenueForecastHelper}</p>
-        </article>
+        </Link>
 
-        <article className="panel people-panel">
+        <Link className="panel people-panel dashboard-link-card" href="/crm?followUp=today">
           <UsersRound size={20} />
           <strong>{data.waitingFamilies} ailə cavab gözləyir</strong>
           <p>{data.waitingHelper}</p>
-        </article>
+        </Link>
       </div>
     </section>
   );

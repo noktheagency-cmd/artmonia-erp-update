@@ -147,6 +147,10 @@ export function BookingWorkspace({
     selectedDateBookings[0] ??
     data.bookings[0];
   const stats = useMemo(() => buildStats(data.bookings), [data.bookings]);
+  const selectedDayStats = useMemo(
+    () => buildDayStats(selectedDateBookings, data.rooms.length * data.timeSlots.length),
+    [selectedDateBookings, data.rooms.length, data.timeSlots.length]
+  );
   const activeFilterCount = countActiveFilters(filters);
 
   function updateDraft<K extends keyof DraftState>(key: K, value: DraftState[K]) {
@@ -224,17 +228,17 @@ export function BookingWorkspace({
     <section className="page-stack operational-page booking-redesign-page booking-day-redesign-page">
       <div className="crm-unified-filter-panel booking-command-panel booking-day-command-panel">
         <div className="student-header-compact booking-header-compact" style={{ marginBottom: 0 }}>
-          <div>
+          <div className="header-title-wrapper-compact booking-legacy-title-block">
             <p className="eyebrow">Dərs bronları</p>
             <h1>Real rezervasiya planı</h1>
             <p>Bron yarandıqda qrup gözləyən tələbə aktivləşir, dərs və davamiyyət DB-də saxlanılır.</p>
           </div>
-          <div className="booking-header-actions">
+          <div className="header-actions-wrapper-compact booking-header-actions">
             <div className="financial-summary-badge-compact booking-summary-badge-compact">
               <Sparkles size={15} />
               <div>
                 <span>Bugünkü fokus</span>
-                <strong>{selectedDateBookings.length} bron</strong>
+                <strong>{selectedDayStats.active} bron</strong>
               </div>
             </div>
             <Button type="button" onClick={() => openReservation()} disabled={!data.permissions.canCreateReservation || data.students.length === 0}>
@@ -244,9 +248,11 @@ export function BookingWorkspace({
           </div>
         </div>
 
+        <div className="filter-header-divider" />
+
         <div className="student-unified-filter-panel-inner booking-filter-panel">
           <div className="filter-main-row booking-day-filter-row">
-            <label className="search-input-wrapper booking-search-input-wrapper">
+            <label className="search-input-wrapper booking-search-input-wrapper booking-command-search">
               <Search size={16} />
               <input
                 value={filters.query}
@@ -312,20 +318,30 @@ export function BookingWorkspace({
       </div>
 
       <div className="crm-tabs-navigation student-tabs-navigation booking-tabs-navigation">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={cx(activeView === tab.id && "is-active")}
-              onClick={() => setActiveView(tab.id)}
-            >
-              <Icon size={16} />
-              {tab.label}
-            </button>
-          );
-        })}
+        <div className="tabs-segmented-container booking-tabs-segmented">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const count =
+              tab.id === "schedule"
+                ? selectedDayStats.active
+                : tab.id === "list"
+                  ? filteredBookings.length
+                  : data.history.length;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={cx("tab-segmented-item booking-tab-item", activeView === tab.id && "is-active")}
+                onClick={() => setActiveView(tab.id)}
+              >
+                <Icon size={15} />
+                <span>{tab.label}</span>
+                <span className="tab-segmented-badge booking-tab-count">{count}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {activeView === "schedule" ? (
@@ -337,13 +353,41 @@ export function BookingWorkspace({
               </div>
               <div>
                 <h2>{formatDateDisplay(selectedDate)}</h2>
-                <p>{selectedDateBookings.length} bron, {data.rooms.length} otaq</p>
+                <p>{selectedDayStats.active} aktiv bron, {data.rooms.length} otaq, {selectedDayStats.free} boş slot</p>
               </div>
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => openReservation()}>
-              <Plus data-icon="inline-start" />
-              Slot əlavə et
-            </Button>
+            <div className="booking-day-head-actions">
+              <span className={cx("booking-density", getDensityClass(selectedDayStats.occupancy))}>
+                {selectedDayStats.occupancy}% doluluq
+              </span>
+              <Button type="button" size="sm" variant="outline" onClick={() => openReservation()}>
+                <Plus data-icon="inline-start" />
+                Slot əlavə et
+              </Button>
+            </div>
+          </div>
+
+          <div className="booking-day-summary-row">
+            <div>
+              <span className="dot dot-info" />
+              <strong>{selectedDayStats.reserved}</strong>
+              <small>Bron</small>
+            </div>
+            <div>
+              <span className="dot dot-success" />
+              <strong>{selectedDayStats.attended}</strong>
+              <small>Gəldi</small>
+            </div>
+            <div>
+              <span className="dot dot-danger" />
+              <strong>{selectedDayStats.absent}</strong>
+              <small>Gəlmədi</small>
+            </div>
+            <div>
+              <span className="dot dot-warning" />
+              <strong>{selectedDayStats.free}</strong>
+              <small>Boş slot</small>
+            </div>
           </div>
 
           <div className="booking-day-slots-grid">
@@ -357,7 +401,7 @@ export function BookingWorkspace({
                     key={`${time}-${room}`}
                     type="button"
                     className={cx(
-                      "booking-day-slot-card",
+                      "booking-day-slot-card booking-compact-slot-card",
                       booking ? statusMeta[booking.status].className : "is-free",
                       activeSelectedBookingId === booking?.id && "is-selected"
                     )}
@@ -467,7 +511,7 @@ export function BookingWorkspace({
                     <span />
                     <div>
                       <strong>{event.title}</strong>
-                      <small>{event.description}</small>
+                      <p>{event.description}</p>
                     </div>
                     <time>{event.time}</time>
                   </div>
@@ -775,6 +819,36 @@ function buildStats(bookings: BookingRow[]) {
   const attendanceRate = bookings.length > 0 ? Math.round((attended / bookings.length) * 100) : 0;
 
   return { attended, absent, activeRooms, attendanceRate };
+}
+
+function buildDayStats(bookings: BookingRow[], totalSlots: number) {
+  const activeBookings = bookings.filter((booking) => booking.status !== "cancelled");
+  const attended = activeBookings.filter((booking) => booking.status === "attended").length;
+  const absent = activeBookings.filter((booking) => booking.status === "absent").length;
+  const reserved = activeBookings.filter((booking) => booking.status === "reserved").length;
+  const free = Math.max(totalSlots - activeBookings.length, 0);
+  const occupancy = totalSlots > 0 ? Math.round((activeBookings.length / totalSlots) * 100) : 0;
+
+  return {
+    active: activeBookings.length,
+    attended,
+    absent,
+    reserved,
+    free,
+    occupancy,
+  };
+}
+
+function getDensityClass(occupancy: number) {
+  if (occupancy >= 72) {
+    return "is-high";
+  }
+
+  if (occupancy >= 38) {
+    return "is-medium";
+  }
+
+  return "is-low";
 }
 
 function matchesBookingFilters(booking: BookingRow, filters: BookingFilters, selectedDate: string) {

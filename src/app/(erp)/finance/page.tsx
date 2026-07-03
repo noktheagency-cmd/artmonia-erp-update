@@ -1,7 +1,11 @@
 import { FinanceWorkspace } from "@/modules/finance/finance-workspace";
 import {
   createFinanceExpenseAction,
+  deleteFinanceExpenseAction,
+  deleteFinancePaymentAction,
   recordFinancePaymentAction,
+  updateFinanceExpenseAction,
+  updateFinancePaymentAction,
 } from "@/modules/finance/actions";
 import { getFinanceData } from "@/modules/finance/queries";
 
@@ -26,6 +30,10 @@ export default async function FinancePage({
       data={data}
       recordPaymentAction={recordFinancePaymentAction}
       createExpenseAction={createFinanceExpenseAction}
+      updatePaymentAction={updateFinancePaymentAction}
+      deletePaymentAction={deleteFinancePaymentAction}
+      updateExpenseAction={updateFinanceExpenseAction}
+      deleteExpenseAction={deleteFinanceExpenseAction}
     />
   );
 }

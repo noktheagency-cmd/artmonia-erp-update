@@ -3,4 +3,5 @@ export const erpCacheTags = {
   dashboard: "erp:dashboard",
   students: "erp:students",
   finance: "erp:finance",
+  workshops: "erp:workshops",
 } as const;

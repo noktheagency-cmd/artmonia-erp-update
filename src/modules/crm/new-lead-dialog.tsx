@@ -1,4 +1,4 @@
-import { createLeadAction } from "@/modules/crm/actions";
+import { createLeadClientAction } from "@/modules/crm/actions";
 import { NewLeadDialogClient } from "@/modules/crm/new-lead-dialog-client";
 
 export function NewLeadDialog({
@@ -12,7 +12,7 @@ export function NewLeadDialog({
 }) {
   return (
     <NewLeadDialogClient
-      createLeadAction={createLeadAction}
+      createLeadAction={createLeadClientAction}
       managers={managers}
       programs={programs}
       sourceOptions={sourceOptions}

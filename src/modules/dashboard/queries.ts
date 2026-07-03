@@ -21,6 +21,7 @@ export type DashboardKpi = {
 };
 
 export type DashboardData = {
+  filters: DashboardDateRange;
   kpis: DashboardKpi[];
   revenueBars: Array<{
     label: string;
@@ -80,6 +81,17 @@ export type DashboardData = {
     count: number;
     tone: "success" | "warning" | "danger" | "info" | "neutral";
   }>;
+};
+
+export type DashboardDateRange = {
+  from: string;
+  to: string;
+  label: string;
+};
+
+export type DashboardFilters = {
+  from?: string;
+  to?: string;
 };
 
 type DashboardRawRow = {
@@ -146,13 +158,16 @@ const agingBuckets = [
   { label: "15+ gün", min: 15, max: Number.POSITIVE_INFINITY, color: "#f43f5e" },
 ] as const;
 
-export async function getOwnerDashboardData(): Promise<DashboardData> {
+export async function getOwnerDashboardData(filters: DashboardFilters = {}): Promise<DashboardData> {
   const prisma = getPrisma();
-  const today = new Date();
+  const dateRange = resolveDashboardDateRange(filters);
+  const today = dateRange.toDate;
   const cachedToday = getCacheTimeBucket(today);
-  const monthStart = startOfMonth(today);
-  const nextMonthStart = addMonths(monthStart, 1);
-  const firstRevenueMonth = addMonths(monthStart, -6);
+  const periodStart = dateRange.fromDate;
+  const periodEndExclusive = addUtcDays(dateRange.toDate, 1);
+  const selectedMonthStart = startOfMonth(today);
+  const firstRevenueMonth = addMonths(selectedMonthStart, -6);
+  const nextRevenueMonth = addMonths(selectedMonthStart, 1);
   
   const fetchDashboardRawData = async () =>
     prisma.$queryRaw<DashboardRawRow[]>(Prisma.sql`
@@ -187,6 +202,7 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
           select p.payment_month, sum(p.amount) as amount
           from erp.payments p
           where p.payment_month >= ${firstRevenueMonth}
+            and p.payment_month < ${nextRevenueMonth}
           group by p.payment_month
         ) revenue
       ), '[]'::jsonb) as "revenueRows",
@@ -202,6 +218,13 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
             'OPEN'::"erp"."TaskStatus",
             'IN_PROGRESS'::"erp"."TaskStatus"
           )
+          and (
+            t.due_at is null
+            or (
+              t.due_at >= ${periodStart}
+              and t.due_at < ${periodEndExclusive}
+            )
+          )
           order by t.due_at asc nulls last, t.created_at asc
           limit 4
         ) task_rows
@@ -209,7 +232,8 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
       coalesce((
         select sum(tp.payout_amount)
         from erp.teacher_payouts tp
-        where tp.period_month = ${monthStart}
+        where tp.period_month >= ${periodStart}
+          and tp.period_month < ${periodEndExclusive}
           and tp.status in (
             'DRAFT'::"erp"."ApprovalStatus",
             'REQUESTED'::"erp"."ApprovalStatus",
@@ -228,7 +252,10 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
             'TRIAL_CONSULTATION'::"erp"."LeadStage",
             'NURTURE'::"erp"."LeadStage"
           )
-          and (l.next_follow_up_at is null or l.next_follow_up_at <= ${cachedToday})
+          and (l.next_follow_up_at is null or (
+            l.next_follow_up_at >= ${periodStart}
+            and l.next_follow_up_at < ${periodEndExclusive}
+          ))
       ), 0) as "waitingLeads",
       coalesce((
         select jsonb_agg(
@@ -310,14 +337,14 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
       coalesce((
         select count(*)::int
         from erp.leads l
-        where l.created_at >= ${monthStart}
-          and l.created_at < ${nextMonthStart}
+        where l.created_at >= ${periodStart}
+          and l.created_at < ${periodEndExclusive}
       ), 0) as "totalLeadsThisMonth",
       coalesce((
         select count(*)::int
         from erp.leads l
-        where l.created_at >= ${monthStart}
-          and l.created_at < ${nextMonthStart}
+        where l.created_at >= ${periodStart}
+          and l.created_at < ${periodEndExclusive}
           and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
       ), 0) as "convertedLeadsThisMonth",
       coalesce((
@@ -356,10 +383,10 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
           left join erp.users u on u.id = l.manager_id
           left join erp.payments p
             on p.student_id = l.converted_student_id
-            and p.paid_at >= ${monthStart}
-            and p.paid_at < ${nextMonthStart}
-          where l.created_at >= ${monthStart}
-            and l.created_at < ${nextMonthStart}
+            and p.paid_at >= ${periodStart}
+            and p.paid_at < ${periodEndExclusive}
+          where l.created_at >= ${periodStart}
+            and l.created_at < ${periodEndExclusive}
           group by coalesce(u.full_name, 'Menecer təyin edilməyib')
           limit 5
         ) team_rows
@@ -369,9 +396,10 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
     fetchDashboardRawData,
     [
       "owner-dashboard-data",
-      monthStart.toISOString(),
-      nextMonthStart.toISOString(),
       firstRevenueMonth.toISOString(),
+      nextRevenueMonth.toISOString(),
+      periodStart.toISOString(),
+      periodEndExclusive.toISOString(),
       cachedToday.toISOString(),
     ],
     {
@@ -424,7 +452,7 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
   const currentMonthRevenue = revenueAmounts.at(-1)?.amount ?? 0;
   const bestRevenue = revenueAmounts.reduce(
     (best, item) => (item.amount > best.amount ? item : best),
-    revenueAmounts[0] ?? { month: monthStart, amount: 0 }
+    revenueAmounts[0] ?? { month: selectedMonthStart, amount: 0 }
   );
   const bestRevenueIndex = revenueAmounts.findIndex(
     (item) => item.month.getTime() === bestRevenue.month.getTime()
@@ -506,6 +534,11 @@ export async function getOwnerDashboardData(): Promise<DashboardData> {
   });
 
   return {
+    filters: {
+      from: dateRange.from,
+      to: dateRange.to,
+      label: dateRange.label,
+    },
     kpis: [
       {
         label: "Aktiv tələbə",
@@ -629,6 +662,105 @@ function mapLifecycleStatus(status: string): { label: string; tone: "success" | 
 function getCacheTimeBucket(value: Date) {
   const bucketMs = 30_000;
   return new Date(Math.floor(value.getTime() / bucketMs) * bucketMs);
+}
+
+function resolveDashboardDateRange(filters: DashboardFilters) {
+  const today = startOfUtcDay(new Date());
+  const defaultFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const parsedFrom = parseDateInput(filters.from) ?? defaultFrom;
+  const parsedTo = parseDateInput(filters.to) ?? today;
+  const fromDate = parsedFrom <= parsedTo ? parsedFrom : parsedTo;
+  const toDate = parsedFrom <= parsedTo ? parsedTo : parsedFrom;
+  const from = toDateInput(fromDate);
+  const to = toDateInput(toDate);
+  const label = buildDateRangeLabel(fromDate, toDate, today);
+
+  return {
+    from,
+    to,
+    label,
+    fromDate,
+    toDate,
+  };
+}
+
+function parseDateInput(value?: string) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function buildDateRangeLabel(from: Date, to: Date, today: Date) {
+  const currentMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const previousMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+  const previousMonthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
+  const last30Start = addUtcDays(today, -29);
+
+  if (sameUtcDay(from, today) && sameUtcDay(to, today)) {
+    return "Bu gün";
+  }
+
+  if (sameUtcDay(from, currentMonthStart) && sameUtcDay(to, today)) {
+    return "Bu ay";
+  }
+
+  if (sameUtcDay(from, last30Start) && sameUtcDay(to, today)) {
+    return "Son 30 gün";
+  }
+
+  if (sameUtcDay(from, previousMonthStart) && sameUtcDay(to, previousMonthEnd)) {
+    return "Keçən ay";
+  }
+
+  return `${formatDateLabel(from)} - ${formatDateLabel(to)}`;
+}
+
+function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
+function addUtcDays(value: Date, days: number) {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function sameUtcDay(left: Date, right: Date) {
+  return toDateInput(left) === toDateInput(right);
+}
+
+function toDateInput(value: Date) {
+  return [
+    value.getUTCFullYear().toString(),
+    (value.getUTCMonth() + 1).toString().padStart(2, "0"),
+    value.getUTCDate().toString().padStart(2, "0"),
+  ].join("-");
+}
+
+function formatDateLabel(value: Date) {
+  const day = value.getUTCDate().toString().padStart(2, "0");
+  const month = (value.getUTCMonth() + 1).toString().padStart(2, "0");
+  const year = value.getUTCFullYear();
+
+  return `${day}.${month}.${year}`;
 }
 
 function isMissingIncrementalCacheError(error: unknown) {

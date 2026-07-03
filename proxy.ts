@@ -12,6 +12,7 @@ export const config = {
     "/students/:path*",
     "/bookings/:path*",
     "/crm/:path*",
+    "/marketing/:path*",
     "/hr/:path*",
     "/finance/:path*",
     "/reports/:path*",

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Plus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { formatLeadStageLabel, leadStageSelectOptions } from "@/modules/crm/stage";
+import type { CreateLeadFormState } from "@/modules/crm/actions";
 
 type DuplicateMatch = {
   id: string;
@@ -43,10 +45,40 @@ export function NewLeadDialogClient({
   programs: Array<{ id: string; name: string }>;
   managers: Array<{ id: string; fullName: string }>;
   sourceOptions: string[];
-  createLeadAction: (formData: FormData) => void | Promise<void>;
+  createLeadAction: (
+    formData: FormData
+  ) => Promise<CreateLeadFormState>;
 }) {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
   const [isChecking, startChecking] = useTransition();
+  const [isSubmitting, startSubmitting] = useTransition();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    setSubmitError(null);
+
+    startSubmitting(async () => {
+      const result = await createLeadAction(formData);
+
+      if (result.status === "success") {
+        setIsOpen(false);
+        setDuplicates([]);
+        form.reset();
+        router.replace("/crm?tab=list&leadCreated=1", { scroll: false });
+        router.refresh();
+        return;
+      }
+
+      setSubmitError(result.message ?? "Müraciət yaradılmadı.");
+    });
+  }
 
   function checkPhone(value: string) {
     if (value.replace(/\D/g, "").length < 6) {
@@ -75,7 +107,7 @@ export function NewLeadDialogClient({
   }
 
   return (
-    <Dialog>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button className="crm-primary-button crm-new-lead-trigger" type="button">
           <span className="crm-new-lead-icon" aria-hidden="true">
@@ -92,7 +124,7 @@ export function NewLeadDialogClient({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={createLeadAction} className="crm-form crm-form-dialog">
+        <form ref={formRef} onSubmit={handleSubmit} className="crm-form crm-form-dialog">
           <label className="form-field">
             <span>Ad və soyad</span>
             <Input name="fullName" required minLength={2} maxLength={120} />
@@ -205,6 +237,8 @@ export function NewLeadDialogClient({
               <span>Növbəti addım tarixi</span>
               <DatePicker
                 name="nextFollowUpDate"
+                compact
+                popoverPlacement="floating"
               />
             </label>
           </div>
@@ -214,10 +248,20 @@ export function NewLeadDialogClient({
             <Input name="note" maxLength={180} />
           </label>
 
+          {submitError ? (
+            <div className="duplicate-alert" role="alert">
+              <AlertTriangle data-icon="inline-start" />
+              <div>
+                <strong>Müraciət yaradılmadı</strong>
+                <p>{submitError}</p>
+              </div>
+            </div>
+          ) : null}
+
           <DialogFooter>
-            <Button type="submit">
+            <Button type="submit" disabled={isSubmitting}>
               <Plus data-icon="inline-start" />
-              Müraciəti əlavə et
+              {isSubmitting ? "Yaradılır..." : "Müraciəti əlavə et"}
             </Button>
           </DialogFooter>
         </form>

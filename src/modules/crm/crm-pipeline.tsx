@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   CheckCircle2, 
@@ -64,6 +64,26 @@ export function CrmPipeline({ data }: { data: CrmData }) {
   const activeTab = tabParam === "list" ? "list" : "overview";
   const [dateFrom, setDateFrom] = useState(data.filters.dateFrom);
   const [dateTo, setDateTo] = useState(data.filters.dateTo);
+  const showCreateToast = searchParams.get("leadCreated") === "1";
+
+  const dismissCreateToast = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("leadCreated");
+    params.set("tab", "list");
+    router.replace(`/crm?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
+
+  useEffect(() => {
+    if (!showCreateToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      dismissCreateToast();
+    }, 4200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [dismissCreateToast, showCreateToast]);
 
   function handleTabChange(tab: "overview" | "list") {
     const params = new URLSearchParams(searchParams.toString());
@@ -152,12 +172,29 @@ export function CrmPipeline({ data }: { data: CrmData }) {
       {/* Visual Navigation Progress Indicator */}
       <div className="route-progress" aria-hidden={!isPending} data-visible={isPending} />
 
+      {showCreateToast ? (
+        <div className="crm-toast-viewport" role="status" aria-live="polite">
+          <div className="crm-toast is-success">
+            <span className="crm-toast-icon" aria-hidden="true">
+              <CheckCircle2 size={18} />
+            </span>
+            <div>
+              <strong>Müraciət yaradıldı</strong>
+              <p>Yeni müraciət siyahıya əlavə olundu.</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Bildirişi bağla"
+              onClick={dismissCreateToast}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* --- REDESIGNED UNIFIED FILTER PANEL (SCREENSHOT LAYOUT) --- */}
-      <form className="crm-unified-filter-panel student-unified-filter-panel" onSubmit={handleFilterSubmit}>
-        {data.filters.period !== "this_month" && (
-          <input type="hidden" name="period" value={data.filters.period} />
-        )}
-        
+      <section className="crm-unified-filter-panel student-unified-filter-panel">
         {/* --- PREMIUM COMPACT HEADER (SCREENSHOT LAYOUT) --- */}
         <div className="student-header-compact" style={{ marginBottom: 0 }}>
           <div className="header-title-wrapper-compact">
@@ -185,9 +222,14 @@ export function CrmPipeline({ data }: { data: CrmData }) {
         </div>
 
         <div className="filter-header-divider" />
+
+        <form className="crm-filter-controls-form" onSubmit={handleFilterSubmit}>
+          {data.filters.period !== "this_month" && (
+            <input type="hidden" name="period" value={data.filters.period} />
+          )}
         
-        {/* Main Inputs Row */}
-        <div className="filter-main-row">
+          {/* Main Inputs Row */}
+          <div className="filter-main-row">
           {/* Search Bar */}
           <div className="search-input-wrapper" style={{ flex: "1.5", minWidth: "220px" }}>
             <Search size={18} className="search-icon" />
@@ -230,8 +272,8 @@ export function CrmPipeline({ data }: { data: CrmData }) {
           </div>
         </div>
 
-        {/* Quick Period Buttons & Selects Row */}
-        <div className="period-quick-row">
+          {/* Quick Period Buttons & Selects Row */}
+          <div className="period-quick-row">
           <button
             type="button"
             onClick={() => setQuickDateRange("today")}
@@ -306,8 +348,9 @@ export function CrmPipeline({ data }: { data: CrmData }) {
               icon={CheckCircle2}
             />
           </div>
-        </div>
-      </form>
+          </div>
+        </form>
+      </section>
 
       {/* --- REDESIGNED PREMIUM SEGMENTED TABS SWITCHER (SCREENSHOT STYLE) --- */}
       <div className="crm-tabs-navigation">

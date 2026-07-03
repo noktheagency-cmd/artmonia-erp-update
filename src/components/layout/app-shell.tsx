@@ -11,16 +11,14 @@ import {
   useState,
 } from "react";
 import {
-  Bell,
   BriefcaseBusiness,
   CalendarDays,
   CreditCard,
   Gauge,
   GraduationCap,
-  LayoutGrid,
   LogOut,
-  Paintbrush,
-  Settings,
+  Megaphone,
+  Presentation,
   UsersRound,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
@@ -41,10 +39,11 @@ const navItems: NavItem[] = [
   { href: "/dashboard", label: "İdarə paneli", icon: Gauge },
   { href: "/students", label: "Tələbələr", icon: GraduationCap },
   { href: "/bookings" as Route, label: "Bronlar", icon: CalendarDays },
+  { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation },
   { href: "/crm", label: "Follow-up", icon: UsersRound },
+  { href: "/marketing" as Route, label: "Marketing", icon: Megaphone },
   { href: "/hr" as Route, label: "HR panel", icon: BriefcaseBusiness },
   { href: "/finance", label: "Maliyyə", icon: CreditCard },
-  { href: "/reports", label: "Hesabatlar", icon: LayoutGrid },
 ];
 
 export function AppShell({
@@ -206,15 +205,6 @@ export function AppShell({
         </nav>
 
         <div className="rail-bottom-stack">
-          <button className="nav-icon only-desktop" type="button" aria-label="Studiya rejimi">
-            <Paintbrush size={18} strokeWidth={1.9} />
-          </button>
-          <button className="nav-icon only-desktop" type="button" aria-label="Tənzimləmələr">
-            <Settings size={18} strokeWidth={1.9} />
-          </button>
-          <button className="nav-icon only-desktop" type="button" aria-label="Bildirişlər">
-            <Bell size={18} strokeWidth={1.9} />
-          </button>
           <div
             className="nav-icon"
             aria-label={`${currentUser.fullName} (${currentUser.roles.join(", ")})`}

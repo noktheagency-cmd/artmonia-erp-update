@@ -90,27 +90,45 @@ export type FinanceData = {
   }>;
   payments: Array<{
     id: string;
+    studentId: string;
     studentName: string;
     studentCode: string;
     payerName: string;
     amount: string;
+    amountValue: number;
+    amountInput: string;
     paidAt: string;
+    dateKey: string;
+    paidDateValue: string;
     paymentMonth: string;
+    paymentMonthValue: string;
+    methodValue: string;
     method: string;
     receipt: string;
+    receiptFilePath: string;
+    receiptReference: string;
     note: string;
   }>;
   expenses: Array<{
     id: string;
+    categoryId: string;
     category: string;
     amount: string;
+    amountValue: number;
+    amountInput: string;
     expenseDate: string;
+    dateKey: string;
+    expenseDateValue: string;
+    methodValue: string;
     method: string;
     vendor: string;
     staffName: string;
+    staffTarget: string;
     salaryMode: string;
     salaryFormula: string;
     receipt: string;
+    receiptFilePath: string;
+    receiptReference: string;
     description: string;
   }>;
   debtors: Array<{
@@ -121,21 +139,31 @@ export type FinanceData = {
     program: string;
     teacher: string;
     balance: string;
+    balanceValue: number;
     nextDueDate: string;
     overdueDays: string;
     tone: StatusTone;
   }>;
   payrollItems: Array<{
     id: string;
+    categoryId: string;
     category: string;
     amount: string;
+    amountValue: number;
+    amountInput: string;
     expenseDate: string;
+    dateKey: string;
+    expenseDateValue: string;
+    methodValue: string;
     method: string;
     vendor: string;
     staffName: string;
+    staffTarget: string;
     salaryMode: string;
     salaryFormula: string;
     receipt: string;
+    receiptFilePath: string;
+    receiptReference: string;
     description: string;
   }>;
   alerts: Array<{
@@ -188,25 +216,35 @@ type StaffOptionRow = {
 
 type PaymentRow = {
   id: string;
+  studentId: string;
   studentName: string;
   studentCode: string;
   payerName: string | null;
   amount: unknown;
   paidAt: string;
+  dateKey: string;
+  paidDateValue: string;
   paymentMonth: string;
+  paymentMonthValue: string;
   method: string;
   receiptFileName: string | null;
+  receiptFilePath: string | null;
   receiptReference: string | null;
   note: string | null;
 };
 
 type ExpenseRow = {
   id: string;
+  categoryId: string;
   category: string;
   amount: unknown;
   expenseDate: string;
+  dateKey: string;
+  expenseDateValue: string;
   method: string;
   vendor: string | null;
+  employeeUserId: string | null;
+  teacherId: string | null;
   employeeName: string | null;
   teacherName: string | null;
   salaryMode: string;
@@ -214,6 +252,7 @@ type ExpenseRow = {
   salaryBaseAmount: unknown;
   salaryCalculatedAmount: unknown;
   receiptFileName: string | null;
+  receiptFilePath: string | null;
   receiptReference: string | null;
   description: string | null;
 };
@@ -231,11 +270,11 @@ type DebtRow = {
 };
 
 const movementTypes: Array<{ value: MovementType; label: string }> = [
-  { value: "overview", label: "Umumi statistika" },
-  { value: "payments", label: "Odenisler" },
-  { value: "debts", label: "Borclar" },
-  { value: "expenses", label: "Xercler" },
-  { value: "payroll", label: "Maaslar" },
+  { value: "overview", label: "Ümumi baxış" },
+  { value: "payments", label: "Ödənişlər" },
+  { value: "debts", label: "Alacaqlar" },
+  { value: "expenses", label: "Xərclər" },
+  { value: "payroll", label: "Əməkhaqqı" },
 ];
 
 export async function getFinanceData(
@@ -254,6 +293,9 @@ export async function getFinanceData(
     ? new Date(`${normalizedFilters.to}T00:00:00.000Z`)
     : addMonths(nextMonthStart, 0);
   const endDateExclusive = addDays(toDate, 1);
+  const activePeriodStart = startOfMonth(fromDate);
+  const defaultFrom = formatDateInput(monthStart);
+  const defaultTo = formatDateInput(today);
   const searchSql = buildSearchSql(normalizedFilters.query);
   const categorySql = normalizedFilters.category
     ? Prisma.sql`and fec.id = ${normalizedFilters.category}::uuid`
@@ -274,33 +316,54 @@ export async function getFinanceData(
         coalesce((
           select sum(p.amount)
           from erp.payments p
-          where p.paid_at >= ${monthStart}
-            and p.paid_at < ${nextMonthStart}
+          join erp.students s on s.id = p.student_id
+          join erp.contacts c on c.id = s.contact_id
+          where p.paid_at >= ${fromDate}
+            and p.paid_at < ${endDateExclusive}
+            ${searchSql.payments}
         ), 0) as "income",
         coalesce((
           select count(*)::int
           from erp.payments p
-          where p.paid_at >= ${monthStart}
-            and p.paid_at < ${nextMonthStart}
+          join erp.students s on s.id = p.student_id
+          join erp.contacts c on c.id = s.contact_id
+          where p.paid_at >= ${fromDate}
+            and p.paid_at < ${endDateExclusive}
+            ${searchSql.payments}
         ), 0) as "paymentCount",
         coalesce((
           select sum(fe.amount)
           from erp.finance_expenses fe
-          where fe.expense_date >= ${monthStart}
-            and fe.expense_date < ${nextMonthStart}
+          join erp.finance_expense_categories fec on fec.id = fe.category_id
+          left join erp.users eu on eu.id = fe.employee_user_id
+          left join erp.teachers t on t.id = fe.teacher_id
+          where fe.expense_date >= ${fromDate}
+            and fe.expense_date < ${endDateExclusive}
+            ${categorySql}
+            ${searchSql.expenses}
         ), 0) as "expense",
         coalesce((
           select count(*)::int
           from erp.finance_expenses fe
-          where fe.expense_date >= ${monthStart}
-            and fe.expense_date < ${nextMonthStart}
+          join erp.finance_expense_categories fec on fec.id = fe.category_id
+          left join erp.users eu on eu.id = fe.employee_user_id
+          left join erp.teachers t on t.id = fe.teacher_id
+          where fe.expense_date >= ${fromDate}
+            and fe.expense_date < ${endDateExclusive}
+            ${categorySql}
+            ${searchSql.expenses}
         ), 0) as "expenseCount",
         coalesce((
           select sum(fe.amount)
           from erp.finance_expenses fe
-          where fe.expense_date >= ${monthStart}
-            and fe.expense_date < ${nextMonthStart}
+          join erp.finance_expense_categories fec on fec.id = fe.category_id
+          left join erp.users eu on eu.id = fe.employee_user_id
+          left join erp.teachers t on t.id = fe.teacher_id
+          where fe.expense_date >= ${fromDate}
+            and fe.expense_date < ${endDateExclusive}
             and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"
+            ${categorySql}
+            ${searchSql.expenses}
         ), 0) as "payroll",
         coalesce((
           select sum(i.balance_due)
@@ -390,7 +453,7 @@ export async function getFinanceData(
         concat('teacher:', t.id::text) as "id",
         t.full_name as "label",
         'teacher' as "kind",
-        coalesce(t.phone, 'Muellim') as "meta",
+        coalesce(t.phone, 'Müəllim') as "meta",
         'PERCENT' as "salaryMode",
         0 as "staticSalary",
         coalesce(rule.salary_percent, last_salary.salary_percent, 0) as "salaryPercent",
@@ -401,8 +464,8 @@ export async function getFinanceData(
         select tcr.salary_percent
         from erp.teacher_contract_rules tcr
         where tcr.teacher_id = t.id
-          and tcr.valid_from <= ${monthStart}
-          and (tcr.valid_to is null or tcr.valid_to >= ${monthStart})
+          and tcr.valid_from <= ${activePeriodStart}
+          and (tcr.valid_to is null or tcr.valid_to >= ${activePeriodStart})
         order by tcr.valid_from desc, tcr.created_at desc
         limit 1
       ) rule on true
@@ -410,7 +473,7 @@ export async function getFinanceData(
         select tp.eligible_revenue, tp.payout_amount
         from erp.teacher_payouts tp
         where tp.teacher_id = t.id
-          and tp.period_month = ${monthStart}
+          and tp.period_month = ${activePeriodStart}
         order by tp.created_at desc
         limit 1
       ) payout on true
@@ -431,14 +494,19 @@ export async function getFinanceData(
     prisma.$queryRaw<PaymentRow[]>(Prisma.sql`
       select
         p.id::text as "id",
+        s.id::text as "studentId",
         c.full_name as "studentName",
         s.code as "studentCode",
         p.payer_name as "payerName",
         p.amount,
         to_char(p.paid_at, 'DD.MM.YYYY') as "paidAt",
-        to_char(p.payment_month, 'YYYY-MM') as "paymentMonth",
+        to_char(p.paid_at, 'YYYY-MM-DD') as "dateKey",
+        to_char(p.paid_at, 'YYYY-MM-DD') as "paidDateValue",
+        to_char(p.payment_month, 'DD.MM.YYYY') as "paymentMonth",
+        to_char(p.payment_month, 'YYYY-MM-DD') as "paymentMonthValue",
         p.method::text as "method",
         p.receipt_file_name as "receiptFileName",
+        p.receipt_file_path as "receiptFilePath",
         p.receipt_reference as "receiptReference",
         p.note
       from erp.payments p
@@ -453,11 +521,16 @@ export async function getFinanceData(
     prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
       select
         fe.id::text as "id",
+        fec.id::text as "categoryId",
         fec.name as "category",
         fe.amount,
         to_char(fe.expense_date, 'DD.MM.YYYY') as "expenseDate",
+        to_char(fe.expense_date, 'YYYY-MM-DD') as "dateKey",
+        to_char(fe.expense_date, 'YYYY-MM-DD') as "expenseDateValue",
         fe.method::text as "method",
         fe.vendor,
+        fe.employee_user_id::text as "employeeUserId",
+        fe.teacher_id::text as "teacherId",
         eu.full_name as "employeeName",
         t.full_name as "teacherName",
         fe.salary_mode::text as "salaryMode",
@@ -465,6 +538,7 @@ export async function getFinanceData(
         fe.salary_base_amount as "salaryBaseAmount",
         fe.salary_calculated_amount as "salaryCalculatedAmount",
         fe.receipt_file_name as "receiptFileName",
+        fe.receipt_file_path as "receiptFilePath",
         fe.receipt_reference as "receiptReference",
         fe.description
       from erp.finance_expenses fe
@@ -482,11 +556,16 @@ export async function getFinanceData(
     prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
       select
         fe.id::text as "id",
+        fec.id::text as "categoryId",
         fec.name as "category",
         fe.amount,
         to_char(fe.expense_date, 'DD.MM.YYYY') as "expenseDate",
+        to_char(fe.expense_date, 'YYYY-MM-DD') as "dateKey",
+        to_char(fe.expense_date, 'YYYY-MM-DD') as "expenseDateValue",
         fe.method::text as "method",
         fe.vendor,
+        fe.employee_user_id::text as "employeeUserId",
+        fe.teacher_id::text as "teacherId",
         eu.full_name as "employeeName",
         t.full_name as "teacherName",
         fe.salary_mode::text as "salaryMode",
@@ -494,6 +573,7 @@ export async function getFinanceData(
         fe.salary_base_amount as "salaryBaseAmount",
         fe.salary_calculated_amount as "salaryCalculatedAmount",
         fe.receipt_file_name as "receiptFileName",
+        fe.receipt_file_path as "receiptFilePath",
         fe.receipt_reference as "receiptReference",
         fe.description
       from erp.finance_expenses fe
@@ -562,14 +642,14 @@ export async function getFinanceData(
   const expenses = expenseRows.map(mapExpenseRow);
   const payrollItems = payrollRows.map(mapExpenseRow);
   const categoryLabel =
-    categoryRows.find((category) => category.id === normalizedFilters.category)?.name ??
-    "Butun kateqoriyalar";
+    formatFinanceCategoryName(categoryRows.find((category) => category.id === normalizedFilters.category)?.name ?? "") ||
+    "Bütün kateqoriyalar";
   const activeCount = [
     normalizedFilters.query,
     normalizedFilters.category,
     normalizedFilters.type !== "overview" ? normalizedFilters.type : "",
-    normalizedFilters.from,
-    normalizedFilters.to,
+    normalizedFilters.from !== defaultFrom ? normalizedFilters.from : "",
+    normalizedFilters.to !== defaultTo ? normalizedFilters.to : "",
   ].filter(Boolean).length;
 
   return {
@@ -585,10 +665,10 @@ export async function getFinanceData(
     },
     filterLabels: {
       category: categoryLabel,
-      type: movementTypes.find((item) => item.value === normalizedFilters.type)?.label ?? "Umumi statistika",
+      type: movementTypes.find((item) => item.value === normalizedFilters.type)?.label ?? "Ümumi baxış",
       period:
-        normalizedFilters.from || normalizedFilters.to
-          ? `${normalizedFilters.from || "..."} - ${normalizedFilters.to || "..."}`
+        normalizedFilters.from !== defaultFrom || normalizedFilters.to !== defaultTo
+          ? `${formatDisplayDateInput(normalizedFilters.from) || "..."} - ${formatDisplayDateInput(normalizedFilters.to) || "..."}`
           : "Cari ay",
     },
     summary: {
@@ -603,39 +683,39 @@ export async function getFinanceData(
     },
     kpis: [
       {
-        label: "Daxil olan odenis",
+        label: "Daxil olan ödəniş",
         value: formatAmount(income),
-        helper: `${formatCount(toNumber(summary.paymentCount))} qebul emeliyyati`,
+        helper: `${formatCount(toNumber(summary.paymentCount))} qəbul əməliyyatı`,
         tone: "success",
       },
       {
-        label: "Xercler",
+        label: "Xərclər",
         value: formatAmount(expense),
-        helper: `${formatCount(toNumber(summary.expenseCount))} xerc qeydi`,
+        helper: `${formatCount(toNumber(summary.expenseCount))} xərc qeydi`,
         tone: expense > income ? "danger" : "neutral",
       },
       {
-        label: "Net netice",
+        label: "Xalis qazanc",
         value: formatAmount(net),
-        helper: net >= 0 ? "Gelir xercden yuxaridir" : "Xerc gelirden yuxaridir",
+        helper: net >= 0 ? "Gəlir xərclərdən yüksəkdir" : "Xərclər gəlirdən yüksəkdir",
         tone: net >= 0 ? "success" : "danger",
       },
       {
-        label: "Maas fondu",
+        label: "Əməkhaqqı fondu",
         value: formatAmount(payroll),
-        helper: "Statik ve faizli maas xerc snapshot-i",
+        helper: "Sabit və faizli əməkhaqqı xərcləri",
         tone: "info",
       },
       {
-        label: "Aciq borc",
+        label: "Alacaqlar",
         value: formatAmount(debt),
-        helper: `${formatCount(toNumber(summary.debtors))} telebe uzre balans`,
+        helper: `${formatCount(toNumber(summary.debtors))} tələbə üzrə balans`,
         tone: debt > 0 ? "warning" : "success",
       },
     ],
     categories: categoryRows.map((category) => ({
       id: category.id,
-      name: category.name,
+      name: formatFinanceCategoryName(category.name),
       description: category.description ?? "",
       isSystem: category.isSystem,
     })),
@@ -650,7 +730,7 @@ export async function getFinanceData(
         code: student.code,
         phone: student.phone ?? "-",
         program: student.programName ?? "Proqram yoxdur",
-        teacher: student.teacherName ?? "Muellim teyin edilmeyib",
+        teacher: student.teacherName ?? "Müəllim təyin edilməyib",
         balance: formatAmount(balance),
         defaultAmount: formatDecimalInput(fallbackAmount),
         defaultPaymentDate: formatDateInput(today),
@@ -670,14 +750,23 @@ export async function getFinanceData(
     })),
     payments: paymentRows.map((payment) => ({
       id: payment.id,
+      studentId: payment.studentId,
       studentName: payment.studentName,
       studentCode: payment.studentCode,
       payerName: payment.payerName ?? payment.studentName,
       amount: formatAmount(payment.amount),
+      amountValue: toNumber(payment.amount),
+      amountInput: formatDecimalInput(payment.amount),
       paidAt: payment.paidAt,
+      dateKey: payment.dateKey,
+      paidDateValue: payment.paidDateValue,
       paymentMonth: payment.paymentMonth,
+      paymentMonthValue: payment.paymentMonthValue,
+      methodValue: payment.method,
       method: getStudentPaymentMethodLabel(payment.method),
       receipt: payment.receiptReference ?? payment.receiptFileName ?? "-",
+      receiptFilePath: payment.receiptFilePath ?? "",
+      receiptReference: payment.receiptReference ?? "",
       note: payment.note ?? "-",
     })),
     expenses,
@@ -690,28 +779,29 @@ export async function getFinanceData(
         studentCode: debtRow.studentCode,
         phone: debtRow.phone ?? "-",
         program: debtRow.programName ?? "Proqram yoxdur",
-        teacher: debtRow.teacherName ?? "Muellim teyin edilmeyib",
+        teacher: debtRow.teacherName ?? "Müəllim təyin edilməyib",
         balance: formatAmount(debtRow.balanceDue),
+        balanceValue: toNumber(debtRow.balanceDue),
         nextDueDate: debtRow.nextDueDate ?? "-",
-        overdueDays: overdueDays > 0 ? `${formatCount(overdueDays)} gun gecikir` : "Gecikme yoxdur",
+        overdueDays: overdueDays > 0 ? `${formatCount(overdueDays)} gün gecikir` : "Gecikmə yoxdur",
         tone: getDebtTone(overdueDays),
       };
     }),
     payrollItems,
     alerts: [
       {
-        label: "Borc nezareti",
-        value: debt > 0 ? `${formatAmount(debt)} aciq qalib` : "Borc yoxdur",
+        label: "Alacaq nəzarəti",
+        value: debt > 0 ? `${formatAmount(debt)} alacaq qalır` : "Alacaq yoxdur",
         tone: debt > 0 ? "warning" : "success",
       },
       {
-        label: "Maas hazirligi",
-        value: payroll > 0 ? `${formatAmount(payroll)} ayrilib` : "Maas xerc qeydi yoxdur",
+        label: "Əməkhaqqı hazırlığı",
+        value: payroll > 0 ? `${formatAmount(payroll)} ayrılıb` : "Əməkhaqqı xərci yoxdur",
         tone: payroll > 0 ? "info" : "neutral",
       },
       {
-        label: "Pul axini",
-        value: net >= 0 ? "Musbet balans" : "Xerc riski",
+        label: "Pul axını",
+        value: net >= 0 ? "Müsbət balans" : "Xərc riski",
         tone: net >= 0 ? "success" : "danger",
       },
     ],
@@ -839,6 +929,17 @@ function formatDateInput(value: Date) {
   ].join("-");
 }
 
+function formatDisplayDateInput(value: string) {
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!isoMatch) {
+    return value;
+  }
+
+  const [, year, month, day] = isoMatch;
+  return `${day}.${month}.${year}`;
+}
+
 function formatMonthInput(value: Date | string) {
   return new Date(value).toISOString().slice(0, 7);
 }
@@ -850,7 +951,7 @@ function formatDecimalInput(value: unknown) {
 
 function formatSalaryMode(value: string) {
   if (value === "STATIC") {
-    return "Statik";
+    return "Sabit";
   }
 
   if (value === "PERCENT") {
@@ -863,8 +964,8 @@ function formatSalaryMode(value: string) {
 function formatSalaryFormula(expense: ExpenseRow) {
   if (expense.salaryMode === "STATIC") {
     return expense.salaryCalculatedAmount
-      ? `${formatAmount(expense.salaryCalculatedAmount)} statik`
-      : "Statik";
+      ? `${formatAmount(expense.salaryCalculatedAmount)} sabit`
+      : "Sabit";
   }
 
   if (expense.salaryMode === "PERCENT") {
@@ -879,17 +980,62 @@ function formatSalaryFormula(expense: ExpenseRow) {
 function mapExpenseRow(expenseRow: ExpenseRow) {
   return {
     id: expenseRow.id,
-    category: expenseRow.category,
+    categoryId: expenseRow.categoryId,
+    category: formatFinanceCategoryName(expenseRow.category),
     amount: formatAmount(expenseRow.amount),
+    amountValue: toNumber(expenseRow.amount),
+    amountInput: formatDecimalInput(expenseRow.amount),
     expenseDate: expenseRow.expenseDate,
+    dateKey: expenseRow.dateKey,
+    expenseDateValue: expenseRow.expenseDateValue,
+    methodValue: expenseRow.method,
     method: getStudentPaymentMethodLabel(expenseRow.method),
     vendor: expenseRow.vendor ?? "-",
     staffName: expenseRow.teacherName ?? expenseRow.employeeName ?? "-",
+    staffTarget: expenseRow.teacherId
+      ? `teacher:${expenseRow.teacherId}`
+      : expenseRow.employeeUserId
+        ? `user:${expenseRow.employeeUserId}`
+        : "",
     salaryMode: formatSalaryMode(expenseRow.salaryMode),
     salaryFormula: formatSalaryFormula(expenseRow),
     receipt: expenseRow.receiptReference ?? expenseRow.receiptFileName ?? "-",
+    receiptFilePath: expenseRow.receiptFilePath ?? "",
+    receiptReference: expenseRow.receiptReference ?? "",
     description: expenseRow.description ?? "-",
   };
+}
+
+function formatFinanceCategoryName(value: string) {
+  const normalized = normalizeFinanceKeyword(value);
+
+  if (
+    normalized === "maas" ||
+    normalized === "maaş" ||
+    normalized === "emekhaqqi" ||
+    normalized === "əməkhaqqı" ||
+    normalized === "emek haqqi" ||
+    normalized === "əmək haqqı"
+  ) {
+    return "Əməkhaqqı";
+  }
+
+  if (normalized === "icare" || normalized === "kiraye") {
+    return "İcarə";
+  }
+
+  if (normalized === "temir") {
+    return "Təmir";
+  }
+
+  return value;
+}
+
+function normalizeFinanceKeyword(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFC");
 }
 
 function getDebtTone(overdueDays: number): StatusTone {

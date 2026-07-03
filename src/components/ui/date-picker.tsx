@@ -17,17 +17,18 @@ type DatePickerProps = {
   "aria-label"?: string;
   className?: string;
   popoverPlacement?: "default" | "floating";
+  compact?: boolean;
 };
 
-const weekDays = ["B.e", "C.a", "C", "C.a", "C", "S", "B"];
+const weekDays = ["B.e", "Ç.a", "Ç", "C.a", "C", "Ş", "B"];
 const monthNames = [
   "Yanvar",
   "Fevral",
   "Mart",
   "Aprel",
   "May",
-  "Iyun",
-  "Iyul",
+  "İyun",
+  "İyul",
   "Avqust",
   "Sentyabr",
   "Oktyabr",
@@ -46,6 +47,7 @@ export function DatePicker({
   "aria-label": ariaLabel,
   className,
   popoverPlacement = "default",
+  compact = false,
 }: DatePickerProps) {
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(defaultValue);
@@ -124,6 +126,7 @@ export function DatePicker({
   }, [isOpen, popoverPlacement]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
+  const yearOptions = useMemo(() => buildYearOptions(viewDate), [viewDate]);
   const todayValue = toPickerDate(new Date());
   const selectedDate = parsePickerDate(selectedValue);
 
@@ -144,6 +147,14 @@ export function DatePicker({
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + monthOffset, 1));
   }
 
+  function selectMonth(month: number) {
+    setViewDate((current) => new Date(current.getFullYear(), month, 1));
+  }
+
+  function selectYear(year: number) {
+    setViewDate((current) => new Date(year, current.getMonth(), 1));
+  }
+
   function selectToday() {
     selectDate(new Date());
   }
@@ -156,19 +167,44 @@ export function DatePicker({
   const popover = isOpen ? (
     <div
       ref={popoverRef}
-      className={cx("date-picker-popover", popoverPlacement === "floating" && "is-floating")}
+      className={cx(
+        "date-picker-popover",
+        popoverPlacement === "floating" && "is-floating",
+        compact && "is-compact"
+      )}
       style={popoverPlacement === "floating" ? floatingStyle : undefined}
       role="dialog"
       aria-label={ariaLabel ?? "Tarix sec"}
     >
       <div className="date-picker-head">
-        <button type="button" aria-label="Evvelki ay" onClick={() => shiftMonth(-1)}>
+        <button type="button" aria-label="Əvvəlki ay" onClick={() => shiftMonth(-1)}>
           <ChevronLeft size={16} />
         </button>
-        <strong>
-          {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
-        </strong>
-        <button type="button" aria-label="Novbeti ay" onClick={() => shiftMonth(1)}>
+        <div className="date-picker-current" aria-label="Göstərilən ay və il">
+          <select
+            aria-label="Ay seç"
+            value={viewDate.getMonth()}
+            onChange={(event) => selectMonth(Number(event.target.value))}
+          >
+            {monthNames.map((month, index) => (
+              <option key={month} value={index}>
+                {month}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="İl seç"
+            value={viewDate.getFullYear()}
+            onChange={(event) => selectYear(Number(event.target.value))}
+          >
+            {yearOptions.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="button" aria-label="Növbəti ay" onClick={() => shiftMonth(1)}>
           <ChevronRight size={16} />
         </button>
       </div>
@@ -206,21 +242,27 @@ export function DatePicker({
       <div className="date-picker-footer">
         {allowClear ? (
           <button type="button" onClick={clearDate}>
-            Temizle
+            Təmizlə
           </button>
         ) : (
           <span />
         )}
         <button type="button" onClick={selectToday}>
-          Bugun
+          Bu gün
         </button>
       </div>
     </div>
   ) : null;
 
   return (
-    <div ref={rootRef} className={cx("date-picker", className)}>
-      <input type="hidden" name={name} value={selectedValue} required={required} />
+    <div ref={rootRef} className={cx("date-picker", compact && "is-compact", className)}>
+      <input
+        type="hidden"
+        name={name}
+        value={selectedValue}
+        required={required}
+        suppressHydrationWarning
+      />
       <button
         type="button"
         className={cx("date-picker-trigger", isOpen && "is-open", selectedValue && "has-value")}
@@ -261,6 +303,13 @@ function buildCalendarDays(viewDate: Date) {
       isCurrentMonth: date.getMonth() === month,
     };
   });
+}
+
+function buildYearOptions(viewDate: Date) {
+  const currentYear = viewDate.getFullYear();
+  const startYear = currentYear - 8;
+
+  return Array.from({ length: 17 }, (_, index) => startYear + index);
 }
 
 function parsePickerDate(value?: string) {
