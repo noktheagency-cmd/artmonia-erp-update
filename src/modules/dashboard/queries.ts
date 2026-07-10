@@ -26,7 +26,12 @@ export type DashboardData = {
   revenueBars: Array<{
     label: string;
     value: number;
+    rawAmount: number;
     amount: string;
+    rawExpense: number;
+    expense: string;
+    rawProfit: number;
+    profit: string;
   }>;
   revenueStats: Array<{
     label: string;
@@ -76,6 +81,14 @@ export type DashboardData = {
     score: number;
   }>;
   conversionRate: string;
+  conversionHelper: string;
+  churnRate: string;
+  churnCounts: {
+    frozen: number;
+    stopped: number;
+    declined: number;
+    total: number;
+  };
   studentStatusCounts: Array<{
     label: string;
     count: number;
@@ -97,8 +110,11 @@ export type DashboardFilters = {
 type DashboardRawRow = {
   activeStudents: unknown;
   activeMrr: unknown;
+  periodRevenue: unknown;
+  periodExpenses: unknown;
   debtAmount: unknown;
   revenueRows: unknown;
+  expenseRows: unknown;
   taskRows: unknown;
   payoutPreview: unknown;
   waitingLeads: unknown;
@@ -113,6 +129,11 @@ type DashboardRawRow = {
 
 type DashboardRevenueRawRow = {
   paymentMonth: string;
+  amount: unknown;
+};
+
+type DashboardExpenseRawRow = {
+  expenseMonth: string;
   amount: unknown;
 };
 
@@ -166,7 +187,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const periodStart = dateRange.fromDate;
   const periodEndExclusive = addUtcDays(dateRange.toDate, 1);
   const selectedMonthStart = startOfMonth(today);
-  const firstRevenueMonth = addMonths(selectedMonthStart, -6);
+  const firstRevenueMonth = addMonths(selectedMonthStart, -11);
   const nextRevenueMonth = addMonths(selectedMonthStart, 1);
   
   const fetchDashboardRawData = async () =>
@@ -184,6 +205,18 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         where e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
           and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "activeMrr",
+      coalesce((
+        select sum(p.amount)
+        from erp.payments p
+        where p.paid_at >= ${periodStart}
+          and p.paid_at < ${periodEndExclusive}
+      ), 0) as "periodRevenue",
+      coalesce((
+        select sum(fe.amount)
+        from erp.finance_expenses fe
+        where fe.expense_date >= ${periodStart}
+          and fe.expense_date < ${periodEndExclusive}
+      ), 0) as "periodExpenses",
       coalesce((
         select sum(i.balance_due)
         from erp.invoices i
@@ -206,6 +239,22 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           group by p.payment_month
         ) revenue
       ), '[]'::jsonb) as "revenueRows",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'expenseMonth', expense.expense_month,
+            'amount', expense.amount
+          )
+          order by expense.expense_month asc
+        )
+        from (
+          select date_trunc('month', fe.expense_date)::date as expense_month, sum(fe.amount) as amount
+          from erp.finance_expenses fe
+          where fe.expense_date >= ${firstRevenueMonth}
+            and fe.expense_date < ${nextRevenueMonth}
+          group by date_trunc('month', fe.expense_date)::date
+        ) expense
+      ), '[]'::jsonb) as "expenseRows",
       coalesce((
         select jsonb_agg(
           jsonb_build_object('title', task_rows.title)
@@ -422,6 +471,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const [row] = rows;
 
   const revenueRows = asJsonArray<DashboardRevenueRawRow>(row?.revenueRows);
+  const expenseRows = asJsonArray<DashboardExpenseRawRow>(row?.expenseRows);
   const taskRows = asJsonArray<DashboardTaskRawRow>(row?.taskRows);
   const debtBucketRows = asJsonArray<DashboardDebtBucketRawRow>(row?.debtBuckets);
   const recentPaymentRows = asJsonArray<RawPaymentRow>(row?.recentPayments);
@@ -435,14 +485,21 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       toNumber(item.amount),
     ])
   );
+  const expenseByMonth = new Map(
+    expenseRows.map((item) => [
+      new Date(item.expenseMonth).toISOString().slice(0, 7),
+      toNumber(item.amount),
+    ])
+  );
   
-  const revenueAmounts = Array.from({ length: 7 }, (_, index) => {
+  const revenueAmounts = Array.from({ length: 12 }, (_, index) => {
     const month = addMonths(firstRevenueMonth, index);
     const key = month.toISOString().slice(0, 7);
 
     return {
       month,
       amount: revenueByMonth.get(key) ?? 0,
+      expense: expenseByMonth.get(key) ?? 0,
     };
   });
   
@@ -476,6 +533,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   
   const activeStudents = toNumber(row?.activeStudents);
   const activeMrr = toNumber(row?.activeMrr);
+  const netProfit = toNumber(row?.periodRevenue) - toNumber(row?.periodExpenses);
   const totalDebt = toNumber(row?.debtAmount);
   const payoutPreview = toNumber(row?.payoutPreview);
   const waitingLeads = toNumber(row?.waitingLeads);
@@ -486,6 +544,13 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const conversionRate = totalLeadsThisMonth > 0 
     ? `${Math.round((convertedLeadsThisMonth / totalLeadsThisMonth) * 100)}%`
     : "0%";
+  const churnByStatus = new Map(rawStatusCounts.map((item) => [item.status, toNumber(item.count)]));
+  const frozenStudents = churnByStatus.get("FROZEN") ?? 0;
+  const stoppedStudents = churnByStatus.get("STOPPED") ?? 0;
+  const declinedStudents = churnByStatus.get("DECLINED") ?? 0;
+  const totalStudents = rawStatusCounts.reduce((sum, item) => sum + toNumber(item.count), 0);
+  const totalChurn = frozenStudents + stoppedStudents + declinedStudents;
+  const churnRate = totalStudents > 0 ? `${Math.round((totalChurn / totalStudents) * 100)}%` : "0%";
 
   const recentPayments = recentPaymentRows.map((item) => ({
     id: item.id,
@@ -555,40 +620,40 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         tone: "light",
       },
       {
-        label: "Gecikən borclar",
-        value: formatAmount(totalDebt),
-        delta: "Ödənilməyən",
-        helper: "Ümumi faktura qalıqları",
+        label: "Net Profit",
+        value: formatAmount(netProfit),
+        delta: "Xalis gəlir",
+        helper: "Daxil olan ödənişlərdən xərclər çıxıldıqdan sonra",
         tone: "light",
       },
       {
-        label: "Müraciət çevrilməsi",
-        value: conversionRate,
-        delta: "Konversiya",
-        helper: `${totalLeadsThisMonth} yeni müraciət daxil olub`,
+        label: "Satış sayı",
+        value: formatCount(convertedLeadsThisMonth),
+        delta: "Yeni satışlar",
+        helper: `${totalLeadsThisMonth} müraciətdən çevrilib`,
         tone: "light",
       },
     ],
     revenueBars: revenueAmounts.map((item) => ({
       label: formatMonth(item.month),
       value: Math.max(8, Math.round((item.amount / maxRevenue) * 100)),
+      rawAmount: item.amount,
       amount: formatAmount(item.amount),
+      rawExpense: item.expense,
+      expense: formatAmount(item.expense),
+      rawProfit: item.amount - item.expense,
+      profit: formatAmount(item.amount - item.expense),
     })),
     revenueStats: [
       {
-        label: "Dövr üzrə gəlir",
+        label: "İllik gəlir dinamikası",
         value: formatAmount(totalRevenuePeriod),
-        helper: "Son 7 ayın ümumi ödənişi",
+        helper: "İllik ümumi dövriyyə",
       },
       {
-        label: "Aylıq orta",
+        label: "Aylıq orta göstərici",
         value: formatAmount(averageMonthlyRevenue),
-        helper: "Aylar üzrə orta göstərici",
-      },
-      {
-        label: "Cari ay",
-        value: formatAmount(currentMonthRevenue),
-        helper: `${daysElapsed}/${daysInMonth} gün tamamlanıb`,
+        helper: "Son 12 ay üzrə orta dövriyyə",
       },
     ],
     bestRevenueMonth: {
@@ -619,6 +684,14 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     programStats,
     teamPerformance,
     conversionRate,
+    conversionHelper: `${convertedLeadsThisMonth} satış / ${totalLeadsThisMonth} müraciət`,
+    churnRate,
+    churnCounts: {
+      frozen: frozenStudents,
+      stopped: stoppedStudents,
+      declined: declinedStudents,
+      total: totalChurn,
+    },
     studentStatusCounts,
   };
 }

@@ -3,8 +3,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import {
   AppRole,
   ApprovalStatus,
+  AttendanceMark,
   EnrollmentStatus,
   FinanceSalaryMode,
+  GroupWeekday,
   InvoiceStatus,
   LeadStage,
   PaymentAllocationMode,
@@ -12,6 +14,7 @@ import {
   PrismaClient,
   StudentLifecycleStatus,
   TaskStatus,
+  type Teacher,
 } from "../src/generated/prisma/client";
 import {
   permissionCatalog,
@@ -51,6 +54,11 @@ function roleName(role: AppRole) {
 }
 
 async function resetDemoData() {
+  await prisma.attendanceRecord.deleteMany();
+  await prisma.groupSession.deleteMany();
+  await prisma.groupMembership.deleteMany();
+  await prisma.groupSchedule.deleteMany();
+  await prisma.studentGroup.deleteMany();
   await prisma.financeExpense.deleteMany();
   await prisma.financeExpenseCategory.deleteMany();
   await prisma.paymentAllocation.deleteMany();
@@ -148,6 +156,11 @@ async function seedRolesAndUsers() {
         email: "finance@artmonia.local",
         phone: "+994501110104",
       },
+      {
+        fullName: "Aysel H.",
+        email: "aysel.teacher@artmonia.local",
+        phone: "+994504421001",
+      },
     ],
   });
 
@@ -157,6 +170,7 @@ async function seedRolesAndUsers() {
     ["admin@artmonia.local", AppRole.ADMIN],
     ["sales@artmonia.local", AppRole.SALES],
     ["finance@artmonia.local", AppRole.FINANCE],
+    ["aysel.teacher@artmonia.local", AppRole.TEACHER],
   ];
 
   await prisma.userRole.createMany({
@@ -180,10 +194,11 @@ async function seedRolesAndUsers() {
     admin: userByEmail.get("admin@artmonia.local")!,
     sales: userByEmail.get("sales@artmonia.local")!,
     finance: userByEmail.get("finance@artmonia.local")!,
+    teacher: userByEmail.get("aysel.teacher@artmonia.local")!,
   };
 }
 
-async function seedTeachersAndPrograms(ownerId: string) {
+async function seedTeachersAndPrograms(ownerId: string, teacherUserId: string) {
   const teacherSeed = [
     ["Aysel H.", "+994504421001", 44],
     ["Nigar R.", "+994504421002", 38],
@@ -191,7 +206,7 @@ async function seedTeachersAndPrograms(ownerId: string) {
     ["Leyla S.", "+994504421004", 28],
   ] as const;
 
-  const teachers = [];
+  const teachers: Teacher[] = [];
 
   for (const [fullName, phone, capacity] of teacherSeed) {
     const contact = await prisma.contact.create({
@@ -205,6 +220,7 @@ async function seedTeachersAndPrograms(ownerId: string) {
 
     const teacher = await prisma.teacher.create({
       data: {
+        userId: teachers.length === 0 ? teacherUserId : undefined,
         contactId: contact.id,
         fullName,
         phone,
@@ -546,6 +562,98 @@ async function seedStudentsAndFinance(input: {
   return students;
 }
 
+async function seedGroupsAndJournal(input: {
+  ownerId: string;
+  students: Awaited<ReturnType<typeof seedStudentsAndFinance>>;
+}) {
+  const h1 = await prisma.studentGroup.create({
+    data: {
+      code: "H1",
+      capacity: 12,
+      createdById: input.ownerId,
+      schedules: {
+        create: [
+          { weekday: GroupWeekday.TUESDAY, startTime: "11:00", endTime: "14:00" },
+          { weekday: GroupWeekday.WEDNESDAY, startTime: "11:00", endTime: "14:00" },
+          { weekday: GroupWeekday.THURSDAY, startTime: "11:00", endTime: "14:00" },
+        ],
+      },
+    },
+  });
+
+  const h2 = await prisma.studentGroup.create({
+    data: {
+      code: "H2",
+      capacity: 10,
+      createdById: input.ownerId,
+      schedules: {
+        create: [
+          { weekday: GroupWeekday.MONDAY, startTime: "15:00", endTime: "18:00" },
+          { weekday: GroupWeekday.WEDNESDAY, startTime: "15:00", endTime: "18:00" },
+          { weekday: GroupWeekday.FRIDAY, startTime: "15:00", endTime: "18:00" },
+        ],
+      },
+    },
+  });
+
+  const membershipSeeds = [
+    { groupId: h1.id, row: input.students[0] },
+    { groupId: h1.id, row: input.students[1] },
+    { groupId: h1.id, row: input.students[4] },
+    { groupId: h2.id, row: input.students[3] },
+    { groupId: h2.id, row: input.students[5] },
+  ];
+  const memberships = [];
+
+  for (const seed of membershipSeeds) {
+    if (!seed.row.enrollment.teacherId) {
+      continue;
+    }
+
+    memberships.push(
+      await prisma.groupMembership.create({
+        data: {
+          groupId: seed.groupId,
+          enrollmentId: seed.row.enrollment.id,
+          teacherId: seed.row.enrollment.teacherId,
+          joinedAt: date("2026-07-01"),
+          assignedById: input.ownerId,
+        },
+      })
+    );
+  }
+
+  const fridaySchedule = await prisma.groupSchedule.findUniqueOrThrow({
+    where: {
+      groupId_weekday: {
+        groupId: h2.id,
+        weekday: GroupWeekday.FRIDAY,
+      },
+    },
+  });
+  const session = await prisma.groupSession.create({
+    data: {
+      groupId: h2.id,
+      scheduleId: fridaySchedule.id,
+      sessionDate: date("2026-07-10"),
+      startTime: fridaySchedule.startTime,
+      endTime: fridaySchedule.endTime,
+      createdById: input.ownerId,
+    },
+  });
+  const h2Memberships = memberships.filter((membership) => membership.groupId === h2.id);
+
+  await prisma.attendanceRecord.createMany({
+    data: h2Memberships.map((membership, index) => ({
+      sessionId: session.id,
+      membershipId: membership.id,
+      teacherId: membership.teacherId,
+      status: index === 0 ? AttendanceMark.PRESENT : AttendanceMark.ABSENT,
+      markedById: input.ownerId,
+    })),
+  });
+}
+
 async function seedFinanceExpenseLedger(input: {
   ownerId: string;
   financeId: string;
@@ -700,7 +808,7 @@ async function seedTasksTargetsAndAudit(input: {
 async function main() {
   await resetDemoData();
   const users = await seedRolesAndUsers();
-  const catalog = await seedTeachersAndPrograms(users.owner.id);
+  const catalog = await seedTeachersAndPrograms(users.owner.id, users.teacher.id);
   const students = await seedStudentsAndFinance({
     ownerId: users.owner.id,
     adminId: users.admin.id,
@@ -708,6 +816,10 @@ async function main() {
     financeId: users.finance.id,
     teachers: catalog.teachers,
     programs: catalog.programs,
+  });
+  await seedGroupsAndJournal({
+    ownerId: users.owner.id,
+    students,
   });
   await seedFinanceExpenseLedger({
     ownerId: users.owner.id,

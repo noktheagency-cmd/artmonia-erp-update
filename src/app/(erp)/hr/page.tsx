@@ -1,6 +1,7 @@
 import { HrPerformancePanel } from "@/modules/hr/hr-performance-panel";
 import { getHrPerformanceData } from "@/modules/hr/performance-data";
 import { getTeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
+import { linkTeacherAccountAction } from "@/modules/hr/actions";
 
 export default async function HrPage({
   searchParams,
@@ -16,5 +17,5 @@ export default async function HrPage({
     getTeacherDirectoryData(),
   ]);
 
-  return <HrPerformancePanel data={data} teacherData={teacherData} />;
+  return <HrPerformancePanel data={data} teacherData={teacherData} teacherAccountAction={linkTeacherAccountAction} />;
 }

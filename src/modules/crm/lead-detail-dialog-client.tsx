@@ -1,6 +1,15 @@
 "use client";
 
-import { CalendarClock, Clock3, History, Pencil, Phone, UserRound } from "lucide-react";
+import {
+  CalendarClock,
+  CircleUserRound,
+  Clock3,
+  FileText,
+  History,
+  Pencil,
+  Phone,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +22,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Input } from "@/components/ui/input";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { CrmData } from "@/modules/crm/queries";
@@ -44,174 +58,168 @@ export function LeadDetailDialogClient({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="lead-open-button" type="button">
+        <button className="crm-lead-open-button" type="button">
           <strong>{lead.name}</strong>
           <span>Profili aç</span>
         </button>
       </DialogTrigger>
-      <DialogContent className="lead-detail-dialog">
+      <DialogContent className="crm-modern-dialog crm-detail-dialog">
         <DialogHeader>
-          <DialogTitle>{lead.name}</DialogTitle>
-          <DialogDescription>
-            Müraciət profili, redaktə olunan CRM sahələri və son aktivlik.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="lead-detail-summary">
-          <div>
-            <Phone />
-            <span>{lead.phone}</span>
-          </div>
-          <div>
-            <UserRound />
-            <span>{lead.manager}</span>
-          </div>
-          <div>
-            <CalendarClock />
-            <span>{lead.nextFollowUpAt}</span>
-          </div>
-          <div>
-            <Clock3 />
-            <span>{lead.nextActionTypeLabel}</span>
-          </div>
-        </div>
-
-        <form action={updateLeadAction} className="crm-form crm-form-dialog">
-          <input name="leadId" type="hidden" value={lead.id} />
-          <input name="returnTo" type="hidden" value={returnTo} />
-
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Ad və soyad</span>
-              <Input
-                name="fullName"
-                defaultValue={lead.detail.fullName}
-                required
-                minLength={2}
-                maxLength={120}
-              />
-            </label>
-            <label className="form-field">
-              <span>Telefon</span>
-              <Input name="phone" defaultValue={lead.detail.phone} maxLength={40} />
-            </label>
-          </div>
-
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Mənbə</span>
-              <FormSelect
-                name="source"
-                defaultValue={lead.detail.source}
-                emptyLabel="Seçilməyib"
-                options={buildCrmSourceSelectOptions(sourceOptions)}
-              />
-            </label>
-            <label className="form-field">
-              <span>Proqram</span>
-              <FormSelect
-                name="programId"
-                defaultValue={lead.detail.programId}
-                emptyLabel="Seçilməyib"
-                options={programs.map((program) => ({
-                  value: program.id,
-                  label: program.name,
-                }))}
-              />
-            </label>
-          </div>
-
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Məsul şəxs</span>
-              <FormSelect
-                name="managerId"
-                defaultValue={lead.detail.managerId}
-                emptyLabel="Avtomatik təyin et"
-                options={managers.map((manager) => ({
-                  value: manager.id,
-                  label: manager.fullName,
-                }))}
-              />
-            </label>
-            <label className="form-field">
-              <span>Status</span>
-              <FormSelect
-                name="stage"
-                defaultValue={lead.detail.stage}
-                options={leadStageSelectOptions}
-              />
-            </label>
-          </div>
-
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Prioritet</span>
-              <FormSelect
-                name="priority"
-                defaultValue={lead.detail.priority}
-                options={leadPrioritySelectOptions}
-              />
-            </label>
-            <label className="form-field">
-              <span>Növbəti addım</span>
-              <FormSelect
-                name="nextActionType"
-                defaultValue={lead.detail.nextActionType}
-                emptyLabel="Təyin edilməyib"
-                options={nextActionTypeSelectOptions}
-              />
-            </label>
-          </div>
-
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Növbəti addım tarixi</span>
-              <DatePicker
-                name="nextFollowUpDate"
-                defaultValue={lead.detail.nextFollowUpDate}
-              />
-            </label>
-            <label className="form-field">
-              <span>Yeniləmə qeydi</span>
-              <Input name="note" placeholder="Səbəb və ya növbəti addım" maxLength={240} />
-            </label>
-          </div>
-
-          <div className="lead-history">
-            <div className="lead-history-title">
-              <History />
-              <span>Müraciət tarixçəsi</span>
+          <div className="crm-detail-title-row">
+            <span className="crm-detail-avatar" aria-hidden="true">
+              {lead.name.slice(0, 2).toUpperCase()}
+            </span>
+            <div>
+              <DialogTitle>{lead.name}</DialogTitle>
+              <DialogDescription>Müraciət profili, izləmə planı və CRM tarixçəsi.</DialogDescription>
+            </div>
+            <div className="crm-detail-statuses">
               <StatusChip tone={lead.stageTone}>{lead.stageLabel}</StatusChip>
               <StatusChip tone={lead.priorityTone}>{lead.priorityLabel}</StatusChip>
             </div>
-            {lead.detail.timeline.length > 0 ? (
-              <ol>
-                {lead.detail.timeline.map((item) => (
-                  <li key={item.id}>
-                    <strong>{item.label}</strong>
-                    <span>{item.reason}</span>
-                    <small>
-                      {item.date} - {item.changedBy}
-                    </small>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p>Tarixçə yoxdur</p>
-            )}
+          </div>
+        </DialogHeader>
+
+        <div className="crm-detail-summary">
+          <div><Phone aria-hidden="true" /><span>Telefon</span><strong>{lead.phone}</strong></div>
+          <div><UserRound aria-hidden="true" /><span>Məsul</span><strong>{lead.manager}</strong></div>
+          <div><CalendarClock aria-hidden="true" /><span>İzləmə tarixi</span><strong>{lead.nextFollowUpAt}</strong></div>
+          <div><Clock3 aria-hidden="true" /><span>Növbəti addım</span><strong>{lead.nextActionTypeLabel}</strong></div>
+        </div>
+
+        <form action={updateLeadAction} className="crm-dialog-form">
+          <input name="leadId" type="hidden" value={lead.id} />
+          <input name="returnTo" type="hidden" value={returnTo} />
+
+          <div className="crm-dialog-scroll crm-detail-scroll">
+            <section className="crm-dialog-section">
+              <header><CircleUserRound aria-hidden="true" /><h3>Profil və maraq</h3></header>
+              <FieldGroup className="crm-dialog-fields">
+                <Field>
+                  <FieldLabel htmlFor={`lead-name-${lead.id}`}>Ad və soyad</FieldLabel>
+                  <InputGroup>
+                    <InputGroupAddon aria-hidden="true"><CircleUserRound /></InputGroupAddon>
+                    <InputGroupInput
+                      id={`lead-name-${lead.id}`}
+                      name="fullName"
+                      defaultValue={lead.detail.fullName}
+                      required
+                      minLength={2}
+                      maxLength={120}
+                    />
+                  </InputGroup>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`lead-phone-${lead.id}`}>Telefon</FieldLabel>
+                  <InputGroup>
+                    <InputGroupAddon aria-hidden="true"><Phone /></InputGroupAddon>
+                    <InputGroupInput
+                      id={`lead-phone-${lead.id}`}
+                      name="phone"
+                      defaultValue={lead.detail.phone}
+                      maxLength={40}
+                    />
+                  </InputGroup>
+                </Field>
+                <Field>
+                  <FieldLabel>Mənbə</FieldLabel>
+                  <FormSelect
+                    aria-label="Mənbə"
+                    name="source"
+                    defaultValue={lead.detail.source}
+                    emptyLabel="Seçilməyib"
+                    options={buildCrmSourceSelectOptions(sourceOptions)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Proqram</FieldLabel>
+                  <FormSelect
+                    aria-label="Proqram"
+                    name="programId"
+                    defaultValue={lead.detail.programId}
+                    emptyLabel="Seçilməyib"
+                    options={programs.map((program) => ({ value: program.id, label: program.name }))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Məsul şəxs</FieldLabel>
+                  <FormSelect
+                    aria-label="Məsul şəxs"
+                    name="managerId"
+                    defaultValue={lead.detail.managerId}
+                    emptyLabel="Avtomatik təyin et"
+                    options={managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Status</FieldLabel>
+                  <FormSelect aria-label="Status" name="stage" defaultValue={lead.detail.stage} options={leadStageSelectOptions} />
+                </Field>
+              </FieldGroup>
+            </section>
+
+            <section className="crm-dialog-section">
+              <header><CalendarClock aria-hidden="true" /><h3>İzləmə planı</h3></header>
+              <FieldGroup className="crm-dialog-fields">
+                <Field>
+                  <FieldLabel>Prioritet</FieldLabel>
+                  <FormSelect
+                    aria-label="Prioritet"
+                    name="priority"
+                    defaultValue={lead.detail.priority}
+                    options={leadPrioritySelectOptions}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Növbəti addım</FieldLabel>
+                  <FormSelect
+                    aria-label="Növbəti addım"
+                    name="nextActionType"
+                    defaultValue={lead.detail.nextActionType}
+                    emptyLabel="Təyin edilməyib"
+                    options={nextActionTypeSelectOptions}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Növbəti addım tarixi</FieldLabel>
+                  <DatePicker name="nextFollowUpDate" defaultValue={lead.detail.nextFollowUpDate} />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`lead-note-${lead.id}`}>Yeniləmə qeydi</FieldLabel>
+                  <InputGroup>
+                    <InputGroupAddon aria-hidden="true"><FileText /></InputGroupAddon>
+                    <InputGroupInput
+                      id={`lead-note-${lead.id}`}
+                      name="note"
+                      placeholder="Səbəb və ya növbəti addım"
+                      maxLength={240}
+                    />
+                  </InputGroup>
+                </Field>
+              </FieldGroup>
+            </section>
+
+            <section className="crm-dialog-section crm-history-section">
+              <header><History aria-hidden="true" /><h3>Müraciət tarixçəsi</h3></header>
+              {lead.detail.timeline.length > 0 ? (
+                <ol className="crm-history-list">
+                  {lead.detail.timeline.map((item) => (
+                    <li key={item.id}>
+                      <span aria-hidden="true" />
+                      <div><strong>{item.label}</strong><p>{item.reason}</p></div>
+                      <small>{item.date} · {item.changedBy}</small>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="crm-history-empty"><History aria-hidden="true" />Tarixçə yoxdur</div>
+              )}
+            </section>
           </div>
 
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="ghost">
-                Ləğv et
-              </Button>
-            </DialogClose>
-            <Button type="submit">
-              <Pencil data-icon="inline-start" />
-              Yadda saxla
-            </Button>
+          <DialogFooter className="crm-dialog-actions">
+            <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
+            <Button type="submit"><Pencil data-icon="inline-start" />Yadda saxla</Button>
           </DialogFooter>
         </form>
       </DialogContent>

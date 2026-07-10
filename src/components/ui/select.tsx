@@ -243,11 +243,13 @@ export function FormSelect({
           </div>
         ) : null}
         {filteredItems.length > 0 ? (
-          filteredItems.map((item) => (
-            <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
-              {item.label}
-            </SelectItem>
-          ))
+          <SelectGroup>
+            {filteredItems.map((item) => (
+              <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
         ) : (
           <div className="ui-select-empty-state">Nəticə tapılmadı</div>
         )}

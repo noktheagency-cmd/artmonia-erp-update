@@ -146,9 +146,11 @@ const metricToneMap: Record<HrPerformanceMetric["tone"], HrTone> = {
 export function HrPerformancePanel({
   data,
   teacherData,
+  teacherAccountAction,
 }: {
   data: HrPerformanceData;
   teacherData: TeacherDirectoryData;
+  teacherAccountAction: (formData: FormData) => Promise<void>;
 }) {
   const initialWorkspace = useMemo(() => createWorkspaceState(data), [data]);
   const [workspace, setWorkspace] = useState(initialWorkspace);
@@ -249,7 +251,7 @@ export function HrPerformancePanel({
         />
       )}
       {activeTab === "employees" && <EmployeeCrud />}
-      {activeTab === "teachers" && <TeacherDirectoryPanel data={teacherData} />}
+      {activeTab === "teachers" && <TeacherDirectoryPanel data={teacherData} teacherAccountAction={teacherAccountAction} />}
       {activeTab === "daily" && (
         <DailyTab
           data={data}

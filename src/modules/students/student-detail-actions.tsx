@@ -68,10 +68,10 @@ export function StudentDetailActions({
     <div className="student-actions-row">
       <Dialog open={statusOpen} onOpenChange={setStatusOpen}>
         <DialogTrigger asChild>
-          <button className="ui-button ui-button-outline" type="button" disabled={!permissions.canChangeStatus}>
-            <RefreshCcw size={16} />
+          <Button variant="outline" type="button" disabled={!permissions.canChangeStatus}>
+            <RefreshCcw data-icon="inline-start" />
             Status dəyiş
-          </button>
+          </Button>
         </DialogTrigger>
         <DialogContent className="student-payment-dialog">
           <DialogHeader>
@@ -134,10 +134,10 @@ export function StudentDetailActions({
       {/* Record Payment Dialog */}
       <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
         <DialogTrigger asChild>
-          <button className="ui-button ui-button-secondary" type="button" disabled={!permissions.canRecordPayment}>
-            <Banknote size={16} />
+          <Button variant="secondary" type="button" disabled={!permissions.canRecordPayment}>
+            <Banknote data-icon="inline-start" />
             Ödəniş qəbul et
-          </button>
+          </Button>
         </DialogTrigger>
         <DialogContent className="student-payment-dialog">
           <DialogHeader>
@@ -232,10 +232,10 @@ export function StudentDetailActions({
       {/* Edit Student Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogTrigger asChild>
-          <button className="dark-action" type="button" disabled={!permissions.canCreateStudent}>
-            <Edit size={16} />
+          <Button type="button" disabled={!permissions.canCreateStudent}>
+            <Edit data-icon="inline-start" />
             Redaktə et
-          </button>
+          </Button>
         </DialogTrigger>
         <DialogContent className="student-edit-dialog">
           <DialogHeader>

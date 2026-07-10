@@ -1,4 +1,4 @@
-import { ChevronLeft, Banknote, Phone, ReceiptText, UserRound, CalendarDays, History, Clock3 } from "lucide-react";
+import { ChevronLeft, Banknote, Phone, ReceiptText, UserRound, CalendarDays, History, Clock3, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { getStudentDetailData } from "@/modules/students/queries";
 import {
@@ -27,12 +27,12 @@ export default async function StudentDetailPage({
   const { student, permissions } = data;
 
   return (
-    <section className="page-stack student-detail-page">
+    <section className="page-stack student-detail-page student-detail-modern-page">
       <div className="page-heading list-heading">
         <div className="student-header-back-col">
           <Link href="/students" className="back-link">
             <ChevronLeft size={16} />
-            <span>CRM-ə qayıt</span>
+            <span>Tələbələrə qayıt</span>
           </Link>
           <div className="student-header-title-row">
             <h1>{student.name}</h1>
@@ -50,24 +50,65 @@ export default async function StudentDetailPage({
         />
       </div>
 
-      <div className="lead-detail-summary student-detail-summary">
-        <div>
+      <div className="lead-detail-summary student-detail-summary student-profile-quick-grid">
+        <div className="student-profile-quick-item">
           <Phone />
-          <span>{student.phone}</span>
+          <span><small>Əlaqə</small><strong>{student.phone}</strong></span>
         </div>
-        <div>
+        <div className="student-profile-quick-item">
           <ReceiptText />
-          <span>{student.program}</span>
+          <span><small>Proqram</small><strong>{student.program}</strong></span>
         </div>
-        <div>
+        <div className="student-profile-quick-item">
           <UserRound />
-          <span>{student.teacher}</span>
+          <span><small>Müəllim</small><strong>{student.teacher}</strong></span>
         </div>
-        <div>
+        <div className="student-profile-quick-item is-balance">
           <Banknote />
-          <span>{student.balance}</span>
+          <span><small>Açıq balans</small><strong>{student.balance}</strong></span>
         </div>
       </div>
+
+      <section className="student-clv-profile" aria-labelledby="student-clv-title">
+        <div className="student-detail-section-title">
+          <TrendingUp />
+          <span id="student-clv-title">Tələbə CLV-si</span>
+        </div>
+        <div className="student-clv-summary-grid">
+          <div>
+            <span>Toplam ödənilən məbləğ</span>
+            <strong>{student.clv.totalPaid}</strong>
+          </div>
+          <div>
+            <span>Ödəniş edilmiş aylar</span>
+            <strong>{student.clv.paidMonths} ay</strong>
+          </div>
+          {student.paymentTone !== "success" && (
+            <div className="is-debt">
+              <span>Qalan borc</span>
+              <strong>{student.balance}</strong>
+            </div>
+          )}
+        </div>
+        <div className="student-clv-history">
+          <div className="student-clv-history-head">
+            <span>Aylıq ödəniş tarixçəsi</span>
+            <span>Məbləğ</span>
+            <span>Son ödəniş</span>
+          </div>
+          {student.detail.monthlyPayments.length > 0 ? (
+            student.detail.monthlyPayments.map((payment) => (
+              <div className="student-clv-history-row" key={payment.month}>
+                <span>{payment.month}</span>
+                <strong>{payment.amount}</strong>
+                <span>{payment.paidAt}</span>
+              </div>
+            ))
+          ) : (
+            <div className="student-detail-empty">Ödəniş tarixçəsi yoxdur</div>
+          )}
+        </div>
+      </section>
 
       <div className="student-detail-layout">
         <section className="student-detail-section">

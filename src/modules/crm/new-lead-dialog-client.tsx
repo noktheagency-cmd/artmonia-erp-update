@@ -2,10 +2,21 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Plus, UserPlus } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  CalendarClock,
+  CircleUserRound,
+  FileText,
+  LoaderCircle,
+  Phone,
+  Plus,
+  UserPlus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -14,7 +25,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Input } from "@/components/ui/input";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
 import {
   leadPrioritySelectOptions,
@@ -32,9 +48,7 @@ type DuplicateMatch = {
   leads: Array<{ stage: string; createdAt: string }>;
 };
 
-type DuplicateResponse = {
-  matches: DuplicateMatch[];
-};
+type DuplicateResponse = { matches: DuplicateMatch[] };
 
 export function NewLeadDialogClient({
   programs,
@@ -45,9 +59,7 @@ export function NewLeadDialogClient({
   programs: Array<{ id: string; name: string }>;
   managers: Array<{ id: string; fullName: string }>;
   sourceOptions: string[];
-  createLeadAction: (
-    formData: FormData
-  ) => Promise<CreateLeadFormState>;
+  createLeadAction: (formData: FormData) => Promise<CreateLeadFormState>;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -57,25 +69,32 @@ export function NewLeadDialogClient({
   const [isSubmitting, startSubmitting] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  function resetDialogState() {
+    setDuplicates([]);
+    setSubmitError(null);
+  }
+
+  function handleOpenChange(open: boolean) {
+    setIsOpen(open);
+    if (!open) resetDialogState();
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-
     setSubmitError(null);
 
     startSubmitting(async () => {
       const result = await createLeadAction(formData);
-
       if (result.status === "success") {
         setIsOpen(false);
-        setDuplicates([]);
+        resetDialogState();
         form.reset();
         router.replace("/crm?tab=list&leadCreated=1", { scroll: false });
         router.refresh();
         return;
       }
-
       setSubmitError(result.message ?? "Müraciət yaradılmadı.");
     });
   }
@@ -92,12 +111,10 @@ export function NewLeadDialogClient({
           `/api/crm/phone-duplicates?phone=${encodeURIComponent(value)}`,
           { cache: "no-store" }
         );
-
         if (!response.ok) {
           setDuplicates([]);
           return;
         }
-
         const payload = (await response.json()) as DuplicateResponse;
         setDuplicates(payload.matches);
       } catch {
@@ -107,16 +124,14 @@ export function NewLeadDialogClient({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button className="crm-primary-button crm-new-lead-trigger" type="button">
-          <span className="crm-new-lead-icon" aria-hidden="true">
-            <UserPlus size={16} />
-          </span>
+        <Button className="crm-new-lead-trigger" type="button">
+          <UserPlus data-icon="inline-start" />
           Yeni müraciət
         </Button>
       </DialogTrigger>
-      <DialogContent className="lead-dialog-content">
+      <DialogContent className="crm-modern-dialog crm-create-dialog">
         <DialogHeader>
           <DialogTitle>Yeni müraciət</DialogTitle>
           <DialogDescription>
@@ -124,143 +139,149 @@ export function NewLeadDialogClient({
           </DialogDescription>
         </DialogHeader>
 
-        <form ref={formRef} onSubmit={handleSubmit} className="crm-form crm-form-dialog">
-          <label className="form-field">
-            <span>Ad və soyad</span>
-            <Input name="fullName" required minLength={2} maxLength={120} />
-          </label>
+        <div className="crm-dialog-steps" aria-label="Müraciət yaratma bölmələri">
+          <div className="is-active"><span>1</span><strong>Əlaqə</strong></div>
+          <div><span>2</span><strong>Maraq</strong></div>
+          <div><span>3</span><strong>İzləmə</strong></div>
+        </div>
 
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Telefon</span>
-              <Input
-                name="phone"
-                maxLength={40}
-                onBlur={(event) => checkPhone(event.currentTarget.value)}
-              />
-            </label>
-            <label className="form-field">
-              <span>Mənbə</span>
-              <FormSelect
-                name="source"
-                defaultValue="Instagram"
-                options={buildCrmSourceSelectOptions(sourceOptions)}
-              />
-            </label>
-          </div>
+        <form ref={formRef} onSubmit={handleSubmit} className="crm-dialog-form">
+          <div className="crm-dialog-scroll">
+            <section className="crm-dialog-section">
+              <header>
+                <CircleUserRound aria-hidden="true" />
+                <h3>Əlaqə məlumatları</h3>
+              </header>
+              <FieldGroup className="crm-dialog-fields">
+                <Field className="is-full">
+                  <FieldLabel htmlFor="new-lead-name">Ad və soyad</FieldLabel>
+                  <InputGroup>
+                    <InputGroupAddon aria-hidden="true"><CircleUserRound /></InputGroupAddon>
+                    <InputGroupInput id="new-lead-name" name="fullName" required minLength={2} maxLength={120} />
+                  </InputGroup>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="new-lead-phone">Telefon</FieldLabel>
+                  <InputGroup>
+                    <InputGroupAddon aria-hidden="true"><Phone /></InputGroupAddon>
+                    <InputGroupInput
+                      id="new-lead-phone"
+                      name="phone"
+                      maxLength={40}
+                      onBlur={(event) => checkPhone(event.currentTarget.value)}
+                    />
+                  </InputGroup>
+                  <FieldDescription>
+                    {isChecking ? "Telefon nömrəsi yoxlanılır..." : "Dublikat qeyd avtomatik yoxlanılır"}
+                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel>Mənbə</FieldLabel>
+                  <FormSelect
+                    aria-label="Mənbə"
+                    name="source"
+                    defaultValue="Instagram"
+                    options={buildCrmSourceSelectOptions(sourceOptions)}
+                  />
+                </Field>
+              </FieldGroup>
 
-          {isChecking ? (
-            <div className="duplicate-alert duplicate-muted">Telefon yoxlanılır...</div>
-          ) : null}
+              {duplicates.length > 0 ? (
+                <div className="crm-duplicate-alert" role="alert">
+                  <AlertTriangle aria-hidden="true" />
+                  <div>
+                    <strong>Bu telefonla oxşar qeyd tapıldı</strong>
+                    {duplicates.map((match) => {
+                      const studentCodes = match.students.map((student) => student.code).join(", ");
+                      const leadStages = match.leads.map((lead) => formatLeadStageLabel(lead.stage)).join(", ");
+                      return (
+                        <p key={match.id}>
+                          {match.fullName} · {match.phone}
+                          {studentCodes ? ` · Tələbə: ${studentCodes}` : ""}
+                          {leadStages ? ` · Mərhələ: ${leadStages}` : ""}
+                        </p>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </section>
 
-          {duplicates.length > 0 ? (
-            <div className="duplicate-alert" role="alert">
-              <AlertTriangle data-icon="inline-start" />
-              <div>
-                <strong>Bu telefonla oxşar qeyd tapıldı</strong>
-                {duplicates.map((match) => {
-                  const studentCodes = match.students
-                    .map((student) => student.code)
-                    .join(", ");
-                  const leadStages = match.leads
-                    .map((lead) => formatLeadStageLabel(lead.stage))
-                    .join(", ");
+            <section className="crm-dialog-section">
+              <header>
+                <BookOpen aria-hidden="true" />
+                <h3>Maraq və məsuliyyət</h3>
+              </header>
+              <FieldGroup className="crm-dialog-fields">
+                <Field>
+                  <FieldLabel>Proqram</FieldLabel>
+                  <FormSelect
+                    aria-label="Proqram"
+                    name="programId"
+                    defaultValue=""
+                    emptyLabel="Seçilməyib"
+                    options={programs.map((program) => ({ value: program.id, label: program.name }))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Məsul şəxs</FieldLabel>
+                  <FormSelect
+                    aria-label="Məsul şəxs"
+                    name="managerId"
+                    defaultValue=""
+                    emptyLabel="Avtomatik təyin et"
+                    options={managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Status</FieldLabel>
+                  <FormSelect aria-label="Status" name="stage" defaultValue="NEW" options={leadStageSelectOptions} />
+                </Field>
+                <Field>
+                  <FieldLabel>Prioritet</FieldLabel>
+                  <FormSelect aria-label="Prioritet" name="priority" defaultValue="NORMAL" options={leadPrioritySelectOptions} />
+                </Field>
+              </FieldGroup>
+            </section>
 
-                  return (
-                    <p key={match.id}>
-                      {match.fullName} - {match.phone}
-                      {studentCodes ? ` - Tələbə: ${studentCodes}` : ""}
-                      {leadStages ? ` - Müraciət mərhələsi: ${leadStages}` : ""}
-                    </p>
-                  );
-                })}
+            <section className="crm-dialog-section">
+              <header>
+                <CalendarClock aria-hidden="true" />
+                <h3>Növbəti addım</h3>
+              </header>
+              <FieldGroup className="crm-dialog-fields">
+                <Field>
+                  <FieldLabel>Növbəti addım</FieldLabel>
+                  <FormSelect aria-label="Növbəti addım" name="nextActionType" defaultValue="CALL" options={nextActionTypeSelectOptions} />
+                </Field>
+                <Field>
+                  <FieldLabel>Növbəti addım tarixi</FieldLabel>
+                  <DatePicker name="nextFollowUpDate" compact popoverPlacement="floating" />
+                </Field>
+                <Field className="is-full">
+                  <FieldLabel htmlFor="new-lead-note">Qeyd</FieldLabel>
+                  <div className="crm-textarea-wrap">
+                    <FileText aria-hidden="true" />
+                    <textarea id="new-lead-note" name="note" maxLength={180} placeholder="Qeyd daxil edin..." />
+                  </div>
+                </Field>
+              </FieldGroup>
+            </section>
+
+            {submitError ? (
+              <div className="crm-duplicate-alert is-error" role="alert">
+                <AlertTriangle aria-hidden="true" />
+                <div><strong>Müraciət yaradılmadı</strong><p>{submitError}</p></div>
               </div>
-            </div>
-          ) : null}
-
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Proqram</span>
-              <FormSelect
-                name="programId"
-                defaultValue=""
-                emptyLabel="Seçilməyib"
-                options={programs.map((program) => ({
-                  value: program.id,
-                  label: program.name,
-                }))}
-              />
-            </label>
-            <label className="form-field">
-              <span>Məsul şəxs</span>
-              <FormSelect
-                name="managerId"
-                defaultValue=""
-                emptyLabel="Avtomatik təyin et"
-                options={managers.map((manager) => ({
-                  value: manager.id,
-                  label: manager.fullName,
-                }))}
-              />
-            </label>
+            ) : null}
           </div>
 
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Status</span>
-              <FormSelect
-                name="stage"
-                defaultValue="NEW"
-                options={leadStageSelectOptions}
-              />
-            </label>
-            <label className="form-field">
-              <span>Prioritet</span>
-              <FormSelect
-                name="priority"
-                defaultValue="NORMAL"
-                options={leadPrioritySelectOptions}
-              />
-            </label>
-          </div>
-
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Növbəti addım</span>
-              <FormSelect
-                name="nextActionType"
-                defaultValue="CALL"
-                options={nextActionTypeSelectOptions}
-              />
-            </label>
-            <label className="form-field">
-              <span>Növbəti addım tarixi</span>
-              <DatePicker
-                name="nextFollowUpDate"
-                compact
-                popoverPlacement="floating"
-              />
-            </label>
-          </div>
-
-          <label className="form-field">
-            <span>Qeyd</span>
-            <Input name="note" maxLength={180} />
-          </label>
-
-          {submitError ? (
-            <div className="duplicate-alert" role="alert">
-              <AlertTriangle data-icon="inline-start" />
-              <div>
-                <strong>Müraciət yaradılmadı</strong>
-                <p>{submitError}</p>
-              </div>
-            </div>
-          ) : null}
-
-          <DialogFooter>
+          <DialogFooter className="crm-dialog-actions">
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Ləğv et</Button>
+            </DialogClose>
             <Button type="submit" disabled={isSubmitting}>
-              <Plus data-icon="inline-start" />
+              {isSubmitting ? <LoaderCircle className="crm-spin" data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
               {isSubmitting ? "Yaradılır..." : "Müraciəti əlavə et"}
             </Button>
           </DialogFooter>

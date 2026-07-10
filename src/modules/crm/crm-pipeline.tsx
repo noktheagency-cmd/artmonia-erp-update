@@ -1,48 +1,52 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
+import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
-import { 
-  CheckCircle2, 
-  Filter, 
-  Search, 
-  SlidersHorizontal, 
-  BarChart3, 
-  List, 
-  TrendingUp, 
-  AlertCircle, 
-  Clock,
-  Briefcase,
-  Users,
-  Layers,
-  Sparkles,
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
   Calendar,
   CalendarDays,
-  User,
+  CheckCircle2,
+  Clock3,
+  Filter,
+  Layers3,
+  List,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  TrendingUp,
+  UserRound,
+  UserRoundPlus,
   X,
-  Activity,
-  BookOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cx } from "@/components/ui/cx";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
-import { StatusChip } from "@/components/ui/status-chip";
-import { LeadDetailDialog } from "@/modules/crm/lead-detail-dialog";
-import { NewLeadDialog } from "@/modules/crm/new-lead-dialog";
+import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
+import { CrmOverview } from "@/modules/crm/crm-overview";
 import type { CrmData } from "@/modules/crm/queries";
-import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
-import { convertLeadToStudentAction } from "@/modules/crm/actions";
+import { NewLeadDialog } from "@/modules/crm/new-lead-dialog";
+import { ExportDialog } from "@/modules/exports/export-dialog";
 import {
   leadPriorityLabels,
   leadPrioritySelectOptions,
 } from "@/modules/crm/follow-up";
-import {
-  leadStageLabels,
-  leadStageSelectOptions,
-} from "@/modules/crm/stage";
+import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
+import { leadStageLabels, leadStageSelectOptions } from "@/modules/crm/stage";
 
 const followUpLabels = {
   all: "Bütün növbəti addımlar",
+  attention: "Diqqət tələb edir",
   overdue: "Gecikmiş",
   today: "Bugünkü",
   unplanned: "Planlanmayıb",
@@ -54,16 +58,15 @@ const followUpSelectOptions = Object.entries(followUpLabels).map(([value, label]
   label,
 }));
 
+const metricIcons = [TrendingUp, UserRoundPlus, Clock3, CheckCircle2];
+
+type CrmTab = "overview" | "list";
+
 export function CrmPipeline({ data }: { data: CrmData }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-
-  // Tab synchronization using URL search parameter 'tab'
-  const tabParam = searchParams.get("tab");
-  const activeTab = tabParam === "list" ? "list" : "overview";
-  const [dateFrom, setDateFrom] = useState(data.filters.dateFrom);
-  const [dateTo, setDateTo] = useState(data.filters.dateTo);
+  const activeTab: CrmTab = searchParams.get("tab") === "list" ? "list" : "overview";
   const showCreateToast = searchParams.get("leadCreated") === "1";
 
   const dismissCreateToast = useCallback(() => {
@@ -74,64 +77,227 @@ export function CrmPipeline({ data }: { data: CrmData }) {
   }, [router, searchParams]);
 
   useEffect(() => {
-    if (!showCreateToast) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      dismissCreateToast();
-    }, 4200);
-
+    if (!showCreateToast) return;
+    const timeoutId = window.setTimeout(dismissCreateToast, 4200);
     return () => window.clearTimeout(timeoutId);
   }, [dismissCreateToast, showCreateToast]);
 
-  function handleTabChange(tab: "overview" | "list") {
+  function navigate(params: URLSearchParams, transition = false) {
+    const href = params.size > 0 ? `/crm?${params.toString()}` : "/crm";
+    if (transition) {
+      startTransition(() => router.push(href as Route));
+      return;
+    }
+    router.push(href as Route);
+  }
+
+  function handleTabChange(tab: CrmTab) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
-    router.push(`/crm?${params.toString()}`);
+    navigate(params);
   }
 
   function handleQuickFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (value) {
-      params.set(key, value);
-    } else {
-      params.delete(key);
+    if (value && value !== "all") params.set(key, value);
+    else params.delete(key);
+    params.set("tab", "list");
+    navigate(params);
+  }
+
+  function handleMetricClick(index: number) {
+    if (index === 2) {
+      handleQuickFilter("followUp", "attention");
+      return;
     }
-    params.set("tab", "list"); // Switch to list tab to see results
-    router.push(`/crm?${params.toString()}`);
+    if (index === 3) {
+      handleQuickFilter("stage", "REGISTERED");
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (index === 1) {
+      params.delete("from");
+      params.delete("to");
+      params.delete("period");
+    }
+    params.set("tab", "list");
+    navigate(params);
+  }
+
+  function handleClearFilters() {
+    const params = new URLSearchParams();
+    params.set("tab", activeTab);
+    navigate(params);
   }
 
   function handleFilterSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams(searchParams.toString());
+    const fields = [
+      "q",
+      "stage",
+      "owner",
+      "program",
+      "priority",
+      "source",
+      "followUp",
+      "from",
+      "to",
+      "period",
+    ];
 
-    const fields = ["q", "stage", "owner", "program", "priority", "source", "followUp", "from", "to"];
     fields.forEach((field) => {
       const value = formData.get(field)?.toString().trim();
-      if (value && value !== "all" && value !== "") {
-        params.set(field, value);
-      } else {
-        params.delete(field);
-      }
+      if (value && value !== "all") params.set(field, value);
+      else params.delete(field);
     });
 
     params.set("tab", activeTab);
-
-    startTransition(() => {
-      router.push(`/crm?${params.toString()}`);
-    });
+    navigate(params, true);
   }
 
-  function handleClearFilters() {
-    const params = new URLSearchParams();
-    params.set("tab", activeTab);
-    if (data.filters.period !== "this_month") {
-      params.set("period", data.filters.period);
-    }
-    router.push(`/crm?${params.toString()}`);
-  }
+  return (
+    <section className="crm-command-page" aria-labelledby="crm-page-title">
+      <div className="route-progress" aria-hidden={!isPending} data-visible={isPending} />
+
+      {showCreateToast ? (
+        <div className="crm-modern-toast" role="status" aria-live="polite">
+          <span aria-hidden="true"><CheckCircle2 /></span>
+          <div>
+            <strong>Müraciət yaradıldı</strong>
+            <p>Yeni müraciət siyahıya əlavə olundu.</p>
+          </div>
+          <button type="button" aria-label="Bildirişi bağla" onClick={dismissCreateToast}>
+            <X />
+          </button>
+        </div>
+      ) : null}
+
+      <header className="crm-command-header crm-enter">
+        <div>
+          <h1 id="crm-page-title">Müraciətlər və İzləmə</h1>
+          <p>Yeni müraciətlər, sınaq namizədləri və izləmələrin qeydiyyata çevrilmə prosesi.</p>
+        </div>
+        <div className="crm-header-actions">
+          {data.access.canExport ? (
+            <ExportDialog
+              module="crm"
+              resultCount={data.leads.length}
+              filters={{ q: data.query, stage: data.filters.stage, owner: data.filters.owner, program: data.filters.program, source: data.filters.source, priority: data.filters.priority, followUp: data.filters.followUp, from: data.filters.dateFrom, to: data.filters.dateTo }}
+              previewRows={data.leads.map((lead) => ({ name: lead.name, phone: lead.phone, program: lead.program, source: lead.source, stage: lead.stageLabel, priority: lead.priorityLabel, nextAction: lead.nextActionTypeLabel, nextFollowUp: lead.nextFollowUpAt, manager: lead.manager, createdAt: lead.createdAt, note: lead.latestNote, convertedStudent: lead.detail.convertedStudentCode, history: "" }))}
+            />
+          ) : null}
+          {data.access.canCreateLead ? (
+            <NewLeadDialog programs={data.programs} managers={data.managers} sourceOptions={data.sourceOptions} />
+          ) : null}
+        </div>
+      </header>
+
+      <CrmFilterPanel
+        key={`${data.filters.dateFrom}-${data.filters.dateTo}-${data.filters.period}`}
+        data={data}
+        isPending={isPending}
+        onSubmit={handleFilterSubmit}
+        onClear={handleClearFilters}
+      />
+
+      <section className="crm-metrics-grid" aria-label="CRM əsas göstəriciləri">
+        {data.metrics.map((metric, index) => {
+          const Icon = metricIcons[index] ?? Sparkles;
+          return (
+            <button
+              type="button"
+              className={cx("crm-metric-card", `is-${metric.tone}`, "crm-enter")}
+              style={{ animationDelay: `${45 + index * 45}ms` }}
+              onClick={() => handleMetricClick(index)}
+              key={metric.label}
+              aria-label={`${metric.label}: ${metric.value}. Siyahını aç`}
+            >
+              <span className="crm-metric-top">
+                <span>{metric.label}</span>
+                <span className="crm-metric-icon" aria-hidden="true"><Icon /></span>
+              </span>
+              <strong>{metric.value}</strong>
+              <span className="crm-metric-foot">
+                <span>{metric.helper}</span>
+                <span aria-hidden="true">→</span>
+              </span>
+            </button>
+          );
+        })}
+      </section>
+
+      <div className="crm-view-toolbar crm-enter" style={{ animationDelay: "230ms" }}>
+        <div className="crm-view-tabs" role="tablist" aria-label="CRM görünüşü">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "overview"}
+            data-active={activeTab === "overview"}
+            onClick={() => handleTabChange("overview")}
+          >
+            <BarChart3 aria-hidden="true" />
+            <span>İcmal və Analitika</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "list"}
+            data-active={activeTab === "list"}
+            onClick={() => handleTabChange("list")}
+          >
+            <List aria-hidden="true" />
+            <span>Müraciət Siyahısı</span>
+            <small>{data.leads.length}</small>
+          </button>
+        </div>
+        {data.filters.activeCount > 0 ? (
+          <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters}>
+            <SlidersHorizontal data-icon="inline-start" />
+            Filtrləri sıfırla ({data.filters.activeCount})
+          </Button>
+        ) : null}
+      </div>
+
+      {activeTab === "overview" ? (
+        <>
+          <CrmOverview
+            data={data}
+            onStageSelect={(stage) => handleQuickFilter("stage", stage)}
+            onLeadSelect={(name) => handleQuickFilter("q", name)}
+          />
+          <CrmLeadsTable
+            data={data}
+            preview
+            onShowAll={() => handleTabChange("list")}
+            onClearFilters={handleClearFilters}
+          />
+        </>
+      ) : (
+        <div className="crm-list-view">
+          <ActiveFiltersBar data={data} onClear={handleClearFilters} onRemove={handleQuickFilter} />
+          <CrmLeadsTable data={data} onClearFilters={handleClearFilters} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CrmFilterPanel({
+  data,
+  isPending,
+  onSubmit,
+  onClear,
+}: {
+  data: CrmData;
+  isPending: boolean;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onClear: () => void;
+}) {
+  const [dateFrom, setDateFrom] = useState(data.filters.dateFrom);
+  const [dateTo, setDateTo] = useState(data.filters.dateTo);
 
   function setQuickDateRange(periodType: "today" | "month" | "thirty") {
     const today = new Date();
@@ -143,686 +309,179 @@ export function CrmPipeline({ data }: { data: CrmData }) {
     };
 
     if (periodType === "today") {
-      const todayStr = formatDate(today);
-      setDateFrom(todayStr);
-      setDateTo(todayStr);
-    } else if (periodType === "month") {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      setDateFrom(formatDate(firstDay));
-      setDateTo(formatDate(lastDay));
-    } else if (periodType === "thirty") {
-      const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-      setDateFrom(formatDate(thirtyDaysAgo));
-      setDateTo(formatDate(today));
+      const value = formatDate(today);
+      setDateFrom(value);
+      setDateTo(value);
+      return;
     }
+    if (periodType === "month") {
+      setDateFrom(formatDate(new Date(today.getFullYear(), today.getMonth(), 1)));
+      setDateTo(formatDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
+      return;
+    }
+    setDateFrom(formatDate(new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)));
+    setDateTo(formatDate(today));
   }
 
-  const activeFiltersCount = data.filters.activeCount;
-
-  // Formatting date range label
-  const dateFromText = data.filters.dateFrom || "Başlanğıc";
-  const dateToText = data.filters.dateTo || "Son tarix";
-  const activeDateRangeLabel = data.filters.dateFrom || data.filters.dateTo 
-    ? `${dateFromText} - ${dateToText}` 
-    : "Bütün dövr";
-
   return (
-    <section className="page-stack operational-page crm-redesign-page">
-      {/* Visual Navigation Progress Indicator */}
-      <div className="route-progress" aria-hidden={!isPending} data-visible={isPending} />
-
-      {showCreateToast ? (
-        <div className="crm-toast-viewport" role="status" aria-live="polite">
-          <div className="crm-toast is-success">
-            <span className="crm-toast-icon" aria-hidden="true">
-              <CheckCircle2 size={18} />
-            </span>
-            <div>
-              <strong>Müraciət yaradıldı</strong>
-              <p>Yeni müraciət siyahıya əlavə olundu.</p>
-            </div>
-            <button
-              type="button"
-              aria-label="Bildirişi bağla"
-              onClick={dismissCreateToast}
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
+    <form className="crm-filter-panel crm-enter" onSubmit={onSubmit} aria-label="CRM filtrləri">
+      {data.filters.period !== "this_month" ? (
+        <input type="hidden" name="period" value={data.filters.period} />
       ) : null}
 
-      {/* --- REDESIGNED UNIFIED FILTER PANEL (SCREENSHOT LAYOUT) --- */}
-      <section className="crm-unified-filter-panel student-unified-filter-panel">
-        {/* --- PREMIUM COMPACT HEADER (SCREENSHOT LAYOUT) --- */}
-        <div className="student-header-compact" style={{ marginBottom: 0 }}>
-          <div className="header-title-wrapper-compact">
-            <div className="crm-eyebrow-compact">
-              <span className="eyebrow-pill pill-primary">Artmonia CRM</span>
-              <span className="eyebrow-pill pill-date">{activeDateRangeLabel}</span>
-            </div>
-            <div className="title-row-compact">
-              <h1>Müraciətlər və İzləmə</h1>
-            </div>
-            <p className="crm-header-desc" style={{ marginBottom: 0 }}>
-              Yeni müraciətlər, sınaq namizədləri və izləmələrin qeydiyyata çevrilmə prosesi.
-            </p>
-          </div>
-          
-          <div className="header-actions-wrapper-compact">
-            {data.access.canCreateLead ? (
-              <NewLeadDialog
-                programs={data.programs}
-                managers={data.managers}
-                sourceOptions={data.sourceOptions}
-              />
-            ) : null}
-          </div>
-        </div>
-
-        <div className="filter-header-divider" />
-
-        <form className="crm-filter-controls-form" onSubmit={handleFilterSubmit}>
-          {data.filters.period !== "this_month" && (
-            <input type="hidden" name="period" value={data.filters.period} />
-          )}
-        
-          {/* Main Inputs Row */}
-          <div className="filter-main-row">
-          {/* Search Bar */}
-          <div className="search-input-wrapper" style={{ flex: "1.5", minWidth: "220px" }}>
-            <Search size={18} className="search-icon" />
-            <input
+      <div className="crm-filter-primary">
+        <Field className="crm-search-field">
+          <FieldLabel className="sr-only" htmlFor="crm-search">Müraciət axtar</FieldLabel>
+          <InputGroup>
+            <InputGroupAddon aria-hidden="true"><Search /></InputGroupAddon>
+            <InputGroupInput
+              id="crm-search"
               name="q"
-              placeholder="Müraciət edən, kateqoriya..."
+              placeholder="Müraciət edən, telefon və ya mənbə..."
               defaultValue={data.query}
-              className="filter-search-input"
             />
-          </div>
-
-          {/* Date From */}
-          <DatePicker
-            name="from"
-            value={dateFrom}
-            onValueChange={setDateFrom}
-            placeholder="Başlanğıc"
-            aria-label="Başlanğıc tarixi"
-          />
-
-          {/* Date To */}
-          <DatePicker
-            name="to"
-            value={dateTo}
-            onValueChange={setDateTo}
-            placeholder="Son tarix"
-            aria-label="Son tarix"
-          />
-
-          {/* Actions Group */}
-          <div className="filter-actions-group" style={{ marginTop: 0 }}>
-            <Button type="submit" variant="default" size="sm" className="crm-search-submit-btn" disabled={isPending}>
-              <Filter size={16} />
-              Göstər
-            </Button>
-            
-            <button type="button" onClick={handleClearFilters} className="advanced-toggle-btn">
-              Təmizlə
-            </button>
-          </div>
-        </div>
-
-          {/* Quick Period Buttons & Selects Row */}
-          <div className="period-quick-row">
-          <button
-            type="button"
-            onClick={() => setQuickDateRange("today")}
-            className="period-quick-btn"
-          >
-            <Calendar size={13} className="text-tone-primary" />
-            <span>Bugün</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuickDateRange("month")}
-            className="period-quick-btn"
-          >
-            <CalendarDays size={13} className="text-tone-success" />
-            <span>Bu ay</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuickDateRange("thirty")}
-            className="period-quick-btn"
-          >
-            <Clock size={13} className="text-tone-warning" />
-            <span>Son 30 gün</span>
-          </button>
-
-          {/* Selects Grid with Icons */}
-          <div className="quick-selects-grid">
-            <FormSelect
-              name="stage"
-              defaultValue={data.filters.stage}
-              emptyLabel="Bütün statuslar"
-              options={leadStageSelectOptions}
-              icon={Activity}
-            />
-
-            <FormSelect
-              name="owner"
-              defaultValue={data.filters.owner}
-              emptyLabel="Bütün məsullar"
-              options={data.managers.map((m) => ({ value: m.id, label: m.fullName }))}
-              icon={User}
-            />
-
-            <FormSelect
-              name="program"
-              defaultValue={data.filters.program}
-              emptyLabel="Bütün proqramlar"
-              options={data.programs.map((p) => ({ value: p.id, label: p.name }))}
-              icon={BookOpen}
-            />
-
-            <FormSelect
-              name="priority"
-              defaultValue={data.filters.priority}
-              emptyLabel="Bütün prioritetlər"
-              options={leadPrioritySelectOptions}
-              icon={SlidersHorizontal}
-            />
-
-            <FormSelect
-              name="source"
-              defaultValue={data.filters.source}
-              emptyLabel="Bütün mənbələr"
-              options={buildCrmSourceSelectOptions(data.sourceOptions)}
-              icon={Layers}
-            />
-
-            <FormSelect
-              name="followUp"
-              defaultValue={data.filters.followUp}
-              options={followUpSelectOptions}
-              icon={CheckCircle2}
-            />
-          </div>
-          </div>
-        </form>
-      </section>
-
-      {/* --- REDESIGNED PREMIUM SEGMENTED TABS SWITCHER (SCREENSHOT STYLE) --- */}
-      <div className="crm-tabs-navigation">
-        <div className="tabs-segmented-container">
-          <button
-            type="button"
-            onClick={() => handleTabChange("overview")}
-            className={`tab-segmented-item ${activeTab === "overview" ? "is-active" : ""}`}
-          >
-            <BarChart3 size={15} />
-            <span>İcmal və Analitika</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange("list")}
-            className={`tab-segmented-item ${activeTab === "list" ? "is-active" : ""}`}
-          >
-            <List size={15} />
-            <span>Müraciət Siyahısı</span>
-            <span className="tab-segmented-badge">{data.leads.length}</span>
-          </button>
-        </div>
-        
-        {activeFiltersCount > 0 && (
-          <button type="button" onClick={handleClearFilters} className="crm-reset-filters-btn">
-            <SlidersHorizontal size={14} />
-            <span>Filtrləri sıfırla ({activeFiltersCount})</span>
-          </button>
-        )}
+          </InputGroup>
+        </Field>
+        <DatePicker
+          name="from"
+          value={dateFrom}
+          onValueChange={setDateFrom}
+          placeholder="Başlanğıc"
+          aria-label="Başlanğıc tarixi"
+        />
+        <DatePicker
+          name="to"
+          value={dateTo}
+          onValueChange={setDateTo}
+          placeholder="Son tarix"
+          aria-label="Son tarix"
+        />
+        <Button type="submit" size="sm" disabled={isPending}>
+          <Filter data-icon="inline-start" />
+          {isPending ? "Yüklənir..." : "Göstər"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+          <X data-icon="inline-start" />
+          Təmizlə
+        </Button>
       </div>
 
-      {/* TAB 1: ANALYTICS & FOCUS DASHBOARD */}
-      {activeTab === "overview" && (
-        <div className="crm-dashboard-layout animate-fade-in">
-          
-          {/* Redesigned Metrics Grid Cards (Screenshot Layout) */}
-          <div className="metrics-grid-premium">
-            {data.metrics.map((metric, index) => {
-              let Icon = TrendingUp;
-              if (index === 1) Icon = Sparkles;
-              if (index === 2) Icon = Clock;
-              if (index === 3) Icon = CheckCircle2;
-
-              const isTodayFollowUp = index === 2;
-
-              return (
-                <div
-                  key={metric.label}
-                  onClick={() => isTodayFollowUp && handleQuickFilter("followUp", "today")}
-                  className={`metric-card-premium tone-${metric.tone}`}
-                  title={isTodayFollowUp ? "Bugünkü follow-up-ları filtrlə" : undefined}
-                >
-                  <div className="card-top-row">
-                    <span className="card-label">{metric.label}</span>
-                    <div className="card-icon-square">
-                      <Icon size={16} />
-                    </div>
-                  </div>
-                  <div className="card-value-row">
-                    <strong>{metric.value}</strong>
-                  </div>
-                  <div className="card-bottom-row">
-                    <span>{metric.helper}</span>
-                    <span className="card-action-text">Siyahı →</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Interactive Lead Progress Stages */}
-          <div className="panel crm-stage-overview-redesign">
-            <div className="panel-head-redesign">
-              <div>
-                <h2>Müraciət Mərhələləri</h2>
-                <p>Namizədlərin statuslar üzrə paylanması. Siyahını süzmək üçün mərhələyə klikləyin.</p>
-              </div>
-              <div className="crm-stage-total-badge">
-                <strong>{data.leads.length}</strong>
-                <span>Görünən Müraciət</span>
-              </div>
-            </div>
-            
-            <div className="crm-pipeline-stages-flow">
-              {data.stageSummary.map((stage, idx) => (
-                <div
-                  key={stage.stage}
-                  onClick={() => handleQuickFilter("stage", stage.stage)}
-                  className={`crm-stage-flow-card tone-${stage.tone} ${data.filters.stage === stage.stage ? "is-active" : ""}`}
-                >
-                  <div className="stage-flow-index">0{idx + 1}</div>
-                  <div className="stage-flow-content">
-                    <span className="stage-flow-label">{stage.label}</span>
-                    <strong className="stage-flow-value">{stage.value}</strong>
-                  </div>
-                  <div className="stage-flow-arrow" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Unified attention focus */}
-          <div className="crm-focus-dashboard-grid crm-focus-dashboard-grid-single">
-            <FocusPanelRedesign
-              title="Bugünkü və kritik diqqət"
-              emptyText="Bugünkü, kritik və gecikmiş müraciət yoxdur"
-              items={data.attentionFocus}
-              icon={<AlertCircle size={18} />}
-              onItemClick={(leadId) => handleQuickFilter("q", leadId)}
-            />
-          </div>
-
-          {/* Core Analytics Breakdown Statistics */}
-          <div className="panel crm-breakdowns-panel-redesign">
-            <div className="panel-head-redesign">
-              <div>
-                <h2>Məhsuldarlıq və Maraq Statistikası</h2>
-                <p>Komanda performansı, aparıcı kanallar və proqram üzrə maraq göstəriciləri.</p>
-              </div>
-            </div>
-            
-            <div className="crm-stats-grid-redesign">
-              {/* Key Conversion Highlights */}
-              <div className="crm-stat-card-highlight">
-                <h3>Satış Performansı</h3>
-                <div className="highlight-metrics-list">
-                  <div className="highlight-metric-row">
-                    <span>Cəmi Satış Sayı</span>
-                    <strong>{data.dashboardStats.salesCount}</strong>
-                  </div>
-                  <div className="highlight-metric-row">
-                    <span>Konversiya Faizi</span>
-                    <strong className="text-tone-success">{data.dashboardStats.conversionRate}</strong>
-                  </div>
-                  <div className="highlight-metric-row">
-                    <span>Konsultasiya Sayı</span>
-                    <strong>{data.dashboardStats.consultationCount}</strong>
-                  </div>
-                  <div className="highlight-metric-row">
-                    <span>İtki Faizi</span>
-                    <strong className="text-tone-danger">{data.dashboardStats.lossRate}</strong>
-                  </div>
-                </div>
-                
-                <div className="sales-source-split">
-                  <h4>Satış Növü Bölgüsü</h4>
-                  <div className="split-progress-bar">
-                    <div 
-                      className="split-segment segment-direct" 
-                      style={{ width: `${parseFloat(data.dashboardStats.salesCount) > 0 ? (parseInt(data.dashboardStats.directSales) / parseInt(data.dashboardStats.salesCount)) * 100 : 50}%` }}
-                      title={`Birbaşa satış: ${data.dashboardStats.directSales}`}
-                    />
-                    <div 
-                      className="split-segment segment-consult" 
-                      style={{ width: `${parseFloat(data.dashboardStats.salesCount) > 0 ? (parseInt(data.dashboardStats.consultationSales) / parseInt(data.dashboardStats.salesCount)) * 100 : 50}%` }}
-                      title={`Konsultasiyadan satış: ${data.dashboardStats.consultationSales}`}
-                    />
-                  </div>
-                  <div className="split-labels">
-                    <span>Birbaşa ({data.dashboardStats.directSales})</span>
-                    <span>Konsultasiya ({data.dashboardStats.consultationSales})</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Team performance breakdown */}
-              <BreakdownListRedesign
-                title="Komanda Performansı"
-                subtitle="Satış sayı / Konversiya"
-                icon={<Users size={16} />}
-                items={data.dashboardStats.teamPerformance.map((item) => ({
-                  label: item.manager,
-                  value: `${item.sales} satış • ${item.conversionRate}`,
-                }))}
-              />
-
-              {/* Source breakdown */}
-              <BreakdownListRedesign
-                title="Mənbə Bölgüsü"
-                subtitle="Müraciət kanalları üzrə"
-                icon={<Layers size={16} />}
-                items={data.dashboardStats.sourceStats}
-              />
-
-              {/* Program breakdown */}
-              <BreakdownListRedesign
-                title="Proqram Marağı"
-                subtitle="Kurs və sahələrə görə"
-                icon={<Briefcase size={16} />}
-                items={data.dashboardStats.programStats}
-              />
-            </div>
-          </div>
+      <div className="crm-filter-secondary">
+        <div className="crm-quick-periods" aria-label="Sürətli tarix aralığı">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setQuickDateRange("today")}>
+            <Calendar data-icon="inline-start" />Bugün
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setQuickDateRange("month")}>
+            <CalendarDays data-icon="inline-start" />Bu ay
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setQuickDateRange("thirty")}>
+            <Clock3 data-icon="inline-start" />Son 30 gün
+          </Button>
         </div>
-      )}
-
-      {/* TAB 2: LEADS LIST VIEW */}
-      {activeTab === "list" && (
-        <div className="crm-list-layout animate-fade-in">
-          {/* Active Filters Summary Chips */}
-          {activeFiltersCount > 0 && (
-            <div className="crm-active-chips-wrapper" aria-label="Aktiv filtrlər">
-              <span className="chips-title">Aktiv süzgəclər:</span>
-              <div className="chips-container">
-                <span>{data.leads.length} müraciət tapıldı</span>
-                {data.filters.stage && (
-                  <span className="filter-chip-item">
-                    Status: {leadStageLabels[data.filters.stage]}
-                    <button type="button" onClick={() => handleQuickFilter("stage", "")}><X size={12} /></button>
-                  </span>
-                )}
-                {data.filters.priority && (
-                  <span className="filter-chip-item">
-                    Prioritet: {leadPriorityLabels[data.filters.priority]}
-                    <button type="button" onClick={() => handleQuickFilter("priority", "")}><X size={12} /></button>
-                  </span>
-                )}
-                {data.filters.followUp !== "all" && (
-                  <span className="filter-chip-item">
-                    Addım: {followUpLabels[data.filters.followUp]}
-                    <button type="button" onClick={() => handleQuickFilter("followUp", "all")}><X size={12} /></button>
-                  </span>
-                )}
-                {data.filters.program && (
-                  <span className="filter-chip-item">
-                    Proqram: {data.programs.find(p => p.id === data.filters.program)?.name}
-                    <button type="button" onClick={() => handleQuickFilter("program", "")}><X size={12} /></button>
-                  </span>
-                )}
-                {data.filters.owner && (
-                  <span className="filter-chip-item">
-                    Məsul: {data.managers.find(m => m.id === data.filters.owner)?.fullName}
-                    <button type="button" onClick={() => handleQuickFilter("owner", "")}><X size={12} /></button>
-                  </span>
-                )}
-                {data.filters.source && (
-                  <span className="filter-chip-item">
-                    Mənbə: {data.filters.source}
-                    <button type="button" onClick={() => handleQuickFilter("source", "")}><X size={12} /></button>
-                  </span>
-                )}
-                {(data.filters.dateFrom || data.filters.dateTo) && (
-                  <span className="filter-chip-item">
-                    Tarix: {data.filters.dateFrom || "*"} - {data.filters.dateTo || "*"}
-                    <button type="button" onClick={() => {
-                      const params = new URLSearchParams(searchParams.toString());
-                      params.delete("from");
-                      params.delete("to");
-                      router.push(`/crm?${params.toString()}`);
-                    }}><X size={12} /></button>
-                  </span>
-                )}
-                <button type="button" onClick={handleClearFilters} className="clear-all-chips-btn">
-                  Hamısını təmizlə
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Premium Modern Table Panel */}
-          <article className="panel table-panel crm-table-panel-redesign">
-            <div className="table-panel-header-new">
-              <h2>Müraciət Verilənləri Bazası</h2>
-              <span className="table-count-indicator">{data.leads.length} Qeyd tapıldı</span>
-            </div>
-
-            <div className="data-table-wrap-redesign">
-              <table className="data-table-redesign">
-                <thead>
-                  <tr>
-                    <th>Müraciət edən</th>
-                    <th>Mənbə</th>
-                    <th>Proqram</th>
-                    <th>Məsul şəxs</th>
-                    <th>Status</th>
-                    <th>Prioritet</th>
-                    <th>Növbəti addım</th>
-                    <th>İzləmə tarixi</th>
-                    <th>Əməliyyat</th>
-                    <th>Son Qeyd</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.leads.length > 0 ? (
-                    data.leads.map((lead) => (
-                      <tr key={lead.id} className="table-row-interactive">
-                        <td>
-                          <div className="lead-identity-cell">
-                            <LeadDetailDialog
-                              lead={lead}
-                              managers={data.managers}
-                              programs={data.programs}
-                              sourceOptions={data.sourceOptions}
-                              returnTo={data.returnTo}
-                            />
-                            <span className="lead-phone-display">{lead.phone}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="lead-source-tag">{lead.source}</span>
-                        </td>
-                        <td>
-                          <div className="lead-program-cell">
-                            <strong>{lead.program}</strong>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="lead-owner-cell">
-                            <User size={12} className="owner-avatar-icon" />
-                            <span>{lead.manager}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <StatusChip tone={lead.stageTone}>{lead.stageLabel}</StatusChip>
-                        </td>
-                        <td>
-                          <StatusChip tone={lead.priorityTone}>{lead.priorityLabel}</StatusChip>
-                        </td>
-                        <td>
-                          <span className="lead-action-badge">{lead.nextActionTypeLabel}</span>
-                        </td>
-                        <td>
-                          <div className="lead-date-cell">
-                            <Calendar size={12} className="date-calendar-icon" />
-                            <span className={lead.nextActionTypeLabel === "Gecikib" ? "text-danger-strong" : ""}>
-                              {lead.nextFollowUpAt}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <form action={convertLeadToStudentAction} className="convert-form">
-                            <input type="hidden" name="leadId" value={lead.id} />
-                            <input type="hidden" name="returnTo" value={data.returnTo} />
-                            <Button
-                              type="submit"
-                              variant={lead.canConvert ? "default" : "ghost"}
-                              size="sm"
-                              className={`convert-student-btn ${lead.canConvert ? "is-convertible" : ""}`}
-                              disabled={!lead.canConvert || !data.access.canConvertLead}
-                              aria-disabled={!lead.canConvert || !data.access.canConvertLead}
-                              title={lead.canConvert ? "Tələbə kimi qeydiyyata al" : lead.conversionLabel}
-                            >
-                              {lead.canConvert ? <CheckCircle2 size={14} className="check-icon" /> : null}
-                              <span>{lead.conversionLabel}</span>
-                            </Button>
-                          </form>
-                        </td>
-                        <td>
-                          <div className="lead-note-tooltip-cell">
-                            <span className="lead-latest-note">{lead.latestNote || "Qeyd yoxdur"}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={10}>
-                        <div className="empty-state-redesign">
-                          <AlertCircle size={40} className="empty-icon" />
-                          <h3>Müraciət Tapılmadı</h3>
-                          <p>Seçilmiş filtrlərə uyğun heç bir namizəd tapılmadı. Süzgəcləri dəyişərək yenidən yoxlayın.</p>
-                          <button type="button" onClick={handleClearFilters} className="ui-button ui-button-secondary ui-button-sm">
-                            Filtrləri təmizlə
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </article>
+        <div className="crm-filter-selects">
+          <FormSelect
+            aria-label="Status"
+            name="stage"
+            defaultValue={data.filters.stage}
+            emptyLabel="Bütün statuslar"
+            options={leadStageSelectOptions}
+            icon={Activity}
+          />
+          <FormSelect
+            aria-label="Məsul şəxs"
+            name="owner"
+            defaultValue={data.filters.owner}
+            emptyLabel="Bütün məsullar"
+            options={data.managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
+            icon={UserRound}
+          />
+          <FormSelect
+            aria-label="Proqram"
+            name="program"
+            defaultValue={data.filters.program}
+            emptyLabel="Bütün proqramlar"
+            options={data.programs.map((program) => ({ value: program.id, label: program.name }))}
+            icon={BookOpen}
+          />
+          <FormSelect
+            aria-label="Prioritet"
+            name="priority"
+            defaultValue={data.filters.priority}
+            emptyLabel="Bütün prioritetlər"
+            options={leadPrioritySelectOptions}
+            icon={SlidersHorizontal}
+          />
+          <FormSelect
+            aria-label="Mənbə"
+            name="source"
+            defaultValue={data.filters.source}
+            emptyLabel="Bütün mənbələr"
+            options={buildCrmSourceSelectOptions(data.sourceOptions)}
+            icon={Layers3}
+          />
+          <FormSelect
+            aria-label="Növbəti addım"
+            name="followUp"
+            defaultValue={data.filters.followUp}
+            options={followUpSelectOptions}
+            icon={CheckCircle2}
+          />
         </div>
-      )}
-    </section>
+      </div>
+    </form>
   );
 }
 
-/* Beautiful Focus Panel Helper Component */
-function FocusPanelRedesign({
-  title,
-  emptyText,
-  items,
-  icon,
-  onItemClick,
+function ActiveFiltersBar({
+  data,
+  onClear,
+  onRemove,
 }: {
-  title: string;
-  emptyText: string;
-  items: CrmData["attentionFocus"];
-  icon: React.ReactNode;
-  onItemClick: (leadId: string) => void;
+  data: CrmData;
+  onClear: () => void;
+  onRemove: (key: string, value: string) => void;
 }) {
-  return (
-    <article className="panel crm-focus-panel-redesign">
-      <div className="panel-head-redesign">
-        <div className="focus-panel-title-area">
-          {icon}
-          <h2>{title}</h2>
-        </div>
-        <span className="focus-count-tag">{items.length} müraciət</span>
-      </div>
-      <div className="crm-focus-list-redesign">
-        {items.length > 0 ? (
-          items.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => onItemClick(item.name)}
-              className="crm-focus-row-redesign"
-              title="Bu müraciəti axtar"
-            >
-              <div className="focus-lead-info">
-                <strong>{item.name}</strong>
-                <span>{item.phone} • Məsul: {item.manager}</span>
-              </div>
-              <div className="focus-lead-meta">
-                {item.reasonLabels.length > 0 ? (
-                  <div className="crm-focus-reason-list">
-                    {item.reasonLabels.map((reason) => (
-                      <span key={reason}>{reason}</span>
-                    ))}
-                  </div>
-                ) : null}
-                <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
-                <div className="focus-next-action-tag">
-                  <Clock size={10} />
-                  <span>{item.nextActionTypeLabel}</span>
-                </div>
-                <small className="focus-date-time">{item.nextFollowUpAt}</small>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="empty-state compact">{emptyText}</div>
-        )}
-      </div>
-    </article>
-  );
-}
+  if (data.filters.activeCount === 0) return null;
 
-/* Beautiful Statistical Breakdown List Helper Component */
-function BreakdownListRedesign({
-  title,
-  subtitle,
-  icon,
-  items,
-}: {
-  title: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  items: Array<{ label: string; value: string }>;
-}) {
+  const chips = [
+    data.filters.stage
+      ? { key: "stage", label: `Status: ${leadStageLabels[data.filters.stage]}` }
+      : null,
+    data.filters.priority
+      ? { key: "priority", label: `Prioritet: ${leadPriorityLabels[data.filters.priority]}` }
+      : null,
+    data.filters.owner
+      ? {
+          key: "owner",
+          label: `Məsul: ${data.managers.find((item) => item.id === data.filters.owner)?.fullName ?? "-"}`,
+        }
+      : null,
+    data.filters.program
+      ? {
+          key: "program",
+          label: `Proqram: ${data.programs.find((item) => item.id === data.filters.program)?.name ?? "-"}`,
+        }
+      : null,
+    data.filters.source ? { key: "source", label: `Mənbə: ${data.filters.source}` } : null,
+    data.filters.followUp !== "all"
+      ? { key: "followUp", label: `Addım: ${followUpLabels[data.filters.followUp]}` }
+      : null,
+  ].filter((chip): chip is { key: string; label: string } => Boolean(chip));
+
   return (
-    <div className="crm-breakdown-card-redesign">
-      <div className="breakdown-card-header">
-        <div className="breakdown-title-wrapper">
-          {icon}
-          <h3>{title}</h3>
-        </div>
-        <span className="breakdown-subtitle">{subtitle}</span>
+    <div className="crm-active-filters" aria-label="Aktiv filtrlər">
+      <div>
+        <SlidersHorizontal aria-hidden="true" />
+        <span>{data.leads.length} nəticə</span>
       </div>
-      <div className="breakdown-card-content">
-        {items.length > 0 ? (
-          items.map((item) => (
-            <div className="breakdown-row-redesign" key={`${title}-${item.label}`}>
-              <span className="breakdown-row-label">{item.label}</span>
-              <b className="breakdown-row-value">{item.value}</b>
-            </div>
-          ))
-        ) : (
-          <span className="crm-breakdown-empty">Məlumat mövcud deyil</span>
-        )}
+      <div className="crm-filter-chips">
+        {chips.map((chip) => (
+          <button type="button" key={chip.key} onClick={() => onRemove(chip.key, "")}>
+            {chip.label}<X aria-hidden="true" />
+          </button>
+        ))}
       </div>
+      <Button type="button" variant="ghost" size="sm" onClick={onClear}>Hamısını təmizlə</Button>
     </div>
   );
 }

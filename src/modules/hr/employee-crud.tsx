@@ -980,7 +980,7 @@ function SalarySection({
           <div className="hr-salary-preview">
             <span>Avtomatik hesablama</span>
             <strong>{formState.salaryPercent}%</strong>
-            <small>Bronlarda tələbə “Gəldi” olduqda və tələbə müəllimə assign edildikdə maaş arxa planda bu faizlə hesablanır.</small>
+            <small>Jurnalda tələbə “Gəldi” olduqda və tələbə müəllimə assign edildikdə maaş arxa planda bu faizlə hesablanır.</small>
           </div>
         </>
       ) : (
@@ -1102,7 +1102,7 @@ function getSalaryBreakdown(employee: Employee | EmployeeFormState) {
     return "Statik maaş";
   }
 
-  return "Bronlarda gələn tələbələrə görə avtomatik hesablanır";
+  return "Jurnalda gələn tələbələrə görə avtomatik hesablanır";
 }
 
 function calculateEmployeePayroll(employee: Employee | EmployeeFormState) {

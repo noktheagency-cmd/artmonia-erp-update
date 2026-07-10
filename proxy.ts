@@ -13,6 +13,7 @@ export const config = {
     "/bookings/:path*",
     "/crm/:path*",
     "/marketing/:path*",
+    "/playbook/:path*",
     "/hr/:path*",
     "/finance/:path*",
     "/reports/:path*",

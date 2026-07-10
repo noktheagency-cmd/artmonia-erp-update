@@ -13,6 +13,7 @@ import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method"
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info";
 type MovementType = "overview" | "payments" | "debts" | "expenses" | "payroll";
+type FinanceSource = "all" | "student" | "workshop";
 
 export type FinanceFilters = {
   q?: string;
@@ -20,6 +21,7 @@ export type FinanceFilters = {
   type?: string;
   from?: string;
   to?: string;
+  source?: string;
 };
 
 export type FinanceData = {
@@ -35,12 +37,14 @@ export type FinanceData = {
     type: MovementType;
     from: string;
     to: string;
+    source: FinanceSource;
     activeCount: number;
   };
   filterLabels: {
     category: string;
     type: string;
     period: string;
+    source: string;
   };
   summary: {
     income: string;
@@ -89,6 +93,9 @@ export type FinanceData = {
     calculatedSalary: string;
   }>;
   payments: Array<{
+    sourceKind: "STUDENT" | "WORKSHOP";
+    sourceLabel: string;
+    sourceHref: string;
     id: string;
     studentId: string;
     studentName: string;
@@ -110,6 +117,9 @@ export type FinanceData = {
     note: string;
   }>;
   expenses: Array<{
+    workshopEventId: string;
+    workshopEventTitle: string;
+    sourceHref: string;
     id: string;
     categoryId: string;
     category: string;
@@ -132,6 +142,8 @@ export type FinanceData = {
     description: string;
   }>;
   debtors: Array<{
+    sourceKind: "STUDENT" | "WORKSHOP";
+    sourceHref: string;
     id: string;
     studentName: string;
     studentCode: string;
@@ -233,6 +245,23 @@ type PaymentRow = {
   note: string | null;
 };
 
+type WorkshopPaymentRow = {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  participantName: string;
+  payerName: string | null;
+  amount: unknown;
+  paidAt: string;
+  dateKey: string;
+  paidDateValue: string;
+  method: string;
+  receiptFileName: string | null;
+  receiptFilePath: string | null;
+  receiptReference: string | null;
+  note: string | null;
+};
+
 type ExpenseRow = {
   id: string;
   categoryId: string;
@@ -255,6 +284,8 @@ type ExpenseRow = {
   receiptFilePath: string | null;
   receiptReference: string | null;
   description: string | null;
+  workshopEventId: string | null;
+  workshopEventTitle: string | null;
 };
 
 type DebtRow = {
@@ -267,6 +298,18 @@ type DebtRow = {
   overdueDays: unknown;
   programName: string | null;
   teacherName: string | null;
+};
+
+type WorkshopDebtRow = {
+  participantId: string;
+  eventId: string;
+  eventTitle: string;
+  participantName: string;
+  phone: string | null;
+  balanceDue: unknown;
+  eventDate: string;
+  overdueDays: unknown;
+  instructor: string | null;
 };
 
 const movementTypes: Array<{ value: MovementType; label: string }> = [
@@ -286,6 +329,10 @@ export async function getFinanceData(
   const monthStart = startOfMonth(today);
   const nextMonthStart = addMonths(monthStart, 1);
   const normalizedFilters = normalizeFinanceFilters(input, monthStart, today);
+  const canReadWorkshopFinance = actor.permissions.has("workshop.finance.read");
+  const includeStudentSource = normalizedFilters.source !== "workshop";
+  const includeWorkshopSource =
+    canReadWorkshopFinance && normalizedFilters.source !== "student";
   const fromDate = normalizedFilters.from
     ? new Date(`${normalizedFilters.from}T00:00:00.000Z`)
     : monthStart;
@@ -300,6 +347,13 @@ export async function getFinanceData(
   const categorySql = normalizedFilters.category
     ? Prisma.sql`and fec.id = ${normalizedFilters.category}::uuid`
     : Prisma.empty;
+  const studentSourceSql = includeStudentSource ? Prisma.empty : Prisma.sql`and false`;
+  const workshopSourceSql = includeWorkshopSource ? Prisma.empty : Prisma.sql`and false`;
+  const expenseSourceSql = !canReadWorkshopFinance || normalizedFilters.source === "student"
+    ? Prisma.sql`and fe.workshop_event_id is null`
+    : normalizedFilters.source === "workshop"
+      ? Prisma.sql`and fe.workshop_event_id is not null`
+      : Prisma.empty;
 
   const [
     summaryRows,
@@ -307,9 +361,11 @@ export async function getFinanceData(
     studentRows,
     staffRows,
     paymentRows,
+    workshopPaymentRows,
     expenseRows,
     payrollRows,
     debtRows,
+    workshopDebtRows,
   ] = await Promise.all([
     prisma.$queryRaw<FinanceSummaryRow[]>(Prisma.sql`
       select
@@ -320,7 +376,18 @@ export async function getFinanceData(
           join erp.contacts c on c.id = s.contact_id
           where p.paid_at >= ${fromDate}
             and p.paid_at < ${endDateExclusive}
+            ${studentSourceSql}
             ${searchSql.payments}
+        ), 0) + coalesce((
+          select sum(wp.amount)
+          from erp.workshop_payments wp
+          join erp.workshop_events we on we.id = wp.event_id
+          join erp.workshop_participants participant on participant.id = wp.participant_id
+          where wp.paid_at >= ${fromDate}
+            and wp.paid_at < ${endDateExclusive}
+            and wp.voided_at is null
+            ${workshopSourceSql}
+            ${searchSql.workshopPayments}
         ), 0) as "income",
         coalesce((
           select count(*)::int
@@ -329,7 +396,18 @@ export async function getFinanceData(
           join erp.contacts c on c.id = s.contact_id
           where p.paid_at >= ${fromDate}
             and p.paid_at < ${endDateExclusive}
+            ${studentSourceSql}
             ${searchSql.payments}
+        ), 0) + coalesce((
+          select count(*)::int
+          from erp.workshop_payments wp
+          join erp.workshop_events we on we.id = wp.event_id
+          join erp.workshop_participants participant on participant.id = wp.participant_id
+          where wp.paid_at >= ${fromDate}
+            and wp.paid_at < ${endDateExclusive}
+            and wp.voided_at is null
+            ${workshopSourceSql}
+            ${searchSql.workshopPayments}
         ), 0) as "paymentCount",
         coalesce((
           select sum(fe.amount)
@@ -339,6 +417,8 @@ export async function getFinanceData(
           left join erp.teachers t on t.id = fe.teacher_id
           where fe.expense_date >= ${fromDate}
             and fe.expense_date < ${endDateExclusive}
+            and fe.voided_at is null
+            ${expenseSourceSql}
             ${categorySql}
             ${searchSql.expenses}
         ), 0) as "expense",
@@ -350,6 +430,8 @@ export async function getFinanceData(
           left join erp.teachers t on t.id = fe.teacher_id
           where fe.expense_date >= ${fromDate}
             and fe.expense_date < ${endDateExclusive}
+            and fe.voided_at is null
+            ${expenseSourceSql}
             ${categorySql}
             ${searchSql.expenses}
         ), 0) as "expenseCount",
@@ -361,7 +443,9 @@ export async function getFinanceData(
           left join erp.teachers t on t.id = fe.teacher_id
           where fe.expense_date >= ${fromDate}
             and fe.expense_date < ${endDateExclusive}
+            and fe.voided_at is null
             and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"
+            ${expenseSourceSql}
             ${categorySql}
             ${searchSql.expenses}
         ), 0) as "payroll",
@@ -370,12 +454,41 @@ export async function getFinanceData(
           from erp.invoices i
           where i.balance_due > 0
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            ${studentSourceSql}
+        ), 0) + coalesce((
+          select sum(greatest(0, participant.list_price - participant.discount_amount - coalesce(paid.total, 0)))
+          from erp.workshop_participants participant
+          join erp.workshop_events we on we.id = participant.event_id
+          left join lateral (
+            select sum(wp.amount) as total
+            from erp.workshop_payments wp
+            where wp.participant_id = participant.id and wp.voided_at is null
+          ) paid on true
+          where participant.cancelled_at is null
+            and participant.is_gift = false
+            ${workshopSourceSql}
+            ${searchSql.workshopDebts}
         ), 0) as "debt",
         coalesce((
           select count(distinct i.student_id)::int
           from erp.invoices i
           where i.balance_due > 0
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            ${studentSourceSql}
+        ), 0) + coalesce((
+          select count(*)::int
+          from erp.workshop_participants participant
+          join erp.workshop_events we on we.id = participant.event_id
+          left join lateral (
+            select sum(wp.amount) as total
+            from erp.workshop_payments wp
+            where wp.participant_id = participant.id and wp.voided_at is null
+          ) paid on true
+          where participant.cancelled_at is null
+            and participant.is_gift = false
+            and participant.list_price - participant.discount_amount - coalesce(paid.total, 0) > 0
+            ${workshopSourceSql}
+            ${searchSql.workshopDebts}
         ), 0) as "debtors"
     `),
     prisma.$queryRaw<CategoryRow[]>(Prisma.sql`
@@ -514,8 +627,36 @@ export async function getFinanceData(
       join erp.contacts c on c.id = s.contact_id
       where p.paid_at >= ${fromDate}
         and p.paid_at < ${endDateExclusive}
+        ${studentSourceSql}
         ${searchSql.payments}
       order by p.paid_at desc, p.created_at desc
+      limit 70
+    `),
+    prisma.$queryRaw<WorkshopPaymentRow[]>(Prisma.sql`
+      select
+        wp.id::text as "id",
+        we.id::text as "eventId",
+        we.title as "eventTitle",
+        participant.full_name as "participantName",
+        wp.payer_name as "payerName",
+        wp.amount,
+        to_char(wp.paid_at, 'DD.MM.YYYY') as "paidAt",
+        to_char(wp.paid_at, 'YYYY-MM-DD') as "dateKey",
+        to_char(wp.paid_at, 'YYYY-MM-DD') as "paidDateValue",
+        wp.method::text as "method",
+        wp.receipt_file_name as "receiptFileName",
+        wp.receipt_file_path as "receiptFilePath",
+        wp.receipt_reference as "receiptReference",
+        wp.note
+      from erp.workshop_payments wp
+      join erp.workshop_events we on we.id = wp.event_id
+      join erp.workshop_participants participant on participant.id = wp.participant_id
+      where wp.paid_at >= ${fromDate}
+        and wp.paid_at < ${endDateExclusive}
+        and wp.voided_at is null
+        ${workshopSourceSql}
+        ${searchSql.workshopPayments}
+      order by wp.paid_at desc, wp.created_at desc
       limit 70
     `),
     prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
@@ -540,14 +681,19 @@ export async function getFinanceData(
         fe.receipt_file_name as "receiptFileName",
         fe.receipt_file_path as "receiptFilePath",
         fe.receipt_reference as "receiptReference",
-        fe.description
+        fe.description,
+        fe.workshop_event_id::text as "workshopEventId",
+        we.title as "workshopEventTitle"
       from erp.finance_expenses fe
       join erp.finance_expense_categories fec on fec.id = fe.category_id
       left join erp.users eu on eu.id = fe.employee_user_id
       left join erp.teachers t on t.id = fe.teacher_id
+      left join erp.workshop_events we on we.id = fe.workshop_event_id
       where fe.expense_date >= ${fromDate}
         and fe.expense_date < ${endDateExclusive}
+        and fe.voided_at is null
         and fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode"
+        ${expenseSourceSql}
         ${categorySql}
         ${searchSql.expenses}
       order by fe.expense_date desc, fe.created_at desc
@@ -575,14 +721,19 @@ export async function getFinanceData(
         fe.receipt_file_name as "receiptFileName",
         fe.receipt_file_path as "receiptFilePath",
         fe.receipt_reference as "receiptReference",
-        fe.description
+        fe.description,
+        fe.workshop_event_id::text as "workshopEventId",
+        we.title as "workshopEventTitle"
       from erp.finance_expenses fe
       join erp.finance_expense_categories fec on fec.id = fe.category_id
       left join erp.users eu on eu.id = fe.employee_user_id
       left join erp.teachers t on t.id = fe.teacher_id
+      left join erp.workshop_events we on we.id = fe.workshop_event_id
       where fe.expense_date >= ${fromDate}
         and fe.expense_date < ${endDateExclusive}
+        and fe.voided_at is null
         and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"
+        ${expenseSourceSql}
         ${categorySql}
         ${searchSql.expenses}
       order by fe.expense_date desc, fe.created_at desc
@@ -618,9 +769,36 @@ export async function getFinanceData(
       ) ae on true
       where i.balance_due > 0
         and i.status <> 'VOID'::"erp"."InvoiceStatus"
+        ${studentSourceSql}
         ${searchSql.debts}
       group by s.id, s.code, c.full_name, c.phone_display, ae.program_name, ae.teacher_name
       order by min(i.due_date) asc, coalesce(sum(i.balance_due), 0) desc
+      limit 70
+    `),
+    prisma.$queryRaw<WorkshopDebtRow[]>(Prisma.sql`
+      select
+        participant.id::text as "participantId",
+        we.id::text as "eventId",
+        we.title as "eventTitle",
+        participant.full_name as "participantName",
+        participant.phone,
+        greatest(0, participant.list_price - participant.discount_amount - coalesce(paid.total, 0)) as "balanceDue",
+        to_char(we.event_date, 'DD.MM.YYYY') as "eventDate",
+        greatest(0, (current_date - we.event_date)::int) as "overdueDays",
+        we.instructor
+      from erp.workshop_participants participant
+      join erp.workshop_events we on we.id = participant.event_id
+      left join lateral (
+        select sum(wp.amount) as total
+        from erp.workshop_payments wp
+        where wp.participant_id = participant.id and wp.voided_at is null
+      ) paid on true
+      where participant.cancelled_at is null
+        and participant.is_gift = false
+        and participant.list_price - participant.discount_amount - coalesce(paid.total, 0) > 0
+        ${workshopSourceSql}
+        ${searchSql.workshopDebts}
+      order by we.event_date asc, "balanceDue" desc
       limit 70
     `),
   ]);
@@ -648,6 +826,7 @@ export async function getFinanceData(
     normalizedFilters.query,
     normalizedFilters.category,
     normalizedFilters.type !== "overview" ? normalizedFilters.type : "",
+    normalizedFilters.source !== "all" ? normalizedFilters.source : "",
     normalizedFilters.from !== defaultFrom ? normalizedFilters.from : "",
     normalizedFilters.to !== defaultTo ? normalizedFilters.to : "",
   ].filter(Boolean).length;
@@ -670,6 +849,12 @@ export async function getFinanceData(
         normalizedFilters.from !== defaultFrom || normalizedFilters.to !== defaultTo
           ? `${formatDisplayDateInput(normalizedFilters.from) || "..."} - ${formatDisplayDateInput(normalizedFilters.to) || "..."}`
           : "Cari ay",
+      source:
+        normalizedFilters.source === "student"
+          ? "Tələbə ödənişləri"
+          : normalizedFilters.source === "workshop"
+            ? "Workshop / Masterclass"
+            : "Bütün mənbələr",
     },
     summary: {
       income: formatAmount(income),
@@ -748,7 +933,11 @@ export async function getFinanceData(
       salaryBase: formatDecimalInput(staff.salaryBase),
       calculatedSalary: formatDecimalInput(staff.calculatedSalary),
     })),
-    payments: paymentRows.map((payment) => ({
+    payments: [
+      ...paymentRows.map((payment) => ({
+      sourceKind: "STUDENT" as const,
+      sourceLabel: "Tələbə ödənişi",
+      sourceHref: `/students/${payment.studentId}`,
       id: payment.id,
       studentId: payment.studentId,
       studentName: payment.studentName,
@@ -768,12 +957,40 @@ export async function getFinanceData(
       receiptFilePath: payment.receiptFilePath ?? "",
       receiptReference: payment.receiptReference ?? "",
       note: payment.note ?? "-",
-    })),
+      })),
+      ...workshopPaymentRows.map((payment) => ({
+        sourceKind: "WORKSHOP" as const,
+        sourceLabel: payment.eventTitle,
+        sourceHref: `/workshops/${payment.eventId}?tab=payments`,
+        id: payment.id,
+        studentId: "",
+        studentName: payment.participantName,
+        studentCode: payment.eventTitle,
+        payerName: payment.payerName ?? payment.participantName,
+        amount: formatAmount(payment.amount),
+        amountValue: toNumber(payment.amount),
+        amountInput: formatDecimalInput(payment.amount),
+        paidAt: payment.paidAt,
+        dateKey: payment.dateKey,
+        paidDateValue: payment.paidDateValue,
+        paymentMonth: "Workshop / Masterclass",
+        paymentMonthValue: payment.paidDateValue,
+        methodValue: payment.method,
+        method: getStudentPaymentMethodLabel(payment.method),
+        receipt: payment.receiptReference ?? payment.receiptFileName ?? "-",
+        receiptFilePath: payment.receiptFilePath ?? "",
+        receiptReference: payment.receiptReference ?? "",
+        note: payment.note ?? "-",
+      })),
+    ].sort((left, right) => right.dateKey.localeCompare(left.dateKey)),
     expenses,
-    debtors: debtRows.map((debtRow) => {
+    debtors: [
+      ...debtRows.map((debtRow) => {
       const overdueDays = toNumber(debtRow.overdueDays);
 
       return {
+        sourceKind: "STUDENT" as const,
+        sourceHref: `/students/${debtRow.studentId}`,
         id: debtRow.studentId,
         studentName: debtRow.studentName,
         studentCode: debtRow.studentCode,
@@ -786,7 +1003,26 @@ export async function getFinanceData(
         overdueDays: overdueDays > 0 ? `${formatCount(overdueDays)} gün gecikir` : "Gecikmə yoxdur",
         tone: getDebtTone(overdueDays),
       };
-    }),
+      }),
+      ...workshopDebtRows.map((debtRow) => {
+        const overdueDays = toNumber(debtRow.overdueDays);
+        return {
+          sourceKind: "WORKSHOP" as const,
+          sourceHref: `/workshops/${debtRow.eventId}?tab=participants`,
+          id: debtRow.participantId,
+          studentName: debtRow.participantName,
+          studentCode: debtRow.eventTitle,
+          phone: debtRow.phone ?? "-",
+          program: "Workshop / Masterclass",
+          teacher: debtRow.instructor ?? "Təlimçi təyin edilməyib",
+          balance: formatAmount(debtRow.balanceDue),
+          balanceValue: toNumber(debtRow.balanceDue),
+          nextDueDate: debtRow.eventDate,
+          overdueDays: overdueDays > 0 ? `${formatCount(overdueDays)} gün gecikir` : "Gecikmə yoxdur",
+          tone: getDebtTone(overdueDays),
+        };
+      }),
+    ],
     payrollItems,
     alerts: [
       {
@@ -819,7 +1055,13 @@ function normalizeFinanceFilters(input: FinanceFilters, monthStart: Date, today:
     type,
     from,
     to,
+    source: normalizeFinanceSource(input.source),
   };
+}
+
+function normalizeFinanceSource(value: string | undefined): FinanceSource {
+  const normalized = formFilterString(value);
+  return normalized === "student" || normalized === "workshop" ? normalized : "all";
 }
 
 function normalizeMovementType(value: string | undefined): MovementType {
@@ -839,6 +1081,8 @@ function buildSearchSql(query: string) {
       payments: Prisma.empty,
       expenses: Prisma.empty,
       debts: Prisma.empty,
+      workshopPayments: Prisma.empty,
+      workshopDebts: Prisma.empty,
     };
   }
 
@@ -865,6 +1109,18 @@ function buildSearchSql(query: string) {
       or s.code ilike ${pattern}
       or coalesce(c.phone_display, '') ilike ${pattern}
     )`,
+    workshopPayments: Prisma.sql`and (
+      we.title ilike ${pattern}
+      or participant.full_name ilike ${pattern}
+      or coalesce(wp.payer_name, '') ilike ${pattern}
+      or coalesce(wp.note, '') ilike ${pattern}
+      or coalesce(wp.receipt_reference, '') ilike ${pattern}
+    )`,
+    workshopDebts: Prisma.sql`and (
+      we.title ilike ${pattern}
+      or participant.full_name ilike ${pattern}
+      or coalesce(participant.phone, '') ilike ${pattern}
+    )`,
   };
 }
 
@@ -874,6 +1130,7 @@ function buildFinanceUrl(filters: {
   type: MovementType;
   from: string;
   to: string;
+  source: FinanceSource;
 }) {
   const params = new URLSearchParams();
 
@@ -895,6 +1152,10 @@ function buildFinanceUrl(filters: {
 
   if (filters.to) {
     params.set("to", filters.to);
+  }
+
+  if (filters.source !== "all") {
+    params.set("source", filters.source);
   }
 
   return params.size > 0 ? `/finance?${params.toString()}` : "/finance";
@@ -979,6 +1240,11 @@ function formatSalaryFormula(expense: ExpenseRow) {
 
 function mapExpenseRow(expenseRow: ExpenseRow) {
   return {
+    workshopEventId: expenseRow.workshopEventId ?? "",
+    workshopEventTitle: expenseRow.workshopEventTitle ?? "",
+    sourceHref: expenseRow.workshopEventId
+      ? `/workshops/${expenseRow.workshopEventId}?tab=expenses`
+      : "",
     id: expenseRow.id,
     categoryId: expenseRow.categoryId,
     category: formatFinanceCategoryName(expenseRow.category),

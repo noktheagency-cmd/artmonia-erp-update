@@ -15,6 +15,7 @@ import {
 } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
+import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 
 type SummaryTone = "blue" | "coral" | "yellow" | "mint";
 type StudentTone = "success" | "warning" | "danger" | "neutral" | "info";
@@ -40,6 +41,8 @@ export type StudentListData = {
     canConvertLead: boolean;
     canRecordPayment: boolean;
     canChangeStatus: boolean;
+    canManagePrograms: boolean;
+    canExport: boolean;
   };
   createOptions: {
     leads: Array<{
@@ -56,9 +59,12 @@ export type StudentListData = {
       name: string;
       monthlyFee: string;
       lessonsPerMonth: string;
+      description: string;
+      isActive: boolean;
     }>;
     teachers: Array<{ id: string; fullName: string }>;
     managers: Array<{ id: string; fullName: string }>;
+    sourceOptions: string[];
     defaultRegisteredDate: string;
     defaultPaymentDate: string;
     defaultPaymentMonth: string;
@@ -88,8 +94,19 @@ export type StudentListData = {
     label: string;
     value: string;
     delta: string;
+    amount?: string;
     tone: SummaryTone;
   }>;
+  clv: {
+    totalPaid: string;
+    averagePaid: string;
+    paidMonths: number;
+  };
+  listMetrics: {
+    totalPaid: string;
+    expectedPayment: string;
+    overduePayment: string;
+  };
   students: Array<{
     id: string;
     code: string;
@@ -98,6 +115,7 @@ export type StudentListData = {
     program: string;
     teacher: string;
     dueDate: string;
+    overdueDays: number;
     balance: string;
     lifecycleStatusValue: StudentLifecycleStatus;
     lifecycleStatus: string;
@@ -105,6 +123,10 @@ export type StudentListData = {
     paymentStatus: string;
     paymentTone: StudentTone;
     lastContact: string;
+    clv: {
+      totalPaid: string;
+      paidMonths: number;
+    };
     detail: {
       manager: string;
       registeredAt: string;
@@ -130,6 +152,11 @@ export type StudentListData = {
         method: string;
         note: string;
         createdBy: string;
+      }>;
+      monthlyPayments: Array<{
+        month: string;
+        amount: string;
+        paidAt: string;
       }>;
       timeline: Array<{
         id: string;
@@ -158,6 +185,19 @@ type StudentListCacheInput = {
 type StudentListRawData = {
   rows: StudentListQueryRow[];
   options: StudentCreateOptionRows;
+  clv: StudentClvSummary;
+  paymentSummary: StudentPaymentSummary;
+};
+
+type StudentClvSummary = {
+  totalPaid: number;
+  averagePaid: number;
+  paidMonths: number;
+};
+
+type StudentPaymentSummary = {
+  expectedPayment: number;
+  overduePayment: number;
 };
 
 const lifecycleMeta: Record<
@@ -245,7 +285,7 @@ export async function getStudentListData(
   const dateFromFilter = normalizeDateFilter(input.from);
   const dateToFilter = normalizeDateFilter(input.to);
   const today = startOfToday();
-  const { rows, options } = await readStudentListRawData({
+  const { rows, options, clv, paymentSummary } = await readStudentListRawData({
     search,
     statusFilter,
     programFilter,
@@ -255,12 +295,18 @@ export async function getStudentListData(
     dateFrom: dateFromFilter.input,
     dateTo: dateToFilter.input,
   });
-  const { programs, teachers, managers, leads: convertibleLeads } = options;
+  const { programs, teachers, managers, leads: convertibleLeads, sources } = options;
 
   const summaryCounts = new Map(
     Object.entries(options.summaryCounts).map(([status, count]) => [
       status as StudentLifecycleStatus,
       count,
+    ])
+  );
+  const summaryBalances = new Map(
+    Object.entries(options.summaryBalances).map(([status, balance]) => [
+      status as StudentLifecycleStatus,
+      balance,
     ])
   );
   const visibleStatuses = [
@@ -309,6 +355,8 @@ export async function getStudentListData(
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
       canChangeStatus: actor.permissions.has("student.status.change"),
+      canManagePrograms: actor.permissions.has("settings.manage"),
+      canExport: actor.permissions.has("report.export"),
     },
     createOptions: {
       leads: convertibleLeads,
@@ -317,9 +365,12 @@ export async function getStudentListData(
         name: program.name,
         monthlyFee: formatDecimalInput(program.defaultMonthlyFee),
         lessonsPerMonth: program.defaultLessonsPerMonth?.toString() ?? "",
+        description: program.description ?? "",
+        isActive: program.isActive,
       })),
       teachers,
       managers,
+      sourceOptions: buildCrmSourceOptions(sources),
       defaultRegisteredDate: formatDateInput(new Date()),
       defaultPaymentDate: formatDateInput(new Date()),
       defaultPaymentMonth: formatMonthInput(new Date()),
@@ -354,17 +405,46 @@ export async function getStudentListData(
       programs: programOptions,
       teachers: teacherOptions,
     },
-    statusSummary: visibleStatuses.map((status) => ({
-      label: summaryMeta[status].label,
-      value: formatCount(summaryCounts.get(status) ?? 0),
-      delta: summaryMeta[status].delta,
-      tone: summaryMeta[status].tone,
-    })),
+    statusSummary: visibleStatuses.map((status) => {
+      const outstandingBalance = formatAmount(summaryBalances.get(status) ?? 0);
+      const isOutstandingStatus =
+        status === StudentLifecycleStatus.DEBT ||
+        status === StudentLifecycleStatus.GROUP_WAITING;
+
+      return {
+        label: summaryMeta[status].label,
+        value: formatCount(summaryCounts.get(status) ?? 0),
+        delta:
+          status === StudentLifecycleStatus.DEBT
+            ? `Qalan borc: ${outstandingBalance}`
+            : status === StudentLifecycleStatus.GROUP_WAITING
+              ? `Qalan ödəniş: ${outstandingBalance}`
+              : summaryMeta[status].delta,
+        amount: isOutstandingStatus ? outstandingBalance : undefined,
+        tone: summaryMeta[status].tone,
+      };
+    }),
+    clv: {
+      totalPaid: formatAmount(clv.totalPaid),
+      averagePaid: formatAmount(clv.averagePaid),
+      paidMonths: clv.paidMonths,
+    },
+    listMetrics: {
+      totalPaid: formatAmount(clv.totalPaid),
+      expectedPayment: formatAmount(paymentSummary.expectedPayment),
+      overduePayment: formatAmount(paymentSummary.overduePayment),
+    },
     students: rows.map((student) => {
       const balance = toNumber(student.balanceDue);
+      const totalPaid = toNumber(student.totalPaid);
+      const paidMonths = toNumber(student.paidMonths);
       const lifecycleStatus = lifecycleMeta[student.lifecycleStatus];
       const paymentStatus = getPaymentStatus(
         balance,
+        student.nextDueDate ? new Date(student.nextDueDate) : undefined,
+        today
+      );
+      const overdueDays = getOverdueDays(
         student.nextDueDate ? new Date(student.nextDueDate) : undefined,
         today
       );
@@ -383,6 +463,7 @@ export async function getStudentListData(
         program: student.programName ?? "Proqram yoxdur",
         teacher: student.teacherName ?? "Təyin edilməyib",
         dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate) : "Ödənilib",
+        overdueDays,
         balance: formatAmount(balance),
         lifecycleStatusValue: student.lifecycleStatus,
         lifecycleStatus: lifecycleStatus.label,
@@ -390,6 +471,10 @@ export async function getStudentListData(
         paymentStatus: paymentStatus.label,
         paymentTone: paymentStatus.tone,
         lastContact: `Qeydiyyat: ${formatShortDate(student.registeredAt)}`,
+        clv: {
+          totalPaid: formatAmount(totalPaid),
+          paidMonths,
+        },
         detail: {
           manager: student.managerName ?? "Təyin edilməyib",
           registeredAt: formatShortDate(student.registeredAt),
@@ -420,6 +505,7 @@ export async function getStudentListData(
             note: payment.note ?? "-",
             createdBy: payment.createdByName ?? "Sistem",
           })),
+          monthlyPayments: [],
           timeline: student.timeline.map((item) => ({
             id: item.id,
             label: lifecycleMeta[item.newStatus].label,
@@ -448,20 +534,24 @@ type StudentListQueryRow = {
   teacherName: string | null;
   balanceDue: unknown;
   nextDueDate: Date | string | null;
+  totalPaid: unknown;
+  paidMonths: unknown;
   totalCount: number;
   invoices: StudentInvoiceRecord[];
   payments: StudentPaymentRecord[];
+  monthlyPayments: StudentMonthlyPaymentRecord[];
   timeline: StudentTimelineRecord[];
 };
 
 type StudentListRawRow = Omit<
   StudentListQueryRow,
-  "lifecycleStatus" | "totalCount" | "invoices" | "payments" | "timeline"
+  "lifecycleStatus" | "totalCount" | "invoices" | "payments" | "monthlyPayments" | "timeline"
 > & {
   lifecycleStatus: string;
   totalCount: unknown;
   invoices: unknown;
   payments: unknown;
+  monthlyPayments: unknown;
   timeline: unknown;
 };
 
@@ -482,6 +572,12 @@ type StudentPaymentRecord = {
   method: string;
   note: string | null;
   createdByName: string | null;
+};
+
+type StudentMonthlyPaymentRecord = {
+  month: Date | string;
+  amount: unknown;
+  paidAt: Date | string;
 };
 
 type StudentTimelineRecord = {
@@ -550,6 +646,8 @@ async function getStudentRows(
       ae.teacher_name as "teacherName",
       inv.balance_due as "balanceDue",
       inv.next_due_date as "nextDueDate",
+      clv.total_paid as "totalPaid",
+      clv.paid_months as "paidMonths",
       inv.invoices,
       pay.payments,
       hist.timeline
@@ -611,6 +709,13 @@ async function getStudentRows(
         ), '[]'::jsonb) as invoices
     ) inv on true
     left join lateral (
+      select
+        coalesce(sum(p.amount), 0) as total_paid,
+        count(distinct p.payment_month)::int as paid_months
+      from erp.payments p
+      where p.student_id = ps.id
+    ) clv on true
+    left join lateral (
       select coalesce(jsonb_agg(
         jsonb_build_object(
           'id', ordered.id::text,
@@ -665,6 +770,7 @@ async function getStudentRows(
       status: invoice.status as InvoiceStatus,
     })),
     payments: asJsonArray<StudentPaymentRecord>(row.payments),
+    monthlyPayments: asJsonArray<StudentMonthlyPaymentRecord>(row.monthlyPayments),
     timeline: asJsonArray<StudentTimelineRecord>(row.timeline).map((item) => ({
       ...item,
       newStatus: item.newStatus as StudentLifecycleStatus,
@@ -674,28 +780,34 @@ async function getStudentRows(
 
 type StudentCreateOptionRows = {
   summaryCounts: Record<string, number>;
+  summaryBalances: Record<string, number>;
   programs: Array<{
     id: string;
     name: string;
     defaultMonthlyFee: unknown;
     defaultLessonsPerMonth: number | null;
+    description: string | null;
+    isActive: boolean;
   }>;
   teachers: Array<{ id: string; fullName: string }>;
   managers: Array<{ id: string; fullName: string }>;
+  sources: string[];
   leads: StudentListData["createOptions"]["leads"];
 };
 
 type StudentCreateOptionsRawRow = {
   summaryCounts: unknown;
+  summaryBalances: unknown;
   programs: unknown;
   teachers: unknown;
   managers: unknown;
+  sources: unknown;
   leads: unknown;
 };
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data"],
+  ["student-list-data-v5"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -720,21 +832,88 @@ async function getStudentListRawData(
   input: StudentListCacheInput
 ): Promise<StudentListRawData> {
   const prisma = getPrisma();
-  const [rows, options] = await Promise.all([
+  const filterInput = {
+    search: input.search,
+    statusFilter: input.statusFilter,
+    programFilter: input.programFilter,
+    teacherFilter: input.teacherFilter,
+    paymentFilter: input.paymentFilter,
+    today: new Date(input.today),
+    dateFrom: input.dateFrom ? new Date(input.dateFrom) : null,
+    dateTo: input.dateTo ? new Date(input.dateTo) : null,
+  };
+  const [rows, options, clv, paymentSummary] = await Promise.all([
     getStudentRows(prisma, {
-      search: input.search,
-      statusFilter: input.statusFilter,
-      programFilter: input.programFilter,
-      teacherFilter: input.teacherFilter,
-      paymentFilter: input.paymentFilter,
-      today: new Date(input.today),
-      dateFrom: input.dateFrom ? new Date(input.dateFrom) : null,
-      dateTo: input.dateTo ? new Date(input.dateTo) : null,
+      ...filterInput,
     }),
     getStudentCreateOptions(prisma),
+    getStudentClvSummary(prisma, filterInput),
+    getStudentPaymentSummary(prisma, filterInput),
   ]);
 
-  return { rows, options };
+  return { rows, options, clv, paymentSummary };
+}
+
+async function getStudentClvSummary(
+  prisma: ReturnType<typeof getPrisma>,
+  input: Parameters<typeof buildStudentWhereSql>[0]
+): Promise<StudentClvSummary> {
+  const whereSql = buildStudentWhereSql(input);
+  const [summary] = await prisma.$queryRaw<
+    Array<{ totalPaid: unknown; averagePaid: unknown; paidMonths: unknown }>
+  >(Prisma.sql`
+    select
+      coalesce(sum(clv.total_paid), 0) as "totalPaid",
+      coalesce(avg(clv.total_paid), 0) as "averagePaid",
+      coalesce(sum(clv.paid_months), 0) as "paidMonths"
+    from erp.students s
+    join erp.contacts c on c.id = s.contact_id
+    left join lateral (
+      select
+        coalesce(sum(p.amount), 0) as total_paid,
+        count(distinct p.payment_month)::int as paid_months
+      from erp.payments p
+      where p.student_id = s.id
+    ) clv on true
+    ${whereSql}
+  `);
+
+  return {
+    totalPaid: toNumber(summary?.totalPaid),
+    averagePaid: toNumber(summary?.averagePaid),
+    paidMonths: toNumber(summary?.paidMonths),
+  };
+}
+
+async function getStudentPaymentSummary(
+  prisma: ReturnType<typeof getPrisma>,
+  input: Parameters<typeof buildStudentWhereSql>[0]
+): Promise<StudentPaymentSummary> {
+  const whereSql = buildStudentWhereSql(input);
+  const [summary] = await prisma.$queryRaw<
+    Array<{ expectedPayment: unknown; overduePayment: unknown }>
+  >(Prisma.sql`
+    select
+      coalesce(sum(balance.expected_payment), 0) as "expectedPayment",
+      coalesce(sum(balance.overdue_payment), 0) as "overduePayment"
+    from erp.students s
+    join erp.contacts c on c.id = s.contact_id
+    left join lateral (
+      select
+        coalesce(sum(i.balance_due) filter (where i.due_date >= ${input.today}), 0) as expected_payment,
+        coalesce(sum(i.balance_due) filter (where i.due_date < ${input.today}), 0) as overdue_payment
+      from erp.invoices i
+      where i.student_id = s.id
+        and i.status <> 'VOID'::"erp"."InvoiceStatus"
+        and i.balance_due > 0
+    ) balance on true
+    ${whereSql}
+  `);
+
+  return {
+    expectedPayment: toNumber(summary?.expectedPayment),
+    overduePayment: toNumber(summary?.overduePayment),
+  };
 }
 
 async function getStudentCreateOptions(
@@ -751,12 +930,28 @@ async function getStudentCreateOptions(
         ) summary
       ), '{}'::jsonb) as "summaryCounts",
       coalesce((
+        select jsonb_object_agg(summary.lifecycle_status, summary.total_balance)
+        from (
+          select
+            s.lifecycle_status::text as lifecycle_status,
+            coalesce(sum(i.balance_due), 0) as total_balance
+          from erp.students s
+          left join erp.invoices i
+            on i.student_id = s.id
+            and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            and i.balance_due > 0
+          group by s.lifecycle_status
+        ) summary
+      ), '{}'::jsonb) as "summaryBalances",
+      coalesce((
         select jsonb_agg(
           jsonb_build_object(
             'id', p.id::text,
             'name', p.name,
             'defaultMonthlyFee', p.default_monthly_fee,
             'defaultLessonsPerMonth', p.default_lessons_per_month
+            ,'description', p.description
+            ,'isActive', p.is_active
           )
           order by p.name asc
         )
@@ -785,6 +980,15 @@ async function getStudentCreateOptions(
         from erp.users u
         where u.is_active = true
       ), '[]'::jsonb) as "managers",
+      coalesce((
+        select jsonb_agg(source_rows.source order by source_rows.source asc)
+        from (
+          select distinct trim(c.source) as source
+          from erp.contacts c
+          where c.source is not null
+            and trim(c.source) <> ''
+        ) source_rows
+      ), '[]'::jsonb) as "sources",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -828,6 +1032,7 @@ async function getStudentCreateOptions(
 
   return {
     summaryCounts: asJsonRecord(row?.summaryCounts),
+    summaryBalances: asJsonRecord(row?.summaryBalances),
     programs: asJsonArray<StudentCreateOptionRows["programs"][number]>(
       row?.programs
     ),
@@ -837,6 +1042,7 @@ async function getStudentCreateOptions(
     managers: asJsonArray<StudentCreateOptionRows["managers"][number]>(
       row?.managers
     ),
+    sources: asJsonArray<string>(row?.sources),
     leads: asJsonArray<StudentCreateOptionRows["leads"][number]>(row?.leads),
   };
 }
@@ -1035,6 +1241,14 @@ function getPaymentStatus(
   return { label: "Açıq borc", tone: "warning" };
 }
 
+function getOverdueDays(nextDueDate: Date | undefined, today: Date) {
+  if (!nextDueDate || nextDueDate >= today) {
+    return 0;
+  }
+
+  return Math.floor((today.getTime() - nextDueDate.getTime()) / 86_400_000);
+}
+
 function normalizeDateFilter(value: string | undefined) {
   const normalized = normalizeDateValue(value);
 
@@ -1184,6 +1398,9 @@ export async function getStudentDetailData(studentId: string) {
       ae.teacher_name as "teacherName",
       inv.balance_due as "balanceDue",
       inv.next_due_date as "nextDueDate",
+      clv.total_paid as "totalPaid",
+      clv.paid_months as "paidMonths",
+      clv_history.monthly_payments as "monthlyPayments",
       inv.invoices,
       pay.payments,
       hist.timeline
@@ -1245,6 +1462,32 @@ export async function getStudentDetailData(studentId: string) {
         ), '[]'::jsonb) as invoices
     ) inv on true
     left join lateral (
+      select
+        coalesce(sum(p.amount), 0) as total_paid,
+        count(distinct p.payment_month)::int as paid_months
+      from erp.payments p
+      where p.student_id = ps.id
+    ) clv on true
+    left join lateral (
+      select coalesce(jsonb_agg(
+        jsonb_build_object(
+          'month', monthly.payment_month,
+          'amount', monthly.amount,
+          'paidAt', monthly.last_paid_at
+        )
+        order by monthly.payment_month desc
+      ), '[]'::jsonb) as monthly_payments
+      from (
+        select
+          date_trunc('month', p.payment_month)::date as payment_month,
+          sum(p.amount) as amount,
+          max(p.paid_at) as last_paid_at
+        from erp.payments p
+        where p.student_id = ps.id
+        group by date_trunc('month', p.payment_month)::date
+      ) monthly
+    ) clv_history on true
+    left join lateral (
       select coalesce(jsonb_agg(
         jsonb_build_object(
           'id', ordered.id::text,
@@ -1295,9 +1538,15 @@ export async function getStudentDetailData(studentId: string) {
 
   const student = rows[0];
   const balance = toNumber(student.balanceDue);
+  const totalPaid = toNumber(student.totalPaid);
+  const paidMonths = toNumber(student.paidMonths);
   const lifecycleStatus = lifecycleMeta[student.lifecycleStatus as StudentLifecycleStatus];
   const paymentStatus = getPaymentStatus(
     balance,
+    student.nextDueDate ? new Date(student.nextDueDate as Date) : undefined,
+    today
+  );
+  const overdueDays = getOverdueDays(
     student.nextDueDate ? new Date(student.nextDueDate as Date) : undefined,
     today
   );
@@ -1340,6 +1589,7 @@ export async function getStudentDetailData(studentId: string) {
       program: student.programName ?? "Proqram yoxdur",
       teacher: student.teacherName ?? "Təyin edilməyib",
       dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate as Date) : "Ödənilib",
+      overdueDays,
       balance: formatAmount(balance),
       lifecycleStatusValue: student.lifecycleStatus as StudentLifecycleStatus,
       lifecycleStatus: lifecycleStatus.label,
@@ -1347,6 +1597,10 @@ export async function getStudentDetailData(studentId: string) {
       paymentStatus: paymentStatus.label,
       paymentTone: paymentStatus.tone,
       lastContact: `Qeydiyyat: ${formatShortDate(student.registeredAt as Date)}`,
+      clv: {
+        totalPaid: formatAmount(totalPaid),
+        paidMonths,
+      },
       detail: {
         manager: student.managerName ?? "Təyin edilməyib",
         registeredAt: formatShortDate(student.registeredAt as Date),
@@ -1375,6 +1629,11 @@ export async function getStudentDetailData(studentId: string) {
           method: getStudentPaymentMethodLabel(payment.method),
           note: payment.note ?? "-",
           createdBy: payment.createdByName ?? "Sistem",
+        })),
+        monthlyPayments: asJsonArray<StudentMonthlyPaymentRecord>(student.monthlyPayments).map((payment) => ({
+          month: formatMonthInput(payment.month),
+          amount: formatAmount(payment.amount),
+          paidAt: formatShortDate(payment.paidAt),
         })),
         timeline: asJsonArray<StudentTimelineRecord>(student.timeline).map((item) => ({
           id: item.id,

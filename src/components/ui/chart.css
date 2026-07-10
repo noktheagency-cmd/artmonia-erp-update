@@ -1,0 +1,118 @@
+.ui-chart {
+  display: block;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.ui-chart > .recharts-responsive-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.ui-chart .recharts-surface,
+.ui-chart .recharts-layer,
+.ui-chart .recharts-sector {
+  outline: none;
+}
+
+.ui-chart .recharts-cartesian-axis-tick text {
+  fill: var(--muted);
+}
+
+.ui-chart .recharts-cartesian-grid line {
+  stroke: var(--line);
+  stroke-opacity: 0.72;
+}
+
+.ui-chart .recharts-curve.recharts-tooltip-cursor {
+  stroke: var(--line);
+}
+
+.ui-chart-tooltip {
+  display: grid;
+  min-width: 144px;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: rgb(247 249 252 / 96%);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  box-shadow: 0 16px 36px rgb(39 48 68 / 14%);
+  backdrop-filter: blur(14px);
+}
+
+.ui-chart-tooltip-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ui-chart-tooltip-items {
+  display: grid;
+  gap: 6px;
+}
+
+.ui-chart-tooltip-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ui-chart-tooltip-row > svg {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+
+.ui-chart-tooltip-indicator {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: var(--chart-indicator);
+  border: 1px solid var(--chart-indicator);
+  border-radius: 3px;
+}
+
+.ui-chart-tooltip-indicator.is-line {
+  width: 3px;
+  height: 18px;
+  border-radius: 999px;
+}
+
+.ui-chart-tooltip-indicator.is-dashed {
+  width: 3px;
+  height: 18px;
+  background: transparent;
+  border-width: 0 0 0 2px;
+  border-style: dashed;
+  border-radius: 0;
+}
+
+.ui-chart-tooltip-copy {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ui-chart-tooltip-copy span,
+.ui-chart-tooltip-copy strong {
+  display: block;
+}
+
+.ui-chart-tooltip-copy span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.ui-chart-tooltip-copy strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}

@@ -53,12 +53,21 @@ export function DashboardDateFilter({ from, to, label }: DashboardDateFilterProp
   }
 
   return (
-    <div className="dashboard-date-filter" ref={popoverRef}>
+    <div
+      className="dashboard-date-filter"
+      ref={popoverRef}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setIsOpen(false);
+        }
+      }}
+    >
       <button
         className={`dark-action dashboard-date-trigger${isOpen ? " is-open" : ""}`}
         type="button"
         aria-expanded={isOpen}
         aria-haspopup="dialog"
+        aria-controls="owner-dashboard-date-popover"
         onClick={() => setIsOpen((current) => !current)}
       >
         <CalendarDays size={16} />
@@ -67,7 +76,13 @@ export function DashboardDateFilter({ from, to, label }: DashboardDateFilterProp
       </button>
 
       {isOpen ? (
-        <form className="dashboard-date-popover" onSubmit={handleSubmit}>
+        <form
+          className="dashboard-date-popover"
+          id="owner-dashboard-date-popover"
+          role="dialog"
+          aria-label="Dashboard tarix aralığı"
+          onSubmit={handleSubmit}
+        >
           <div className="dashboard-date-popover-head">
             <span>Tarix filteri</span>
             <strong>{formatRangeLabel(draft.from, draft.to)}</strong>

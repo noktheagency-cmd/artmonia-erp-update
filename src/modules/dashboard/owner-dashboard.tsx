@@ -1,174 +1,153 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { ArrowUpRight, CheckCircle2, CircleDollarSign, TrendingUp, UsersRound } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BadgeDollarSign,
+  GraduationCap,
+  TrendingUp,
+  WalletCards,
+} from "lucide-react";
 import type { DashboardData } from "@/modules/dashboard/queries";
+import { DashboardTasksPanel } from "@/modules/dashboard/dashboard-tasks-panel";
 import { DashboardDateFilter } from "@/modules/dashboard/dashboard-date-filter";
-import { StatusChip } from "@/components/ui/status-chip";
+import { DashboardInsights } from "@/modules/dashboard/dashboard-insights";
+import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashboard-visuals";
+import type { TaskData } from "@/modules/tasks/queries";
 
-const kpiRoutes = [
-  "/students?status=ACTIVE",
-  "/finance?type=payments",
-  "/finance?type=debts",
-  "/crm",
-] as const satisfies readonly Route[];
+type TaskAction = (formData: FormData) => void | Promise<void>;
 
-export function OwnerDashboard({ data }: { data: DashboardData }) {
+type KpiPresentation = {
+  href: Route;
+  icon: LucideIcon;
+  tone: "blue" | "cyan" | "orange" | "violet";
+};
+
+const kpiPresentation: readonly KpiPresentation[] = [
+  { href: "/students?status=ACTIVE&tab=list", icon: GraduationCap, tone: "blue" },
+  { href: "/finance?type=payments", icon: WalletCards, tone: "cyan" },
+  { href: "/finance", icon: BadgeDollarSign, tone: "orange" },
+  { href: "/crm", icon: TrendingUp, tone: "violet" },
+];
+
+export function OwnerDashboard({
+  data,
+  taskData,
+  createTaskAction,
+}: {
+  data: DashboardData;
+  taskData: TaskData;
+  createTaskAction: TaskAction;
+}) {
   return (
-    <section className="page-stack dashboard-page">
-      <div className="page-heading">
+    <section className="owner-dashboard" aria-labelledby="owner-dashboard-title">
+      <header className="owner-dashboard-header">
         <div>
-          <p className="eyeless-label">Artmonia studio operations</p>
-          <h1>Salam, Artmonia</h1>
-          <p>Bugünkü fəaliyyət, müraciətlər, borclar və tapşırıqların cari vəziyyəti.</p>
+          <h1 id="owner-dashboard-title">Salam, Artmonia</h1>
         </div>
-
         <DashboardDateFilter from={data.filters.from} to={data.filters.to} label={data.filters.label} />
+      </header>
+
+      <div className="owner-dashboard-kpi-grid">
+        {data.kpis.map((item, index) => {
+          const presentation = kpiPresentation[index] ?? kpiPresentation[0];
+
+          return <DashboardKpiLink item={item} presentation={presentation} index={index} key={item.label} />;
+        })}
       </div>
 
-      <div className="dashboard-grid">
-        <div className="kpi-grid">
-          {data.kpis.map((item, index) => (
-            <Link
-              className={`metric-card dashboard-link-card ${item.tone === "primary" ? "metric-primary" : ""}`}
-              href={kpiRoutes[index] ?? "/dashboard"}
-              key={item.label}
-            >
-              <span className="corner-action" aria-label={`${item.label} aç`}>
-                <ArrowUpRight size={16} />
-              </span>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <div className="metric-footer">
-                <em>{item.delta}</em>
-                <small>{item.helper}</small>
-              </div>
-            </Link>
-          ))}
-        </div>
+      <div className="owner-dashboard-primary-grid">
+        <article
+          className="owner-dashboard-panel owner-dashboard-revenue-panel owner-dashboard-entrance"
+          style={sequenceStyle(4)}
+        >
+          <DashboardPanelHeader
+            title="Gəlir dinamikası"
+            description="Son 12 ay üzrə dövriyyə, mənfəət və xərc görünüşü"
+            href="/finance?type=payments"
+            actionLabel="Gəlir hesabatını aç"
+          />
 
-        <Link className="panel chart-panel revenue-overview-panel dashboard-link-card" href="/finance?type=payments">
-          <div className="panel-head">
-            <div>
-              <h2>Gəlir dinamikası</h2>
-              <p>Aylar üzrə ümumi statistika və ən produktiv ayın səbəbi</p>
-            </div>
-            <span className="round-dark" aria-label="Gəlir hesabatı aç">
-              <ArrowUpRight size={16} />
-            </span>
-          </div>
+          <RevenueAreaChart items={data.revenueBars} />
 
-          <div className="bar-chart" aria-label="Gəlir bar qrafiki">
-            {data.revenueBars.map((bar) => (
-              <div className="bar-item" key={bar.label}>
-                <div className="bar-track">
-                  <span style={{ height: `${bar.value}%` }} title={bar.amount} />
-                </div>
-                <small>{bar.label}</small>
-                <strong>{bar.amount}</strong>
-              </div>
-            ))}
-          </div>
+          <RevenueSummaryCards items={data.revenueBars} bestRevenueMonth={data.bestRevenueMonth} />
+        </article>
+        <DashboardInsights
+          conversionRate={data.conversionRate}
+          conversionHelper={data.conversionHelper}
+          revenueForecast={data.revenueForecast}
+          revenueForecastHelper={data.revenueForecastHelper}
+          revenueBars={data.revenueBars}
+          churnRate={data.churnRate}
+          churnCounts={data.churnCounts}
+        />
+      </div>
 
-          <div className="revenue-summary-grid">
-            {data.revenueStats.map((item) => (
-              <div className="revenue-summary-item" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <small>{item.helper}</small>
-              </div>
-            ))}
-          </div>
-
-          <div className="productive-month-note">
-            <TrendingUp size={18} />
-            <div>
-              <span>Ən produktiv ay: {data.bestRevenueMonth.label}</span>
-              <strong>{data.bestRevenueMonth.amount}</strong>
-              <p>{data.bestRevenueMonth.reason}</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link className="panel team-performance-panel dashboard-link-card" href="/crm">
-          <div className="panel-head">
-            <div>
-              <h2>Team performance</h2>
-              <p>Bu ay menecerlər üzrə müraciət, satış və konversiya</p>
-            </div>
-          </div>
-          <div className="team-performance-list">
-            {data.teamPerformance.length > 0 ? (
-              data.teamPerformance.map((member) => (
-                <div className="team-performance-item" key={member.name}>
-                  <div className="team-performance-head">
-                    <div>
-                      <strong>{member.name}</strong>
-                      <span>
-                        {member.leads} lead / {member.sales} satış
-                      </span>
-                    </div>
-                    <b>{member.conversion}</b>
-                  </div>
-                  <div className="team-performance-track">
-                    <div className="team-performance-bar" style={{ width: `${member.score}%` }} />
-                  </div>
-                  <small>{member.revenue} gəlir</small>
-                </div>
-              ))
-            ) : (
-              <div className="program-stats-empty">Bu ay üçün komanda göstəricisi yoxdur</div>
-            )}
-          </div>
-        </Link>
-
-        <Link className="panel status-breakdown-panel dashboard-link-card" href="/students">
-          <div className="panel-head">
-            <div>
-              <h2>Tələbə statusları</h2>
-              <p>Cari status paylanması</p>
-            </div>
-          </div>
-          <div className="status-breakdown-list">
-            {data.studentStatusCounts.map((status) => (
-              <div className="status-breakdown-item" key={status.label}>
-                <StatusChip tone={status.tone}>{status.label}</StatusChip>
-                <strong>{status.count} nəfər</strong>
-              </div>
-            ))}
-          </div>
-        </Link>
-
-        <Link className="panel task-panel dashboard-link-card" href="/crm?followUp=today">
-          <div className="mini-icon">
-            <CheckCircle2 size={18} />
-          </div>
-          <strong>Günün tapşırıqları</strong>
-          <ul>
-            {data.tasks.length > 0 ? (
-              data.tasks.map((task) => (
-                <li key={task}>{task}</li>
-              ))
-            ) : (
-              <li className="tasks-empty">Tapşırıq tapılmadı</li>
-            )}
-          </ul>
-        </Link>
-
-        <Link className="panel payout-panel dashboard-link-card" href="/finance?type=payroll">
-          <div className="mini-icon">
-            <CircleDollarSign size={18} />
-          </div>
-          <strong>Ay sonu gəlir proqnozu</strong>
-          <div className="big-number">{data.revenueForecast}</div>
-          <p>{data.revenueForecastHelper}</p>
-        </Link>
-
-        <Link className="panel people-panel dashboard-link-card" href="/crm?followUp=today">
-          <UsersRound size={20} />
-          <strong>{data.waitingFamilies} ailə cavab gözləyir</strong>
-          <p>{data.waitingHelper}</p>
-        </Link>
+      <div className="owner-dashboard-lower-grid">
+        <DashboardTasksPanel
+          data={taskData}
+          createTaskAction={createTaskAction}
+        />
       </div>
     </section>
   );
+}
+
+function DashboardKpiLink({
+  item,
+  presentation,
+  index,
+}: {
+  item: DashboardData["kpis"][number];
+  presentation: KpiPresentation;
+  index: number;
+}) {
+  const Icon = presentation.icon;
+
+  return (
+    <Link
+      className={`owner-dashboard-kpi owner-dashboard-kpi-${presentation.tone} owner-dashboard-entrance`}
+      href={presentation.href}
+      style={sequenceStyle(index)}
+    >
+      <div className="owner-dashboard-kpi-head">
+        <span className="owner-dashboard-kpi-icon" aria-hidden="true">
+          <Icon size={19} strokeWidth={1.9} />
+        </span>
+        <span>{item.label}</span>
+        <ArrowRight className="owner-dashboard-kpi-arrow" size={18} aria-hidden="true" />
+      </div>
+      <strong>{item.value}</strong>
+    </Link>
+  );
+}
+
+function DashboardPanelHeader({
+  title,
+  description,
+  href,
+  actionLabel,
+}: {
+  title: string;
+  description: string;
+  href: Route;
+  actionLabel: string;
+}) {
+  return (
+    <div className="owner-dashboard-panel-head">
+      <div>
+        <h2>{title}</h2>
+        <p>{description}</p>
+      </div>
+      <Link className="owner-dashboard-icon-link" href={href} aria-label={actionLabel}>
+        <ArrowUpRight size={17} strokeWidth={1.9} />
+      </Link>
+    </div>
+  );
+}
+
+function sequenceStyle(index: number) {
+  return { "--dashboard-sequence": index } as CSSProperties;
 }

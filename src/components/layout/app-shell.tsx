@@ -12,13 +12,17 @@ import {
 } from "react";
 import {
   BriefcaseBusiness,
+  BookOpenText,
   CalendarDays,
   CreditCard,
   Gauge,
   GraduationCap,
   LogOut,
   Megaphone,
+  PanelLeftClose,
+  PanelLeftOpen,
   Presentation,
+  ListTodo,
   UsersRound,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
@@ -35,15 +39,19 @@ type NavItem = {
   icon: typeof Gauge;
 };
 
-const navItems: NavItem[] = [
-  { href: "/dashboard", label: "İdarə paneli", icon: Gauge },
+const primaryNavItems: NavItem[] = [
   { href: "/students", label: "Tələbələr", icon: GraduationCap },
-  { href: "/bookings" as Route, label: "Bronlar", icon: CalendarDays },
-  { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation },
   { href: "/crm", label: "Follow-up", icon: UsersRound },
-  { href: "/marketing" as Route, label: "Marketing", icon: Megaphone },
-  { href: "/hr" as Route, label: "HR panel", icon: BriefcaseBusiness },
   { href: "/finance", label: "Maliyyə", icon: CreditCard },
+  { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness },
+  { href: "/groups" as Route, label: "Qruplar", icon: CalendarDays },
+  { href: "/tasks" as Route, label: "Tasklar", icon: ListTodo },
+];
+
+const secondaryNavItems: NavItem[] = [
+  { href: "/marketing" as Route, label: "Marketing", icon: Megaphone },
+  { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText },
+  { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation },
 ];
 
 export function AppShell({
@@ -59,6 +67,7 @@ export function AppShell({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [isSidebarCompact, setIsSidebarCompact] = useState(false);
   const prefetchedHrefs = useRef<Set<string>>(new Set());
   const currentParams = searchParams.toString();
   const currentHref = currentParams ? `${pathname}?${currentParams}` : pathname;
@@ -72,6 +81,11 @@ export function AppShell({
     .toUpperCase();
   const activePendingHref = pendingHref && pendingHref !== currentHref ? pendingHref : null;
   const isNavigating = Boolean(activePendingHref);
+  const visibleSecondaryNavItems = secondaryNavItems.filter(
+    (item) =>
+      item.href !== "/groups" ||
+      currentUser.roles.some((role) => ["SUPER_ADMIN", "OWNER", "ADMIN", "TEACHER"].includes(role))
+  );
 
   function markNavigation(href: string | null) {
     if (href && href !== currentHref) {
@@ -161,7 +175,13 @@ export function AppShell({
   }
 
   return (
-    <div className={cx("app-stage", isNavigating && "is-navigating")}>
+    <div
+      className={cx(
+        "app-stage",
+        isNavigating && "is-navigating",
+        isSidebarCompact && "is-sidebar-compact"
+      )}
+    >
       <div className="studio-wash" aria-hidden="true" />
       <div className="route-progress" aria-hidden={!isNavigating} data-visible={isNavigating} />
       <aside className="side-rail" aria-label="Əsas naviqasiya">
@@ -176,9 +196,19 @@ export function AppShell({
         >
           <Image className="brand-logo" src="/logo.png" alt="" width={34} height={34} priority />
         </Link>
+        <button
+          className="sidebar-toggle"
+          type="button"
+          aria-label={isSidebarCompact ? "Sidebarı genişləndir" : "Sidebarı kiçilt"}
+          aria-expanded={!isSidebarCompact}
+          onClick={() => setIsSidebarCompact((current) => !current)}
+        >
+          {isSidebarCompact ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+        </button>
 
         <nav className="nav-stack">
-          {navItems.map((item) => {
+          <p className="nav-section-label">İş axını</p>
+          {primaryNavItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -199,6 +229,35 @@ export function AppShell({
                 prefetch={false}
               >
                 <Icon size={18} strokeWidth={1.9} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+
+          <div className="nav-divider" aria-hidden="true" />
+          <p className="nav-section-label">Digər</p>
+          {visibleSecondaryNavItems.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cx(
+                  "nav-icon",
+                  active && "is-active",
+                  activePendingHref === item.href && "is-pending"
+                )}
+                aria-label={item.label}
+                aria-current={active ? "page" : undefined}
+                onClick={(event) => handleNavClick(item.href, event)}
+                onMouseEnter={() => handleNavHover(item.href)}
+                onFocus={() => handleNavHover(item.href)}
+                prefetch={false}
+              >
+                <Icon size={18} strokeWidth={1.9} />
+                <span>{item.label}</span>
               </Link>
             );
           })}

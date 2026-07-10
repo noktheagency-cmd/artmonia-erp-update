@@ -1,13 +1,14 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import {
   AlertTriangle,
   ArrowDownToLine,
+  ArrowRight,
   BadgeDollarSign,
   Banknote,
   BarChart3,
@@ -27,8 +28,26 @@ import {
   WalletCards,
   XCircle,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  Pie,
+  PieChart,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { createPortal, useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import {
   Dialog,
   DialogClose,
@@ -45,6 +64,7 @@ import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { FinanceData } from "@/modules/finance/queries";
 
 const addCategoryValue = "__add_category__";
@@ -91,11 +111,54 @@ const financeTabs: Array<{
 
 const financeKpiIcons = [Banknote, ReceiptText, BarChart3, Calculator, AlertTriangle];
 
+function buildFinanceExportPreview(data: FinanceData): Array<Record<string, string>> {
+  if (data.filters.type === "payments") {
+    return data.payments.map((payment) => ({
+      student: payment.studentName,
+      studentCode: payment.studentCode,
+      amount: payment.amount,
+      paidAt: payment.paidAt,
+      paymentMonth: payment.paymentMonth,
+      method: payment.method,
+      payer: payment.payerName,
+      receipt: payment.receipt,
+      note: payment.note,
+    }));
+  }
+
+  if (data.filters.type === "debts") {
+    return data.debtors.map((debtor) => ({
+      student: debtor.studentName,
+      studentCode: debtor.studentCode,
+      phone: debtor.phone,
+      program: debtor.program,
+      teacher: debtor.teacher,
+      balance: debtor.balance,
+      dueDate: debtor.nextDueDate,
+      overdueDays: debtor.overdueDays,
+    }));
+  }
+
+  const expenses = data.filters.type === "payroll" ? data.payrollItems : data.expenses;
+  return expenses.map((expense) => ({
+    staff: expense.staffName,
+    category: expense.category,
+    amount: expense.amount,
+    expenseDate: expense.expenseDate,
+    method: expense.method,
+    vendor: expense.vendor,
+    salaryFormula: expense.salaryFormula,
+    receipt: expense.receipt,
+    description: expense.description,
+  }));
+}
+
 type FinanceFilterDraft = {
   query: string;
   category: string;
   from: string;
   to: string;
+  source: FinanceData["filters"]["source"];
 };
 
 type FinanceToastTone = "success" | "danger";
@@ -138,32 +201,37 @@ export function FinanceWorkspace({
   }
 
   return (
-    <section className="page-stack finance-page">
+    <section className="finance-command-page finance-page">
       <FinanceOperationToast toast={toast} onToastChange={setToast} />
-      <header className="finance-hero">
+      <header className="finance-hero finance-command-hero">
         <div className="finance-hero-head">
           <div className="finance-header-main">
-            <div className="finance-scope-row">
-              <span>Artmonia ERP</span>
-              <span>{data.filterLabels.period}</span>
-              <span>Maliyyə</span>
-            </div>
             <div className="finance-title-block">
               <h1>Maliyyə paneli</h1>
               <p>Gəlirlər, xərclər, alacaqlar və qəbzlər bir yerdə aydın görünür.</p>
             </div>
           </div>
           <div className="finance-header-actions">
+            {data.permissions.canExport ? (
+              <ExportDialog
+                key={`finance-export-${data.filters.type}`}
+                module="finance"
+                initialDataset={data.filters.type === "overview" ? "payments" : data.filters.type}
+                resultCount={data.filters.type === "payments" || data.filters.type === "overview" ? data.payments.length : data.filters.type === "expenses" ? data.expenses.length : data.filters.type === "debts" ? data.debtors.length : data.payrollItems.length}
+                filters={{ q: data.filters.query, category: data.filters.category, type: data.filters.type, from: data.filters.from, to: data.filters.to }}
+                previewRows={buildFinanceExportPreview(data)}
+              />
+            ) : null}
+            <ExpenseDialog
+              data={data}
+              action={createExpenseAction}
+              onNotify={showToast}
+            />
             <PaymentDialog
-            data={data}
-            action={recordPaymentAction}
-            onNotify={showToast}
-          />
-          <ExpenseDialog
-            data={data}
-            action={createExpenseAction}
-            onNotify={showToast}
-          />
+              data={data}
+              action={recordPaymentAction}
+              onNotify={showToast}
+            />
           </div>
         </div>
         <FinanceCommandBar key={`filters-${data.returnTo}`} data={data} />
@@ -373,6 +441,7 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
     category: data.filters.category,
     from: data.filters.from,
     to: data.filters.to,
+    source: data.filters.source,
   }));
   const presets = useMemo(() => buildPeriodPresets(), []);
 
@@ -450,6 +519,20 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
               value: category.id,
               label: category.name,
             }))}
+          />
+        </div>
+
+        <div className="finance-filter-field">
+          <FormSelect
+            name="source"
+            defaultValue={draft.source}
+            onValueChange={(value) => updateDraft({ source: cleanSelectValue(value) as FinanceFilterDraft["source"] })}
+            placeholder="Bütün mənbələr"
+            options={[
+              { value: "all", label: "Bütün mənbələr" },
+              { value: "student", label: "Tələbə ödənişləri" },
+              { value: "workshop", label: "Workshop / Masterclass" },
+            ]}
           />
         </div>
 
@@ -560,15 +643,20 @@ function PaymentDialog({
       <DialogTrigger asChild>
         <Button type="button" disabled={!data.permissions.canRecordPayment}>
           <Banknote data-icon="inline-start" />
-          Ödəniş əlavə et
+          Ödəniş qəbul et
         </Button>
       </DialogTrigger>
       <DialogContent className="finance-dialog finance-payment-dialog">
         <DialogHeader className="dialog-header-custom">
-          <DialogTitle>Ödəniş qəbul et</DialogTitle>
-          <DialogDescription>
-            Tələbəni seç, qəbzi əlavə et və məbləği açıq fakturalara avtomatik bölüşdür.
-          </DialogDescription>
+          <span className="finance-dialog-heading-icon" aria-hidden="true">
+            <ArrowDownToLine size={19} />
+          </span>
+          <div>
+            <DialogTitle>Ödəniş qəbul et</DialogTitle>
+            <DialogDescription>
+              Tələbəni seç, qəbzi əlavə et və məbləği açıq fakturalara avtomatik bölüşdür.
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="finance-form">
@@ -698,6 +786,10 @@ function PaymentDialog({
               <span>Qeyd</span>
               <Input name="note" maxLength={500} placeholder="Bank, terminal və ya əlavə qeyd" />
             </label>
+            <div className="finance-allocation-note">
+              <AlertTriangle size={14} aria-hidden="true" />
+              Bu ödəniş açıq fakturalara avtomatik bölüşdürüləcək və alacaq balansı yenilənəcək.
+            </div>
           </section>
 
           <DialogFooter className="dialog-footer-custom">
@@ -1037,10 +1129,8 @@ function CashFlowChart({ data }: { data: FinanceData }) {
         set.add(expense.dateKey);
       }
     });
-    const list = Array.from(set);
-    list.sort();
-    return list;
-  }, [data.payments, expenseMovements]);
+    return buildFinanceTimelineDates(data.filters.from, data.filters.to, Array.from(set));
+  }, [data.filters.from, data.filters.to, data.payments, expenseMovements]);
 
   const trendPoints = useMemo(() => {
     if (dates.length === 0) {
@@ -1069,121 +1159,102 @@ function CashFlowChart({ data }: { data: FinanceData }) {
     });
   }, [dates, data.payments, expenseMovements]);
 
-  const maxVal = useMemo(() => {
-    let highest = 100;
-    trendPoints.forEach(p => {
-      if (p.income > highest) highest = p.income;
-      if (p.expense > highest) highest = p.expense;
-      if (Math.abs(p.net) > highest) highest = Math.abs(p.net);
-    });
-    return highest * 1.15;
-  }, [trendPoints]);
-
-  const pts = useMemo(() => {
-    const count = trendPoints.length;
-    return trendPoints.map((p, i) => {
-      const x = count > 1 ? 50 + (i / (count - 1)) * 390 : 245;
-      const yIncome = 170 - (p.income / maxVal) * 150;
-      const yExpense = 170 - (p.expense / maxVal) * 150;
-      const yNet = 170 - (p.net / maxVal) * 150;
-      return {
-        ...p,
-        x,
-        yIncome: Math.max(10, Math.min(175, yIncome)),
-        yExpense: Math.max(10, Math.min(175, yExpense)),
-        yNet: Math.max(10, Math.min(175, yNet)),
-      };
-    });
-  }, [trendPoints, maxVal]);
-
-  const incomePoints = pts.map(p => `${p.x},${p.yIncome}`).join(" L ");
-  const expensePoints = pts.map(p => `${p.x},${p.yExpense}`).join(" L ");
-  const netPoints = pts.map(p => `${p.x},${p.yNet}`).join(" L ");
-
-  const incomeAreaD = `M 50,170 L ${incomePoints} L ${pts[pts.length - 1].x},170 Z`;
-  const expenseAreaD = `M 50,170 L ${expensePoints} L ${pts[pts.length - 1].x},170 Z`;
+  const reduceMotion = useReducedMotion();
+  const chartData = useMemo(
+    () => trendPoints.map((point) => ({
+      ...point,
+      label: point.date ? formatShortDate(point.date) : "—",
+    })),
+    [trendPoints]
+  );
+  const chartConfig = {
+    income: { label: "Gəlir", color: "#11a683" },
+    expense: { label: "Xərc", color: "#f04462" },
+    net: { label: "Xalis", color: "#3158f5" },
+  } satisfies ChartConfig;
 
   return (
-    <div className="finance-svg-chart-container" style={{ position: "relative" }}>
-      <svg viewBox="0 0 460 210" className="finance-svg-chart">
-        {/* Grids */}
-        <line x1="50" y1="20" x2="440" y2="20" className="chart-grid-line" />
-        <line x1="50" y1="70" x2="440" y2="70" className="chart-grid-line" />
-        <line x1="50" y1="120" x2="440" y2="120" className="chart-grid-line" />
-        <line x1="50" y1="170" x2="440" y2="170" className="chart-axis-line" stroke="var(--fin-border)" />
-
-        {/* Y Axis */}
-        <text x="40" y="24" textAnchor="end" className="chart-text-label">{(maxVal).toFixed(0)}</text>
-        <text x="40" y="74" textAnchor="end" className="chart-text-label">{(maxVal * 0.66).toFixed(0)}</text>
-        <text x="40" y="124" textAnchor="end" className="chart-text-label">{(maxVal * 0.33).toFixed(0)}</text>
-        <text x="40" y="174" textAnchor="end" className="chart-text-label">0</text>
-
-        {/* Area gradients */}
-        <path d={incomeAreaD} className="chart-area-path" fill="var(--fin-success)" opacity="0.04" />
-        <path d={expenseAreaD} className="chart-area-path" fill="var(--fin-danger)" opacity="0.04" />
-
-        {/* Paths */}
-        {pts.length > 1 && (
-          <>
-            <path d={`M ${incomePoints}`} className="chart-line-path chart-line-income" />
-            <path d={`M ${expensePoints}`} className="chart-line-path chart-line-expense" />
-            <path d={`M ${netPoints}`} className="chart-line-path chart-line-net" />
-          </>
-        )}
-
-        {/* Data circles & triggers */}
-        {dates.length > 0 && pts.map((p, i) => (
-          <g key={i}>
-            <circle cx={p.x} cy={p.yIncome} r="4" fill="var(--fin-success)" className="chart-data-dot" />
-            <circle cx={p.x} cy={p.yExpense} r="4" fill="var(--fin-danger)" className="chart-data-dot" />
-            <circle cx={p.x} cy={p.yNet} r="3.5" fill="var(--fin-primary)" className="chart-data-dot" />
-
-            <rect x={p.x - 10} y="20" width="20" height="150" fill="transparent" className="chart-data-dot-trigger" style={{ cursor: "pointer" }} />
-
-            <g className="chart-tooltip-group">
-              <rect x={p.x > 340 ? p.x - 110 : p.x + 10} y="30" width="100" height="70" rx="6" fill="var(--fin-ink)" opacity="0.95" />
-              <text x={p.x > 340 ? p.x - 60 : p.x + 60} y="46" textAnchor="middle" fill="#ffffff" style={{ fontSize: "8.5px", fontWeight: 700 }}>
-                {p.date}
-              </text>
-              <text x={p.x > 340 ? p.x - 100 : p.x + 20} y="62" fill="var(--fin-success)" style={{ fontSize: "9px", fontWeight: 700 }}>
-                Gəlir: {p.income.toFixed(0)}
-              </text>
-              <text x={p.x > 340 ? p.x - 100 : p.x + 20} y="77" fill="var(--fin-danger)" style={{ fontSize: "9px", fontWeight: 700 }}>
-                Xərc: {p.expense.toFixed(0)}
-              </text>
-              <text x={p.x > 340 ? p.x - 100 : p.x + 20} y="92" fill="#ffffff" style={{ fontSize: "9px", fontWeight: 700 }}>
-                Xalis: {p.net.toFixed(0)}
-              </text>
-            </g>
-          </g>
+    <div className="finance-cash-flow">
+      <div className="finance-chart-key" aria-label="Qrafik göstəriciləri">
+        {Object.entries(chartConfig).map(([key, item]) => (
+          <span key={key}>
+            <i style={{ background: item.color }} />
+            {item.label}
+          </span>
         ))}
-
-        {/* X Axis dates */}
-        {dates.length > 0 && pts.map((p, i) => {
-          const shouldShow = i === 0 || i === pts.length - 1 || (pts.length > 3 && i === Math.floor(pts.length / 2));
-          if (!shouldShow) return null;
-
-          const dParts = p.date.split("-");
-          const formattedDate = dParts[2] ? `${dParts[2]} ${getMonthNameShort(dParts[1])}` : p.date;
-
-          return (
-            <text key={`date-${i}`} x={p.x} y="190" textAnchor="middle" className="chart-text-label" style={{ fontWeight: 700 }}>
-              {formattedDate}
-            </text>
-          );
-        })}
-      </svg>
+      </div>
+      <ChartContainer config={chartConfig} className="finance-cash-flow-chart" initialDimension={{ width: 720, height: 280 }}>
+        <AreaChart data={chartData} margin={{ top: 12, right: 16, left: -10, bottom: 0 }} accessibilityLayer>
+          <defs>
+            <linearGradient id="financeIncomeFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-income)" stopOpacity={0.2} />
+              <stop offset="100%" stopColor="var(--color-income)" stopOpacity={0.01} />
+            </linearGradient>
+            <linearGradient id="financeExpenseFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-expense)" stopOpacity={0.14} />
+              <stop offset="100%" stopColor="var(--color-expense)" stopOpacity={0.01} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} strokeDasharray="4 6" />
+          <XAxis dataKey="label" axisLine={false} tickLine={false} tickMargin={12} minTickGap={26} />
+          <YAxis axisLine={false} tickLine={false} width={54} tickFormatter={formatCompactAmount} />
+          <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="3 4" />
+          <ChartTooltip
+            cursor={{ stroke: "#aebbd0", strokeDasharray: "4 4" }}
+            content={<ChartTooltipContent formatter={(value, name) => (
+              <div className="finance-tooltip-value">
+                <span>{chartConfig[name as keyof typeof chartConfig]?.label ?? name}</span>
+                <strong>{formatChartAmount(Number(value))}</strong>
+              </div>
+            )} />}
+          />
+          <Area
+            type="monotone"
+            dataKey="income"
+            stroke="var(--color-income)"
+            fill="url(#financeIncomeFill)"
+            strokeWidth={2.25}
+            dot={{ r: 3, fill: "var(--color-income)", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, strokeWidth: 2 }}
+            isAnimationActive={!reduceMotion}
+            animationDuration={800}
+          />
+          <Area
+            type="monotone"
+            dataKey="expense"
+            stroke="var(--color-expense)"
+            fill="url(#financeExpenseFill)"
+            strokeWidth={2.25}
+            dot={{ r: 3, fill: "var(--color-expense)", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, strokeWidth: 2 }}
+            isAnimationActive={!reduceMotion}
+            animationDuration={950}
+          />
+          <Line
+            type="monotone"
+            dataKey="net"
+            stroke="var(--color-net)"
+            strokeWidth={2.25}
+            strokeDasharray="6 5"
+            dot={{ r: 3, fill: "var(--color-net)", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, strokeWidth: 2 }}
+            isAnimationActive={!reduceMotion}
+            animationDuration={1100}
+          />
+        </AreaChart>
+      </ChartContainer>
     </div>
   );
 }
 
-function getMonthNameShort(monthNum: string | undefined): string {
-  if (!monthNum) return "";
+function formatShortDate(value: string): string {
+  const [, monthNum, day] = value.split("-");
+  if (!monthNum || !day) return value;
   const months: Record<string, string> = {
     "01": "yan", "02": "fev", "03": "mar", "04": "apr", "05": "may", "06": "iyn",
     "07": "iyl", "08": "avq", "09": "sen", "10": "okt", "11": "noy", "12": "dek"
   };
-  return months[monthNum] || "";
+  return `${day} ${months[monthNum] ?? monthNum}`;
 }
 
 function CategoryDistributionList({ data }: { data: FinanceData }) {
@@ -1221,7 +1292,7 @@ function OverviewWorkspace({ data }: { data: FinanceData }) {
   return (
     <>
       <div className="finance-overview-grid">
-        <article className="finance-panel finance-overview-panel">
+        <article className="finance-panel finance-overview-panel is-cashflow">
           <div className="finance-panel-head">
             <div>
               <span>Pul axını</span>
@@ -1231,7 +1302,7 @@ function OverviewWorkspace({ data }: { data: FinanceData }) {
           <CashFlowChart data={data} />
         </article>
 
-        <article className="finance-panel finance-overview-panel">
+        <article className="finance-panel finance-overview-panel is-distribution">
           <div className="finance-panel-head">
             <div>
               <span>Xərclərin bölgüsü</span>
@@ -1247,7 +1318,91 @@ function OverviewWorkspace({ data }: { data: FinanceData }) {
         <PaymentMethodChart data={data} />
         <DebtRiskChart data={data} />
       </div>
+
+      <RecentFinanceActivity data={data} />
     </>
+  );
+}
+
+function RecentFinanceActivity({ data }: { data: FinanceData }) {
+  const rows = useMemo(() => {
+    const payments = data.payments.map((payment) => ({
+      id: `payment-${payment.id}`,
+      dateKey: payment.dateKey,
+      date: payment.paidAt,
+      type: "Gəlir",
+      description: `${payment.studentName} — kurs haqqı`,
+      category: "Təhsil haqqı",
+      amount: payment.amount,
+      method: payment.method,
+      tone: "success" as const,
+      status: "Qəbul edildi",
+    }));
+    const expenses = [...data.expenses, ...data.payrollItems].map((expense) => ({
+      id: `expense-${expense.id}`,
+      dateKey: expense.dateKey,
+      date: expense.expenseDate,
+      type: "Xərc",
+      description: [expense.vendor, expense.description]
+        .filter((value) => value && value !== "-")
+        .join(" — ") || expense.category,
+      category: expense.category,
+      amount: `-${expense.amount}`,
+      method: expense.method,
+      tone: "danger" as const,
+      status: "Qeyd edildi",
+    }));
+
+    return [...payments, ...expenses]
+      .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+      .slice(0, 5);
+  }, [data.expenses, data.payments, data.payrollItems]);
+
+  return (
+    <article className="finance-panel finance-activity-panel">
+      <div className="finance-panel-head finance-activity-head">
+        <div>
+          <span>Canlı jurnal</span>
+          <h2>Son əməliyyatlar</h2>
+        </div>
+        <Link href={buildFinanceTabHref(data, "payments")}>
+          Hamısına bax
+          <ArrowRight size={14} />
+        </Link>
+      </div>
+      {rows.length > 0 ? (
+        <div className="finance-table-wrap">
+          <table className="finance-table finance-activity-table">
+            <thead>
+              <tr>
+                <th>Tarix</th>
+                <th>Növ</th>
+                <th>Təsvir</th>
+                <th>Kateqoriya</th>
+                <th>Məbləğ</th>
+                <th>Ödəniş üsulu</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.date}</td>
+                  <td><span className={`finance-movement-type is-${row.tone}`}>{row.type}</span></td>
+                  <td><strong className="finance-activity-description">{row.description}</strong></td>
+                  <td><span className={`finance-category-chip is-${row.tone}`}>{row.category}</span></td>
+                  <td className={`finance-money ${row.tone === "success" ? "positive" : "negative"}`}>{row.amount}</td>
+                  <td><span className="payment-method-chip">{row.method}</span></td>
+                  <td><StatusChip tone={row.tone}>{row.status}</StatusChip></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="finance-overview-empty">Seçilmiş dövrdə əməliyyat yoxdur</div>
+      )}
+    </article>
   );
 }
 
@@ -1401,11 +1556,41 @@ function DonutChart({
   compact?: boolean;
 }) {
   const total = sumChartValues(slices);
-  const gradient = buildConicGradient(slices, total);
+  const reduceMotion = useReducedMotion();
+  const config = Object.fromEntries(
+    slices.map((slice, index) => [`slice${index}`, { label: slice.label, color: slice.color }])
+  ) satisfies ChartConfig;
 
   return (
     <div className={`finance-donut-layout${compact ? " is-compact" : ""}`}>
-      <div className="finance-donut" style={{ background: gradient }} aria-hidden="true">
+      <div className="finance-donut">
+        <ChartContainer config={config} className="finance-donut-chart" initialDimension={{ width: 156, height: 156 }}>
+          <PieChart accessibilityLayer>
+            <ChartTooltip
+              cursor={false}
+              content={<ChartTooltipContent hideLabel formatter={(value, _name, item) => (
+                <div className="finance-tooltip-value">
+                  <span>{item.payload?.label}</span>
+                  <strong>{formatChartAmount(Number(value))}</strong>
+                </div>
+              )} />}
+            />
+            <Pie
+              data={slices}
+              dataKey="value"
+              nameKey="label"
+              innerRadius="70%"
+              outerRadius="94%"
+              paddingAngle={slices.length > 1 ? 2 : 0}
+              cornerRadius={5}
+              strokeWidth={0}
+              isAnimationActive={!reduceMotion}
+              animationDuration={900}
+            >
+              {slices.map((slice) => <Cell key={slice.label} fill={slice.color} />)}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
         <div className="finance-donut-core">
           <span>{centerLabel}</span>
           <strong>{centerValue}</strong>
@@ -1464,26 +1649,51 @@ function sumChartValues(slices: Array<{ value: number }>) {
   return slices.reduce((sum, slice) => sum + slice.value, 0);
 }
 
-function buildConicGradient(slices: ChartSlice[], total: number) {
-  if (total <= 0) {
-    return "conic-gradient(#e5eaf3 0deg 360deg)";
-  }
-
-  let current = 0;
-  const stops = slices.map((slice) => {
-    const start = current;
-    const end = current + (slice.value / total) * 360;
-    current = end;
-    return `${slice.color} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`;
-  });
-
-  return `conic-gradient(${stops.join(", ")})`;
-}
-
 function formatChartAmount(value: number) {
   const rounded = Math.round(value);
   const formatted = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${formatted} AZN`;
+}
+
+function formatCompactAmount(value: number) {
+  const absolute = Math.abs(value);
+  if (absolute >= 1000) {
+    return `${value < 0 ? "-" : ""}${(absolute / 1000).toLocaleString("az-AZ", { maximumFractionDigits: 1 })}k`;
+  }
+  return Math.round(value).toLocaleString("az-AZ");
+}
+
+function buildFinanceTimelineDates(from: string, to: string, eventDates: string[]) {
+  const validRange = /^\d{4}-\d{2}-\d{2}$/;
+  if (!validRange.test(from) || !validRange.test(to) || from > to) {
+    return eventDates.toSorted();
+  }
+
+  const start = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  const dayCount = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+
+  if (dayCount > 92) {
+    return Array.from(new Set([from, ...eventDates, to])).toSorted();
+  }
+
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + index);
+    return date.toISOString().slice(0, 10);
+  });
+}
+
+function useReducedMotion() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => true
+  );
 }
 
 function PaymentLedger({
@@ -1531,7 +1741,7 @@ function PaymentLedger({
                   <td>
                     <div className="finance-entity-cell">
                       <strong>{payment.studentName}</strong>
-                      <span>{payment.studentCode}</span>
+                      <span>{payment.studentCode} · {payment.sourceKind === "WORKSHOP" ? "Workshop" : "Tələbə"}</span>
                     </div>
                   </td>
                   <td>{payment.payerName}</td>
@@ -1544,13 +1754,20 @@ function PaymentLedger({
                   </td>
                   <td>{payment.note}</td>
                   <td>
-                    <PaymentCrudActions
-                      data={data}
-                      payment={payment}
-                      updateAction={updateAction}
-                      deleteAction={deleteAction}
-                      onNotify={onNotify}
-                    />
+                    {payment.sourceKind === "WORKSHOP" ? (
+                      <Link className="finance-row-action-btn" href={payment.sourceHref as Route}>
+                        <Eye size={13} />
+                        Tədbirə bax
+                      </Link>
+                    ) : (
+                      <PaymentCrudActions
+                        data={data}
+                        payment={payment}
+                        updateAction={updateAction}
+                        deleteAction={deleteAction}
+                        onNotify={onNotify}
+                      />
+                    )}
                   </td>
                 </tr>
               ))
@@ -1799,9 +2016,9 @@ function DebtLedger({ debtors }: { debtors: FinanceData["debtors"] }) {
                   <td><StatusChip tone={debt.tone}>{formatDebtStatus(debt.tone)}</StatusChip></td>
                   <td>
                     <div className="finance-row-actions">
-                      <Link className="finance-row-action-btn" href={`/students/${debt.id}` as Route}>
+                      <Link className="finance-row-action-btn" href={debt.sourceHref as Route}>
                         <Eye size={13} />
-                        Profil
+                        {debt.sourceKind === "WORKSHOP" ? "Tədbir" : "Profil"}
                       </Link>
                       <Link className="finance-row-action-btn" href="/finance?type=payments">
                         <Banknote size={13} />
@@ -1869,7 +2086,7 @@ function ExpenseLedger({
                   <td>
                     <div className="finance-entity-cell">
                       <strong>{expense.category}</strong>
-                      <span>{expense.description}</span>
+                      <span>{expense.workshopEventTitle || expense.description}</span>
                     </div>
                   </td>
                   <td className="finance-money negative">{expense.amount}</td>
@@ -1884,13 +2101,20 @@ function ExpenseLedger({
                   <td>{expense.receipt}</td>
                   <td>{expense.description}</td>
                   <td>
-                    <ExpenseCrudActions
-                      data={data}
-                      expense={expense}
-                      updateAction={updateAction}
-                      deleteAction={deleteAction}
-                      onNotify={onNotify}
-                    />
+                    {expense.workshopEventId ? (
+                      <Link className="finance-row-action-btn" href={expense.sourceHref as Route}>
+                        <Eye size={13} />
+                        Tədbirə bax
+                      </Link>
+                    ) : (
+                      <ExpenseCrudActions
+                        data={data}
+                        expense={expense}
+                        updateAction={updateAction}
+                        deleteAction={deleteAction}
+                        onNotify={onNotify}
+                      />
+                    )}
                   </td>
                 </tr>
               ))
@@ -2202,6 +2426,7 @@ function buildFinanceFilterPath(
   const type = nextValues.type ?? data.filters.type;
   const from = nextValues.from ?? data.filters.from;
   const to = nextValues.to ?? data.filters.to;
+  const source = nextValues.source ?? data.filters.source;
 
   if (query) {
     params.set("q", query);
@@ -2221,6 +2446,10 @@ function buildFinanceFilterPath(
 
   if (to) {
     params.set("to", to);
+  }
+
+  if (source !== "all") {
+    params.set("source", source);
   }
 
   const queryString = params.toString();
@@ -2315,6 +2544,10 @@ function buildFinanceTabHref(data: FinanceData, tab: FinanceTab) {
 
   if (data.filters.category) {
     query.category = data.filters.category;
+  }
+
+  if (data.filters.source !== "all") {
+    query.source = data.filters.source;
   }
 
   if (tab !== "overview") {

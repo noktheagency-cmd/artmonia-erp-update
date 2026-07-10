@@ -1,23 +1,30 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import { useState, useTransition, type FormEvent } from "react";
 import {
+  ArrowLeft,
+  ArrowRight,
   Banknote,
   CalendarDays,
-  CheckCircle2,
-  Gift,
+  ChevronDown,
+  CircleDollarSign,
+  Filter,
   MapPin,
   Plus,
   Search,
+  SlidersHorizontal,
   Sparkles,
-  Ticket,
+  TrendingUp,
   UserPlus,
   UsersRound,
+  WalletCards,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cx } from "@/components/ui/cx";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -28,400 +35,430 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
-import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
-import type {
-  WorkshopData,
-  WorkshopEventRow,
-  WorkshopParticipantRow,
-} from "@/modules/workshops/queries";
+import type { WorkshopData, WorkshopEventRow } from "@/modules/workshops/queries";
 
-type WorkshopAction = (formData: FormData) => void | Promise<void>;
-type WorkshopView = "participants" | "ledger";
+type WorkshopAction = (formData: FormData) => unknown | Promise<unknown>;
 
+const metricIcons: LucideIcon[] = [TrendingUp, WalletCards, Banknote, UsersRound];
 const eventTypeOptions = [
   { value: "WORKSHOP", label: "Workshop" },
   { value: "MASTERCLASS", label: "Masterclass" },
-];
-
+] as const;
 const eventStatusOptions = [
   { value: "SCHEDULED", label: "Planlı" },
   { value: "DRAFT", label: "Qaralama" },
   { value: "COMPLETED", label: "Tamamlandı" },
   { value: "CANCELLED", label: "Ləğv edildi" },
-];
-
-const durationOptions = [
-  { value: "90", label: "90 dəq" },
-  { value: "120", label: "120 dəq" },
-  { value: "180", label: "180 dəq" },
-  { value: "240", label: "240 dəq" },
-];
-
-const kpiIcons = [Banknote, Ticket, UsersRound, CalendarDays];
+] as const;
+const durationOptions = [90, 120, 180, 240].map((value) => ({
+  value: String(value),
+  label: `${value} dəq`,
+}));
 
 export function WorkshopWorkspace({
   data,
   createWorkshopEventAction,
-  assignWorkshopParticipantAction,
 }: {
   data: WorkshopData;
   createWorkshopEventAction: WorkshopAction;
-  assignWorkshopParticipantAction: WorkshopAction;
 }) {
-  const [selectedEventId, setSelectedEventId] = useState(data.events[0]?.id ?? "");
-  const [query, setQuery] = useState("");
-  const [activeView, setActiveView] = useState<WorkshopView>("participants");
-  const [notice, setNotice] = useState("");
-
-  const selectedEvent =
-    data.events.find((event) => event.id === selectedEventId) ?? data.events[0] ?? null;
-  const normalizedQuery = normalizeSearch(query);
-  const filteredEvents = useMemo(
-    () =>
-      data.events.filter((event) =>
-        normalizeSearch(
-          [
-            event.title,
-            event.eventTypeLabel,
-            event.statusLabel,
-            event.room,
-            event.instructor,
-            event.entryPrice,
-            event.revenue,
-          ].join(" ")
-        ).includes(normalizedQuery)
-      ),
-    [data.events, normalizedQuery]
-  );
-  const eventParticipants = useMemo(
-    () =>
-      data.participants.filter((participant) => {
-        const matchesEvent = selectedEvent ? participant.eventId === selectedEvent.id : true;
-        const matchesQuery =
-          !normalizedQuery ||
-          normalizeSearch(
-            [
-              participant.fullName,
-              participant.phone,
-              participant.eventTitle,
-              participant.paymentLabel,
-              participant.paymentMethod,
-              participant.note,
-            ].join(" ")
-          ).includes(normalizedQuery);
-
-        return matchesEvent && matchesQuery;
-      }),
-    [data.participants, normalizedQuery, selectedEvent]
-  );
-
+  const [mobilePreviewId, setMobilePreviewId] = useState<string | null>(null);
+  const mobilePreviewEvent = data.events.find((event) => event.id === mobilePreviewId) ?? null;
   return (
-    <section className="page-stack workshop-page">
-      <header className="workshop-hero">
-        <div className="workshop-hero-main">
-          <div className="workshop-scope-row">
-            <span>Artmonia ERP</span>
-            <span>Workshop & Masterclass</span>
-          </div>
-          <div className="workshop-title-block">
-            <h1>Workshop & Masterclass</h1>
-            <p>Tədbirləri yarat, iştirakçıları assign et və real gəliri avtomatik izlə.</p>
-          </div>
+    <section className="workshop-shell" aria-label="Workshop və Masterclass idarəetməsi">
+      <header className="workshop-topbar">
+        <div>
+          <h1>Workshop &amp; Masterclass</h1>
+          <p>Tədbirləri, iştirakçıları və daxili maliyyəni vahid iş sahəsində idarə et.</p>
         </div>
-        <div className="workshop-hero-actions">
-          <ParticipantDialog
-            data={data}
-            activeEvent={selectedEvent}
-            action={assignWorkshopParticipantAction}
-            disabled={!data.permissions.canManage || data.events.length === 0}
-            onNotify={setNotice}
-          />
-          <EventDialog
+        <div className="workshop-topbar-actions">
+          {data.selectedEvent && data.permissions.canManage ? (
+            <Link
+              className="ui-button ui-button-outline ui-button-default"
+              href={`/workshops/${data.selectedEvent.id}?tab=participants&add=1` as Route}
+            >
+              <UserPlus data-icon="inline-start" />
+              İştirakçı əlavə et
+            </Link>
+          ) : null}
+          <CreateEventDialog
             defaultDate={data.defaultDate}
             action={createWorkshopEventAction}
             disabled={!data.permissions.canManage}
-            onNotify={setNotice}
           />
         </div>
       </header>
 
-      <div className="workshop-command-bar">
-        <label className="workshop-search">
-          <Search size={15} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tədbir, iştirakçı, məkan və ödəniş üzrə axtar"
-          />
-        </label>
-        <div className="workshop-command-summary">
-          <Sparkles size={15} />
-          <span>{data.summary.revenue} real gəlir</span>
-        </div>
+      <div className="workshop-kpis" aria-label="Workshop göstəriciləri">
+        {data.kpis.map((kpi, index) => (
+          <Metric key={kpi.label} icon={metricIcons[index] ?? Sparkles} {...kpi} />
+        ))}
       </div>
 
-      {notice ? (
-        <div className="workshop-notice" role="status">
-          <CheckCircle2 size={15} />
-          <span>{notice}</span>
-        </div>
-      ) : null}
+      <FilterPanel data={data} />
 
-      <div className="workshop-kpi-grid" aria-label="Workshop göstəriciləri">
-        {data.kpis.map((kpi, index) => {
-          const Icon = kpiIcons[index] ?? Sparkles;
-          return <MetricCard key={kpi.label} icon={Icon} {...kpi} />;
-        })}
-      </div>
-
-      <div className="workshop-board">
-        <article className="workshop-events-panel">
-          <PanelHead
-            icon={CalendarDays}
-            title="Tədbirlər"
-            subtitle={`${filteredEvents.length} tədbir göstərilir`}
-          />
-          <div className="workshop-event-list">
-            {filteredEvents.length > 0 ? (
-              filteredEvents.map((event) => (
-                <button
-                  key={event.id}
-                  type="button"
-                  className={cx(
-                    "workshop-event-card",
-                    selectedEvent?.id === event.id && "is-selected"
-                  )}
-                  onClick={() => setSelectedEventId(event.id)}
-                >
-                  <span className="workshop-event-ribbon" />
-                  <div className="workshop-event-top">
-                    <div>
-                      <strong>{event.title}</strong>
-                      <span>{event.eventTypeLabel} / {event.date} / {event.time}</span>
-                    </div>
-                    <StatusChip tone={event.statusTone}>{event.statusLabel}</StatusChip>
-                  </div>
-                  <div className="workshop-event-meta">
-                    <span><MapPin size={13} />{event.room}</span>
-                    <span><UsersRound size={13} />{event.participantCount}{event.capacity ? `/${event.capacity}` : ""}</span>
-                    <span><Ticket size={13} />{event.entryPrice}</span>
-                  </div>
-                  <div className="workshop-event-finance">
-                    <div>
-                      <span>Gəlir</span>
-                      <strong>{event.revenue}</strong>
-                    </div>
-                    <div>
-                      <span>Potensial</span>
-                      <strong>{event.potentialRevenue}</strong>
-                    </div>
-                    <div>
-                      <span>Hədiyyə</span>
-                      <strong>{event.giftCount}</strong>
-                    </div>
-                  </div>
-                  <div className="workshop-fill-track" aria-label={`${event.fillRate}% doluluq`}>
-                    <span style={{ width: `${event.fillRate}%` }} />
-                  </div>
-                </button>
-              ))
-            ) : (
-              <div className="workshop-empty">Uyğun tədbir tapılmadı</div>
-            )}
-          </div>
-        </article>
-
-        <article className="workshop-detail-panel">
-          {selectedEvent ? (
-            <>
-              <div className="workshop-detail-head">
-                <div>
-                  <span>{selectedEvent.eventTypeLabel}</span>
-                  <h2>{selectedEvent.title}</h2>
-                  <p>{selectedEvent.date} / {selectedEvent.time} / {selectedEvent.duration}</p>
-                </div>
-                <StatusChip tone={selectedEvent.statusTone}>{selectedEvent.statusLabel}</StatusChip>
-              </div>
-
-              <div className="workshop-detail-grid">
-                <DetailStat label="Təlimçi" value={selectedEvent.instructor} />
-                <DetailStat label="Məkan" value={selectedEvent.room} />
-                <DetailStat label="Giriş qiyməti" value={selectedEvent.entryPrice} />
-                <DetailStat label="Real qazanc" value={selectedEvent.revenue} strong />
-              </div>
-
-              <div className="workshop-mini-ledger">
-                <div>
-                  <Banknote size={15} />
-                  <span>Ödənişli</span>
-                  <strong>{selectedEvent.paidCount}</strong>
-                </div>
-                <div>
-                  <Gift size={15} />
-                  <span>Hədiyyə</span>
-                  <strong>{selectedEvent.giftCount}</strong>
-                </div>
-                <div>
-                  <Sparkles size={15} />
-                  <span>Endirimli</span>
-                  <strong>{selectedEvent.discountedCount}</strong>
-                </div>
-                <div>
-                  <Ticket size={15} />
-                  <span>Qalan potensial</span>
-                  <strong>{selectedEvent.remainingRevenue}</strong>
-                </div>
-              </div>
-
-              <div className="workshop-tabs">
-                <button
-                  type="button"
-                  className={cx(activeView === "participants" && "is-active")}
-                  onClick={() => setActiveView("participants")}
-                >
-                  İştirakçılar
-                  <span>{eventParticipants.length}</span>
-                </button>
-                <button
-                  type="button"
-                  className={cx(activeView === "ledger" && "is-active")}
-                  onClick={() => setActiveView("ledger")}
-                >
-                  Gəlir görünüşü
-                  <span>{selectedEvent.revenue}</span>
-                </button>
-              </div>
-
-              {activeView === "participants" ? (
-                <ParticipantTable participants={eventParticipants} />
-              ) : (
-                <RevenueBreakdown event={selectedEvent} participants={eventParticipants} />
-              )}
-            </>
-          ) : (
-            <div className="workshop-empty is-large">
-              Tədbir yaratdıqdan sonra iştirakçı və gəlir paneli burada görünəcək.
+      <div className="workshop-command-layout">
+        <section className="workshop-event-table-panel">
+          <div className="workshop-section-head">
+            <div>
+              <span>{data.pagination.total} nəticə</span>
+              <h2>Tədbirlər</h2>
             </div>
+            <span className="workshop-sort-label">
+              <SlidersHorizontal />
+              {sortLabel(data.filters.sort)}
+            </span>
+          </div>
+
+          <div className="workshop-table-scroll">
+            <table className="workshop-data-table">
+              <thead>
+                <tr>
+                  <th>Tədbir</th>
+                  <th>Növ</th>
+                  <th>Tarix</th>
+                  <th>Məkan</th>
+                  <th>Tutum</th>
+                  {data.permissions.canViewFinance ? <th>Dövriyyə</th> : null}
+                  {data.permissions.canViewFinance ? <th>Xərclər</th> : null}
+                  {data.permissions.canViewFinance ? <th>Xalis mənfəət</th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {data.events.length > 0 ? data.events.map((event) => (
+                  <EventRow
+                    key={event.id}
+                    event={event}
+                    selected={data.selectedEvent?.id === event.id}
+                    href={buildWorkshopUrl(data, { selected: event.id })}
+                    showFinance={data.permissions.canViewFinance}
+                    onPreview={() => setMobilePreviewId(event.id)}
+                  />
+                )) : (
+                  <tr>
+                    <td colSpan={8}>
+                      <EmptyState title="Uyğun tədbir tapılmadı" description="Filtrləri sıfırlayın və ya yeni tədbir yaradın." />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <Pagination data={data} />
+        </section>
+
+        <aside className="workshop-preview-panel">
+          {data.selectedEvent ? (
+            <EventPreview event={data.selectedEvent} data={data} />
+          ) : (
+            <EmptyState title="Tədbir seçilməyib" description="Siyahıdan bir tədbir seçərək detalları görün." />
           )}
-        </article>
+        </aside>
       </div>
+
+      <Dialog open={Boolean(mobilePreviewEvent)} onOpenChange={(open) => !open && setMobilePreviewId(null)}>
+        <DialogContent className="workshop-mobile-preview-sheet">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Tədbir önizləməsi</DialogTitle>
+            <DialogDescription>Seçilmiş workshop və ya masterclass detalları</DialogDescription>
+          </DialogHeader>
+          {mobilePreviewEvent ? <EventPreview event={mobilePreviewEvent} data={data} /> : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
 
-function EventDialog({
-  defaultDate,
-  action,
-  disabled,
-  onNotify,
-}: {
+function FilterPanel({ data }: { data: WorkshopData }) {
+  const [expanded, setExpanded] = useState(data.filters.activeCount > 1);
+  return (
+    <section className="workshop-filter-panel">
+      <form method="get" action="/workshops" className="workshop-filter-form">
+        <div className="workshop-filter-primary">
+          <InputGroup className="workshop-search-group">
+            <InputGroupAddon><Search /></InputGroupAddon>
+            <InputGroupInput
+              name="q"
+              defaultValue={data.filters.query}
+              placeholder="Tədbir, təlimçi, məkan və iştirakçı axtar"
+              aria-label="Tədbir axtar"
+            />
+          </InputGroup>
+          <Button type="button" variant="outline" onClick={() => setExpanded((value) => !value)}>
+            <Filter data-icon="inline-start" />
+            Filtrlər
+            <span className="workshop-filter-count">{data.filters.activeCount}</span>
+            <ChevronDown data-icon="inline-end" />
+          </Button>
+          <Button type="submit">Tətbiq et</Button>
+        </div>
+
+        {expanded ? (
+          <div className="workshop-filter-grid">
+            <FilterSelect name="type" label="Növ" value={data.filters.type} options={[
+              { value: "all", label: "Hamısı" }, ...eventTypeOptions,
+            ]} />
+            <FilterSelect name="status" label="Status" value={data.filters.status} options={[
+              { value: "all", label: "Hamısı" }, ...eventStatusOptions,
+            ]} />
+            <FilterDate name="from" label="Başlanğıc" value={data.filters.from} />
+            <FilterDate name="to" label="Son tarix" value={data.filters.to} />
+            <FilterSelect name="collection" label="Ödəniş statusu" value={data.filters.collection} options={[
+              { value: "all", label: "Hamısı" },
+              { value: "unpaid", label: "Ödənilməyib" },
+              { value: "advance", label: "Avans" },
+              { value: "paid", label: "Tam ödənilib" },
+              { value: "gift", label: "Hədiyyə var" },
+            ]} />
+            <FilterSelect name="profitability" label="Mənfəət" value={data.filters.profitability} options={[
+              { value: "all", label: "Hamısı" },
+              { value: "profit", label: "Mənfəətli" },
+              { value: "loss", label: "Zərər" },
+              { value: "breakeven", label: "Balans" },
+            ]} />
+            <FilterSelect name="instructor" label="Təlimçi" value={data.filters.instructor} options={[
+              { value: "", label: "Hamısı" }, ...data.filterOptions.instructors,
+            ]} />
+            <FilterSelect name="room" label="Məkan" value={data.filters.room} options={[
+              { value: "", label: "Hamısı" }, ...data.filterOptions.rooms,
+            ]} />
+            <FilterSelect name="sort" label="Sıralama" value={data.filters.sort} options={[
+              { value: "upcoming", label: "Yaxın tarix" },
+              { value: "newest", label: "Ən yeni" },
+              { value: "revenue", label: "Dövriyyə" },
+              { value: "expense", label: "Xərc" },
+              { value: "profit", label: "Mənfəət" },
+              { value: "participants", label: "İştirakçı" },
+            ]} />
+            <FilterSelect name="pageSize" label="Səhifədə" value={String(data.filters.pageSize)} options={
+              [10, 25, 50, 100].map((value) => ({ value: String(value), label: String(value) }))
+            } />
+            <Link href="/workshops" className="workshop-reset-link">
+              <X /> Filtrləri sıfırla
+            </Link>
+          </div>
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+function FilterSelect({ name, label, value, options }: {
+  name: string;
+  label: string;
+  value: string;
+  options: readonly { value: string; label: string }[];
+}) {
+  return (
+    <label className="workshop-filter-field">
+      <span>{label}</span>
+      <select name={name} defaultValue={value}>
+        {options.map((option) => <option key={`${name}-${option.value}`} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function FilterDate({ name, label, value }: { name: string; label: string; value: string }) {
+  return (
+    <label className="workshop-filter-field">
+      <span>{label}</span>
+      <input type="date" name={name} defaultValue={value} />
+    </label>
+  );
+}
+
+function EventRow({ event, selected, href, showFinance, onPreview }: {
+  event: WorkshopEventRow;
+  selected: boolean;
+  href: Route;
+  showFinance: boolean;
+  onPreview: () => void;
+}) {
+  return (
+    <tr className={selected ? "is-selected" : undefined}>
+      <td>
+        <Link href={href} className="workshop-event-link workshop-event-link-desktop" aria-current={selected ? "true" : undefined}>
+          <span className="workshop-selected-dot" />
+          <span><strong>{event.title}</strong><small>{event.instructor}</small></span>
+        </Link>
+        <button type="button" className="workshop-event-link workshop-event-link-mobile" onClick={onPreview}>
+          <span className="workshop-selected-dot" />
+          <span><strong>{event.title}</strong><small>{event.instructor}</small></span>
+        </button>
+      </td>
+      <td><span className={`workshop-type-tag is-${event.eventType.toLowerCase()}`}>{event.eventTypeLabel}</span></td>
+      <td><strong>{event.date}</strong><small>{event.time}</small></td>
+      <td><span className="workshop-inline-meta"><MapPin />{event.room}</span></td>
+      <td>{event.participantCount}{event.capacity ? `/${event.capacity}` : ""}</td>
+      {showFinance ? <td>{event.revenue}</td> : null}
+      {showFinance ? <td>{event.expense}</td> : null}
+      {showFinance ? <td><strong className={event.netProfitValue < 0 ? "is-negative" : "is-positive"}>{event.netProfit}</strong></td> : null}
+    </tr>
+  );
+}
+
+function EventPreview({ event, data }: { event: WorkshopEventRow; data: WorkshopData }) {
+  return (
+    <>
+      <div className="workshop-preview-head">
+        <div>
+          <div className="workshop-preview-labels">
+            <span>{event.eventTypeLabel}</span>
+            <StatusChip tone={event.statusTone}>{event.statusLabel}</StatusChip>
+          </div>
+          <h2>{event.title}</h2>
+          <p>{event.date}, {event.time} · {event.room}</p>
+        </div>
+        <Link href={`/workshops/${event.id}` as Route} className="workshop-close-preview" aria-label="Ətraflı bax">
+          <ArrowRight />
+        </Link>
+      </div>
+
+      {data.permissions.canViewFinance ? (
+        <div className="workshop-preview-finance">
+          <PreviewMetric label="Dövriyyə" value={event.revenue} />
+          <PreviewMetric label="Xərclər" value={event.expense} />
+          <PreviewMetric label="Xalis mənfəət" value={event.netProfit} positive={event.netProfitValue >= 0} />
+        </div>
+      ) : null}
+
+      <div className="workshop-capacity-block">
+        <div><span>Tutum</span><strong>{event.participantCount}{event.capacity ? ` / ${event.capacity}` : ""}</strong></div>
+        <div className="workshop-progress"><span style={{ width: `${event.fillRate}%` }} /></div>
+        <div className="workshop-capacity-legend">
+          <span><i className="is-paid" />Ödənilib {event.paidCount}</span>
+          <span><i className="is-advance" />Avans {event.advanceCount}</span>
+          <span><i className="is-unpaid" />Gözləyir {event.unpaidCount}</span>
+          <span><i className="is-gift" />Hədiyyə {event.giftCount}</span>
+        </div>
+      </div>
+
+      <div className="workshop-preview-actions">
+        {data.permissions.canManageFinance ? (
+          <Link className="ui-button ui-button-default ui-button-default" href={`/workshops/${event.id}?tab=payments&add=1` as Route}>
+            <WalletCards data-icon="inline-start" /> Ödəniş qəbul et
+          </Link>
+        ) : null}
+        {data.permissions.canManageFinance ? (
+          <Link className="ui-button ui-button-outline ui-button-default" href={`/workshops/${event.id}?tab=expenses&add=1` as Route}>
+            <CircleDollarSign data-icon="inline-start" /> Xərc əlavə et
+          </Link>
+        ) : null}
+      </div>
+
+      <div className="workshop-preview-grid">
+        <div><span>Giriş qiyməti</span><strong>{event.entryPrice}</strong></div>
+        <div><span>Gözlənilən ödəniş</span><strong>{event.expected}</strong></div>
+        <div><span>Təlimçi</span><strong>{event.instructor}</strong></div>
+        <div><span>Müddət</span><strong>{event.duration}</strong></div>
+      </div>
+
+      <Link className="workshop-detail-link" href={`/workshops/${event.id}` as Route}>
+        Ətraflı bax <ArrowRight />
+      </Link>
+    </>
+  );
+}
+
+function PreviewMetric({ label, value, positive = false }: { label: string; value: string; positive?: boolean }) {
+  return <div><span>{label}</span><strong className={positive ? "is-positive" : undefined}>{value}</strong></div>;
+}
+
+function Metric({ icon: Icon, label, value, helper, tone }: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  helper: string;
+  tone: "success" | "warning" | "danger" | "neutral" | "info";
+}) {
+  return (
+    <article className={`workshop-metric is-${tone}`}>
+      <div className="workshop-metric-icon"><Icon /></div>
+      <div><span>{label}</span><strong>{value}</strong><small>{helper}</small></div>
+    </article>
+  );
+}
+
+function Pagination({ data }: { data: WorkshopData }) {
+  const { pagination } = data;
+  if (pagination.totalPages <= 1) return <div className="workshop-pagination"><span>Cəmi {pagination.total} tədbir</span></div>;
+  return (
+    <div className="workshop-pagination">
+      <span>Cəmi {pagination.total} tədbir</span>
+      <div>
+        {pagination.hasPrevious ? (
+          <Link aria-label="Əvvəlki səhifə" href={buildWorkshopUrl(data, { page: String(pagination.page - 1) })}><ArrowLeft /></Link>
+        ) : <span className="is-disabled"><ArrowLeft /></span>}
+        <strong>{pagination.page}</strong>
+        <span>/ {pagination.totalPages}</span>
+        {pagination.hasNext ? (
+          <Link aria-label="Növbəti səhifə" href={buildWorkshopUrl(data, { page: String(pagination.page + 1) })}><ArrowRight /></Link>
+        ) : <span className="is-disabled"><ArrowRight /></span>}
+      </div>
+    </div>
+  );
+}
+
+function CreateEventDialog({ defaultDate, action, disabled }: {
   defaultDate: string;
   action: WorkshopAction;
   disabled: boolean;
-  onNotify: (message: string) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [notice, setNotice] = useState("");
+  const [pending, startTransition] = useTransition();
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     startTransition(() => {
-      void (async () => {
-        try {
-          await action(formData);
-          setOpen(false);
-          onNotify("Tədbir yaradıldı.");
-          router.refresh();
-        } catch (error) {
-          onNotify(error instanceof Error ? error.message : "Tədbir yaratmaq mümkün olmadı");
-        }
-      })();
+      void Promise.resolve(action(formData)).then(() => {
+        setOpen(false);
+        form.reset();
+        router.refresh();
+      }).catch((error) => setNotice(error instanceof Error ? error.message : "Tədbir yaradıla bilmədi"));
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" disabled={disabled}>
-          <Plus data-icon="inline-start" />
-          Tədbir yarat
-        </Button>
+        <Button disabled={disabled}><Plus data-icon="inline-start" />Yeni tədbir</Button>
       </DialogTrigger>
       <DialogContent className="workshop-dialog">
         <DialogHeader>
-          <DialogTitle>Workshop / Masterclass yarat</DialogTitle>
-          <DialogDescription>
-            Tədbirin tarixini, giriş qiymətini, tutumunu və əsas detallarını qeyd et.
-          </DialogDescription>
+          <DialogTitle>Yeni workshop / masterclass</DialogTitle>
+          <DialogDescription>Tədbirin əsas detallarını və satış qiymətini daxil edin.</DialogDescription>
         </DialogHeader>
-        <form className="workshop-form" onSubmit={handleSubmit}>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Tədbir adı</span>
-              <Input name="title" placeholder="Məs: Portfolio masterclass" maxLength={140} required />
-            </label>
-            <label className="form-field">
-              <span>Növ</span>
-              <FormSelect name="eventType" defaultValue="WORKSHOP" options={eventTypeOptions} />
-            </label>
-          </div>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Tarix</span>
-              <DatePicker name="eventDate" defaultValue={defaultDate} allowClear={false} required popoverPlacement="floating" />
-            </label>
-            <label className="form-field">
-              <span>Saat</span>
-              <Input name="startTime" defaultValue="19:00" pattern="\d{2}:\d{2}" required />
-            </label>
-          </div>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Müddət</span>
-              <FormSelect name="durationMinutes" defaultValue="120" options={durationOptions} />
-            </label>
-            <label className="form-field">
-              <span>Status</span>
-              <FormSelect name="status" defaultValue="SCHEDULED" options={eventStatusOptions} />
-            </label>
-          </div>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Giriş qiyməti</span>
-              <Input name="entryPrice" inputMode="decimal" placeholder="80" required />
-            </label>
-            <label className="form-field">
-              <span>Tutum</span>
-              <Input name="capacity" type="number" min={1} max={1000} placeholder="18" />
-            </label>
-          </div>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Məkan</span>
-              <Input name="room" placeholder="Workshop studio" maxLength={90} />
-            </label>
-            <label className="form-field">
-              <span>Təlimçi</span>
-              <Input name="instructor" placeholder="Təlimçi adı" maxLength={120} />
-            </label>
-          </div>
-          <label className="form-field">
-            <span>Qeyd</span>
-            <textarea name="note" maxLength={700} placeholder="Materiallar, mövzu və xüsusi qeyd" />
-          </label>
+        <form onSubmit={submit} className="workshop-dialog-form">
+          <FieldGroup>
+            <div className="workshop-form-grid">
+              <Field><FieldLabel htmlFor="event-title">Tədbir adı</FieldLabel><Input id="event-title" name="title" required /></Field>
+              <Field><FieldLabel>Növ</FieldLabel><FormSelect name="eventType" defaultValue="WORKSHOP" options={eventTypeOptions} /></Field>
+              <Field><FieldLabel>Tarix</FieldLabel><DatePicker name="eventDate" defaultValue={defaultDate} required allowClear={false} popoverPlacement="floating" /></Field>
+              <Field><FieldLabel htmlFor="event-time">Saat</FieldLabel><Input id="event-time" name="startTime" defaultValue="19:00" required /></Field>
+              <Field><FieldLabel>Müddət</FieldLabel><FormSelect name="durationMinutes" defaultValue="120" options={durationOptions} /></Field>
+              <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue="SCHEDULED" options={eventStatusOptions} /></Field>
+              <Field><FieldLabel htmlFor="event-price">Giriş qiyməti</FieldLabel><Input id="event-price" name="entryPrice" inputMode="decimal" defaultValue="0" required /></Field>
+              <Field><FieldLabel htmlFor="event-capacity">Tutum</FieldLabel><Input id="event-capacity" name="capacity" type="number" min={1} /></Field>
+              <Field><FieldLabel htmlFor="event-room">Məkan</FieldLabel><Input id="event-room" name="room" /></Field>
+              <Field><FieldLabel htmlFor="event-instructor">Təlimçi</FieldLabel><Input id="event-instructor" name="instructor" /></Field>
+            </div>
+            <Field><FieldLabel htmlFor="event-note">Qeyd</FieldLabel><textarea id="event-note" name="note" rows={3} /></Field>
+          </FieldGroup>
+          {notice ? <p className="workshop-form-error" role="alert">{notice}</p> : null}
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Ləğv et
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              Yarat
-            </Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button>
+            <Button disabled={pending}>{pending ? "Yaradılır..." : "Tədbir yarat"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -429,412 +466,34 @@ function EventDialog({
   );
 }
 
-function ParticipantDialog({
-  data,
-  activeEvent,
-  action,
-  disabled,
-  onNotify,
-}: {
-  data: WorkshopData;
-  activeEvent: WorkshopEventRow | null;
-  action: WorkshopAction;
-  disabled: boolean;
-  onNotify: (message: string) => void;
-}) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const [eventId, setEventId] = useState(activeEvent?.id ?? data.events[0]?.id ?? "");
-  const [studentId, setStudentId] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [isPaid, setIsPaid] = useState(true);
-  const [isDiscounted, setIsDiscounted] = useState(false);
-  const [isGift, setIsGift] = useState(false);
-  const selectedEvent = data.events.find((event) => event.id === eventId) ?? activeEvent ?? data.events[0];
-  const selectedStudent = data.students.find((student) => student.id === studentId);
-  const [listPrice, setListPrice] = useState(selectedEvent?.entryPriceInput ?? "");
-  const [amountPaid, setAmountPaid] = useState(selectedEvent?.entryPriceInput ?? "");
-
-  function syncEvent(nextEventId: string) {
-    const nextEvent = data.events.find((event) => event.id === nextEventId);
-    setEventId(nextEventId);
-    setListPrice(nextEvent?.entryPriceInput ?? "");
-    setAmountPaid(isGift ? "0" : nextEvent?.entryPriceInput ?? "");
-  }
-
-  function syncStudent(nextStudentId: string) {
-    const student = data.students.find((item) => item.id === nextStudentId);
-    setStudentId(nextStudentId);
-
-    if (student) {
-      setFullName(student.name);
-      setPhone(student.phone);
-    }
-  }
-
-  function toggleGift(nextValue: boolean) {
-    setIsGift(nextValue);
-
-    if (nextValue) {
-      setIsPaid(false);
-      setIsDiscounted(false);
-      setAmountPaid("0");
-      return;
-    }
-
-    setIsPaid(true);
-    setAmountPaid(listPrice);
-  }
-
-  function togglePaid(nextValue: boolean) {
-    setIsPaid(nextValue);
-
-    if (!nextValue) {
-      setIsDiscounted(false);
-      setAmountPaid("0");
-      return;
-    }
-
-    setIsGift(false);
-    setAmountPaid(amountPaid === "0" ? listPrice : amountPaid);
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-
-    startTransition(() => {
-      void (async () => {
-        try {
-          await action(formData);
-          setOpen(false);
-          setStudentId("");
-          setFullName("");
-          setPhone("");
-          setIsPaid(true);
-          setIsDiscounted(false);
-          setIsGift(false);
-          onNotify("İştirakçı assign edildi və gəlir yeniləndi.");
-          router.refresh();
-        } catch (error) {
-          onNotify(error instanceof Error ? error.message : "İştirakçı əlavə etmək mümkün olmadı");
-        }
-      })();
-    });
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (nextOpen && activeEvent?.id) {
-          syncEvent(activeEvent.id);
-        }
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button type="button" variant="secondary" disabled={disabled}>
-          <UserPlus data-icon="inline-start" />
-          İştirakçı yarat
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="workshop-dialog workshop-participant-dialog">
-        <DialogHeader>
-          <DialogTitle>İştirakçı yarat və assign et</DialogTitle>
-          <DialogDescription>
-            Mövcud tələbəni seç və ya iştirakçını əl ilə yaz, sonra ödəniş statusunu qeyd et.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="workshop-form" onSubmit={handleSubmit}>
-          <label className="form-field">
-            <span>Tədbir</span>
-            <FormSelect
-              name="eventId"
-              value={eventId}
-              onValueChange={syncEvent}
-              options={data.eventOptions}
-              searchable
-              searchPlaceholder="Tədbir axtar..."
-            />
-          </label>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Mövcud tələbə</span>
-              <FormSelect
-                name="studentId"
-                value={studentId}
-                onValueChange={syncStudent}
-                emptyLabel="Yeni iştirakçı"
-                options={data.students.map((student) => ({
-                  value: student.id,
-                  label: student.label,
-                  searchText: [student.phone, student.program, student.teacher].join(" "),
-                }))}
-                searchable
-                searchPlaceholder="Tələbə axtar..."
-              />
-            </label>
-            <label className="form-field">
-              <span>Ad soyad</span>
-              <Input
-                name="fullName"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder={selectedStudent?.name ?? "İştirakçı adı"}
-                maxLength={140}
-              />
-            </label>
-          </div>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>Telefon</span>
-              <Input
-                name="phone"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                placeholder="050 000 00 00"
-                maxLength={40}
-              />
-            </label>
-            <label className="form-field">
-              <span>Ödəniş üsulu</span>
-              <FormSelect name="paymentMethod" defaultValue="CASH" options={studentPaymentMethodOptions} />
-            </label>
-          </div>
-          <div className="field-grid">
-            <label className="form-field">
-              <span>List qiyməti</span>
-              <Input
-                name="listPrice"
-                value={listPrice}
-                inputMode="decimal"
-                onChange={(event) => setListPrice(event.target.value)}
-              />
-            </label>
-            <label className="form-field">
-              <span>Ödənilən məbləğ</span>
-              <Input
-                name="amountPaid"
-                value={amountPaid}
-                inputMode="decimal"
-                onChange={(event) => setAmountPaid(event.target.value)}
-                disabled={isGift || !isPaid}
-              />
-            </label>
-          </div>
-          <div className="workshop-switch-grid">
-            <SwitchField label="Ödəniş etdi" checked={isPaid} disabled={isGift} onCheckedChange={togglePaid} name="isPaid" />
-            <SwitchField label="Endirimli ödəniş" checked={isDiscounted} disabled={isGift || !isPaid} onCheckedChange={setIsDiscounted} name="isDiscounted" />
-            <SwitchField label="Hədiyyə kimi" checked={isGift} onCheckedChange={toggleGift} name="isGift" />
-          </div>
-          <label className="form-field">
-            <span>Qeyd</span>
-            <textarea name="note" maxLength={700} placeholder="Endirim səbəbi, hədiyyə qeydi və ya əlavə qeyd" />
-          </label>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Ləğv et
-            </Button>
-            <Button type="submit" disabled={isPending || !eventId}>
-              Assign et
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
+function EmptyState({ title, description }: { title: string; description: string }) {
+  return <div className="workshop-empty-state"><CalendarDays /><strong>{title}</strong><p>{description}</p></div>;
 }
 
-function SwitchField({
-  label,
-  checked,
-  disabled,
-  onCheckedChange,
-  name,
-}: {
-  label: string;
-  checked: boolean;
-  disabled?: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  name: string;
-}) {
-  return (
-    <label className={cx("workshop-switch", checked && "is-on", disabled && "is-disabled")}>
-      <input
-        type="checkbox"
-        name={name}
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onCheckedChange(event.target.checked)}
-      />
-      <span />
-      <strong>{label}</strong>
-    </label>
-  );
+function buildWorkshopUrl(data: WorkshopData, overrides: Record<string, string>): Route {
+  const params = new URLSearchParams();
+  const values: Record<string, string> = {
+    q: data.filters.query,
+    type: data.filters.type,
+    status: data.filters.status,
+    from: data.filters.from,
+    to: data.filters.to,
+    instructor: data.filters.instructor,
+    room: data.filters.room,
+    collection: data.filters.collection,
+    profitability: data.filters.profitability,
+    sort: data.filters.sort,
+    page: String(data.filters.page),
+    pageSize: String(data.filters.pageSize),
+    selected: data.filters.selected,
+    ...overrides,
+  };
+  Object.entries(values).forEach(([key, value]) => {
+    if (value && value !== "all") params.set(key, value);
+  });
+  return `/workshops?${params.toString()}` as Route;
 }
 
-function ParticipantTable({ participants }: { participants: WorkshopParticipantRow[] }) {
-  return (
-    <div className="workshop-table-wrap">
-      <table className="workshop-table">
-        <thead>
-          <tr>
-            <th>İştirakçı</th>
-            <th>Ödəniş</th>
-            <th>Status</th>
-            <th>Metod</th>
-            <th>Assign</th>
-            <th>Qeyd</th>
-          </tr>
-        </thead>
-        <tbody>
-          {participants.length > 0 ? (
-            participants.map((participant) => (
-              <tr key={participant.id}>
-                <td>
-                  <div className="workshop-person-cell">
-                    <strong>{participant.fullName}</strong>
-                    <span>{participant.phone}</span>
-                  </div>
-                </td>
-                <td>
-                  <div className="workshop-money-cell">
-                    <strong>{participant.amountPaid}</strong>
-                    <span>List: {participant.listPrice}</span>
-                  </div>
-                </td>
-                <td><StatusChip tone={participant.paymentTone}>{participant.paymentLabel}</StatusChip></td>
-                <td>{participant.paymentMethod}</td>
-                <td>{participant.assignedAt}</td>
-                <td><span className="workshop-note">{participant.note || "-"}</span></td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={6}>
-                <div className="workshop-empty">Bu tədbir üzrə iştirakçı yoxdur</div>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function RevenueBreakdown({
-  event,
-  participants,
-}: {
-  event: WorkshopEventRow;
-  participants: WorkshopParticipantRow[];
-}) {
-  const paid = participants.filter((participant) => participant.isPaid && !participant.isGift);
-  const gifts = participants.filter((participant) => participant.isGift);
-  const discounted = participants.filter((participant) => participant.isDiscounted);
-
-  return (
-    <div className="workshop-revenue-view">
-      <div className="workshop-revenue-card is-main">
-        <span>Real qazanc</span>
-        <strong>{event.revenue}</strong>
-        <p>{paid.length} ödənişli iştirakçıdan yığılıb</p>
-      </div>
-      <div className="workshop-revenue-card">
-        <span>Potensial</span>
-        <strong>{event.potentialRevenue}</strong>
-        <p>List qiyməti x iştirakçı sayı</p>
-      </div>
-      <div className="workshop-revenue-card">
-        <span>Endirimli</span>
-        <strong>{discounted.length}</strong>
-        <p>Endirimli ödəniş kimi qeyd olunub</p>
-      </div>
-      <div className="workshop-revenue-card">
-        <span>Hədiyyə</span>
-        <strong>{gifts.length}</strong>
-        <p>Gəlir hesabına daxil edilmir</p>
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  helper,
-  tone,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  helper: string;
-  tone: string;
-}) {
-  return (
-    <article className={cx("workshop-kpi", `is-${tone}`)}>
-      <div className="workshop-kpi-top">
-        <span>{label}</span>
-        <Icon size={14} />
-      </div>
-      <strong>{value}</strong>
-      <small>{helper}</small>
-    </article>
-  );
-}
-
-function PanelHead({
-  icon: Icon,
-  title,
-  subtitle,
-}: {
-  icon: LucideIcon;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <div className="workshop-panel-head">
-      <div>
-        <span>{subtitle}</span>
-        <h2>{title}</h2>
-      </div>
-      <Icon size={18} />
-    </div>
-  );
-}
-
-function DetailStat({
-  label,
-  value,
-  strong = false,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className={cx("workshop-detail-stat", strong && "is-strong")}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function normalizeSearch(value: string) {
-  return value
-    .toLocaleLowerCase("az")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[ə]/g, "e")
-    .replace(/[ı]/g, "i")
-    .replace(/[ş]/g, "s")
-    .replace(/[ç]/g, "c")
-    .replace(/[ğ]/g, "g")
-    .replace(/[ö]/g, "o")
-    .replace(/[ü]/g, "u")
-    .trim();
+function sortLabel(value: WorkshopData["filters"]["sort"]) {
+  return ({ upcoming: "Yaxın tarix", newest: "Ən yeni", revenue: "Dövriyyə", expense: "Xərc", profit: "Mənfəət", participants: "İştirakçı" } as const)[value];
 }

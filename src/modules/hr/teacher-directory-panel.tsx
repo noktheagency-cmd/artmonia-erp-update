@@ -27,7 +27,13 @@ import type {
   TeacherDirectoryTeacher,
 } from "@/modules/hr/teacher-directory-data";
 
-export function TeacherDirectoryPanel({ data }: { data: TeacherDirectoryData }) {
+export function TeacherDirectoryPanel({
+  data,
+  teacherAccountAction,
+}: {
+  data: TeacherDirectoryData;
+  teacherAccountAction: (formData: FormData) => Promise<void>;
+}) {
   const [query, setQuery] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState(data.teachers[0]?.id ?? "");
   const filteredTeachers = useMemo(
@@ -102,13 +108,21 @@ export function TeacherDirectoryPanel({ data }: { data: TeacherDirectoryData }) 
           </div>
         </HrPanel>
 
-        {selectedTeacher ? <TeacherDetail teacher={selectedTeacher} /> : null}
+        {selectedTeacher ? <TeacherDetail teacher={selectedTeacher} data={data} teacherAccountAction={teacherAccountAction} /> : null}
       </div>
     </div>
   );
 }
 
-function TeacherDetail({ teacher }: { teacher: TeacherDirectoryTeacher }) {
+function TeacherDetail({
+  teacher,
+  data,
+  teacherAccountAction,
+}: {
+  teacher: TeacherDirectoryTeacher;
+  data: TeacherDirectoryData;
+  teacherAccountAction: (formData: FormData) => Promise<void>;
+}) {
   return (
     <div className="teacher-detail-stack">
       <div className="teacher-detail-metrics">
@@ -143,6 +157,24 @@ function TeacherDetail({ teacher }: { teacher: TeacherDirectoryTeacher }) {
           description={teacher.phone ? `Əlaqə: ${teacher.phone}` : "Telefon qeyd edilməyib"}
           meta={<StatusChip tone={teacher.isActive ? "success" : "neutral"}>{teacher.isActive ? "Aktiv" : "Passiv"}</StatusChip>}
         />
+
+        {data.permissions.canManageTeacherAccounts ? (
+          <form action={teacherAccountAction} className="teacher-account-link-form">
+            <input type="hidden" name="teacherId" value={teacher.id} />
+            <label>
+              <span>ERP hesabı</span>
+              <select name="userId" defaultValue={teacher.userId}>
+                <option value="">Bağlanmayıb</option>
+                {data.accountOptions.map((account) => (
+                  <option value={account.id} key={account.id}>
+                    {account.name} · {account.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">Hesabı bağla</button>
+          </form>
+        ) : null}
 
         <div className="teacher-detail-grid">
           <section>
@@ -186,7 +218,7 @@ function TeacherDetail({ teacher }: { teacher: TeacherDirectoryTeacher }) {
                     </span>
                     <div>
                       <strong>{lesson.student}</strong>
-                      <span>{lesson.program} · {lesson.room}</span>
+                      <span>{lesson.program} · Qrup {lesson.group}</span>
                       <small>{lesson.date} / {lesson.time}{lesson.note ? ` · ${lesson.note}` : ""}</small>
                     </div>
                     <StatusChip tone={lesson.status === "Gəldi" ? "success" : lesson.status === "Gəlmədi" ? "danger" : "info"}>
@@ -244,7 +276,7 @@ function matchesTeacherQuery(teacher: TeacherDirectoryTeacher, query: string) {
     teacher.phone,
     teacher.nextLessonStudent,
     ...teacher.students.flatMap((student) => [student.name, student.code, student.program]),
-    ...teacher.lessons.flatMap((lesson) => [lesson.student, lesson.program, lesson.room]),
+    ...teacher.lessons.flatMap((lesson) => [lesson.student, lesson.program, lesson.group]),
   ]
     .join(" ")
     .toLocaleLowerCase("az");

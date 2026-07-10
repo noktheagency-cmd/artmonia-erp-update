@@ -42,6 +42,7 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 
 export type CrmFollowUpFilter =
   | "all"
+  | "attention"
   | "overdue"
   | "today"
   | "unplanned"
@@ -84,6 +85,7 @@ export type CrmData = {
     canCreateLead: boolean;
     canUpdateLead: boolean;
     canConvertLead: boolean;
+    canExport: boolean;
   };
   metrics: Array<{
     label: string;
@@ -375,6 +377,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       canCreateLead: actor.permissions.has("crm.lead.create"),
       canUpdateLead: actor.permissions.has("crm.lead.update"),
       canConvertLead: actor.permissions.has("crm.lead.convert"),
+      canExport: actor.permissions.has("report.export"),
     },
     metrics: [
       {
@@ -816,6 +819,7 @@ function buildCrmListWhereSql(input: {
   priorityFilter: LeadPriorityValue | "";
   followUpFilter: CrmFollowUpFilter;
   periodRange: CrmPeriodRange;
+  today: Date;
   todayStart: Date;
   tomorrowStart: Date;
 }) {
@@ -864,7 +868,18 @@ function buildCrmListWhereSql(input: {
     conditions.push(Prisma.sql`l.priority = ${input.priorityFilter}::"erp"."LeadPriority"`);
   }
 
-  if (input.followUpFilter === "overdue") {
+  if (input.followUpFilter === "attention") {
+    conditions.push(Prisma.sql`
+      l.stage in (
+        'NEW'::"erp"."LeadStage",
+        'CONTACTED'::"erp"."LeadStage",
+        'QUALIFIED'::"erp"."LeadStage",
+        'TRIAL_CONSULTATION'::"erp"."LeadStage",
+        'NURTURE'::"erp"."LeadStage"
+      )
+      and (l.next_follow_up_at is null or l.next_follow_up_at <= ${input.today})
+    `);
+  } else if (input.followUpFilter === "overdue") {
     conditions.push(Prisma.sql`l.next_follow_up_at < ${input.todayStart}`);
   } else if (input.followUpFilter === "today") {
     conditions.push(Prisma.sql`
@@ -980,6 +995,7 @@ function normalizeNextActionTypeValue(value: string | null | undefined): NextAct
 function normalizeFollowUp(value: string | undefined): CrmFollowUpFilter {
   const allowed: CrmFollowUpFilter[] = [
     "all",
+    "attention",
     "overdue",
     "today",
     "unplanned",

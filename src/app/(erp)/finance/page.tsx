@@ -20,6 +20,7 @@ export default async function FinancePage({
     type?: string;
     from?: string;
     to?: string;
+    source?: string;
   }>;
 }) {
   const filters = await searchParams;

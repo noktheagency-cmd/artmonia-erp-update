@@ -1,18 +1,6 @@
-import {
-  createLessonReservationAction,
-  markLessonAttendanceAction,
-} from "@/modules/bookings/actions";
-import { getBookingData } from "@/modules/bookings/queries";
-import { BookingWorkspace } from "@/modules/bookings/booking-workspace";
+import { redirect } from "next/navigation";
+import type { Route } from "next";
 
-export default async function BookingsPage() {
-  const data = await getBookingData();
-
-  return (
-    <BookingWorkspace
-      data={data}
-      createLessonReservationAction={createLessonReservationAction}
-      markLessonAttendanceAction={markLessonAttendanceAction}
-    />
-  );
+export default function LegacyBookingsPage() {
+  redirect("/groups" as Route);
 }
