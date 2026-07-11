@@ -1,3 +1,4 @@
+import "@/modules/students/students.css";
 import { StudentList } from "@/modules/students/student-list";
 import { getStudentListData } from "@/modules/students/queries";
 

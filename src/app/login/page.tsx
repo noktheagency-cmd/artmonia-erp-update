@@ -3,7 +3,7 @@ import Image from "next/image";
 import { AlertTriangle, ArrowUpRight, AtSign, LockKeyhole } from "lucide-react";
 import { signInAction } from "@/modules/auth/actions";
 import { getCurrentErpUser } from "@/server/auth/session";
-import { LoginScene } from "./login-scene";
+import { LoginSceneLazy } from "./login-scene-lazy";
 
 const errorMessages: Record<string, string> = {
   credentials: "Email or password is incorrect.",
@@ -27,7 +27,7 @@ export default async function LoginPage({
 
   return (
     <main className="kinetic-login">
-      <LoginScene />
+      <LoginSceneLazy />
 
       <header className="kinetic-wordmark" aria-label="Artmonia ERP">
         <Image src="/logo.png" alt="Artmonia" width={1254} height={1254} priority />

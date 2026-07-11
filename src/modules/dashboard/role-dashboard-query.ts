@@ -1,4 +1,4 @@
-import { LeadStage, MarketingCampaignStatus } from "@/generated/prisma/client";
+import { LeadStage, MarketingCampaignStatus, Prisma } from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 
@@ -15,6 +15,26 @@ export type RoleDashboardData = {
   recent: Array<{ title: string; meta: string; status: string }>;
 };
 
+type SalesDashboardRow = {
+  leadCount: number;
+  studentCount: number;
+  followUps: number;
+  converted: number;
+  stages: Array<{ stage: LeadStage; count: number }>;
+  recent: Array<{ name: string; nextFollowUpAt: string | null; stage: LeadStage }>;
+};
+
+type MarketingDashboardRow = {
+  campaigns: number;
+  active: number;
+  budget: number;
+  spend: number;
+  revenue: number;
+  leads: number;
+  conversions: number;
+  recent: Array<{ name: string; channel: string; budget: number; status: MarketingCampaignStatus }>;
+};
+
 export async function getRoleDashboardData(): Promise<RoleDashboardData> {
   const actor = await requireErpActor();
   if (actor.permissions.has("dashboard.sales.read")) return salesDashboard(actor.id, actor.fullName);
@@ -24,17 +44,40 @@ export async function getRoleDashboardData(): Promise<RoleDashboardData> {
 }
 
 async function salesDashboard(actorId: string, actorName: string): Promise<RoleDashboardData> {
-  const prisma = getPrisma();
-  const activeStages = [LeadStage.NEW, LeadStage.CONTACTED, LeadStage.QUALIFIED, LeadStage.TRIAL_CONSULTATION, LeadStage.NURTURE];
-  const [leadCount, studentCount, followUps, converted, stages, recent] = await Promise.all([
-    prisma.lead.count({ where: { managerId: actorId } }),
-    prisma.student.count({ where: { managerId: actorId } }),
-    prisma.lead.count({ where: { managerId: actorId, stage: { in: activeStages }, OR: [{ nextFollowUpAt: null }, { nextFollowUpAt: { lte: new Date(Date.now() + 86_400_000) } }] } }),
-    prisma.lead.count({ where: { managerId: actorId, OR: [{ convertedStudentId: { not: null } }, { stage: LeadStage.REGISTERED }] } }),
-    prisma.lead.groupBy({ by: ["stage"], where: { managerId: actorId }, _count: { _all: true } }),
-    prisma.lead.findMany({ where: { managerId: actorId }, take: 5, orderBy: [{ nextFollowUpAt: "asc" }, { updatedAt: "desc" }], include: { contact: { select: { fullName: true } } } }),
-  ]);
-  const maxStage = Math.max(...stages.map((item) => item._count._all), 1);
+  const [row] = await getPrisma().$queryRaw<SalesDashboardRow[]>(Prisma.sql`
+    select
+      count(*)::int as "leadCount",
+      (select count(*)::int from erp.students student where student.manager_id = ${actorId}::uuid) as "studentCount",
+      count(*) filter (
+        where lead.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_CONSULTATION', 'NURTURE')
+          and (lead.next_follow_up_at is null or lead.next_follow_up_at <= now() + interval '1 day')
+      )::int as "followUps",
+      count(*) filter (where lead.converted_student_id is not null or lead.stage = 'REGISTERED')::int as converted,
+      coalesce((
+        select jsonb_agg(jsonb_build_object('stage', grouped.stage::text, 'count', grouped.count) order by grouped.stage)
+        from (select stage, count(*)::int as count from erp.leads where manager_id = ${actorId}::uuid group by stage) grouped
+      ), '[]'::jsonb) as stages,
+      coalesce((
+        select jsonb_agg(jsonb_build_object('name', recent.full_name, 'nextFollowUpAt', recent.next_follow_up_at, 'stage', recent.stage::text) order by recent.next_follow_up_at asc nulls last, recent.updated_at desc)
+        from (
+          select contact.full_name, lead.next_follow_up_at, lead.stage, lead.updated_at
+          from erp.leads lead
+          join erp.contacts contact on contact.id = lead.contact_id
+          where lead.manager_id = ${actorId}::uuid
+          order by lead.next_follow_up_at asc nulls last, lead.updated_at desc
+          limit 5
+        ) recent
+      ), '[]'::jsonb) as recent
+    from erp.leads lead
+    where lead.manager_id = ${actorId}::uuid
+  `);
+  const leadCount = row?.leadCount ?? 0;
+  const studentCount = row?.studentCount ?? 0;
+  const followUps = row?.followUps ?? 0;
+  const converted = row?.converted ?? 0;
+  const stages = row?.stages ?? [];
+  const recent = row?.recent ?? [];
+  const maxStage = Math.max(...stages.map((item) => item.count), 1);
   return {
     kind: "sales", actorName, eyebrow: "Şəxsi satış mərkəzi", title: "Follow-up ritmini qoru", description: "Yalnız sizə təyin olunmuş lead və tələbələr üzrə canlı satış görünüşü.", primaryHref: "/crm", primaryLabel: "Follow-up aç",
     kpis: [
@@ -43,8 +86,8 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
       { label: "Konvertasiya", value: leadCount ? `${Math.round(converted / leadCount * 100)}%` : "0%", helper: `${converted} uğurlu qeydiyyat`, tone: "green" },
       { label: "Mənim tələbələrim", value: String(studentCount), helper: "Satışdan tələbəyə çevrilən portfel", tone: "violet" },
     ],
-    breakdown: stages.map((item) => ({ label: stageLabel(item.stage), value: item._count._all, total: maxStage })),
-    recent: recent.map((lead) => ({ title: lead.contact.fullName, meta: lead.nextFollowUpAt ? `Növbəti əlaqə: ${dateLabel(lead.nextFollowUpAt)}` : "Əlaqə tarixi gözləyir", status: stageLabel(lead.stage) })),
+    breakdown: stages.map((item) => ({ label: stageLabel(item.stage), value: item.count, total: maxStage })),
+    recent: recent.map((lead) => ({ title: lead.name, meta: lead.nextFollowUpAt ? `Növbəti əlaqə: ${dateLabel(new Date(lead.nextFollowUpAt))}` : "Əlaqə tarixi gözləyir", status: stageLabel(lead.stage) })),
   };
 }
 
@@ -76,22 +119,41 @@ async function teacherDashboard(actorId: string, actorName: string): Promise<Rol
 }
 
 async function marketingDashboard(actorName: string): Promise<RoleDashboardData> {
-  const prisma = getPrisma();
-  const [campaigns, active, budget, stats, recent] = await Promise.all([
-    prisma.marketingCampaign.count(),
-    prisma.marketingCampaign.count({ where: { status: MarketingCampaignStatus.ACTIVE } }),
-    prisma.marketingCampaign.aggregate({ _sum: { budget: true } }),
-    prisma.marketingCampaignStat.aggregate({ _sum: { spend: true, revenue: true, leads: true, conversions: true } }),
-    prisma.marketingCampaign.findMany({ take: 5, orderBy: [{ status: "asc" }, { startsAt: "desc" }] }),
-  ]);
-  const spend = Number(stats._sum.spend ?? 0); const revenue = Number(stats._sum.revenue ?? 0); const leads = stats._sum.leads ?? 0; const conversions = stats._sum.conversions ?? 0;
+  const [row] = await getPrisma().$queryRaw<MarketingDashboardRow[]>(Prisma.sql`
+    select
+      count(*)::int as campaigns,
+      count(*) filter (where campaign.status = 'ACTIVE')::int as active,
+      coalesce(sum(campaign.budget), 0)::float8 as budget,
+      coalesce((select sum(stat.spend) from erp.marketing_campaign_stats stat), 0)::float8 as spend,
+      coalesce((select sum(stat.revenue) from erp.marketing_campaign_stats stat), 0)::float8 as revenue,
+      coalesce((select sum(stat.leads) from erp.marketing_campaign_stats stat), 0)::int as leads,
+      coalesce((select sum(stat.conversions) from erp.marketing_campaign_stats stat), 0)::int as conversions,
+      coalesce((
+        select jsonb_agg(jsonb_build_object('name', recent.name, 'channel', recent.channel, 'budget', recent.budget::float8, 'status', recent.status::text) order by recent.status, recent.starts_at desc)
+        from (
+          select name, channel, budget, status, starts_at
+          from erp.marketing_campaigns
+          order by status asc, starts_at desc
+          limit 5
+        ) recent
+      ), '[]'::jsonb) as recent
+    from erp.marketing_campaigns campaign
+  `);
+  const campaigns = row?.campaigns ?? 0;
+  const active = row?.active ?? 0;
+  const budget = row?.budget ?? 0;
+  const spend = row?.spend ?? 0;
+  const revenue = row?.revenue ?? 0;
+  const leads = row?.leads ?? 0;
+  const conversions = row?.conversions ?? 0;
+  const recent = row?.recent ?? [];
   return {
     kind: "marketing", actorName, eyebrow: "Marketing cockpit", title: "Kampaniyaları nəticəyə çevir", description: "Marketing performansı, büdcə, lead axını və şəxsi tasklar bir mərkəzdə.", primaryHref: "/marketing", primaryLabel: "Marketing aç",
     kpis: [
       { label: "Aktiv kampaniyalar", value: String(active), helper: `${campaigns} ümumi kampaniya`, tone: "violet" },
       { label: "Lead axını", value: String(leads), helper: `${conversions} konvertasiya`, tone: "blue" },
       { label: "ROAS", value: spend ? `${(revenue / spend).toFixed(1)}x` : "—", helper: `${money(spend)} xərc`, tone: "green" },
-      { label: "Plan büdcəsi", value: money(Number(budget._sum.budget ?? 0)), helper: `${money(revenue)} gəlir təsiri`, tone: "orange" },
+      { label: "Plan büdcəsi", value: money(budget), helper: `${money(revenue)} gəlir təsiri`, tone: "orange" },
     ],
     breakdown: [{ label: "Lead", value: leads, total: Math.max(leads, 1) }, { label: "Konvertasiya", value: conversions, total: Math.max(leads, 1) }],
     recent: recent.map((campaign) => ({ title: campaign.name, meta: `${campaign.channel} · ${money(Number(campaign.budget))}`, status: campaignStatus(campaign.status) })),

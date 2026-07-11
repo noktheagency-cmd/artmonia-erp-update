@@ -1,3 +1,4 @@
+import "@/modules/playbook/playbook.css";
 import { PlaybookWorkspace } from "@/modules/playbook/playbook-workspace";
 import { getPlaybookData } from "@/modules/playbook/queries";
 import { requireErpActor } from "@/server/auth/actor";

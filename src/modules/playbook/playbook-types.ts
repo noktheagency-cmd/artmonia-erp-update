@@ -44,7 +44,17 @@ export type PlaybookData = {
   documents: PlaybookDocument[];
 };
 
-export function mapDepartmentRow(row: PlaybookDepartmentRow): PlaybookDepartment {
+type DepartmentProjection = Pick<
+  PlaybookDepartmentRow,
+  "id" | "name" | "slug" | "color" | "soft_color" | "icon" | "position" | "created_at" | "updated_at"
+>;
+
+type DocumentProjection = Pick<
+  PlaybookDocumentRow,
+  "id" | "department_id" | "name" | "original_name" | "storage_path" | "extension" | "mime_type" | "size_bytes" | "page_count" | "created_at" | "updated_at"
+>;
+
+export function mapDepartmentRow(row: DepartmentProjection): PlaybookDepartment {
   return {
     id: row.id,
     name: row.name,
@@ -58,7 +68,7 @@ export function mapDepartmentRow(row: PlaybookDepartmentRow): PlaybookDepartment
   };
 }
 
-export function mapDocumentRow(row: PlaybookDocumentRow): PlaybookDocument {
+export function mapDocumentRow(row: DocumentProjection): PlaybookDocument {
   return {
     id: row.id,
     departmentId: row.department_id,

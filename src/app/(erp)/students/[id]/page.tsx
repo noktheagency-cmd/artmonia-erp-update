@@ -1,3 +1,4 @@
+import "@/modules/students/students.css";
 import { ChevronLeft, Banknote, Phone, ReceiptText, UserRound, Users, CalendarDays, History, Clock3, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { getStudentDetailData } from "@/modules/students/queries";

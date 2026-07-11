@@ -1,3 +1,4 @@
+import "@/modules/workshops/workshops.css";
 import { notFound } from "next/navigation";
 import {
   assignWorkshopParticipantAction,

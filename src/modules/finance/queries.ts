@@ -354,6 +354,10 @@ export async function getFinanceData(
     : normalizedFilters.source === "workshop"
       ? Prisma.sql`and fe.workshop_event_id is not null`
       : Prisma.empty;
+  const needsPayments = normalizedFilters.type === "overview" || normalizedFilters.type === "payments";
+  const needsExpenses = normalizedFilters.type === "overview" || normalizedFilters.type === "expenses";
+  const needsPayroll = normalizedFilters.type === "overview" || normalizedFilters.type === "payroll";
+  const needsDebts = normalizedFilters.type === "overview" || normalizedFilters.type === "debts";
 
   const [
     summaryRows,
@@ -604,7 +608,7 @@ export async function getFinanceData(
       where t.is_active = true
       order by "label" asc
     `),
-    prisma.$queryRaw<PaymentRow[]>(Prisma.sql`
+    needsPayments ? prisma.$queryRaw<PaymentRow[]>(Prisma.sql`
       select
         p.id::text as "id",
         s.id::text as "studentId",
@@ -631,8 +635,8 @@ export async function getFinanceData(
         ${searchSql.payments}
       order by p.paid_at desc, p.created_at desc
       limit 70
-    `),
-    prisma.$queryRaw<WorkshopPaymentRow[]>(Prisma.sql`
+    `) : Promise.resolve([] as PaymentRow[]),
+    needsPayments ? prisma.$queryRaw<WorkshopPaymentRow[]>(Prisma.sql`
       select
         wp.id::text as "id",
         we.id::text as "eventId",
@@ -658,8 +662,8 @@ export async function getFinanceData(
         ${searchSql.workshopPayments}
       order by wp.paid_at desc, wp.created_at desc
       limit 70
-    `),
-    prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
+    `) : Promise.resolve([] as WorkshopPaymentRow[]),
+    needsExpenses ? prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
       select
         fe.id::text as "id",
         fec.id::text as "categoryId",
@@ -698,8 +702,8 @@ export async function getFinanceData(
         ${searchSql.expenses}
       order by fe.expense_date desc, fe.created_at desc
       limit 70
-    `),
-    prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
+    `) : Promise.resolve([] as ExpenseRow[]),
+    needsPayroll ? prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
       select
         fe.id::text as "id",
         fec.id::text as "categoryId",
@@ -738,8 +742,8 @@ export async function getFinanceData(
         ${searchSql.expenses}
       order by fe.expense_date desc, fe.created_at desc
       limit 70
-    `),
-    prisma.$queryRaw<DebtRow[]>(Prisma.sql`
+    `) : Promise.resolve([] as ExpenseRow[]),
+    needsDebts ? prisma.$queryRaw<DebtRow[]>(Prisma.sql`
       select
         s.id::text as "studentId",
         c.full_name as "studentName",
@@ -774,8 +778,8 @@ export async function getFinanceData(
       group by s.id, s.code, c.full_name, c.phone_display, ae.program_name, ae.teacher_name
       order by min(i.due_date) asc, coalesce(sum(i.balance_due), 0) desc
       limit 70
-    `),
-    prisma.$queryRaw<WorkshopDebtRow[]>(Prisma.sql`
+    `) : Promise.resolve([] as DebtRow[]),
+    needsDebts ? prisma.$queryRaw<WorkshopDebtRow[]>(Prisma.sql`
       select
         participant.id::text as "participantId",
         we.id::text as "eventId",
@@ -800,7 +804,7 @@ export async function getFinanceData(
         ${searchSql.workshopDebts}
       order by we.event_date asc, "balanceDue" desc
       limit 70
-    `),
+    `) : Promise.resolve([] as WorkshopDebtRow[]),
   ]);
 
   const summary = summaryRows[0] ?? {

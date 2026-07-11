@@ -1,3 +1,4 @@
+import "@/modules/crm/crm.css";
 import { CrmPipeline } from "@/modules/crm/crm-pipeline";
 import { getCrmData } from "@/modules/crm/queries";
 

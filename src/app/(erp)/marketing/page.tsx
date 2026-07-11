@@ -1,3 +1,4 @@
+import "@/modules/marketing/marketing.css";
 import { MarketingWorkspace } from "@/modules/marketing/marketing-workspace";
 import { getMarketingData } from "@/modules/marketing/queries";
 

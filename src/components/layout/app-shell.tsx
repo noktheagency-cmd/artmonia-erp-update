@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type MouseEvent,
+  type PointerEvent,
   type SyntheticEvent,
   useRef,
   useState,
@@ -115,6 +116,12 @@ export function AppShell({
     markNavigation(href);
   }
 
+  function handleNavPointerDown(href: Route, event: PointerEvent<HTMLAnchorElement>) {
+    if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      markNavigation(href);
+    }
+  }
+
   function handleNavHover(href: Route) {
     prefetchInternalHref(href);
   }
@@ -153,8 +160,8 @@ export function AppShell({
       return;
     }
 
-    router.prefetch(href as Route);
     prefetchedHrefs.current.add(href);
+    router.prefetch(href as Route);
   }
 
   function handleContentLinkClick(event: MouseEvent<HTMLDivElement>) {
@@ -194,6 +201,7 @@ export function AppShell({
           className="brand-mark"
           aria-label="Artmonia ERP"
           onClick={(event) => handleNavClick("/dashboard", event)}
+          onPointerDown={(event) => handleNavPointerDown("/dashboard", event)}
           onMouseEnter={() => handleNavHover("/dashboard")}
           onFocus={() => handleNavHover("/dashboard")}
           prefetch={false}
@@ -228,6 +236,7 @@ export function AppShell({
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
                 onClick={(event) => handleNavClick(item.href, event)}
+                onPointerDown={(event) => handleNavPointerDown(item.href, event)}
                 onMouseEnter={() => handleNavHover(item.href)}
                 onFocus={() => handleNavHover(item.href)}
                 prefetch={false}
@@ -256,6 +265,7 @@ export function AppShell({
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
                 onClick={(event) => handleNavClick(item.href, event)}
+                onPointerDown={(event) => handleNavPointerDown(item.href, event)}
                 onMouseEnter={() => handleNavHover(item.href)}
                 onFocus={() => handleNavHover(item.href)}
                 prefetch={false}

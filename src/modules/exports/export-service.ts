@@ -9,8 +9,19 @@ import type { PreparedExport } from "@/modules/exports/export-files";
 import { getStudentListData } from "@/modules/students/queries";
 import { getPrisma } from "@/server/db/prisma";
 import type { ErpActor } from "@/server/auth/actor";
+import { Prisma } from "@/generated/prisma/client";
 
 const MAX_EXPORT_ROWS = { csv: 10_000, pdf: 2_000 } as const;
+
+type GroupAttendanceExportRow = {
+  groupId: string;
+  studentCode: string;
+  studentName: string;
+  program: string;
+  teacherName: string;
+  attendanceStatus: "PRESENT" | "ABSENT" | null;
+  note: string | null;
+};
 
 export async function prepareExport(request: ExportRequest): Promise<PreparedExport> {
   const dataset = getExportDataset(request.module, request.dataset);
@@ -226,20 +237,45 @@ async function buildGroupReport(request: ExportRequest) {
   }
 
   const groups = selectedGroupId ? data.groups.filter((group) => group.id === selectedGroupId) : data.groups;
-  const journals = await Promise.all(groups.map((group) => getGroupWorkspaceData({ groupId: group.id, date })));
-  const rows = journals.flatMap((journalData) => {
-    const group = journalData.groups.find((item) => item.id === journalData.selectedGroupId);
-    return journalData.journal.members.map((member) => ({
+  const groupById = new Map(groups.map((group) => [group.id, group]));
+  const reportDate = new Date(`${data.journal.date}T00:00:00.000Z`);
+  const attendanceRows = groups.length === 0 ? [] : await getPrisma().$queryRaw<GroupAttendanceExportRow[]>(Prisma.sql`
+    select
+      membership.group_id::text as "groupId",
+      student.code as "studentCode",
+      contact.full_name as "studentName",
+      program.name as program,
+      teacher.full_name as "teacherName",
+      attendance.status::text as "attendanceStatus",
+      attendance.note
+    from erp.group_memberships membership
+    join erp.enrollments enrollment on enrollment.id = membership.enrollment_id
+    join erp.students student on student.id = enrollment.student_id
+    join erp.contacts contact on contact.id = student.contact_id
+    join erp.programs program on program.id = enrollment.program_id
+    join erp.teachers teacher on teacher.id = membership.teacher_id
+    left join erp.group_sessions session
+      on session.group_id = membership.group_id and session.session_date = ${reportDate}
+    left join erp.attendance_records attendance
+      on attendance.session_id = session.id and attendance.membership_id = membership.id
+    where membership.group_id in (${Prisma.join(groups.map((group) => group.id))})
+      and membership.joined_at <= ${reportDate}
+      and (membership.ended_at is null or membership.ended_at >= ${reportDate})
+    order by membership.group_id, contact.full_name
+  `);
+  const rows = attendanceRows.map((member) => {
+    const group = groupById.get(member.groupId);
+    return {
       group: group?.code ?? "-",
-      date: journalData.journal.dateLabel,
-      schedule: journalData.journal.scheduleLabel,
+      date: data.journal.dateLabel,
+      schedule: group?.scheduleLabel ?? "-",
       studentCode: member.studentCode,
       student: member.studentName,
       program: member.program,
       teacher: member.teacherName,
-      attendance: member.attendanceStatus === "present" ? "İştirak edib" : member.attendanceStatus === "absent" ? "Qeyri-iştirak" : "Qeyd edilməyib",
+      attendance: member.attendanceStatus === "PRESENT" ? "İştirak edib" : member.attendanceStatus === "ABSENT" ? "Qeyri-iştirak" : "Qeyd edilməyib",
       note: member.note || "-",
-    }));
+    };
   });
   return {
     rows,

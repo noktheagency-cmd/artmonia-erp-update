@@ -1,7 +1,6 @@
 import { bonusProgress } from "@/modules/hr/bonus-rules";
 import {
-  calculateBonusCampaignValue,
-  syncActiveBonusCampaigns,
+  calculateBonusCampaignValues,
 } from "@/modules/hr/bonus-service";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -71,8 +70,6 @@ export async function getHrBonusData(): Promise<HrBonusData> {
       permissions: { canManage: false, canApprove: false, canPost: false, canSeeAll: false },
     };
   }
-  await syncActiveBonusCampaigns(actor.id);
-
   const prisma = getPrisma();
   const canManage = actor.permissions.has("hr.bonus.manage");
   const canApprove = actor.permissions.has("hr.bonus.approve");
@@ -111,11 +108,15 @@ export async function getHrBonusData(): Promise<HrBonusData> {
     take: 60,
   });
 
-  const values = await Promise.all(campaigns.map((campaign) => calculateBonusCampaignValue(campaign.id)));
+  const values = await calculateBonusCampaignValues(campaigns);
   return {
     asOf: new Date().toISOString(),
-    campaigns: campaigns.map((campaign, index) => {
-      const value = values[index];
+    campaigns: campaigns.map((campaign) => {
+      const value = values.get(campaign.id) ?? {
+        baseValue: 0,
+        adjustmentValue: 0,
+        currentValue: 0,
+      };
       const maxThreshold = Number(campaign.stages.at(-1)?.threshold ?? 0);
       const ownParticipant = campaign.participants.find((participant) => participant.employeeId === actorEmployee?.id);
       return {

@@ -1,3 +1,4 @@
+import "@/modules/workshops/workshops.css";
 import {
   createWorkshopEventAction,
 } from "@/modules/workshops/actions";

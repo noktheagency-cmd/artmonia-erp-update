@@ -2,8 +2,8 @@ import { createTaskAction, updateTaskStatusAction } from "@/modules/tasks/action
 import { getTaskData } from "@/modules/tasks/queries";
 import { TaskWorkspace } from "@/modules/tasks/task-workspace";
 
-export default async function TasksPage() {
-  const data = await getTaskData();
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ page?: string; pageSize?: string }> }) {
+  const data = await getTaskData(await searchParams);
 
   return (
     <TaskWorkspace

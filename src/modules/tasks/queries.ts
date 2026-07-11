@@ -24,20 +24,25 @@ export type TaskData = {
   permissions: { canManage: boolean };
   currentUserId: string;
   summary: { open: number; inProgress: number; done: number };
+  pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
 };
 
-export async function getTaskData(): Promise<TaskData> {
+export async function getTaskData(input: { page?: string; pageSize?: string } = {}): Promise<TaskData> {
   const actor = await requireErpActor("task.read");
   const prisma = getPrisma();
   const manageScope = scopeFor(actor.permissions, "task.manage");
   const canManage = manageScope !== null;
   const canManageAll = manageScope === "ALL";
+  const page = Math.max(1, Number.parseInt(input.page ?? "1", 10) || 1);
+  const pageSize = Math.min(50, Math.max(10, Number.parseInt(input.pageSize ?? "25", 10) || 25));
+  const where = canManageAll ? undefined : { ownerUserId: actor.id };
 
-  const [tasks, employees] = await Promise.all([
+  const [tasks, total, statusCounts, employees] = await Promise.all([
     prisma.task.findMany({
-      where: canManageAll ? undefined : { ownerUserId: actor.id },
+      where,
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
-      take: 250,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       select: {
         id: true,
         title: true,
@@ -48,6 +53,8 @@ export async function getTaskData(): Promise<TaskData> {
         ownerUser: { select: { fullName: true } },
       },
     }),
+    prisma.task.count({ where }),
+    prisma.task.groupBy({ by: ["status"], where, _count: { _all: true } }),
     canManageAll
       ? prisma.user.findMany({
           where: { isActive: true },
@@ -86,10 +93,11 @@ export async function getTaskData(): Promise<TaskData> {
     permissions: { canManage },
     currentUserId: actor.id,
     summary: {
-      open: rows.filter((task) => task.status === TaskStatus.OPEN).length,
-      inProgress: rows.filter((task) => task.status === TaskStatus.IN_PROGRESS).length,
-      done: rows.filter((task) => task.status === TaskStatus.DONE).length,
+      open: statusCounts.find((item) => item.status === TaskStatus.OPEN)?._count._all ?? 0,
+      inProgress: statusCounts.find((item) => item.status === TaskStatus.IN_PROGRESS)?._count._all ?? 0,
+      done: statusCounts.find((item) => item.status === TaskStatus.DONE)?._count._all ?? 0,
     },
+    pagination: { page, pageSize, total, hasNext: page * pageSize < total },
   };
 }
 

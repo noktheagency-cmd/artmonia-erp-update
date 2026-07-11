@@ -1,7 +1,7 @@
 import "server-only";
 
 import { requireErpActor } from "@/server/auth/actor";
-import { createSupabaseServerClient } from "@/server/supabase/server";
+import { getSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   mapDepartmentRow,
   mapDocumentRow,
@@ -10,16 +10,16 @@ import {
 
 export async function getPlaybookData(): Promise<PlaybookData> {
   await requireErpActor("playbook.read");
-  const supabase = await createSupabaseServerClient();
+  const supabase = getSupabaseAdminClient();
   const [departmentResult, documentResult] = await Promise.all([
     supabase
       .from("playbook_departments")
-      .select("*")
+      .select("id, name, slug, color, soft_color, icon, position, created_at, updated_at")
       .order("position", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
       .from("playbook_documents")
-      .select("*")
+      .select("id, department_id, name, original_name, storage_path, extension, mime_type, size_bytes, page_count, created_at, updated_at")
       .order("created_at", { ascending: false })
       .limit(300),
   ]);

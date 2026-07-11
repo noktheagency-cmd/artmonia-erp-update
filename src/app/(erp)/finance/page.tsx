@@ -1,3 +1,4 @@
+import "@/modules/finance/finance.css";
 import { FinanceWorkspace } from "@/modules/finance/finance-workspace";
 import {
   createFinanceExpenseAction,

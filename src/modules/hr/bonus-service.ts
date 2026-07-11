@@ -7,6 +7,65 @@ import { splitBonusPool } from "@/modules/hr/bonus-rules";
 import { getPrisma } from "@/server/db/prisma";
 
 type NumericRow = { value: Prisma.Decimal | number | string | null };
+type CampaignValueRow = {
+  id: string;
+  baseValue: Prisma.Decimal | number | string | null;
+  adjustmentValue: Prisma.Decimal | number | string | null;
+};
+
+export type BonusCampaignValueInput = {
+  id: string;
+};
+
+export async function calculateBonusCampaignValues(
+  campaigns: BonusCampaignValueInput[],
+) {
+  if (campaigns.length === 0) {
+    return new Map<string, { baseValue: number; adjustmentValue: number; currentValue: number }>();
+  }
+
+  const rows = await getPrisma().$queryRaw<CampaignValueRow[]>(Prisma.sql`
+    select
+      campaign.id::text as id,
+      case campaign.metric_kind
+        when 'DEPARTMENT_COLLECTED_REVENUE'::"erp"."HrBonusMetricKind" then (
+          select coalesce(sum(payment.amount), 0)
+          from erp.payments payment
+          join erp.students student on student.id = payment.student_id
+          join erp.hr_employees employee on employee.user_id = student.manager_id
+          where employee.department = campaign.department
+            and payment.paid_at >= campaign.starts_at
+            and payment.paid_at <= campaign.ends_at
+        )
+        when 'DEPARTMENT_SALES_COUNT'::"erp"."HrBonusMetricKind" then (
+          select count(*)::numeric
+          from erp.students student
+          join erp.hr_employees employee on employee.user_id = student.manager_id
+          where employee.department = campaign.department
+            and student.registered_at >= campaign.starts_at
+            and student.registered_at <= campaign.ends_at
+        )
+        else 0
+      end as "baseValue",
+      coalesce((
+        select sum(adjustment.amount)
+        from erp.hr_bonus_progress_adjustments adjustment
+        where adjustment.campaign_id = campaign.id
+      ), 0) as "adjustmentValue"
+    from erp.hr_bonus_campaigns campaign
+    where campaign.id in (${Prisma.join(campaigns.map((campaign) => campaign.id))})
+  `);
+
+  return new Map(rows.map((row) => {
+    const baseValue = Number(row.baseValue ?? 0);
+    const adjustmentValue = Number(row.adjustmentValue ?? 0);
+    return [row.id, {
+      baseValue,
+      adjustmentValue,
+      currentValue: Math.max(0, baseValue + adjustmentValue),
+    }];
+  }));
+}
 
 export async function calculateBonusCampaignValue(campaignId: string) {
   const prisma = getPrisma();

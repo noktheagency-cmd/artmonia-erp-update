@@ -1,3 +1,4 @@
+import "@/modules/dashboard/dashboard.css";
 import { OwnerDashboard } from "@/modules/dashboard/owner-dashboard";
 import { getOwnerDashboardData } from "@/modules/dashboard/queries";
 import { createTaskAction } from "@/modules/tasks/actions";

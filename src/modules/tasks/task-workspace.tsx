@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useOptimistic, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import type { Route } from "next";
 import {
   CalendarClock,
   CheckCircle2,
@@ -143,6 +145,13 @@ export function TaskWorkspace({
             <p>Axtarış və ya status filtrini dəyişin.</p>
           </div>
         )}
+        {data.pagination.page > 1 || data.pagination.hasNext ? (
+          <nav className="mt-4 flex items-center justify-end gap-2" aria-label="Task sÉ™hifÉ™lÉ™ri">
+            {data.pagination.page > 1 ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page - 1}&pageSize=${data.pagination.pageSize}` as Route}>ÆvvÉ™lki</Link> : null}
+            <span>{data.pagination.page} / {Math.max(1, Math.ceil(data.pagination.total / data.pagination.pageSize))}</span>
+            {data.pagination.hasNext ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page + 1}&pageSize=${data.pagination.pageSize}` as Route}>NÃ¶vbÉ™ti</Link> : null}
+          </nav>
+        ) : null}
       </div>
     </section>
   );
@@ -160,20 +169,29 @@ function SummaryItem({ icon: Icon, label, value, tone }: { icon: typeof CircleDo
 function TaskListRow({ task, updateTaskStatusAction }: { task: TaskRow; updateTaskStatusAction: TaskAction }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(
+    task.status,
+    (_current, next: TaskStatusValue) => next,
+  );
 
   function updateStatus(status: string) {
     const formData = new FormData();
     formData.set("taskId", task.id);
     formData.set("status", status);
     startTransition(async () => {
-      await updateTaskStatusAction(formData);
-      router.refresh();
+      setOptimisticStatus(status as TaskStatusValue);
+      try {
+        await updateTaskStatusAction(formData);
+        router.refresh();
+      } catch (error) {
+        notifyCaughtError(error, "Task statusu yenilÉ™nmÉ™di", "Status yenilÉ™nmÉ™di");
+      }
     });
   }
 
   return (
     <article className={cx("task-row", task.isOverdue && "is-overdue", isPending && "is-pending")}>
-      <span className={cx("task-status-mark", `is-${task.status.toLowerCase()}`)} aria-hidden="true" />
+      <span className={cx("task-status-mark", `is-${optimisticStatus.toLowerCase()}`)} aria-hidden="true" />
       <div className="task-main">
         <h3>{task.title}</h3>
         {task.description ? <p>{task.description}</p> : null}
@@ -188,11 +206,11 @@ function TaskListRow({ task, updateTaskStatusAction }: { task: TaskRow; updateTa
       </div>
       <FormSelect
         name={`status-${task.id}`}
-        value={task.status}
+        value={optimisticStatus}
         onValueChange={updateStatus}
         options={statusOptions}
         disabled={isPending}
-        className={cx("task-status-select", `is-${task.status.toLowerCase()}`)}
+        className={cx("task-status-select", `is-${optimisticStatus.toLowerCase()}`)}
         aria-label={`${task.title} statusu`}
       />
     </article>

@@ -1,4 +1,4 @@
-import { AppRole, EnrollmentStatus, StudentLifecycleStatus } from "@/generated/prisma/client";
+import { AppRole, Prisma, StudentLifecycleStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { isPrivilegedActor, requireErpActor } from "@/server/auth/actor";
 import {
@@ -83,6 +83,51 @@ export type GroupWorkspaceData = {
   };
 };
 
+type GroupRawRow = {
+  id: string;
+  code: string;
+  capacity: number;
+  schedules: Array<{ id: string; weekday: GroupWeekdayCode; startTime: string; endTime: string }>;
+  memberships: Array<{
+    id: string;
+    enrollmentId: string;
+    teacherId: string;
+    joinedAt: string;
+    teacher: { id: string; fullName: string };
+    enrollment: {
+      program: { name: string };
+      student: { id: string; code: string; lifecycleStatus: StudentLifecycleStatus; contact: { fullName: string } };
+    };
+  }>;
+};
+
+type JournalRawRow = {
+  id: string;
+  enrollmentId: string;
+  studentId: string;
+  studentCode: string;
+  studentName: string;
+  program: string;
+  teacherId: string;
+  teacherName: string;
+  lifecycleStatus: StudentLifecycleStatus;
+  joinedAt: string;
+  attendanceId: string | null;
+  attendanceStatus: "PRESENT" | "ABSENT" | null;
+  note: string | null;
+};
+
+type EnrollmentOptionRawRow = {
+  id: string;
+  studentId: string;
+  studentCode: string;
+  studentName: string;
+  program: string;
+  currentTeacherId: string | null;
+  currentTeacherName: string | null;
+  lifecycleStatus: StudentLifecycleStatus;
+};
+
 export async function getGroupWorkspaceData(input?: {
   groupId?: string;
   date?: string;
@@ -100,36 +145,64 @@ export async function getGroupWorkspaceData(input?: {
   }
 
   const teacherId = teacherProfile?.id;
-  const groupsRaw = await prisma.studentGroup.findMany({
-    where: {
-      isActive: true,
-      ...(teacherId
-        ? { memberships: { some: { teacherId, endedAt: null } } }
-        : {}),
-    },
-    include: {
-      schedules: true,
-      memberships: {
-        where: {
-          endedAt: null,
-          ...(teacherId ? { teacherId } : {}),
-        },
-        include: {
-          teacher: { select: { id: true, fullName: true } },
-          enrollment: {
-            include: {
-              program: { select: { name: true } },
-              student: {
-                include: { contact: { select: { fullName: true } } },
-              },
-            },
-          },
-        },
-        orderBy: { joinedAt: "asc" },
-      },
-    },
-    orderBy: { code: "asc" },
-  });
+  const teacherGroupFilter = teacherId ? Prisma.sql`
+    and exists (
+      select 1 from erp.group_memberships scoped_membership
+      where scoped_membership.group_id = student_group.id
+        and scoped_membership.teacher_id = ${teacherId}::uuid
+        and scoped_membership.ended_at is null
+    )
+  ` : Prisma.empty;
+  const teacherMembershipFilter = teacherId
+    ? Prisma.sql`and membership.teacher_id = ${teacherId}::uuid`
+    : Prisma.empty;
+  const groupsRaw = await prisma.$queryRaw<GroupRawRow[]>(Prisma.sql`
+    select
+      student_group.id::text as id,
+      student_group.code,
+      student_group.capacity,
+      coalesce((
+        select jsonb_agg(jsonb_build_object(
+          'id', schedule.id::text,
+          'weekday', schedule.weekday::text,
+          'startTime', schedule.start_time,
+          'endTime', schedule.end_time
+        ) order by schedule.weekday, schedule.start_time)
+        from erp.group_schedules schedule
+        where schedule.group_id = student_group.id
+      ), '[]'::jsonb) as schedules,
+      coalesce((
+        select jsonb_agg(jsonb_build_object(
+          'id', membership.id::text,
+          'enrollmentId', membership.enrollment_id::text,
+          'teacherId', membership.teacher_id::text,
+          'joinedAt', membership.joined_at,
+          'teacher', jsonb_build_object('id', teacher.id::text, 'fullName', teacher.full_name),
+          'enrollment', jsonb_build_object(
+            'program', jsonb_build_object('name', program.name),
+            'student', jsonb_build_object(
+              'id', student.id::text,
+              'code', student.code,
+              'lifecycleStatus', student.lifecycle_status::text,
+              'contact', jsonb_build_object('fullName', contact.full_name)
+            )
+          )
+        ) order by membership.joined_at asc)
+        from erp.group_memberships membership
+        join erp.teachers teacher on teacher.id = membership.teacher_id
+        join erp.enrollments enrollment on enrollment.id = membership.enrollment_id
+        join erp.programs program on program.id = enrollment.program_id
+        join erp.students student on student.id = enrollment.student_id
+        join erp.contacts contact on contact.id = student.contact_id
+        where membership.group_id = student_group.id
+          and membership.ended_at is null
+          ${teacherMembershipFilter}
+      ), '[]'::jsonb) as memberships
+    from erp.groups student_group
+    where student_group.is_active = true
+      ${teacherGroupFilter}
+    order by student_group.code asc
+  `);
 
   const groups: GroupView[] = groupsRaw.map((group) => ({
     id: group.id,
@@ -147,7 +220,10 @@ export async function getGroupWorkspaceData(input?: {
         startTime: schedule.startTime,
         endTime: schedule.endTime,
       })),
-    members: group.memberships.map(mapMember),
+    members: group.memberships.map((membership) => mapMember({
+      ...membership,
+      joinedAt: new Date(membership.joinedAt),
+    })),
   }));
   const selectedGroup = groups.find((group) => group.id === input?.groupId) ?? groups[0];
   const selectedGroupRaw = selectedGroup
@@ -160,82 +236,97 @@ export async function getGroupWorkspaceData(input?: {
       )
     : todayInBaku();
   const selectedDateValue = new Date(`${selectedDate}T00:00:00.000Z`);
-  const journalMemberships = selectedGroup
-    ? await prisma.groupMembership.findMany({
-        where: {
-          groupId: selectedGroup.id,
-          joinedAt: { lte: selectedDateValue },
-          OR: [{ endedAt: null }, { endedAt: { gte: selectedDateValue } }],
-          ...(teacherId ? { teacherId } : {}),
-        },
-        include: {
-          teacher: { select: { id: true, fullName: true } },
-          enrollment: {
-            include: {
-              program: { select: { name: true } },
-              student: { include: { contact: { select: { fullName: true } } } },
-            },
-          },
-        },
-        orderBy: { joinedAt: "asc" },
-      })
-    : [];
-  const session = selectedGroup
-    ? await prisma.groupSession.findUnique({
-        where: { groupId_sessionDate: { groupId: selectedGroup.id, sessionDate: selectedDateValue } },
-        include: { attendance: true },
-      })
-    : null;
-  const attendanceByMembership = new Map(
-    (session?.attendance ?? []).map((record) => [record.membershipId, record])
-  );
-  const journalMembers: JournalMemberView[] = journalMemberships.map((membership) => {
-    const member = mapMember(membership);
-    const attendance = attendanceByMembership.get(membership.id);
-    return {
-      ...member,
-      attendanceId: attendance?.id ?? null,
-      attendanceStatus:
-        attendance?.status === "PRESENT"
-          ? "present"
-          : attendance?.status === "ABSENT"
-            ? "absent"
-            : null,
-      note: attendance?.note ?? "",
-    };
-  });
   const canManageGroups = actor.permissions.has("group.manage") && privileged;
-  const [teachers, enrollmentOptions] = canManageGroups
-    ? await Promise.all([
+  const managementOptionsPromise = canManageGroups
+    ? Promise.all([
         prisma.teacher.findMany({
           where: { isActive: true },
           select: { id: true, fullName: true },
           orderBy: { fullName: "asc" },
         }),
-        prisma.enrollment.findMany({
-          where: {
-            status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
-            student: {
-              lifecycleStatus: {
-                in: [
-                  StudentLifecycleStatus.GROUP_WAITING,
-                  StudentLifecycleStatus.ACTIVE,
-                  StudentLifecycleStatus.DEBT,
-                  StudentLifecycleStatus.FROZEN,
-                ],
-              },
-            },
-            groupMemberships: { none: { endedAt: null } },
-          },
-          include: {
-            teacher: { select: { id: true, fullName: true } },
-            program: { select: { name: true } },
-            student: { include: { contact: { select: { fullName: true } } } },
-          },
-          orderBy: { student: { contact: { fullName: "asc" } } },
-        }),
+        prisma.$queryRaw<EnrollmentOptionRawRow[]>(Prisma.sql`
+          select
+            enrollment.id::text as id,
+            student.id::text as "studentId",
+            student.code as "studentCode",
+            contact.full_name as "studentName",
+            program.name as program,
+            teacher.id::text as "currentTeacherId",
+            teacher.full_name as "currentTeacherName",
+            student.lifecycle_status::text as "lifecycleStatus"
+          from erp.enrollments enrollment
+          join erp.students student on student.id = enrollment.student_id
+          join erp.contacts contact on contact.id = student.contact_id
+          join erp.programs program on program.id = enrollment.program_id
+          left join erp.teachers teacher on teacher.id = enrollment.teacher_id
+          where enrollment.status in ('ACTIVE', 'PAUSED')
+            and student.lifecycle_status in ('GROUP_WAITING', 'ACTIVE', 'DEBT', 'FROZEN')
+            and not exists (
+              select 1 from erp.group_memberships membership
+              where membership.enrollment_id = enrollment.id and membership.ended_at is null
+            )
+          order by contact.full_name asc
+        `),
       ])
-    : [[], []];
+    : Promise.resolve([[], []] as const);
+  const [journalMemberships, [teachers, enrollmentOptions]] = await Promise.all([
+    selectedGroup
+    ? prisma.$queryRaw<JournalRawRow[]>(Prisma.sql`
+        select
+          membership.id::text as id,
+          membership.enrollment_id::text as "enrollmentId",
+          student.id::text as "studentId",
+          student.code as "studentCode",
+          contact.full_name as "studentName",
+          program.name as program,
+          teacher.id::text as "teacherId",
+          teacher.full_name as "teacherName",
+          student.lifecycle_status::text as "lifecycleStatus",
+          membership.joined_at::text as "joinedAt",
+          attendance.id::text as "attendanceId",
+          attendance.status::text as "attendanceStatus",
+          attendance.note
+        from erp.group_memberships membership
+        join erp.enrollments enrollment on enrollment.id = membership.enrollment_id
+        join erp.students student on student.id = enrollment.student_id
+        join erp.contacts contact on contact.id = student.contact_id
+        join erp.programs program on program.id = enrollment.program_id
+        join erp.teachers teacher on teacher.id = membership.teacher_id
+        left join erp.group_sessions session
+          on session.group_id = membership.group_id and session.session_date = ${selectedDateValue}
+        left join erp.attendance_records attendance
+          on attendance.session_id = session.id and attendance.membership_id = membership.id
+        where membership.group_id = ${selectedGroup.id}::uuid
+          and membership.joined_at <= ${selectedDateValue}
+          and (membership.ended_at is null or membership.ended_at >= ${selectedDateValue})
+          ${teacherMembershipFilter}
+        order by membership.joined_at asc
+      `)
+    : Promise.resolve([]),
+    managementOptionsPromise,
+  ]);
+  const journalMembers: JournalMemberView[] = journalMemberships.map((membership) => {
+    return {
+      id: membership.id,
+      enrollmentId: membership.enrollmentId,
+      studentId: membership.studentId,
+      studentCode: membership.studentCode,
+      studentName: membership.studentName,
+      program: membership.program,
+      teacherId: membership.teacherId,
+      teacherName: membership.teacherName,
+      lifecycleStatus: formatLifecycleStatus(membership.lifecycleStatus),
+      joinedAt: toDateInput(new Date(membership.joinedAt)),
+      attendanceId: membership.attendanceId,
+      attendanceStatus:
+        membership.attendanceStatus === "PRESENT"
+          ? "present"
+          : membership.attendanceStatus === "ABSENT"
+            ? "absent"
+            : null,
+      note: membership.note ?? "",
+    };
+  });
   const scheduleForDate = selectedGroupRaw?.schedules.find(
     (schedule) => schedule.weekday === weekdayFromDate(selectedDate)
   );
@@ -255,13 +346,13 @@ export async function getGroupWorkspaceData(input?: {
     teachers: teachers.map((teacher) => ({ id: teacher.id, name: teacher.fullName })),
     enrollmentOptions: enrollmentOptions.map((enrollment) => ({
       id: enrollment.id,
-      studentId: enrollment.student.id,
-      studentCode: enrollment.student.code,
-      studentName: enrollment.student.contact.fullName,
-      program: enrollment.program.name,
-      currentTeacherId: enrollment.teacher?.id ?? "",
-      currentTeacherName: enrollment.teacher?.fullName ?? "Müəllim seçilməyib",
-      lifecycleStatus: formatLifecycleStatus(enrollment.student.lifecycleStatus),
+      studentId: enrollment.studentId,
+      studentCode: enrollment.studentCode,
+      studentName: enrollment.studentName,
+      program: enrollment.program,
+      currentTeacherId: enrollment.currentTeacherId ?? "",
+      currentTeacherName: enrollment.currentTeacherName ?? "Müəllim seçilməyib",
+      lifecycleStatus: formatLifecycleStatus(enrollment.lifecycleStatus),
     })),
     journal: {
       date: selectedDate,
