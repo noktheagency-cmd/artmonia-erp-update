@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import type { TaskData, TaskRow } from "@/modules/tasks/queries";
+import { notifyCaughtError } from "@/lib/app-notifications";
 
 type TaskAction = (formData: FormData) => void | Promise<void>;
 
@@ -152,7 +153,7 @@ function CreateDashboardTaskDialog({ employees, action }: { employees: TaskData[
         setOpen(false);
         router.refresh();
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Task yaradıla bilmədi");
+        setError(notifyCaughtError(caught, "Task yaradıla bilmədi", "Task yaradılmadı"));
       }
     });
   }

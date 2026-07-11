@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Banknote, Check, Plus, Trash2, UserPlus } from "lucide-react";
+import { Banknote, BookOpen, Check, Plus, Trash2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,13 +21,21 @@ import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
 
 type CreateOptions = StudentListData["createOptions"];
-type CreateMode = "lead" | "manual";
 const ADD_SOURCE_VALUE = "__add_source__";
+const educationLevelOptions = [
+  { value: "Orta təhsil", label: "Orta təhsil" },
+  { value: "Subbakalavr", label: "Subbakalavr" },
+  { value: "Bakalavr", label: "Bakalavr" },
+  { value: "Magistr", label: "Magistr" },
+  { value: "Doktorantura", label: "Doktorantura" },
+];
 type StudentFormValues = {
+  monthlyFee: string;
   paymentAmount: string;
   paymentDate: string;
   paymentMethod: string;
   paymentNote: string;
+  nextPaymentDate: string;
 };
 
 export function StudentCreateDialogClient({
@@ -44,7 +53,6 @@ export function StudentCreateDialogClient({
   returnTo: string;
   createStudentAction: (formData: FormData) => void | Promise<void>;
 }) {
-  const [mode, setMode] = useState<CreateMode>("lead");
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [isAddingSource, setIsAddingSource] = useState(false);
   const [acceptPayment, setAcceptPayment] = useState(false);
@@ -56,9 +64,9 @@ export function StudentCreateDialogClient({
     programId: "",
     teacherId: "",
     managerId: "",
+    campaignId: "",
     lifecycleStatus: "GROUP_WAITING",
     registeredDate: createOptions.defaultRegisteredDate,
-    firstLessonDate: "",
     monthlyFee: "",
     lessonsPerMonth: "",
     notes: "",
@@ -66,17 +74,19 @@ export function StudentCreateDialogClient({
     paymentDate: createOptions.defaultPaymentDate,
     paymentMethod: "CASH",
     paymentNote: "",
+    nextPaymentDate: addOneMonth(createOptions.defaultPaymentDate),
   }));
 
   function updateValue(name: keyof typeof values, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
   }
 
-  function handleModeChange(nextMode: CreateMode) {
-    setMode(nextMode);
+  function handleLeadChange(value: string) {
+    const leadId = cleanSelectValue(value);
+    setSelectedLeadId(leadId);
+    const lead = createOptions.leads.find((item) => item.id === leadId);
 
-    if (nextMode === "manual") {
-      setSelectedLeadId("");
+    if (!lead) {
       setIsAddingSource(false);
       setValues((current) => ({
         ...current,
@@ -87,21 +97,13 @@ export function StudentCreateDialogClient({
         programId: "",
         teacherId: "",
         managerId: "",
+        campaignId: "",
         monthlyFee: "",
         lessonsPerMonth: "",
         paymentAmount: "",
         paymentNote: "",
         notes: "",
       }));
-    }
-  }
-
-  function handleLeadChange(value: string) {
-    const leadId = cleanSelectValue(value);
-    setSelectedLeadId(leadId);
-    const lead = createOptions.leads.find((item) => item.id === leadId);
-
-    if (!lead) {
       return;
     }
 
@@ -114,10 +116,11 @@ export function StudentCreateDialogClient({
       source: lead.source,
       programId: lead.programId,
       managerId: lead.managerId,
-      monthlyFee: program?.monthlyFee ?? current.monthlyFee,
-      lessonsPerMonth: program?.lessonsPerMonth ?? current.lessonsPerMonth,
+      campaignId: lead.campaignId,
+      monthlyFee: program?.monthlyFee ?? "",
+      lessonsPerMonth: program?.lessonsPerMonth ?? "",
       notes: lead.note,
-      paymentAmount: program?.monthlyFee ?? current.paymentAmount,
+      paymentAmount: program?.monthlyFee ?? "",
     }));
   }
 
@@ -127,9 +130,9 @@ export function StudentCreateDialogClient({
     setValues((current) => ({
       ...current,
       programId,
-      monthlyFee: program?.monthlyFee ?? current.monthlyFee,
-      lessonsPerMonth: program?.lessonsPerMonth ?? current.lessonsPerMonth,
-      paymentAmount: program?.monthlyFee ?? current.paymentAmount,
+      monthlyFee: program?.monthlyFee ?? "",
+      lessonsPerMonth: program?.lessonsPerMonth ?? "",
+      paymentAmount: program?.monthlyFee ?? "",
     }));
   }
 
@@ -156,16 +159,18 @@ export function StudentCreateDialogClient({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" disabled={!canCreateStudent}>
-          <Plus data-icon="inline-start" />
-          Tələbə yarat
+        <Button type="button" size="icon" className="students-create-action" disabled={!canCreateStudent} aria-label="Tələbə yarat" title="Tələbə yarat">
+          <Plus />
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="student-create-dialog">
+      <DialogContent className="student-create-dialog">
         <DialogHeader className="student-create-header">
           <div className="student-create-title">
             <span className="student-create-header-icon"><UserPlus /></span>
-            <DialogTitle>Yeni tələbə</DialogTitle>
+            <div>
+              <DialogTitle>Yeni tələbə</DialogTitle>
+              <DialogDescription>Müraciəti tələbəyə çevirin və tədris məlumatlarını tamamlayın.</DialogDescription>
+            </div>
           </div>
           <InitialPaymentDialog
             accepted={acceptPayment}
@@ -178,7 +183,6 @@ export function StudentCreateDialogClient({
         </DialogHeader>
 
         <form action={createStudentAction} className="student-create-form" id="student-create-form">
-          <input name="mode" type="hidden" value={mode} />
           <input name="returnTo" type="hidden" value={returnTo} />
           <input name="acceptPayment" type="hidden" value={acceptPayment ? "true" : "false"} />
           <input name="paymentAmount" type="hidden" value={values.paymentAmount} />
@@ -186,69 +190,36 @@ export function StudentCreateDialogClient({
           <input name="paymentMonth" type="hidden" value={getPaymentMonth(values.paymentDate)} />
           <input name="paymentMethod" type="hidden" value={values.paymentMethod} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
+          <input name="nextPaymentDate" type="hidden" value={values.nextPaymentDate} />
 
-          <div className="student-create-toolbar">
-            <div className="student-create-switch" role="tablist" aria-label="Yaratma rejimi">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === "lead"}
-                data-active={mode === "lead"}
-                disabled={!canConvertLead}
-                onClick={() => handleModeChange("lead")}
-              >
-                Müraciətdən
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === "manual"}
-                data-active={mode === "manual"}
-                onClick={() => handleModeChange("manual")}
-              >
-                Sıfırdan
-              </button>
-            </div>
-
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">
-                  Ləğv et
-                </Button>
-              </DialogClose>
-              <Button type="submit" disabled={!canCreateStudent}>
-                <Plus data-icon="inline-start" />
-                {acceptPayment
-                  ? "Yarat və ödənişi qəbul et"
-                  : "Tələbəni yarat"}
-              </Button>
-            </DialogFooter>
-          </div>
-
-          {mode === "lead" ? (
-            <label className="form-field">
-              <span>Müraciət</span>
-              <FormSelect
-                name="leadId"
-                value={selectedLeadId}
-                onValueChange={handleLeadChange}
-                emptyLabel={
-                  createOptions.leads.length > 0
-                    ? "Müraciət seçin"
-                    : "Çevriləcək müraciət yoxdur"
-                }
-                options={createOptions.leads.map((lead) => ({
-                  value: lead.id,
-                  label: `${lead.name} - ${lead.phone || lead.source}`,
-                }))}
-                disabled={!canConvertLead || createOptions.leads.length === 0}
-                required={mode === "lead"}
-              />
-            </label>
-          ) : null}
+          <label className="form-field student-create-lead-field">
+            <span>Müraciət</span>
+            <FormSelect
+              name="leadId"
+              value={selectedLeadId}
+              onValueChange={handleLeadChange}
+              emptyLabel={
+                createOptions.leads.length > 0
+                  ? "Müraciət seçin (istəyə bağlı)"
+                  : "Müraciət yoxdur — məlumatları əl ilə daxil edin"
+              }
+              options={createOptions.leads.map((lead) => ({
+                value: lead.id,
+                label: `${lead.name} - ${lead.phone || lead.source}`,
+              }))}
+              disabled={!canConvertLead || createOptions.leads.length === 0}
+            />
+          </label>
 
           <div className="student-create-section">
-            <div className="field-grid">
+            <div className="student-create-section-heading">
+              <UserPlus />
+              <div>
+                <strong>Şəxsi məlumatlar</strong>
+                <span>Tələbənin əsas əlaqə məlumatları</span>
+              </div>
+            </div>
+            <div className="student-create-grid student-create-grid-personal">
               <label className="form-field">
                 <span>Ad və soyad</span>
                 <Input
@@ -270,8 +241,6 @@ export function StudentCreateDialogClient({
                   maxLength={40}
                 />
               </label>
-            </div>
-            <div className="field-grid">
               <label className="form-field">
                 <span>Mənbə</span>
                 <FormSelect
@@ -301,18 +270,26 @@ export function StudentCreateDialogClient({
               </label>
               <label className="form-field">
                 <span>Təhsil səviyyəsi</span>
-                <Input
+                <FormSelect
                   name="educationLevel"
                   value={values.educationLevel}
-                  onChange={(event) => updateValue("educationLevel", event.target.value)}
-                  maxLength={80}
+                  onValueChange={(value) => updateValue("educationLevel", cleanSelectValue(value))}
+                  emptyLabel="Təhsil səviyyəsi"
+                  options={educationLevelOptions}
                 />
               </label>
             </div>
           </div>
 
           <div className="student-create-section">
-            <div className="field-grid">
+            <div className="student-create-section-heading">
+              <BookOpen />
+              <div>
+                <strong>Tədris məlumatları</strong>
+                <span>Proqram, məsul şəxslər və ödəniş planı</span>
+              </div>
+            </div>
+            <div className="student-create-grid">
               <label className="form-field">
                 <span>Proqram</span>
                 <FormSelect
@@ -335,8 +312,16 @@ export function StudentCreateDialogClient({
                   <strong>Qrup gözləyir</strong>
                 </div>
               </label>
-            </div>
-            <div className="field-grid">
+              <label className="form-field">
+                <span>Kampaniya</span>
+                <FormSelect
+                  name="campaignId"
+                  value={values.campaignId}
+                  onValueChange={(value) => updateValue("campaignId", cleanSelectValue(value))}
+                  emptyLabel="Kampaniya seçilməyib"
+                  options={createOptions.campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))}
+                />
+              </label>
               <label className="form-field">
                 <span>Müəllim</span>
                 <FormSelect
@@ -367,8 +352,6 @@ export function StudentCreateDialogClient({
                   }))}
                 />
               </label>
-            </div>
-            <div className="field-grid">
               <label className="form-field">
                 <span>Qeydiyyat tarixi</span>
                 <DatePicker
@@ -376,18 +359,10 @@ export function StudentCreateDialogClient({
                   value={values.registeredDate}
                   onValueChange={(value) => updateValue("registeredDate", value)}
                   allowClear={false}
+                  popoverPlacement="floating"
                   required
                 />
               </label>
-              <label className="form-field">
-                <span>İlk dərs tarixi</span>
-                <DatePicker
-                  name="firstLessonDate"
-                  value={values.firstLessonDate}
-                />
-              </label>
-            </div>
-            <div className="field-grid">
               <label className="form-field">
                 <span>Aylıq məbləğ</span>
                 <Input
@@ -408,7 +383,7 @@ export function StudentCreateDialogClient({
                 />
               </label>
             </div>
-            <label className="form-field">
+            <label className="form-field student-create-notes">
               <span>Qeyd</span>
               <Input
                 name="notes"
@@ -417,6 +392,26 @@ export function StudentCreateDialogClient({
                 maxLength={500}
               />
             </label>
+          </div>
+
+          <div className="student-create-toolbar">
+            <p>Məcburi sahələri doldurduqdan sonra tələbəni yaradın.</p>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Ləğv et
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                disabled={!canCreateStudent || (Boolean(selectedLeadId) && !canConvertLead)}
+              >
+                <Plus data-icon="inline-start" />
+                {acceptPayment
+                  ? "Yarat və ödənişi qəbul et"
+                  : "Tələbəni yarat"}
+              </Button>
+            </DialogFooter>
           </div>
         </form>
       </DialogContent>
@@ -488,7 +483,13 @@ function InitialPaymentDialog({
               <Input
                 name="paymentAmount"
                 value={values.paymentAmount}
-                onChange={(event) => onChange("paymentAmount", event.target.value)}
+                onChange={(event) => {
+                  const amount = event.target.value;
+                  onChange("paymentAmount", amount);
+                  if (toAmount(amount) >= toAmount(values.monthlyFee)) {
+                    onChange("nextPaymentDate", addOneMonth(values.paymentDate));
+                  }
+                }}
                 inputMode="decimal"
                 required
               />
@@ -508,7 +509,23 @@ function InitialPaymentDialog({
             <DatePicker
               name="paymentDate"
               value={values.paymentDate}
-              onValueChange={(value) => onChange("paymentDate", value)}
+              onValueChange={(value) => {
+                onChange("paymentDate", value);
+                if (toAmount(values.paymentAmount) >= toAmount(values.monthlyFee)) {
+                  onChange("nextPaymentDate", addOneMonth(value));
+                }
+              }}
+              allowClear={false}
+              popoverPlacement="floating"
+              required={open}
+            />
+          </label>
+          <label className="form-field">
+            <span>Növbəti ödəniş tarixi</span>
+            <DatePicker
+              name="nextPaymentDate"
+              value={values.nextPaymentDate}
+              onValueChange={(value) => onChange("nextPaymentDate", value)}
               allowClear={false}
               popoverPlacement="floating"
               required={open}
@@ -558,4 +575,16 @@ function getPaymentMonth(paymentDate: string) {
   }
 
   return localMatch ? `${localMatch[2]}-${localMatch[1]}` : "";
+}
+
+function toAmount(value: string) {
+  return Number(value.replace(",", ".")) || 0;
+}
+
+function addOneMonth(value: string) {
+  const normalized = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!normalized) return value;
+  const date = new Date(Date.UTC(Number(normalized[1]), Number(normalized[2]) - 1, Number(normalized[3])));
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  return date.toISOString().slice(0, 10);
 }

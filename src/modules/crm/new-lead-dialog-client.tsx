@@ -53,11 +53,13 @@ type DuplicateResponse = { matches: DuplicateMatch[] };
 export function NewLeadDialogClient({
   programs,
   managers,
+  campaigns,
   sourceOptions,
   createLeadAction,
 }: {
   programs: Array<{ id: string; name: string }>;
   managers: Array<{ id: string; fullName: string }>;
+  campaigns: Array<{ id: string; name: string }>;
   sourceOptions: string[];
   createLeadAction: (formData: FormData) => Promise<CreateLeadFormState>;
 }) {
@@ -126,24 +128,17 @@ export function NewLeadDialogClient({
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button className="crm-new-lead-trigger" type="button">
-          <UserPlus data-icon="inline-start" />
-          Yeni müraciət
+        <Button className="crm-new-lead-trigger" type="button" size="icon" aria-label="Yeni müraciət" title="Yeni müraciət">
+          <UserPlus />
         </Button>
       </DialogTrigger>
       <DialogContent className="crm-modern-dialog crm-create-dialog">
-        <DialogHeader>
+        <DialogHeader className="crm-create-accessible-header">
           <DialogTitle>Yeni müraciət</DialogTitle>
           <DialogDescription>
             Müraciət məlumatlarını, maraq göstərilən proqramı, məsul şəxsi və ilk izləmə tarixini daxil edin.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="crm-dialog-steps" aria-label="Müraciət yaratma bölmələri">
-          <div className="is-active"><span>1</span><strong>Əlaqə</strong></div>
-          <div><span>2</span><strong>Maraq</strong></div>
-          <div><span>3</span><strong>İzləmə</strong></div>
-        </div>
 
         <form ref={formRef} onSubmit={handleSubmit} className="crm-dialog-form">
           <div className="crm-dialog-scroll">
@@ -224,6 +219,10 @@ export function NewLeadDialogClient({
                   />
                 </Field>
                 <Field>
+                  <FieldLabel>Kampaniya</FieldLabel>
+                  <FormSelect aria-label="Kampaniya" name="campaignId" defaultValue="" emptyLabel="Kampaniya seçilməyib" options={campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))} />
+                </Field>
+                <Field>
                   <FieldLabel>Məsul şəxs</FieldLabel>
                   <FormSelect
                     aria-label="Məsul şəxs"
@@ -280,7 +279,7 @@ export function NewLeadDialogClient({
             <DialogClose asChild>
               <Button type="button" variant="outline">Ləğv et</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button className="crm-create-submit" type="submit" disabled={isSubmitting}>
               {isSubmitting ? <LoaderCircle className="crm-spin" data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
               {isSubmitting ? "Yaradılır..." : "Müraciəti əlavə et"}
             </Button>

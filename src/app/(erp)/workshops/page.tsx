@@ -1,6 +1,10 @@
 import {
   createWorkshopEventAction,
 } from "@/modules/workshops/actions";
+import {
+  generateWorkshopOfferAction,
+  getWorkshopOfferAudienceAction,
+} from "@/modules/workshops/offer-actions";
 import { getWorkshopData, type WorkshopFilters } from "@/modules/workshops/queries";
 import { WorkshopWorkspace } from "@/modules/workshops/workshop-workspace";
 
@@ -17,6 +21,8 @@ export default async function WorkshopsPage({
     <WorkshopWorkspace
       data={data}
       createWorkshopEventAction={createWorkshopEventAction}
+      loadOfferAudienceAction={getWorkshopOfferAudienceAction}
+      generateOfferAction={generateWorkshopOfferAction}
     />
   );
 }

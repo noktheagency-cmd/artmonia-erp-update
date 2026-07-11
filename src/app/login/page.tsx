@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { AlertTriangle, ArrowUpRight, AtSign, LockKeyhole } from "lucide-react";
 import { signInAction } from "@/modules/auth/actions";
 import { getCurrentErpUser } from "@/server/auth/session";
@@ -29,13 +30,7 @@ export default async function LoginPage({
       <LoginScene />
 
       <header className="kinetic-wordmark" aria-label="Artmonia ERP">
-        <span className="kinetic-wordmark-mark" aria-hidden="true">
-          <i />
-          <i />
-        </span>
-        <span>
-          Art<span>monia</span>
-        </span>
+        <Image src="/logo.png" alt="Artmonia" width={1254} height={1254} priority />
       </header>
 
       <section className="kinetic-panel" aria-label="Sign in">

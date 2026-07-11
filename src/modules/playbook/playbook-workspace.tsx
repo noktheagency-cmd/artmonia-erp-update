@@ -45,6 +45,7 @@ import {
 } from "react";
 import { cx } from "@/components/ui/cx";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
+import { notifyCaughtError } from "@/lib/app-notifications";
 import {
   mapDepartmentRow,
   mapDocumentRow,
@@ -104,7 +105,7 @@ type DeleteTarget =
   | { type: "department"; department: PlaybookDepartment }
   | { type: "document"; document: PlaybookDocument };
 
-export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }) {
+export function PlaybookWorkspace({ initialData, canManage }: { initialData: PlaybookData; canManage: boolean }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [departments, setDepartments] = useState(initialData.departments);
   const [documents, setDocuments] = useState(initialData.documents);
@@ -304,7 +305,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
       setDocuments((current) => [...uploadedDocuments, ...current]);
       announce(`${uploadedDocuments.length} sənəd Supabase-ə yükləndi.`);
     } catch (error) {
-      announce(getErrorMessage(error, "Sənəd yüklənmədi."));
+      announce(notifyCaughtError(error, "Sənəd yüklənmədi.", "Sənəd yüklənmədi"));
     } finally {
       setIsUploading(false);
     }
@@ -363,7 +364,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
 
       setDrawerOpen(false);
     } catch (error) {
-      announce(getErrorMessage(error, "Departament yadda saxlanmadı."));
+      announce(notifyCaughtError(error, "Departament yadda saxlanmadı.", "Departament saxlanmadı"));
     } finally {
       setIsMutating(false);
     }
@@ -395,7 +396,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
       setEditingDocument(null);
       announce(`${updatedDocument.name} yeniləndi.`);
     } catch (error) {
-      announce(getErrorMessage(error, "Sənəd yenilənmədi."));
+      announce(notifyCaughtError(error, "Sənəd yenilənmədi.", "Sənəd yenilənmədi"));
     } finally {
       setIsMutating(false);
     }
@@ -412,7 +413,8 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
 
     if (result.error) {
       setPreviewDocument(null);
-      announce(getErrorMessage(result.error, "Sənəd açıla bilmədi."));
+      announce(notifyCaughtError(result.error, "Sənəd açıla bilmədi.", "Sənəd açıla bilmədi"));
+      setIsPreviewLoading(false);
       return;
     }
 
@@ -432,7 +434,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
       .createSignedUrl(document.storagePath, 300, { download: true });
 
     if (result.error) {
-      announce(getErrorMessage(result.error, "Sənəd endirilə bilmədi."));
+      announce(notifyCaughtError(result.error, "Sənəd endirilə bilmədi.", "Sənəd endirilə bilmədi"));
       return;
     }
 
@@ -496,7 +498,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
       setDeleteTarget(null);
       setEditingDocument(null);
     } catch (error) {
-      announce(getErrorMessage(error, "Silmə əməliyyatı tamamlanmadı."));
+      announce(notifyCaughtError(error, "Silmə əməliyyatı tamamlanmadı.", "Silmə alınmadı"));
     } finally {
       setIsMutating(false);
     }
@@ -518,7 +520,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
           <h1 id="playbook-title">Şirkət Playbook-u</h1>
           <p>Komandanın bildiyi hər şey, bir yerdə.</p>
         </div>
-        <div className="playbook-header-actions">
+        {canManage ? <div className="playbook-header-actions">
           <button className="playbook-button playbook-button-primary" type="button" onClick={openCreateDepartment}>
             <Plus size={17} />
             Yeni departament
@@ -527,7 +529,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
             {isUploading ? <LoaderCircle className="playbook-spin" size={17} /> : <UploadCloud size={17} />}
             {isUploading ? "Yüklənir..." : "Sənəd yüklə"}
           </button>
-        </div>
+        </div> : null}
       </header>
 
       <article className="playbook-hero">
@@ -568,8 +570,8 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
             onClick={() => setActiveDepartment(department.id)}
           />
         ))}
-        <button className="playbook-add-department" type="button" onClick={openCreateDepartment} aria-label="Yeni departament yarat"><Plus size={19} /></button>
-        {activeDepartment !== "all" && departmentById.get(activeDepartment) ? (
+        {canManage ? <button className="playbook-add-department" type="button" onClick={openCreateDepartment} aria-label="Yeni departament yarat"><Plus size={19} /></button> : null}
+        {canManage && activeDepartment !== "all" && departmentById.get(activeDepartment) ? (
           <button className="playbook-edit-department" type="button" onClick={() => openEditDepartment(departmentById.get(activeDepartment)!)}>
             <Pencil size={15} />
             Redaktə et
@@ -603,6 +605,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
                   onPreview={() => void openDocumentPreview(document)}
                   onDownload={() => void downloadDocument(document)}
                   onMenu={() => openDocumentEditor(document)}
+                  canManage={canManage}
                 />
               ))
             ) : (
@@ -614,11 +617,11 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
             )}
           </div>
 
-          <button className="playbook-dropzone" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !departments.length}>
+          {canManage ? <button className="playbook-dropzone" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !departments.length}>
             <span>{isUploading ? <LoaderCircle className="playbook-spin" size={22} /> : <UploadCloud size={22} />}</span>
             <strong>{isUploading ? "Fayllar Supabase-ə yüklənir..." : "Sənədləri bura sürükləyin və ya yükləmək üçün klikləyin"}</strong>
             <small>PDF, DOCX, XLSX və PPTX · maksimum 6 MB</small>
-          </button>
+          </button> : null}
         </article>
 
         <aside className="playbook-side-stack">
@@ -638,7 +641,7 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
                       <strong>{department.name}</strong>
                       <small>{count} sənəd</small>
                     </button>
-                    <button className="playbook-map-edit" type="button" onClick={() => openEditDepartment(department)} aria-label={`${department.name} departamentini redaktə et`}><Pencil size={13} /></button>
+                    {canManage ? <button className="playbook-map-edit" type="button" onClick={() => openEditDepartment(department)} aria-label={`${department.name} departamentini redaktə et`}><Pencil size={13} /></button> : null}
                   </div>
                 );
               })}
@@ -646,12 +649,12 @@ export function PlaybookWorkspace({ initialData }: { initialData: PlaybookData }
             <div className="playbook-map-total"><span>Cəmi</span><strong>{documents.length} sənəd</strong></div>
           </article>
 
-          <button className="playbook-quick-upload" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !departments.length}>
+          {canManage ? <button className="playbook-quick-upload" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !departments.length}>
             <span>{isUploading ? <LoaderCircle className="playbook-spin" size={25} /> : <UploadCloud size={25} />}</span>
             <strong>{isUploading ? "Yüklənir..." : "Sənəd əlavə et"}</strong>
             <small>Faylı seçin və ya bura buraxın</small>
             <ArrowDownToLine size={16} />
-          </button>
+          </button> : null}
         </aside>
       </div>
 
@@ -772,7 +775,7 @@ function DepartmentTab({ active, color, icon: Icon, label, onClick }: { active: 
   return <button className={cx("playbook-department-tab", active && "is-active")} type="button" onClick={onClick} style={{ "--department-color": color } as React.CSSProperties}><Icon size={16} />{label}</button>;
 }
 
-function DocumentRow({ document, department, onPreview, onDownload, onMenu }: { document: PlaybookDocument; department?: PlaybookDepartment; onPreview: () => void; onDownload: () => void; onMenu: () => void }) {
+function DocumentRow({ document, department, onPreview, onDownload, onMenu, canManage }: { document: PlaybookDocument; department?: PlaybookDepartment; onPreview: () => void; onDownload: () => void; onMenu: () => void; canManage: boolean }) {
   const FileIcon = document.extension === "XLSX" || document.extension === "XLS" ? FileSpreadsheet : document.extension === "PDF" ? FileText : File;
 
   return (
@@ -788,7 +791,7 @@ function DocumentRow({ document, department, onPreview, onDownload, onMenu }: { 
       <div className="playbook-document-date" role="cell">{formatRelativeDate(document.updatedAt)}</div>
       <div className="playbook-row-actions">
         <button type="button" className="playbook-row-menu" aria-label={`${document.name} sənədini endir`} onClick={onDownload}><Download size={16} /></button>
-        <button type="button" className="playbook-row-menu" aria-label={`${document.name} sənədini redaktə et`} onClick={onMenu}><MoreHorizontal size={18} /></button>
+        {canManage ? <button type="button" className="playbook-row-menu" aria-label={`${document.name} sənədini redaktə et`} onClick={onMenu}><MoreHorizontal size={18} /></button> : null}
       </div>
     </div>
   );
@@ -829,12 +832,4 @@ function formatRelativeDate(value: string) {
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days} gün əvvəl`;
   return new Intl.DateTimeFormat("az-AZ", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    if ("code" in error && error.code === "23505") return "Bu adda departament artıq mövcuddur.";
-    return error.message;
-  }
-  return fallback;
 }

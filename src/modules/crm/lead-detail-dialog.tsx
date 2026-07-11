@@ -1,4 +1,4 @@
-import { updateLeadAction } from "@/modules/crm/actions";
+import { deleteLeadAction, updateLeadAction } from "@/modules/crm/actions";
 import { LeadDetailDialogClient } from "@/modules/crm/lead-detail-dialog-client";
 import type { CrmData } from "@/modules/crm/queries";
 
@@ -23,6 +23,7 @@ export function LeadDetailDialog({
       sourceOptions={sourceOptions}
       returnTo={returnTo}
       updateLeadAction={updateLeadAction}
+      deleteLeadAction={deleteLeadAction}
     />
   );
 }

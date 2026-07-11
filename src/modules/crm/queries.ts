@@ -164,6 +164,7 @@ export type CrmData = {
   }>;
   programs: Array<{ id: string; name: string }>;
   managers: Array<{ id: string; fullName: string }>;
+  campaigns: Array<{ id: string; name: string }>;
   sourceOptions: string[];
 };
 
@@ -213,6 +214,7 @@ type CrmRawRow = {
   leads: unknown;
   programs: unknown;
   managers: unknown;
+  campaigns: unknown;
   sources: unknown;
 };
 
@@ -321,6 +323,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const programStatsRows = asJsonArray<CrmBreakdownRaw>(row?.programStats);
   const programs = asJsonArray<{ id: string; name: string }>(row?.programs);
   const managers = asJsonArray<{ id: string; fullName: string }>(row?.managers);
+  const campaigns = asJsonArray<{ id: string; name: string }>(row?.campaigns);
   const sourceValues = asJsonArray<string>(row?.sources);
   const formattedLeads = leadRows.map((lead) => formatLeadRow(lead));
   const salesCount = toNumber(conversionStats?.salesCount);
@@ -442,6 +445,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     leads: formattedLeads,
     programs,
     managers,
+    campaigns,
     sourceOptions: buildCrmSourceOptions(sourceValues),
   };
 }
@@ -753,6 +757,11 @@ function getCrmRawData(
         from erp.users u
         where ${managerScopeSql}
       ), '[]'::jsonb) as "managers",
+      coalesce((
+        select jsonb_agg(jsonb_build_object('id', mc.id::text, 'name', mc.name) order by mc.name asc)
+        from erp.marketing_campaigns mc
+        where mc.status = 'ACTIVE'::"erp"."MarketingCampaignStatus"
+      ), '[]'::jsonb) as "campaigns",
       coalesce((
         select jsonb_agg(source_rows.source order by source_rows.source asc)
         from (

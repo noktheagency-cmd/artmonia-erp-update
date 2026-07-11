@@ -104,13 +104,14 @@ export async function syncActivationBilling(
     where: {
       studentId: input.studentId,
       status: { not: InvoiceStatus.VOID },
-      balanceDue: { gt: 0 },
+      periodMonth: startOfMonth(input.effectiveAt),
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
       amount: true,
       balanceDue: true,
+      enrollmentId: true,
     },
   });
 
@@ -118,6 +119,7 @@ export async function syncActivationBilling(
     await tx.invoice.update({
       where: { id: existingInvoice.id },
       data: {
+        enrollmentId: existingInvoice.enrollmentId ?? enrollment.id,
         periodMonth: startOfMonth(input.effectiveAt),
         dueDate: input.effectiveAt,
         status: resolveInvoiceStatus({

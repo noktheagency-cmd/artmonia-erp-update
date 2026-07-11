@@ -7,8 +7,6 @@ import {
   Activity,
   BarChart3,
   BookOpen,
-  Calendar,
-  CalendarDays,
   CheckCircle2,
   Clock3,
   Filter,
@@ -45,7 +43,7 @@ import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { leadStageLabels, leadStageSelectOptions } from "@/modules/crm/stage";
 
 const followUpLabels = {
-  all: "Bütün növbəti addımlar",
+  all: "İzləmə",
   attention: "Diqqət tələb edir",
   overdue: "Gecikmiş",
   today: "Bugünkü",
@@ -190,7 +188,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
             />
           ) : null}
           {data.access.canCreateLead ? (
-            <NewLeadDialog programs={data.programs} managers={data.managers} sourceOptions={data.sourceOptions} />
+            <NewLeadDialog programs={data.programs} managers={data.managers} campaigns={data.campaigns} sourceOptions={data.sourceOptions} />
           ) : null}
         </div>
       </header>
@@ -299,30 +297,6 @@ function CrmFilterPanel({
   const [dateFrom, setDateFrom] = useState(data.filters.dateFrom);
   const [dateTo, setDateTo] = useState(data.filters.dateTo);
 
-  function setQuickDateRange(periodType: "today" | "month" | "thirty") {
-    const today = new Date();
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
-    };
-
-    if (periodType === "today") {
-      const value = formatDate(today);
-      setDateFrom(value);
-      setDateTo(value);
-      return;
-    }
-    if (periodType === "month") {
-      setDateFrom(formatDate(new Date(today.getFullYear(), today.getMonth(), 1)));
-      setDateTo(formatDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
-      return;
-    }
-    setDateFrom(formatDate(new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)));
-    setDateTo(formatDate(today));
-  }
-
   return (
     <form className="crm-filter-panel crm-enter" onSubmit={onSubmit} aria-label="CRM filtrləri">
       {data.filters.period !== "this_month" ? (
@@ -348,6 +322,7 @@ function CrmFilterPanel({
           onValueChange={setDateFrom}
           placeholder="Başlanğıc"
           aria-label="Başlanğıc tarixi"
+          popoverPlacement="floating"
         />
         <DatePicker
           name="to"
@@ -355,35 +330,23 @@ function CrmFilterPanel({
           onValueChange={setDateTo}
           placeholder="Son tarix"
           aria-label="Son tarix"
+          popoverPlacement="floating"
         />
-        <Button type="submit" size="sm" disabled={isPending}>
-          <Filter data-icon="inline-start" />
-          {isPending ? "Yüklənir..." : "Göstər"}
+        <Button className="crm-filter-icon-action is-apply" type="submit" size="icon" disabled={isPending} aria-label="Filtrləri göstər" title="Göstər">
+          <Filter />
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onClear}>
-          <X data-icon="inline-start" />
-          Təmizlə
+        <Button className="crm-filter-icon-action is-clear" type="button" variant="ghost" size="icon" onClick={onClear} aria-label="Filtrləri təmizlə" title="Təmizlə">
+          <X />
         </Button>
       </div>
 
       <div className="crm-filter-secondary">
-        <div className="crm-quick-periods" aria-label="Sürətli tarix aralığı">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setQuickDateRange("today")}>
-            <Calendar data-icon="inline-start" />Bugün
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setQuickDateRange("month")}>
-            <CalendarDays data-icon="inline-start" />Bu ay
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setQuickDateRange("thirty")}>
-            <Clock3 data-icon="inline-start" />Son 30 gün
-          </Button>
-        </div>
         <div className="crm-filter-selects">
           <FormSelect
             aria-label="Status"
             name="stage"
             defaultValue={data.filters.stage}
-            emptyLabel="Bütün statuslar"
+            emptyLabel="Status"
             options={leadStageSelectOptions}
             icon={Activity}
           />
@@ -391,7 +354,7 @@ function CrmFilterPanel({
             aria-label="Məsul şəxs"
             name="owner"
             defaultValue={data.filters.owner}
-            emptyLabel="Bütün məsullar"
+            emptyLabel="Məsul"
             options={data.managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
             icon={UserRound}
           />
@@ -399,7 +362,7 @@ function CrmFilterPanel({
             aria-label="Proqram"
             name="program"
             defaultValue={data.filters.program}
-            emptyLabel="Bütün proqramlar"
+            emptyLabel="Proqram"
             options={data.programs.map((program) => ({ value: program.id, label: program.name }))}
             icon={BookOpen}
           />
@@ -407,7 +370,7 @@ function CrmFilterPanel({
             aria-label="Prioritet"
             name="priority"
             defaultValue={data.filters.priority}
-            emptyLabel="Bütün prioritetlər"
+            emptyLabel="Prioritet"
             options={leadPrioritySelectOptions}
             icon={SlidersHorizontal}
           />
@@ -415,7 +378,7 @@ function CrmFilterPanel({
             aria-label="Mənbə"
             name="source"
             defaultValue={data.filters.source}
-            emptyLabel="Bütün mənbələr"
+            emptyLabel="Mənbə"
             options={buildCrmSourceSelectOptions(data.sourceOptions)}
             icon={Layers3}
           />

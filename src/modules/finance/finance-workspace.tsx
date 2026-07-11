@@ -536,21 +536,11 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
           />
         </div>
 
-        <div className="finance-filter-actions">
-          <Button type="submit" size="sm" disabled={isPending}>
-            <ListFilter data-icon="inline-start" size={13} />
-            {isPending ? "Yenilənir..." : "Göstər"}
-          </Button>
-          {data.filters.activeCount > 0 ? (
-            <Link className="ui-button ui-button-ghost ui-button-sm" href="/finance">
-              Təmizlə
-            </Link>
-          ) : null}
-        </div>
       </div>
 
-      <div className="finance-filter-presets">
-        <div className="finance-preset-pills">
+      <div className="finance-filter-footer">
+        <div className="finance-filter-presets">
+          <div className="finance-preset-pills">
           {presets.map((preset) => {
             const isActive = draft.from === preset.from && draft.to === preset.to;
 
@@ -565,10 +555,23 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
               </button>
             );
           })}
+          </div>
+          <span className="finance-preset-info-text">
+            Seçilən tarix və kateqoriya bütün cədvəllərə tətbiq olunur
+          </span>
         </div>
-        <span className="finance-preset-info-text">
-          Seçilən tarix və kateqoriya bütün cədvəllərə tətbiq olunur
-        </span>
+
+        <div className="finance-filter-actions">
+          <Button type="submit" size="sm" disabled={isPending}>
+            <ListFilter data-icon="inline-start" size={13} />
+            {isPending ? "Yenilənir..." : "Göstər"}
+          </Button>
+          {data.filters.activeCount > 0 ? (
+            <Link className="ui-button ui-button-ghost ui-button-sm" href="/finance">
+              Təmizlə
+            </Link>
+          ) : null}
+        </div>
       </div>
     </form>
   );
@@ -836,6 +839,21 @@ function ExpenseDialog({
     usesPayrollFlow && selectedStaff ? getStaffCalculatedSalary(selectedStaff) : "";
   const payableSalary = salaryCalculatedAmount ? `${salaryCalculatedAmount} AZN` : "0 AZN";
 
+  function resetExpenseForm() {
+    setCategoryValue("");
+    setNewCategoryName("");
+    setStaffTarget("");
+    setAmount("");
+  }
+
+  function handleDialogOpenChange(nextOpen: boolean) {
+    setIsOpen(nextOpen);
+
+    if (!nextOpen) {
+      resetExpenseForm();
+    }
+  }
+
   function handleCategoryChange(value: string) {
     const nextCategory = cleanSelectValue(value);
     const nextCategoryName =
@@ -845,20 +863,11 @@ function ExpenseDialog({
 
     setCategoryValue(nextCategory);
 
+    if (nextCategory !== addCategoryValue) {
+      setNewCategoryName("");
+    }
+
     if (!isPayrollCategoryName(nextCategoryName)) {
-      setStaffTarget("");
-      return;
-    }
-
-    if (selectedStaff) {
-      setAmount(getStaffCalculatedSalary(selectedStaff));
-    }
-  }
-
-  function handleNewCategoryNameChange(value: string) {
-    setNewCategoryName(value);
-
-    if (!isPayrollCategoryName(value)) {
       setStaffTarget("");
       return;
     }
@@ -889,6 +898,7 @@ function ExpenseDialog({
     startSubmitTransition(async () => {
       try {
         const result = await action(formData);
+        resetExpenseForm();
         setIsOpen(false);
         router.push(result.redirectTo as Route);
       } catch (error) {
@@ -902,7 +912,7 @@ function ExpenseDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
       <DialogTrigger asChild>
         <Button type="button" variant="secondary" disabled={!data.permissions.canCreateExpense}>
           <Plus data-icon="inline-start" />
@@ -910,12 +920,10 @@ function ExpenseDialog({
         </Button>
       </DialogTrigger>
       <DialogContent className="finance-dialog finance-expense-dialog">
-        <DialogHeader className="dialog-header-custom">
-          <DialogTitle>Xərc əlavə et</DialogTitle>
-          <DialogDescription>
-            Xərc kateqoriyasını, qəbzi, təchizatçını və lazım olduqda əməkhaqqı hesablamasını qeyd et.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogTitle className="sr-only">Yeni xərc qeydi</DialogTitle>
+        <DialogDescription className="sr-only">
+          Yeni xərc qeydinin məlumatları
+        </DialogDescription>
 
         <form onSubmit={handleSubmit} className="finance-form">
           <input
@@ -937,38 +945,40 @@ function ExpenseDialog({
           <section className="finance-form-section">
             <div className="finance-form-section-title">
               <ReceiptText size={16} />
-              <span>Xərc kateqoriyası</span>
+              <span>Kateqoriya</span>
             </div>
-            <div className="field-grid">
-              <label className="form-field">
-                <span>Kateqoriya</span>
-                <FormSelect
-                  name="categorySelector"
-                  value={categoryValue}
-                  onValueChange={handleCategoryChange}
-                  emptyLabel="Kateqoriya seç"
-                  options={[
-                    ...data.categories.map((category) => ({
-                      value: category.id,
-                      label: category.name,
-                    })),
-                    { value: addCategoryValue, label: "+ Yeni kateqoriya" },
-                  ]}
-                />
-              </label>
-              <label className="form-field">
-                <span>Yeni kateqoriya</span>
-                <Input
-                  name="newCategoryName"
-                  value={newCategoryName}
-                  onChange={(event) => handleNewCategoryNameChange(event.target.value)}
-                  disabled={!isAddingCategory}
-                  required={isAddingCategory}
-                  maxLength={80}
-                  placeholder="Məs: Təmir"
-                />
-              </label>
-            </div>
+            <label className="form-field finance-category-field">
+              <span>Xərc növü</span>
+              <FormSelect
+                name="categorySelector"
+                value={categoryValue}
+                onValueChange={handleCategoryChange}
+                emptyLabel="Kateqoriya seç"
+                searchable
+                searchPlaceholder="Kateqoriya axtar..."
+                options={[
+                  ...data.categories.map((category) => ({
+                    value: category.id,
+                    label: category.name,
+                  })),
+                  { value: addCategoryValue, label: "+ Yeni kateqoriya" },
+                ]}
+              />
+              {isAddingCategory ? (
+                <div className="finance-inline-category-create">
+                  <Input
+                    autoFocus
+                    name="newCategoryName"
+                    value={newCategoryName}
+                    onChange={(event) => setNewCategoryName(event.target.value)}
+                    maxLength={80}
+                    placeholder="Yeni kateqoriyanın adı"
+                    required
+                  />
+                  <small>Kateqoriya xərci saxlayanda avtomatik yaradılacaq.</small>
+                </div>
+              ) : null}
+            </label>
           </section>
 
           {usesPayrollFlow ? (
@@ -1015,16 +1025,7 @@ function ExpenseDialog({
                     <strong>{payableSalary}</strong>
                   </div>
                 </div>
-              ) : (
-                <div className="finance-salary-box">
-                  <div className="finance-salary-head">
-                    <div>
-                      <span>Əməkhaqqı hesablaması</span>
-                      <strong>Əməkdaş seçilməyib</strong>
-                    </div>
-                  </div>
-                </div>
-              )}
+              ) : null}
             </section>
           ) : null}
 
@@ -1056,22 +1057,12 @@ function ExpenseDialog({
                 />
               </label>
             </div>
+            <label className="form-field">
+              <span>Ödəniş üsulu</span>
+              <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
+            </label>
             <div className="field-grid">
-              <label className="form-field">
-                <span>Ödəniş üsulu</span>
-                <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
-              </label>
-              <label className="form-field">
-                <span>Təchizatçı / mənbə</span>
-                <Input name="vendor" maxLength={120} placeholder="Məs: Meta Ads, icarəçi, əməkdaş adı" />
-              </label>
-            </div>
-            <div className="field-grid">
-              <label className="form-field">
-                <span>Qəbz nömrəsi</span>
-                <Input name="receiptReference" maxLength={120} placeholder="INV-2026-06" />
-              </label>
-              <label className="form-field">
+              <label className="form-field finance-receipt-upload-field">
                 <span>Qəbz əlavə et</span>
                 <span className="finance-file-control">
                   <Upload size={14} />
@@ -1097,6 +1088,7 @@ function ExpenseDialog({
               isPending={isSubmitting}
               disabled={
                 !categoryValue ||
+                (isAddingCategory && !newCategoryName.trim()) ||
                 !amount ||
                 (usesPayrollFlow && !selectedStaff) ||
                 !data.permissions.canCreateExpense

@@ -27,6 +27,11 @@ import { getPrisma } from "@/server/db/prisma";
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().trim().max(max).optional());
 
+const optionalEmail = z.preprocess(
+  optionalFormString,
+  z.string().trim().email().max(180).optional()
+);
+
 const optionalUuid = z.preprocess(
   optionalFormString,
   z.string().uuid().optional()
@@ -91,6 +96,7 @@ const participantSchema = z.object({
   studentId: optionalUuid,
   fullName: optionalText(140),
   phone: optionalText(40),
+  email: optionalEmail,
   listPrice: optionalAmount,
   discountAmount: optionalAmount,
   advanceAmount: optionalAmount,
@@ -106,6 +112,7 @@ const updateParticipantSchema = z.object({
   participantId: z.string().uuid(),
   fullName: z.string().trim().min(2).max(140),
   phone: optionalText(40),
+  email: optionalEmail,
   listPrice: requiredNonnegativeAmount,
   discountAmount: optionalAmount,
   isGift: checkbox.default(false),
@@ -131,7 +138,7 @@ const replacePaymentSchema = paymentSchema.extend({
 
 const voidPaymentSchema = z.object({
   paymentId: z.string().uuid(),
-  reason: z.string().trim().min(3).max(700),
+  reason: optionalText(700),
 });
 
 const expenseSchema = z.object({
@@ -152,7 +159,7 @@ const replaceExpenseSchema = expenseSchema.extend({
 
 const voidExpenseSchema = z.object({
   expenseId: z.string().uuid(),
-  reason: z.string().trim().min(3).max(700),
+  reason: optionalText(700),
 });
 
 export async function createWorkshopEventAction(formData: FormData) {
@@ -239,34 +246,29 @@ export async function updateWorkshopEventAction(formData: FormData) {
 
 export async function deleteOrCancelWorkshopEventAction(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
-  const input = z.object({ eventId: z.string().uuid(), reason: optionalText(700) })
+  const input = z.object({ eventId: z.string().uuid() })
     .parse(Object.fromEntries(formData));
   const prisma = getPrisma();
 
-  const result = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const event = await tx.workshopEvent.findUnique({
       where: { id: input.eventId },
-      include: { _count: { select: { participants: true, payments: true, expenses: true } } },
     });
     if (!event) throw new Error("Tədbir tapılmadı");
 
-    const hasHistory = event._count.participants + event._count.payments + event._count.expenses > 0;
-    if (hasHistory) {
-      const updated = await tx.workshopEvent.update({
-        where: { id: event.id },
-        data: { status: WorkshopEventStatus.CANCELLED },
-      });
-      await writeAuditLog(tx, {
-        actorUserId: actor.id,
-        action: "workshop.event.cancel",
-        entityType: "workshop_event",
-        entityId: event.id,
-        before: eventAuditJson(event),
-        after: eventAuditJson(updated),
-        reason: input.reason ?? "Maliyyə və ya iştirakçı tarixçəsinə görə tədbir ləğv edildi",
-      });
-      return "cancelled" as const;
-    }
+    // Replacement records reference another record in the same table, so clear
+    // those links before deleting the event's financial history.
+    await tx.workshopPayment.updateMany({
+      where: { eventId: event.id, replacesPaymentId: { not: null } },
+      data: { replacesPaymentId: null },
+    });
+    await tx.financeExpense.updateMany({
+      where: { workshopEventId: event.id, replacesExpenseId: { not: null } },
+      data: { replacesExpenseId: null },
+    });
+    await tx.workshopPayment.deleteMany({ where: { eventId: event.id } });
+    await tx.financeExpense.deleteMany({ where: { workshopEventId: event.id } });
+    await tx.workshopParticipant.deleteMany({ where: { eventId: event.id } });
 
     await tx.workshopEvent.delete({ where: { id: event.id } });
     await writeAuditLog(tx, {
@@ -275,13 +277,12 @@ export async function deleteOrCancelWorkshopEventAction(formData: FormData) {
       entityType: "workshop_event",
       entityId: event.id,
       before: eventAuditJson(event),
-      reason: input.reason ?? "Boş tədbir silindi",
+      reason: "Tədbir və ona bağlı iştirakçı, ödəniş və xərc məlumatları tam silindi",
     });
-    return "deleted" as const;
   });
 
   invalidateWorkshopCaches(input.eventId);
-  return { ok: true as const, result };
+  return { ok: true as const };
 }
 
 export async function assignWorkshopParticipantAction(formData: FormData) {
@@ -310,7 +311,7 @@ export async function assignWorkshopParticipantAction(formData: FormData) {
     const student = input.studentId
       ? await tx.student.findUnique({
           where: { id: input.studentId },
-          select: { id: true, contact: { select: { fullName: true, phoneDisplay: true } } },
+          select: { id: true, contact: { select: { fullName: true, phoneDisplay: true, email: true } } },
         })
       : null;
     if (input.studentId && !student) throw new Error("Tələbə tapılmadı");
@@ -345,6 +346,7 @@ export async function assignWorkshopParticipantAction(formData: FormData) {
         studentId: student?.id ?? null,
         fullName,
         phone: input.phone ?? student?.contact.phoneDisplay ?? null,
+        email: input.email ?? student?.contact.email ?? null,
         paymentMethod: input.paymentMethod as PaymentMethod,
         listPrice,
         amountPaid: advance,
@@ -414,6 +416,7 @@ export async function updateWorkshopParticipantAction(formData: FormData) {
       data: {
         fullName: input.fullName,
         phone: input.phone ?? null,
+        email: input.email ?? null,
         listPrice: input.listPrice,
         discountAmount: discount,
         isGift: input.isGift,
@@ -441,7 +444,7 @@ export async function cancelWorkshopParticipantAction(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = z.object({
     participantId: z.string().uuid(),
-    reason: z.string().trim().min(3).max(700),
+    reason: optionalText(700),
   }).parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   let eventId = "";
@@ -456,7 +459,11 @@ export async function cancelWorkshopParticipantAction(formData: FormData) {
     } else {
       await tx.workshopParticipant.update({
         where: { id: participant.id },
-        data: { cancelledAt: new Date(), cancelledById: actor.id, cancelReason: input.reason },
+        data: {
+          cancelledAt: new Date(),
+          cancelledById: actor.id,
+          cancelReason: input.reason ?? "İştirakçı ləğv edildi",
+        },
       });
     }
     await writeAuditLog(tx, {
@@ -465,7 +472,7 @@ export async function cancelWorkshopParticipantAction(formData: FormData) {
       entityType: "workshop_participant",
       entityId: participant.id,
       before: participantAuditJson(participant),
-      reason: input.reason,
+      reason: input.reason ?? "İştirakçı silindi və ya ləğv edildi",
     });
   });
 
@@ -583,7 +590,11 @@ export async function voidWorkshopPaymentAction(formData: FormData) {
     eventId = payment.eventId;
     await tx.workshopPayment.update({
       where: { id: payment.id },
-      data: { voidedAt: new Date(), voidedById: actor.id, voidReason: input.reason },
+      data: {
+        voidedAt: new Date(),
+        voidedById: actor.id,
+        voidReason: input.reason ?? "Ödəniş ləğv edildi",
+      },
     });
     await syncParticipantPaymentSnapshot(tx, payment.participantId);
     await writeAuditLog(tx, {
@@ -592,7 +603,7 @@ export async function voidWorkshopPaymentAction(formData: FormData) {
       entityType: "workshop_payment",
       entityId: payment.id,
       before: paymentAuditJson(payment),
-      reason: input.reason,
+      reason: input.reason ?? "Workshop ödənişi ləğv edildi",
     });
   });
 
@@ -701,7 +712,11 @@ export async function voidWorkshopExpenseAction(formData: FormData) {
     eventId = expense.workshopEventId;
     await tx.financeExpense.update({
       where: { id: expense.id },
-      data: { voidedAt: new Date(), voidedById: actor.id, voidReason: input.reason },
+      data: {
+        voidedAt: new Date(),
+        voidedById: actor.id,
+        voidReason: input.reason ?? "Xərc ləğv edildi",
+      },
     });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -709,7 +724,7 @@ export async function voidWorkshopExpenseAction(formData: FormData) {
       entityType: "finance_expense",
       entityId: expense.id,
       before: expenseAuditJson(expense),
-      reason: input.reason,
+      reason: input.reason ?? "Workshop xərci ləğv edildi",
     });
   });
 

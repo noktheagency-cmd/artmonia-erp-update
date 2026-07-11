@@ -20,6 +20,13 @@ enum AppRole {
   @@schema("erp")
 }
 
+enum PermissionScope {
+  ASSIGNED
+  ALL
+
+  @@schema("erp")
+}
+
 enum LeadStage {
   NEW
   CONTACTED
@@ -173,6 +180,79 @@ enum WorkshopEventStatus {
   @@schema("erp")
 }
 
+enum MarketingCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+
+  @@schema("erp")
+}
+
+enum MarketingReportOutcome {
+  SUCCESSFUL
+  UNSUCCESSFUL
+
+  @@schema("erp")
+}
+
+enum HrEmployeeStatus {
+  ACTIVE
+  PROBATION
+  ON_LEAVE
+  INACTIVE
+
+  @@schema("erp")
+}
+
+enum HrStaffType {
+  EMPLOYEE
+  TEACHER
+
+  @@schema("erp")
+}
+
+enum HrLookupKind {
+  DEPARTMENT
+  POSITION
+
+  @@schema("erp")
+}
+
+enum HrBonusMetricKind {
+  DEPARTMENT_COLLECTED_REVENUE
+  DEPARTMENT_SALES_COUNT
+  MANUAL_KPI
+
+  @@schema("erp")
+}
+
+enum HrBonusDistributionMode {
+  EQUAL
+  HR_APPROVAL
+
+  @@schema("erp")
+}
+
+enum HrBonusCampaignStatus {
+  SCHEDULED
+  ACTIVE
+  ACHIEVED
+  EXPIRED
+  CANCELLED
+
+  @@schema("erp")
+}
+
+enum HrBonusAwardStatus {
+  PENDING_HR
+  APPROVED
+  POSTED
+  VOIDED
+
+  @@schema("erp")
+}
+
 model User {
   id         String   @id @default(uuid()) @db.Uuid
   authUserId String?  @unique @map("auth_user_id") @db.Uuid
@@ -183,50 +263,274 @@ model User {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  roles                        UserRole[]
-  managedLeads                 Lead[]                     @relation("LeadManager")
-  managedStudents              Student[]                  @relation("StudentManager")
-  leadStageChanges             LeadStageHistory[]         @relation("LeadStageChanger")
-  statusChanges                StudentStatusHistory[]     @relation("StatusChanger")
-  createdPricingVersions       ProgramPricingVersion[]    @relation("PricingCreator")
-  teacherAssignmentChanges     TeacherAssignmentHistory[] @relation("TeacherAssignmentChanger")
-  createdPayments              Payment[]                  @relation("PaymentCreator")
-  requestedRefundAdjustments   RefundAdjustment[]         @relation("RefundRequestedBy")
-  financeApprovedAdjustments   RefundAdjustment[]         @relation("RefundFinanceApprovedBy")
-  ownerApprovedAdjustments     RefundAdjustment[]         @relation("RefundOwnerApprovedBy")
-  createdTeacherRules          TeacherContractRule[]      @relation("TeacherRuleCreator")
-  generatedPayouts             TeacherPayout[]            @relation("PayoutGeneratedBy")
-  approvedPayouts              TeacherPayout[]            @relation("PayoutApprovedBy")
-  ownedTasks                   Task[]                     @relation("TaskOwner")
-  createdTasks                 Task[]                     @relation("TaskCreator")
-  ownedTargets                 Target[]                   @relation("TargetOwner")
-  managedTargets               Target[]                   @relation("TargetManager")
-  auditLogs                    AuditLog[]                 @relation("AuditActor")
-  exports                      DataExport[]               @relation("ExportRequestedBy")
-  createdFinanceExpenses       FinanceExpense[]           @relation("FinanceExpenseCreator")
-  employeeFinanceExpenses      FinanceExpense[]           @relation("FinanceExpenseEmployee")
-  createdLessons               Lesson[]                   @relation("LessonCreator")
-  teacherProfile               Teacher?                   @relation("TeacherUser")
-  createdGroups                StudentGroup[]             @relation("GroupCreator")
-  assignedGroupMemberships     GroupMembership[]          @relation("GroupMembershipAssigner")
-  createdGroupSessions         GroupSession[]             @relation("GroupSessionCreator")
-  markedAttendanceRecords      AttendanceRecord[]         @relation("AttendanceMarker")
-  createdWorkshopEvents        WorkshopEvent[]            @relation("WorkshopEventCreator")
-  assignedWorkshopParticipants WorkshopParticipant[]      @relation("WorkshopParticipantAssigner")
-  cancelledWorkshopParticipants WorkshopParticipant[]     @relation("WorkshopParticipantCanceller")
-  createdWorkshopPayments      WorkshopPayment[]          @relation("WorkshopPaymentCreator")
-  voidedWorkshopPayments       WorkshopPayment[]          @relation("WorkshopPaymentVoider")
-  voidedFinanceExpenses        FinanceExpense[]            @relation("FinanceExpenseVoider")
+  roles                         UserRole[]
+  managedLeads                  Lead[]                      @relation("LeadManager")
+  managedStudents               Student[]                   @relation("StudentManager")
+  leadStageChanges              LeadStageHistory[]          @relation("LeadStageChanger")
+  statusChanges                 StudentStatusHistory[]      @relation("StatusChanger")
+  createdPricingVersions        ProgramPricingVersion[]     @relation("PricingCreator")
+  teacherAssignmentChanges      TeacherAssignmentHistory[]  @relation("TeacherAssignmentChanger")
+  createdPayments               Payment[]                   @relation("PaymentCreator")
+  requestedRefundAdjustments    RefundAdjustment[]          @relation("RefundRequestedBy")
+  financeApprovedAdjustments    RefundAdjustment[]          @relation("RefundFinanceApprovedBy")
+  ownerApprovedAdjustments      RefundAdjustment[]          @relation("RefundOwnerApprovedBy")
+  createdTeacherRules           TeacherContractRule[]       @relation("TeacherRuleCreator")
+  generatedPayouts              TeacherPayout[]             @relation("PayoutGeneratedBy")
+  approvedPayouts               TeacherPayout[]             @relation("PayoutApprovedBy")
+  ownedTasks                    Task[]                      @relation("TaskOwner")
+  createdTasks                  Task[]                      @relation("TaskCreator")
+  ownedTargets                  Target[]                    @relation("TargetOwner")
+  managedTargets                Target[]                    @relation("TargetManager")
+  auditLogs                     AuditLog[]                  @relation("AuditActor")
+  exports                       DataExport[]                @relation("ExportRequestedBy")
+  createdFinanceExpenses        FinanceExpense[]            @relation("FinanceExpenseCreator")
+  employeeFinanceExpenses       FinanceExpense[]            @relation("FinanceExpenseEmployee")
+  createdLessons                Lesson[]                    @relation("LessonCreator")
+  teacherProfile                Teacher?                    @relation("TeacherUser")
+  createdGroups                 StudentGroup[]              @relation("GroupCreator")
+  assignedGroupMemberships      GroupMembership[]           @relation("GroupMembershipAssigner")
+  createdGroupSessions          GroupSession[]              @relation("GroupSessionCreator")
+  markedAttendanceRecords       AttendanceRecord[]          @relation("AttendanceMarker")
+  createdWorkshopEvents         WorkshopEvent[]             @relation("WorkshopEventCreator")
+  assignedWorkshopParticipants  WorkshopParticipant[]       @relation("WorkshopParticipantAssigner")
+  cancelledWorkshopParticipants WorkshopParticipant[]       @relation("WorkshopParticipantCanceller")
+  createdWorkshopPayments       WorkshopPayment[]           @relation("WorkshopPaymentCreator")
+  voidedWorkshopPayments        WorkshopPayment[]           @relation("WorkshopPaymentVoider")
+  voidedFinanceExpenses         FinanceExpense[]            @relation("FinanceExpenseVoider")
+  createdMarketingCampaigns     MarketingCampaign[]         @relation("MarketingCampaignCreator")
+  createdMarketingReports       MarketingCampaignReport[]
+  hrEmployeeProfile             HrEmployee?
+  createdBonusCampaigns         HrBonusCampaign[]           @relation("HrBonusCampaignCreator")
+  bonusProgressAdjustments      HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
+  approvedBonusAwards           HrBonusAward[]              @relation("HrBonusAwardApprover")
 
   @@map("users")
   @@schema("erp")
 }
 
-model Role {
-  id        String   @id @default(uuid()) @db.Uuid
-  code      AppRole  @unique
+model HrEmployee {
+  id              String            @id @default(uuid()) @db.Uuid
+  userId          String?           @unique @map("user_id") @db.Uuid
+  teacherId       String?           @unique @map("teacher_id") @db.Uuid
+  staffType       HrStaffType       @default(EMPLOYEE) @map("staff_type")
+  fullName        String            @map("full_name")
+  email           String?
+  phone           String?
+  department      String
+  position        String
+  hireDate        DateTime          @map("hire_date") @db.Date
+  status          HrEmployeeStatus  @default(ACTIVE)
+  contractType    String            @default("FULL_TIME") @map("contract_type")
+  salaryMode      FinanceSalaryMode @default(STATIC) @map("salary_mode")
+  salaryAmount    Decimal           @default(0) @map("salary_amount") @db.Decimal(12, 2)
+  salaryPercent   Decimal?          @map("salary_percent") @db.Decimal(5, 2)
+  profilePhotoUrl String?           @map("profile_photo_url")
+  note            String?
+  createdById     String?           @map("created_by_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  user                 User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  teacher              Teacher?             @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  bonusParticipants    HrBonusParticipant[]
+  bonusFinanceExpenses FinanceExpense[]     @relation("FinanceExpenseHrEmployee")
+
+  @@index([status])
+  @@index([department])
+  @@map("hr_employees")
+  @@schema("erp")
+}
+
+model HrLookupOption {
+  id        String       @id @default(uuid()) @db.Uuid
+  kind      HrLookupKind
   name      String
-  createdAt DateTime @default(now()) @map("created_at")
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  @@unique([kind, name])
+  @@index([kind, isActive])
+  @@map("hr_lookup_options")
+  @@schema("erp")
+}
+
+model HrBonusCampaign {
+  id               String                  @id @default(uuid()) @db.Uuid
+  name             String
+  department       String
+  startsAt         DateTime                @map("starts_at") @db.Date
+  endsAt           DateTime                @map("ends_at") @db.Date
+  metricKind       HrBonusMetricKind       @map("metric_kind")
+  distributionMode HrBonusDistributionMode @default(EQUAL) @map("distribution_mode")
+  status           HrBonusCampaignStatus   @default(ACTIVE)
+  createdById      String?                 @map("created_by_id") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  createdBy    User?                       @relation("HrBonusCampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  stages       HrBonusStage[]
+  participants HrBonusParticipant[]
+  adjustments  HrBonusProgressAdjustment[]
+
+  @@index([department, startsAt, endsAt])
+  @@index([status, startsAt, endsAt])
+  @@index([createdById])
+  @@map("hr_bonus_campaigns")
+  @@schema("erp")
+}
+
+model HrBonusStage {
+  id           String    @id @default(uuid()) @db.Uuid
+  campaignId   String    @map("campaign_id") @db.Uuid
+  sortOrder    Int       @map("sort_order")
+  threshold    Decimal   @db.Decimal(14, 2)
+  bonusPool    Decimal   @map("bonus_pool") @db.Decimal(12, 2)
+  reachedAt    DateTime? @map("reached_at")
+  reachedValue Decimal?  @map("reached_value") @db.Decimal(14, 2)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  campaign HrBonusCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  awards   HrBonusAward[]
+
+  @@unique([campaignId, sortOrder])
+  @@index([campaignId, threshold])
+  @@map("hr_bonus_stages")
+  @@schema("erp")
+}
+
+model HrBonusParticipant {
+  id            String   @id @default(uuid()) @db.Uuid
+  campaignId    String   @map("campaign_id") @db.Uuid
+  employeeId    String?  @map("employee_id") @db.Uuid
+  employeeName  String   @map("employee_name")
+  employeeEmail String?  @map("employee_email")
+  isEligible    Boolean  @default(true) @map("is_eligible")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  campaign HrBonusCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  employee HrEmployee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  awards   HrBonusAward[]
+
+  @@unique([campaignId, employeeId])
+  @@index([employeeId])
+  @@map("hr_bonus_participants")
+  @@schema("erp")
+}
+
+model HrBonusProgressAdjustment {
+  id          String   @id @default(uuid()) @db.Uuid
+  campaignId  String   @map("campaign_id") @db.Uuid
+  amount      Decimal  @db.Decimal(14, 2)
+  reason      String
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  campaign  HrBonusCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation("HrBonusAdjustmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, createdAt])
+  @@index([createdById])
+  @@map("hr_bonus_progress_adjustments")
+  @@schema("erp")
+}
+
+model HrBonusAward {
+  id            String             @id @default(uuid()) @db.Uuid
+  stageId       String             @map("stage_id") @db.Uuid
+  participantId String             @map("participant_id") @db.Uuid
+  amount        Decimal            @db.Decimal(12, 2)
+  status        HrBonusAwardStatus @default(PENDING_HR)
+  approvedById  String?            @map("approved_by_id") @db.Uuid
+  approvedAt    DateTime?          @map("approved_at")
+  postedAt      DateTime?          @map("posted_at")
+  voidReason    String?            @map("void_reason")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  stage          HrBonusStage       @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  participant    HrBonusParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  approvedBy     User?              @relation("HrBonusAwardApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  financeExpense FinanceExpense?
+
+  @@unique([stageId, participantId])
+  @@index([participantId, status])
+  @@index([approvedById])
+  @@map("hr_bonus_awards")
+  @@schema("erp")
+}
+
+model MarketingCampaign {
+  id          String                  @id @default(uuid()) @db.Uuid
+  name        String
+  channel     String
+  owner       String?
+  objective   String?
+  notes       String?
+  status      MarketingCampaignStatus @default(DRAFT)
+  budget      Decimal                 @default(0) @db.Decimal(12, 2)
+  startsAt    DateTime                @map("starts_at") @db.Date
+  endsAt      DateTime?               @map("ends_at") @db.Date
+  createdById String?                 @map("created_by_id") @db.Uuid
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
+
+  createdBy User?                     @relation("MarketingCampaignCreator", fields: [createdById], references: [id])
+  stats     MarketingCampaignStat[]
+  leads     Lead[]
+  students  Student[]
+  reports   MarketingCampaignReport[]
+
+  @@index([status, startsAt])
+  @@index([channel, startsAt])
+  @@map("marketing_campaigns")
+  @@schema("erp")
+}
+
+model MarketingCampaignReport {
+  id          String                 @id @default(uuid()) @db.Uuid
+  campaignId  String                 @map("campaign_id") @db.Uuid
+  outcome     MarketingReportOutcome
+  notes       String?
+  createdById String?                @map("created_by_id") @db.Uuid
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  campaign  MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation(fields: [createdById], references: [id])
+
+  @@index([campaignId, createdAt])
+  @@map("marketing_campaign_reports")
+  @@schema("erp")
+}
+
+model MarketingCampaignStat {
+  id          String   @id @default(uuid()) @db.Uuid
+  campaignId  String   @map("campaign_id") @db.Uuid
+  recordedOn  DateTime @map("recorded_on") @db.Date
+  spend       Decimal  @default(0) @db.Decimal(12, 2)
+  revenue     Decimal  @default(0) @db.Decimal(12, 2)
+  leads       Int      @default(0)
+  conversions Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, recordedOn])
+  @@index([recordedOn])
+  @@map("marketing_campaign_stats")
+  @@schema("erp")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        AppRole? @unique
+  key         String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   users       UserRole[]
   permissions RolePermission[]
@@ -261,8 +565,9 @@ model Permission {
 }
 
 model RolePermission {
-  roleId       String @map("role_id") @db.Uuid
-  permissionId String @map("permission_id") @db.Uuid
+  roleId       String          @map("role_id") @db.Uuid
+  permissionId String          @map("permission_id") @db.Uuid
+  scope        PermissionScope @default(ALL)
 
   role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -307,6 +612,7 @@ model Lead {
   priority           LeadPriority        @default(NORMAL)
   lostReason         String?             @map("lost_reason")
   convertedStudentId String?             @unique @map("converted_student_id") @db.Uuid
+  campaignId         String?             @map("campaign_id") @db.Uuid
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
 
@@ -314,6 +620,7 @@ model Lead {
   manager          User?              @relation("LeadManager", fields: [managerId], references: [id])
   programInterest  Program?           @relation(fields: [programInterestId], references: [id])
   convertedStudent Student?           @relation("LeadConvertedStudent", fields: [convertedStudentId], references: [id])
+  campaign         MarketingCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   stageHistory     LeadStageHistory[]
 
   @@index([contactId])
@@ -322,6 +629,7 @@ model Lead {
   @@index([programInterestId])
   @@index([nextFollowUpAt])
   @@index([priority, nextFollowUpAt])
+  @@index([campaignId, createdAt])
   @@map("leads")
   @@schema("erp")
 }
@@ -405,6 +713,7 @@ model Teacher {
   lessons           Lesson[]
   groupMemberships  GroupMembership[]
   attendanceRecords AttendanceRecord[]
+  hrEmployee        HrEmployee?
 
   @@map("teachers")
   @@schema("erp")
@@ -415,6 +724,7 @@ model Student {
   code            String                 @unique
   contactId       String                 @map("contact_id") @db.Uuid
   managerId       String?                @map("manager_id") @db.Uuid
+  campaignId      String?                @map("campaign_id") @db.Uuid
   sourceLead      Lead?                  @relation("LeadConvertedStudent")
   lifecycleStatus StudentLifecycleStatus @default(GROUP_WAITING) @map("lifecycle_status")
   educationLevel  String?                @map("education_level")
@@ -429,6 +739,7 @@ model Student {
 
   contact              Contact                @relation(fields: [contactId], references: [id])
   manager              User?                  @relation("StudentManager", fields: [managerId], references: [id])
+  campaign             MarketingCampaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   relationships        StudentRelationship[]
   statusHistory        StudentStatusHistory[]
   enrollments          Enrollment[]
@@ -442,6 +753,7 @@ model Student {
   @@index([lifecycleStatus])
   @@index([managerId, lifecycleStatus])
   @@index([registeredAt])
+  @@index([campaignId, registeredAt])
   @@map("students")
   @@schema("erp")
 }
@@ -711,6 +1023,7 @@ model WorkshopParticipant {
   studentId      String?       @map("student_id") @db.Uuid
   fullName       String        @map("full_name")
   phone          String?
+  email          String?
   paymentMethod  PaymentMethod @default(CASH) @map("payment_method")
   listPrice      Decimal       @default(0) @map("list_price") @db.Decimal(12, 2)
   amountPaid     Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2)
@@ -726,11 +1039,11 @@ model WorkshopParticipant {
   cancelReason   String?       @map("cancel_reason")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  event      WorkshopEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  student    Student?      @relation(fields: [studentId], references: [id])
-  assignedBy User?         @relation("WorkshopParticipantAssigner", fields: [assignedById], references: [id])
-  cancelledBy User?        @relation("WorkshopParticipantCanceller", fields: [cancelledById], references: [id])
-  payments   WorkshopPayment[]
+  event       WorkshopEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student     Student?          @relation(fields: [studentId], references: [id])
+  assignedBy  User?             @relation("WorkshopParticipantAssigner", fields: [assignedById], references: [id])
+  cancelledBy User?             @relation("WorkshopParticipantCanceller", fields: [cancelledById], references: [id])
+  payments    WorkshopPayment[]
 
   @@unique([eventId, studentId])
   @@index([eventId, isPaid, isGift])
@@ -763,12 +1076,12 @@ model WorkshopPayment {
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  event           WorkshopEvent   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  event           WorkshopEvent       @relation(fields: [eventId], references: [id], onDelete: Restrict)
   participant     WorkshopParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
-  createdBy       User?           @relation("WorkshopPaymentCreator", fields: [createdById], references: [id])
-  voidedBy        User?           @relation("WorkshopPaymentVoider", fields: [voidedById], references: [id])
-  replacesPayment WorkshopPayment? @relation("WorkshopPaymentReplacement", fields: [replacesPaymentId], references: [id], onDelete: Restrict)
-  replacement     WorkshopPayment? @relation("WorkshopPaymentReplacement")
+  createdBy       User?               @relation("WorkshopPaymentCreator", fields: [createdById], references: [id])
+  voidedBy        User?               @relation("WorkshopPaymentVoider", fields: [voidedById], references: [id])
+  replacesPayment WorkshopPayment?    @relation("WorkshopPaymentReplacement", fields: [replacesPaymentId], references: [id], onDelete: Restrict)
+  replacement     WorkshopPayment?    @relation("WorkshopPaymentReplacement")
 
   @@index([eventId, paidAt])
   @@index([participantId, paidAt])
@@ -812,6 +1125,7 @@ model Payment {
   amount           Decimal       @db.Decimal(12, 2)
   paidAt           DateTime      @map("paid_at") @db.Date
   paymentMonth     DateTime      @map("payment_month") @db.Date
+  nextPaymentAt    DateTime?     @map("next_payment_at") @db.Date
   method           PaymentMethod @default(CASH)
   payerName        String?       @map("payer_name")
   note             String?
@@ -830,6 +1144,7 @@ model Payment {
 
   @@index([studentId, paidAt])
   @@index([paymentMonth])
+  @@index([nextPaymentAt])
   @@index([createdById])
   @@map("payments")
   @@schema("erp")
@@ -875,6 +1190,8 @@ model FinanceExpense {
   vendor                 String?
   description            String?
   employeeUserId         String?           @map("employee_user_id") @db.Uuid
+  hrEmployeeId           String?           @map("hr_employee_id") @db.Uuid
+  bonusAwardId           String?           @unique @map("bonus_award_id") @db.Uuid
   teacherId              String?           @map("teacher_id") @db.Uuid
   salaryMode             FinanceSalaryMode @default(NONE) @map("salary_mode")
   salaryPercent          Decimal?          @map("salary_percent") @db.Decimal(5, 2)
@@ -892,17 +1209,20 @@ model FinanceExpense {
   createdAt              DateTime          @default(now()) @map("created_at")
   updatedAt              DateTime          @updatedAt @map("updated_at")
 
-  category     FinanceExpenseCategory @relation(fields: [categoryId], references: [id])
-  employeeUser User?                  @relation("FinanceExpenseEmployee", fields: [employeeUserId], references: [id])
-  teacher      Teacher?               @relation("FinanceExpenseTeacher", fields: [teacherId], references: [id])
-  createdBy    User?                  @relation("FinanceExpenseCreator", fields: [createdById], references: [id])
-  workshopEvent WorkshopEvent?        @relation(fields: [workshopEventId], references: [id], onDelete: Restrict)
-  voidedBy      User?                  @relation("FinanceExpenseVoider", fields: [voidedById], references: [id])
-  replacesExpense FinanceExpense?      @relation("FinanceExpenseReplacement", fields: [replacesExpenseId], references: [id], onDelete: Restrict)
-  replacement     FinanceExpense?      @relation("FinanceExpenseReplacement")
+  category        FinanceExpenseCategory @relation(fields: [categoryId], references: [id])
+  employeeUser    User?                  @relation("FinanceExpenseEmployee", fields: [employeeUserId], references: [id])
+  hrEmployee      HrEmployee?            @relation("FinanceExpenseHrEmployee", fields: [hrEmployeeId], references: [id], onDelete: SetNull)
+  bonusAward      HrBonusAward?          @relation(fields: [bonusAwardId], references: [id], onDelete: Restrict)
+  teacher         Teacher?               @relation("FinanceExpenseTeacher", fields: [teacherId], references: [id])
+  createdBy       User?                  @relation("FinanceExpenseCreator", fields: [createdById], references: [id])
+  workshopEvent   WorkshopEvent?         @relation(fields: [workshopEventId], references: [id], onDelete: Restrict)
+  voidedBy        User?                  @relation("FinanceExpenseVoider", fields: [voidedById], references: [id])
+  replacesExpense FinanceExpense?        @relation("FinanceExpenseReplacement", fields: [replacesExpenseId], references: [id], onDelete: Restrict)
+  replacement     FinanceExpense?        @relation("FinanceExpenseReplacement")
 
   @@index([categoryId, expenseDate])
   @@index([employeeUserId])
+  @@index([hrEmployeeId])
   @@index([teacherId])
   @@index([createdById])
   @@index([expenseDate])

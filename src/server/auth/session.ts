@@ -3,8 +3,8 @@ import { cookies } from "next/headers";
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import {
-  getPermissionsForRoles,
-  type PermissionCode,
+  loadPermissionsForUser,
+  type EffectivePermissions,
 } from "@/server/rbac/permissions";
 import { getEnv, hasSupabasePublicEnv } from "@/server/env";
 import { hasSupabaseAuthCookie } from "@/server/supabase/auth-cookies";
@@ -15,8 +15,9 @@ export type CurrentErpUser = {
   authUserId: string | null;
   fullName: string;
   email: string;
+  profilePhotoUrl: string | null;
   roles: AppRole[];
-  permissions: Set<PermissionCode>;
+  permissions: EffectivePermissions;
 };
 
 export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> => {
@@ -49,13 +50,15 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
       u.auth_user_id::text as "authUserId",
       u.full_name as "fullName",
       u.email,
+      he.profile_photo_url as "profilePhotoUrl",
       coalesce(array_agg(r.code::text) filter (where r.code is not null), array[]::text[]) as "roles"
     from erp.users u
+    left join erp.hr_employees he on he.user_id = u.id
     left join erp.user_roles ur on ur.user_id = u.id
     left join erp.roles r on r.id = ur.role_id
     where u.auth_user_id = ${data.claims.sub}::uuid
       and u.is_active = true
-    group by u.id
+    group by u.id, he.profile_photo_url
     limit 1
   `);
 
@@ -70,8 +73,9 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
     authUserId: user.authUserId,
     fullName: user.fullName,
     email: user.email,
+    profilePhotoUrl: user.profilePhotoUrl,
     roles,
-    permissions: getPermissionsForRoles(roles),
+    permissions: await loadPermissionsForUser(user.id, roles),
   };
 });
 

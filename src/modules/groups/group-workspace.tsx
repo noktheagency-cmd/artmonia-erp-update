@@ -13,6 +13,8 @@ import {
   Clock3,
   Edit3,
   GraduationCap,
+  Gauge,
+  Layers3,
   MoreHorizontal,
   Plus,
   RotateCcw,
@@ -41,6 +43,7 @@ import type {
 import { groupWeekdays, orderedWeekdays, weekdayMeta, type GroupWeekdayCode } from "@/modules/groups/shared";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import styles from "./groups.module.css";
+import { notifyCaughtError } from "@/lib/app-notifications";
 
 type GroupsTab = "groups" | "journal";
 type GroupActions = {
@@ -65,6 +68,8 @@ export function GroupWorkspace({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
+  const [teacherFilter, setTeacherFilter] = useState("all");
+  const [occupancyFilter, setOccupancyFilter] = useState("all");
   const [notice, setNotice] = useState("");
   const [groupDialog, setGroupDialog] = useState<"create" | "edit" | null>(null);
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
@@ -72,14 +77,19 @@ export function GroupWorkspace({
   const selectedGroup = data.groups.find((group) => group.id === data.selectedGroupId) ?? data.groups[0];
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("az");
-    if (!needle) return data.groups;
-    return data.groups.filter((group) =>
-      [group.code, group.scheduleLabel, ...group.members.map((member) => member.studentName)]
+    return data.groups.filter((group) => {
+      const matchesText = !needle || [group.code, group.scheduleLabel, ...group.members.map((member) => member.studentName)]
         .join(" ")
         .toLocaleLowerCase("az")
-        .includes(needle)
-    );
-  }, [data.groups, query]);
+        .includes(needle);
+      const matchesTeacher = teacherFilter === "all" || group.members.some((member) => member.teacherId === teacherFilter);
+      const ratio = group.capacity ? group.memberCount / group.capacity : 0;
+      const matchesOccupancy = occupancyFilter === "all" || (occupancyFilter === "available" ? ratio < 1 : occupancyFilter === "full" ? ratio >= 1 : ratio >= .75);
+      return matchesText && matchesTeacher && matchesOccupancy;
+    });
+  }, [data.groups, occupancyFilter, query, teacherFilter]);
+  const totalStudents = data.groups.reduce((sum, group) => sum + group.memberCount, 0);
+  const totalCapacity = data.groups.reduce((sum, group) => sum + group.capacity, 0);
 
   function navigate(tab: GroupsTab, groupId = selectedGroup?.id, date = data.journal.date) {
     const params = new URLSearchParams({ tab });
@@ -96,7 +106,7 @@ export function GroupWorkspace({
           setNotice(success);
           router.refresh();
         } catch (error) {
-          setNotice(error instanceof Error ? error.message : "Əməliyyat tamamlanmadı");
+          setNotice(notifyCaughtError(error, "Əməliyyat tamamlanmadı"));
         }
       })();
     });
@@ -153,13 +163,24 @@ export function GroupWorkspace({
         </div>
       ) : null}
 
+      {activeTab === "groups" ? <>
+        <div className={styles.filterBand}>
+          <label className={styles.searchBox}><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Qrup və ya tələbə axtar..." /></label>
+          <select aria-label="Müəllim üzrə filtr" value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)}><option value="all">Bütün müəllimlər</option>{data.teachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.name}</option>)}</select>
+          <select aria-label="Doluluq üzrə filtr" value={occupancyFilter} onChange={(event) => setOccupancyFilter(event.target.value)}><option value="all">Bütün doluluqlar</option><option value="available">Yeri olan</option><option value="busy">75%+ dolu</option><option value="full">Tam dolu</option></select>
+          <Button type="button" variant="ghost" onClick={() => { setQuery(""); setTeacherFilter("all"); setOccupancyFilter("all"); }}><RotateCcw data-icon="inline-start" /> Təmizlə</Button><span>{filteredGroups.length} nəticə</span>
+        </div>
+        <div className={styles.kpiGrid}>
+          <GroupKpi icon={Layers3} label="Qruplar" value={data.groups.length} helper="Aktiv qrup" tone="blue" />
+          <GroupKpi icon={UsersRound} label="Tələbələr" value={totalStudents} helper="Qruplara bölünüb" tone="green" />
+          <GroupKpi icon={GraduationCap} label="Ümumi tutum" value={totalCapacity} helper={`${Math.max(totalCapacity - totalStudents, 0)} boş yer`} tone="violet" />
+          <GroupKpi icon={Gauge} label="Doluluq" value={`${totalCapacity ? Math.round(totalStudents / totalCapacity * 100) : 0}%`} helper="Orta istifadə" tone="amber" />
+        </div>
+      </> : null}
+
       {activeTab === "groups" ? (
         <div className={styles.groupsWorkspace}>
           <aside className={styles.groupListPanel}>
-            <label className={styles.searchBox}>
-              <Search size={18} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Qrup adı və tələbə üzrə axtar" />
-            </label>
             <div className={styles.listHeading}>
               <strong>Bütün qruplar</strong>
               <span>{filteredGroups.length}</span>
@@ -252,7 +273,7 @@ export function GroupWorkspace({
                     router.refresh();
                   }
                 } catch (error) {
-                  setNotice(error instanceof Error ? error.message : "Qrup saxlanmadı");
+                  setNotice(notifyCaughtError(error, "Qrup saxlanmadı", "Qrup saxlanmadı"));
                 }
               })();
             });
@@ -295,6 +316,8 @@ export function GroupWorkspace({
     </section>
   );
 }
+
+function GroupKpi({ icon: Icon, label, value, helper, tone }: { icon: typeof Layers3; label: string; value: number | string; helper: string; tone: string }) { return <article className={styles.kpi} data-tone={tone}><span><Icon size={18} /></span><div><small>{label}</small><strong>{value}</strong><p>{helper}</p></div></article>; }
 
 function GroupRoster({
   group,
@@ -393,7 +416,7 @@ function JournalView({
           onNotice("Jurnal saxlanıldı.");
           router.refresh();
         } catch (error) {
-          onNotice(error instanceof Error ? error.message : "Jurnalı saxlamaq mümkün olmadı");
+          onNotice(notifyCaughtError(error, "Jurnalı saxlamaq mümkün olmadı", "Jurnal saxlanmadı"));
         }
       })();
     });

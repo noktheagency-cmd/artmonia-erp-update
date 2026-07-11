@@ -12,10 +12,10 @@ import {
   Clock3,
   CreditCard,
   Edit3,
+  EllipsisVertical,
   FileText,
   Gift,
   MapPin,
-  MoreVertical,
   Search,
   Trash2,
   UserPlus,
@@ -34,6 +34,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { notifyCaughtError } from "@/lib/app-notifications";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
@@ -109,8 +110,7 @@ export function WorkshopDetailWorkspace({
           </div>
         </div>
         <div className="workshop-detail-actions">
-          {data.permissions.canManage ? <EditEventDialog data={data} action={actions.updateEvent} /> : null}
-          {data.permissions.canManage ? <EventDangerDialog eventId={event.id} action={actions.deleteOrCancelEvent} /> : null}
+          {data.permissions.canManage ? <EventActionsMenu data={data} actions={actions} /> : null}
           {data.permissions.canManageFinance ? (
             <PaymentDialog data={data} action={actions.recordPayment} autoOpen={autoOpen && data.activeTab === "payments"} />
           ) : null}
@@ -127,6 +127,31 @@ export function WorkshopDetailWorkspace({
       {data.activeTab === "expenses" ? <ExpensesTab data={data} actions={actions} autoOpen={autoOpen} /> : null}
       {data.activeTab === "details" ? <DetailsTab data={data} actions={actions} /> : null}
     </section>
+  );
+}
+
+function EventActionsMenu({ data, actions }: { data: WorkshopDetailData; actions: Actions }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="workshop-event-actions-menu">
+      <Button
+        type="button"
+        variant="outline"
+        className="workshop-event-actions-trigger"
+        aria-label="Tədbir üçün əməliyyatlar"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <EllipsisVertical />
+      </Button>
+      {open ? (
+        <div className="workshop-event-actions-popover" role="menu">
+          <EditEventDialog data={data} action={actions.updateEvent} />
+          <EventDangerDialog eventId={data.event.id} action={actions.deleteOrCancelEvent} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -372,6 +397,7 @@ function ParticipantDialog({ data, action, autoOpen = false }: { data: WorkshopD
         <div className="workshop-form-grid">
           <Field><FieldLabel htmlFor="participant-name">Ad və soyad</FieldLabel><Input id="participant-name" name="fullName" /></Field>
           <Field><FieldLabel htmlFor="participant-phone">Telefon</FieldLabel><Input id="participant-phone" name="phone" /></Field>
+          <Field><FieldLabel htmlFor="participant-email">Email</FieldLabel><Input id="participant-email" name="email" type="email" /></Field>
           <Field><FieldLabel htmlFor="participant-price">Siyahı qiyməti</FieldLabel><Input id="participant-price" name="listPrice" defaultValue={data.event.entryPriceInput} inputMode="decimal" /></Field>
           <Field><FieldLabel htmlFor="participant-discount">Endirim</FieldLabel><Input id="participant-discount" name="discountAmount" defaultValue="0" inputMode="decimal" /></Field>
           <Field><FieldLabel htmlFor="participant-advance">Avans məbləği</FieldLabel><Input id="participant-advance" name="advanceAmount" defaultValue="0" inputMode="decimal" /></Field>
@@ -428,7 +454,7 @@ function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
 function EditEventDialog({ data, action }: { data: WorkshopDetailData; action: WorkshopAction }) {
   const event = data.event;
   return (
-    <ActionDialog title="Tədbiri redaktə et" description="Yeni qiymət yalnız gələcək qeydiyyatlara default olacaq." trigger={<Button variant="outline"><Edit3 data-icon="inline-start" />Redaktə et</Button>} action={action}>
+    <ActionDialog title="Tədbiri redaktə et" description="Yeni qiymət yalnız gələcək qeydiyyatlara default olacaq." trigger={<button type="button" className="workshop-event-menu-item" role="menuitem"><Edit3 />Redaktə et</button>} action={action}>
       <input type="hidden" name="eventId" value={event.id} />
       <FieldGroup><div className="workshop-form-grid">
         <Field><FieldLabel>Ad</FieldLabel><Input name="title" defaultValue={event.title} required /></Field>
@@ -453,6 +479,7 @@ function EditParticipantDialog({ row, action }: { row: WorkshopParticipantRow; a
       <FieldGroup><div className="workshop-form-grid">
         <Field><FieldLabel>Ad və soyad</FieldLabel><Input name="fullName" defaultValue={row.fullName} required /></Field>
         <Field><FieldLabel>Telefon</FieldLabel><Input name="phone" defaultValue={row.phone === "-" ? "" : row.phone} /></Field>
+        <Field><FieldLabel>Email</FieldLabel><Input name="email" type="email" defaultValue={row.email === "-" ? "" : row.email} /></Field>
         <Field><FieldLabel>Siyahı qiyməti</FieldLabel><Input name="listPrice" defaultValue={row.listPriceInput} required /></Field>
         <Field><FieldLabel>Endirim</FieldLabel><Input name="discountAmount" defaultValue={row.discountAmountInput} /></Field>
       </div><Field className="workshop-check-field"><label><input type="checkbox" name="isGift" defaultChecked={row.isGift} /><Gift />Hədiyyə iştirakçı</label></Field><Field><FieldLabel>Qeyd</FieldLabel><textarea name="note" defaultValue={row.note} rows={3} /></Field></FieldGroup>
@@ -461,7 +488,19 @@ function EditParticipantDialog({ row, action }: { row: WorkshopParticipantRow; a
 }
 
 function EventDangerDialog({ eventId, action }: { eventId: string; action: WorkshopAction }) {
-  return <ReasonDialog title="Tədbiri sil / ləğv et" description="Tarixçə varsa tədbir silinməyəcək, ləğv ediləcək." hiddenName="eventId" hiddenValue={eventId} action={action} icon={<MoreVertical />} />;
+  const router = useRouter();
+  return (
+    <ActionDialog
+      title="Tədbiri tam sil"
+      description="Tədbirə bağlı bütün iştirakçılar, ödənişlər və xərclər həmişəlik silinəcək."
+      trigger={<button type="button" className="workshop-event-menu-item is-danger" role="menuitem"><Trash2 />Sil</button>}
+      action={action}
+      destructive
+      onSuccess={() => router.replace("/workshops")}
+    >
+      <input type="hidden" name="eventId" value={eventId} />
+    </ActionDialog>
+  );
 }
 
 function VoidPaymentDialog({ row, action }: { row: WorkshopPaymentRow; action: WorkshopAction }) {
@@ -472,18 +511,17 @@ function VoidExpenseDialog({ row, action }: { row: WorkshopExpenseRow; action: W
   return <ReasonDialog title="Xərci ləğv et" description={`${row.amount} xərc hesabından çıxarılacaq.`} hiddenName="expenseId" hiddenValue={row.id} action={action} icon={<Trash2 />} />;
 }
 
-function ReasonDialog({ title, description, hiddenName, hiddenValue, action, icon }: {
-  title: string; description: string; hiddenName: string; hiddenValue: string; action: WorkshopAction; icon: ReactNode;
+function ReasonDialog({ title, description, hiddenName, hiddenValue, action, icon, onSuccess }: {
+  title: string; description: string; hiddenName: string; hiddenValue: string; action: WorkshopAction; icon: ReactNode; onSuccess?: () => void;
 }) {
   return (
-    <ActionDialog title={title} description={description} trigger={<button type="button" className="workshop-icon-action" aria-label={title}>{icon}</button>} action={action} destructive>
+    <ActionDialog title={title} description={description} trigger={<button type="button" className="workshop-icon-action" aria-label={title}>{icon}</button>} action={action} destructive onSuccess={onSuccess}>
       <input type="hidden" name={hiddenName} value={hiddenValue} />
-      <Field><FieldLabel>Səbəb</FieldLabel><textarea name="reason" minLength={3} rows={4} required /></Field>
     </ActionDialog>
   );
 }
 
-function ActionDialog({ title, description, trigger, action, children, defaultOpen = false, destructive = false }: {
+function ActionDialog({ title, description, trigger, action, children, defaultOpen = false, destructive = false, onSuccess }: {
   title: string;
   description: string;
   trigger: ReactNode;
@@ -491,6 +529,7 @@ function ActionDialog({ title, description, trigger, action, children, defaultOp
   children: ReactNode;
   defaultOpen?: boolean;
   destructive?: boolean;
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
@@ -503,21 +542,22 @@ function ActionDialog({ title, description, trigger, action, children, defaultOp
     startTransition(() => {
       void Promise.resolve(action(new FormData(form))).then(() => {
         setOpen(false);
-        router.refresh();
-      }).catch((caught) => setError(caught instanceof Error ? caught.message : "Əməliyyat tamamlanmadı"));
+        if (onSuccess) onSuccess();
+        else router.refresh();
+      }).catch((caught) => setError(notifyCaughtError(caught, "Əməliyyat tamamlanmadı")));
     });
   }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="workshop-dialog">
-        <DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
+      <DialogContent className="workshop-dialog workshop-action-dialog">
+        <DialogHeader className="workshop-dialog-header"><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
         <form onSubmit={submit} className="workshop-dialog-form">
           {children}
           {error ? <p className="workshop-form-error" role="alert">{error}</p> : null}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button>
-            <Button disabled={pending} className={destructive ? "is-destructive" : undefined}>{pending ? "İcra olunur..." : destructive ? "Təsdiqlə" : "Yadda saxla"}</Button>
+            <Button type="submit" disabled={pending} className={destructive ? "is-destructive" : undefined}>{pending ? "İcra olunur..." : destructive ? "Təsdiqlə" : "Yadda saxla"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

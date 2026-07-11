@@ -107,8 +107,11 @@ export function DatePicker({
         window.innerWidth - width - viewportPadding,
         Math.max(viewportPadding, triggerRect.left + triggerRect.width / 2 - width / 2)
       );
-      const preferredTop = triggerRect.top - height - 12;
-      const top = preferredTop >= viewportPadding ? preferredTop : viewportPadding;
+      const belowTop = triggerRect.bottom + 12;
+      const aboveTop = triggerRect.top - height - 12;
+      const top = belowTop + height <= window.innerHeight - viewportPadding
+        ? belowTop
+        : Math.max(viewportPadding, aboveTop);
 
       setFloatingStyle({ left, top });
     }

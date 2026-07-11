@@ -540,25 +540,25 @@ export async function getFinanceData(
     prisma.$queryRaw<StaffOptionRow[]>(Prisma.sql`
       select
         concat('user:', u.id::text) as "id",
-        u.full_name as "label",
+        he.full_name as "label",
         'employee' as "kind",
-        coalesce(u.email, 'ERP user') as "meta",
-        'STATIC' as "salaryMode",
-        coalesce(last_salary.salary_amount, 0) as "staticSalary",
-        0 as "salaryPercent",
-        coalesce(last_salary.salary_amount, 0) as "salaryBase",
-        coalesce(last_salary.salary_amount, 0) as "calculatedSalary"
-      from erp.users u
+        concat(he.position, ' · ', he.department) as "meta",
+        he.salary_mode::text as "salaryMode",
+        he.salary_amount as "staticSalary",
+        coalesce(he.salary_percent, 0) as "salaryPercent",
+        case when he.salary_mode = 'STATIC'::"erp"."FinanceSalaryMode" then he.salary_amount else coalesce(last_salary.salary_base_amount, 0) end as "salaryBase",
+        case when he.salary_mode = 'STATIC'::"erp"."FinanceSalaryMode" then he.salary_amount else round(coalesce(last_salary.salary_base_amount, 0) * coalesce(he.salary_percent, 0) / 100, 2) end as "calculatedSalary"
+      from erp.hr_employees he
+      join erp.users u on u.id = he.user_id
       left join lateral (
         select
-          coalesce(fe.salary_calculated_amount, fe.amount) as salary_amount
+          fe.salary_base_amount
         from erp.finance_expenses fe
         where fe.employee_user_id = u.id
-          and fe.salary_mode = 'STATIC'::"erp"."FinanceSalaryMode"
         order by fe.expense_date desc, fe.created_at desc
         limit 1
       ) last_salary on true
-      where u.is_active = true
+      where u.is_active = true and he.status <> 'INACTIVE'::"erp"."HrEmployeeStatus"
 
       union all
 
@@ -1292,6 +1292,10 @@ function formatFinanceCategoryName(value: string) {
 
   if (normalized === "temir") {
     return "Təmir";
+  }
+
+  if (normalized === "diger" || normalized === "digər") {
+    return "Digər";
   }
 
   return value;

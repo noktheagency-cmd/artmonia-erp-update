@@ -1,5 +1,10 @@
 import { MarketingWorkspace } from "@/modules/marketing/marketing-workspace";
+import { getMarketingData } from "@/modules/marketing/queries";
 
-export default function MarketingPage() {
-  return <MarketingWorkspace />;
+export const dynamic = "force-dynamic";
+
+export default async function MarketingPage() {
+  const data = await getMarketingData();
+
+  return <MarketingWorkspace data={data} />;
 }

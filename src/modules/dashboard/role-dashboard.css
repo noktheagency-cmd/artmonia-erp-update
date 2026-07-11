@@ -1,0 +1,88 @@
+.role-dashboard {
+  --role-accent: #5267dc;
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  color: #20283a;
+}
+
+.role-dashboard.is-sales { --role-accent: #e97919; }
+.role-dashboard.is-teacher { --role-accent: #6557d9; }
+.role-dashboard.is-marketing { --role-accent: #d84f86; }
+
+.role-dashboard-hero {
+  border: 0;
+  border-radius: 18px;
+  background: radial-gradient(circle at 88% 0, color-mix(in srgb, var(--role-accent) 12%, transparent), transparent 30%), #fff;
+  box-shadow: 0 12px 36px rgba(33, 43, 67, .065);
+}
+
+.role-dashboard-hero-content {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 112px;
+}
+
+.role-dashboard-hero-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  color: #fff;
+  background: var(--role-accent);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--role-accent) 26%, transparent);
+}
+
+.role-dashboard-hero-icon svg { width: 22px; }
+.role-dashboard-greeting { display: flex; align-items: center; gap: 8px; }
+.role-dashboard-greeting h1 { margin: 0; font-size: 12px; font-weight: 680; }
+.role-dashboard-greeting [data-slot="badge"] { font-size: 8px; }
+.role-dashboard-hero h2 { margin: 4px 0 0; font-size: 22px; letter-spacing: -.035em; }
+.role-dashboard-hero p { margin: 4px 0 0; color: #7b8495; font-size: 10px; }
+.role-dashboard-hero-content > a { display: flex; align-items: center; gap: 7px; padding: 9px 12px; color: #fff; background: var(--role-accent); border-radius: 9px; font-size: 9px; font-weight: 760; text-decoration: none; }
+.role-dashboard-hero-content > a svg { width: 14px; }
+
+.role-dashboard-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.role-dashboard-kpi { min-width: 0; border: 0; background: #fff; box-shadow: 0 7px 22px rgba(33, 43, 67, .05); }
+.role-dashboard-kpi [data-slot="card-header"] { grid-template-columns: 34px minmax(0, 1fr); align-items: center; }
+.role-dashboard-kpi [data-slot="card-description"] { align-self: center; overflow: hidden; font-size: 9px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.role-dashboard-kpi-icon { display: grid; grid-row: 1 / 3; width: 34px; height: 34px; place-items: center; color: var(--role-accent); background: color-mix(in srgb, var(--role-accent) 9%, #fff); border-radius: 10px; }
+.role-dashboard-kpi-icon svg { width: 16px; }
+.role-dashboard-kpi [data-slot="card-title"] { font-size: 21px; font-weight: 780; letter-spacing: -.04em; }
+.role-dashboard-kpi p { margin: 3px 0 0; overflow: hidden; color: #929aaa; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+
+.role-dashboard-grid { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 12px; }
+.role-dashboard-panel { min-width: 0; min-height: 278px; border: 0; background: #fff; box-shadow: 0 8px 25px rgba(33, 43, 67, .05); }
+.role-dashboard-panel [data-slot="card-title"] { font-size: 14px; font-weight: 760; }
+.role-dashboard-panel [data-slot="card-description"] { font-size: 9px; }
+.role-dashboard-panel [data-slot="card-action"] a { color: var(--role-accent); font-size: 9px; font-weight: 740; text-decoration: none; }
+.role-dashboard-chart { width: 100%; height: 205px; }
+.role-dashboard-chart text { font-size: 8px; fill: #8790a0; }
+.role-dashboard-empty { display: grid; min-height: 185px; place-items: center; margin: 0; color: #929aaa; font-size: 9px; }
+
+.role-dashboard-recent { display: grid; }
+.role-dashboard-recent > div { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid #eef1f4; }
+.role-dashboard-recent > div:last-child { border-bottom: 0; }
+.role-dashboard-recent > div > span { display: grid; width: 34px; height: 34px; place-items: center; color: var(--role-accent); background: color-mix(in srgb, var(--role-accent) 9%, #fff); border-radius: 10px; font-size: 9px; font-weight: 800; }
+.role-dashboard-recent strong,
+.role-dashboard-recent small { display: block; }
+.role-dashboard-recent strong { font-size: 10px; }
+.role-dashboard-recent small { margin-top: 2px; overflow: hidden; color: #8c95a5; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.role-dashboard-recent [data-slot="badge"] { max-width: 110px; overflow: hidden; font-size: 7.5px; text-overflow: ellipsis; white-space: nowrap; }
+.role-dashboard-recent > p { color: #919aaa; font-size: 9px; }
+
+@media (max-width: 1040px) {
+  .role-dashboard-kpis { grid-template-columns: 1fr 1fr; }
+  .role-dashboard-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 680px) {
+  .role-dashboard-hero-content { grid-template-columns: 40px minmax(0, 1fr); }
+  .role-dashboard-hero-icon { width: 40px; height: 40px; }
+  .role-dashboard-hero-content > a { grid-column: 1 / -1; justify-content: center; }
+  .role-dashboard-kpis { grid-template-columns: 1fr; }
+  .role-dashboard-greeting { align-items: flex-start; flex-direction: column; gap: 4px; }
+}

@@ -6,6 +6,7 @@ import { Prisma, TaskStatus } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
+import { scopeFor } from "@/server/rbac/permissions";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -24,10 +25,12 @@ export async function createTaskAction(formData: FormData) {
   const input = createTaskSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const dueAt = new Date(`${input.dueDate}T12:00:00.000Z`);
+  const manageScope = scopeFor(actor.permissions, "task.manage");
+  const ownerUserId = manageScope === "ALL" ? input.ownerUserId : actor.id;
 
   await prisma.$transaction(async (tx) => {
     const owner = await tx.user.findFirst({
-      where: { id: input.ownerUserId, isActive: true },
+      where: { id: ownerUserId, isActive: true },
       select: { id: true, fullName: true },
     });
 
@@ -83,8 +86,8 @@ export async function updateTaskStatusAction(formData: FormData) {
       throw new Error("Task tapılmadı");
     }
 
-    const canManage = actor.permissions.has("task.manage");
-    if (!canManage && current.ownerUserId !== actor.id) {
+    const manageScope = scopeFor(actor.permissions, "task.manage");
+    if (manageScope !== "ALL" && current.ownerUserId !== actor.id) {
       throw new Error("Bu taskın statusunu dəyişmək icazəniz yoxdur");
     }
 

@@ -83,6 +83,7 @@ export type WorkshopParticipantRow = {
   kind: "student" | "guest";
   fullName: string;
   phone: string;
+  email: string;
   listPrice: string;
   listPriceInput: string;
   discountAmount: string;
@@ -270,6 +271,7 @@ type ParticipantDbRow = {
   studentId: string | null;
   fullName: string;
   phone: string | null;
+  email: string | null;
   listPrice: unknown;
   discountAmount: unknown;
   isGift: boolean;
@@ -525,7 +527,7 @@ export async function getWorkshopDetailData(
         from erp.workshop_payments group by participant_id
       )
       select wp.id::text as id, wp.event_id::text as "eventId", wp.student_id::text as "studentId",
-        wp.full_name as "fullName", wp.phone, wp.list_price as "listPrice",
+        wp.full_name as "fullName", wp.phone, wp.email, wp.list_price as "listPrice",
         wp.discount_amount as "discountAmount", wp.is_gift as "isGift", wp.note,
         wp.assigned_at as "assignedAt", wp.cancelled_at as "cancelledAt",
         coalesce(pt.paid, 0) as paid, count(*) over()::int as "totalCount"
@@ -732,6 +734,7 @@ function mapParticipantRow(row: ParticipantDbRow): WorkshopParticipantRow {
     kind: row.studentId ? "student" : "guest",
     fullName: row.fullName,
     phone: row.phone ?? "-",
+    email: row.email ?? "-",
     listPrice: formatAmount(listPrice),
     listPriceInput: formatDecimalInput(listPrice),
     discountAmount: formatAmount(discount),
@@ -841,7 +844,7 @@ function normalizeDetailFilters(input: WorkshopDetailFilters) {
   };
 }
 
-function getWorkshopPermissions(permissions: Set<string>): WorkshopPermissions {
+function getWorkshopPermissions(permissions: ReadonlyMap<string, unknown>): WorkshopPermissions {
   return {
     canManage: permissions.has("workshop.manage"),
     canViewFinance: permissions.has("workshop.finance.read"),

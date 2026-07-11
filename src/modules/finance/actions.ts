@@ -21,6 +21,7 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { startOfMonth, toNumber } from "@/modules/shared/format";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
+import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -125,6 +126,8 @@ export async function recordFinancePaymentAction(formData: FormData) {
       reason: input.note ?? `${paymentResult.studentCode} üçün ödəniş qəbul edildi`,
     });
   });
+
+  await recalculateTeacherPayoutsForMonth(paymentMonth, actor.id);
 
   invalidateFinanceCaches();
   return {
@@ -238,7 +241,7 @@ export async function updateFinancePaymentAction(formData: FormData) {
   const paymentMonth = parseMonthInput(input.paymentMonth);
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx) => {
+  const previousPaymentMonth = await prisma.$transaction(async (tx) => {
     const existing = await tx.payment.findUnique({
       where: { id: input.paymentId },
       select: {
@@ -315,7 +318,11 @@ export async function updateFinancePaymentAction(formData: FormData) {
       } satisfies Prisma.InputJsonValue,
       reason: input.note ?? "Ödəniş düzəliş edildi",
     });
+    return existing.paymentMonth;
   });
+
+  await recalculateTeacherPayoutsForMonth(previousPaymentMonth, actor.id);
+  if (previousPaymentMonth.getTime() !== paymentMonth.getTime()) await recalculateTeacherPayoutsForMonth(paymentMonth, actor.id);
 
   invalidateFinanceCaches();
   return {
@@ -329,7 +336,7 @@ export async function deleteFinancePaymentAction(formData: FormData) {
   const input = deleteFinancePaymentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx) => {
+  const deletedPaymentMonth = await prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUnique({
       where: { id: input.paymentId },
       select: {
@@ -367,7 +374,10 @@ export async function deleteFinancePaymentAction(formData: FormData) {
       } satisfies Prisma.InputJsonValue,
       reason: "Ödəniş silindi və faktura balansları yeniləndi",
     });
+    return payment.paymentMonth;
   });
+
+  await recalculateTeacherPayoutsForMonth(deletedPaymentMonth, actor.id);
 
   invalidateFinanceCaches();
   return {
@@ -824,19 +834,18 @@ async function resolveStaffSalarySnapshot(
   }
 
   if (staff.employeeUserId) {
-    const employee = await tx.user.findUnique({
-      where: { id: staff.employeeUserId },
-      select: { id: true, isActive: true },
+    const employee = await tx.hrEmployee.findUnique({
+      where: { userId: staff.employeeUserId },
+      select: { id: true, salaryMode: true, salaryAmount: true, salaryPercent: true, user: { select: { isActive: true } } },
     });
 
-    if (!employee?.isActive) {
+    if (!employee?.user?.isActive) {
       throw new Error("Seçilmiş əməkdaş tapılmadı və ya aktiv deyil");
     }
 
     const lastSalary = await tx.financeExpense.findFirst({
       where: {
         employeeUserId: staff.employeeUserId,
-        salaryMode: FinanceSalaryMode.STATIC,
       },
       orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
       select: {
@@ -844,12 +853,16 @@ async function resolveStaffSalarySnapshot(
         salaryCalculatedAmount: true,
       },
     });
-    const salaryAmount = roundMoney(toNumber(lastSalary?.salaryCalculatedAmount ?? lastSalary?.amount));
+    const salaryBase = roundMoney(toNumber(lastSalary?.salaryCalculatedAmount ?? lastSalary?.amount));
+    const salaryPercent = roundMoney(toNumber(employee.salaryPercent));
+    const salaryAmount = employee.salaryMode === FinanceSalaryMode.PERCENT
+      ? roundMoney(salaryBase * salaryPercent / 100)
+      : roundMoney(toNumber(employee.salaryAmount));
 
     return {
-      salaryMode: FinanceSalaryMode.STATIC,
-      salaryPercent: null,
-      salaryBaseAmount: salaryAmount,
+      salaryMode: employee.salaryMode,
+      salaryPercent: employee.salaryMode === FinanceSalaryMode.PERCENT ? salaryPercent : null,
+      salaryBaseAmount: employee.salaryMode === FinanceSalaryMode.PERCENT ? salaryBase : salaryAmount,
       salaryCalculatedAmount: salaryAmount,
     };
   }

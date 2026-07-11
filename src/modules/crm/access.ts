@@ -1,17 +1,17 @@
 import { AppRole, type Lead, type Prisma } from "@/generated/prisma/client";
-import { isPrivilegedActor, type ErpActor } from "@/server/auth/actor";
-import { assertPermission, type PermissionCode } from "@/server/rbac/permissions";
+import type { ErpActor } from "@/server/auth/actor";
+import { assertPermission, scopeFor, type PermissionCode } from "@/server/rbac/permissions";
 
 export type LeadAccessFields = Pick<Lead, "id" | "managerId" | "stage">;
 
 export function getLeadReadScope(actor: ErpActor): Prisma.LeadWhereInput {
-  assertPermission(actor.roles, "crm.lead.read");
+  assertPermission(actor.permissions, "crm.lead.read");
 
-  if (isPrivilegedActor(actor)) {
+  if (scopeFor(actor.permissions, "crm.lead.read") === "ALL") {
     return {};
   }
 
-  if (actor.roles.includes(AppRole.SALES)) {
+  if (scopeFor(actor.permissions, "crm.lead.read") === "ASSIGNED") {
     return { managerId: actor.id };
   }
 
@@ -37,7 +37,7 @@ export function getLeadManagerScope(actor: ErpActor): Prisma.UserWhereInput {
 }
 
 export function canAssignLeadOwner(actor: ErpActor) {
-  return isPrivilegedActor(actor);
+  return scopeFor(actor.permissions, "crm.lead.update") === "ALL";
 }
 
 export function resolveLeadManagerId(
@@ -56,23 +56,23 @@ export function assertCanAccessLead(
   lead: LeadAccessFields | null,
   permission: PermissionCode
 ): asserts lead is LeadAccessFields {
-  assertPermission(actor.roles, permission);
+  assertPermission(actor.permissions, permission);
 
   if (!lead) {
     throw new Error("Müraciət tapılmadı");
   }
 
-  if (!isPrivilegedActor(actor) && lead.managerId !== actor.id) {
+  if (scopeFor(actor.permissions, permission) !== "ALL" && lead.managerId !== actor.id) {
     throw new Error("Bu müraciətə giriş icazəniz yoxdur");
   }
 }
 
 export function getCrmScopeLabel(actor: ErpActor) {
-  if (isPrivilegedActor(actor)) {
+  if (scopeFor(actor.permissions, "crm.lead.read") === "ALL") {
     return "Bütün CRM müraciətləri";
   }
 
-  if (actor.roles.includes(AppRole.SALES)) {
+  if (scopeFor(actor.permissions, "crm.lead.read") === "ASSIGNED") {
     return "Mənə təyin olunan müraciətlər";
   }
 

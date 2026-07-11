@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Presentation,
+  Settings2,
   ListTodo,
   UsersRound,
 } from "lucide-react";
@@ -30,28 +31,32 @@ import { cx } from "@/components/ui/cx";
 type ShellUser = {
   fullName: string;
   email: string;
+  profilePhotoUrl: string | null;
   roles: string[];
+  permissions: string[];
 };
 
 type NavItem = {
   href: Route;
   label: string;
   icon: typeof Gauge;
+  requiredPermissions: string[];
 };
 
 const primaryNavItems: NavItem[] = [
-  { href: "/students", label: "Tələbələr", icon: GraduationCap },
-  { href: "/crm", label: "Follow-up", icon: UsersRound },
-  { href: "/finance", label: "Maliyyə", icon: CreditCard },
-  { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness },
-  { href: "/groups" as Route, label: "Qruplar", icon: CalendarDays },
-  { href: "/tasks" as Route, label: "Tasklar", icon: ListTodo },
+  { href: "/students", label: "Tələbələr", icon: GraduationCap, requiredPermissions: ["student.read"] },
+  { href: "/crm", label: "Follow-up", icon: UsersRound, requiredPermissions: ["crm.lead.read"] },
+  { href: "/finance", label: "Maliyyə", icon: CreditCard, requiredPermissions: ["billing.invoice.read", "billing.payment.read", "billing.expense.read"] },
+  { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness, requiredPermissions: ["hr.employee.read", "teacher.read", "hr.bonus.read"] },
+  { href: "/groups" as Route, label: "Qruplar", icon: CalendarDays, requiredPermissions: ["group.read", "attendance.read"] },
+  { href: "/tasks" as Route, label: "Tasklar", icon: ListTodo, requiredPermissions: ["task.read"] },
 ];
 
 const secondaryNavItems: NavItem[] = [
-  { href: "/marketing" as Route, label: "Marketing", icon: Megaphone },
-  { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText },
-  { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation },
+  { href: "/marketing" as Route, label: "Marketing", icon: Megaphone, requiredPermissions: ["marketing.read"] },
+  { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText, requiredPermissions: ["playbook.read"] },
+  { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation, requiredPermissions: ["workshop.read"] },
+  { href: "/settings/roles" as Route, label: "Rol və icazələr", icon: Settings2, requiredPermissions: ["auth.role.read"] },
 ];
 
 export function AppShell({
@@ -81,11 +86,10 @@ export function AppShell({
     .toUpperCase();
   const activePendingHref = pendingHref && pendingHref !== currentHref ? pendingHref : null;
   const isNavigating = Boolean(activePendingHref);
-  const visibleSecondaryNavItems = secondaryNavItems.filter(
-    (item) =>
-      item.href !== "/groups" ||
-      currentUser.roles.some((role) => ["SUPER_ADMIN", "OWNER", "ADMIN", "TEACHER"].includes(role))
-  );
+  const permissionSet = new Set(currentUser.permissions);
+  const isVisible = (item: NavItem) => item.requiredPermissions.some((permission) => permissionSet.has(permission));
+  const visiblePrimaryNavItems = primaryNavItems.filter(isVisible);
+  const visibleSecondaryNavItems = secondaryNavItems.filter(isVisible);
 
   function markNavigation(href: string | null) {
     if (href && href !== currentHref) {
@@ -208,7 +212,7 @@ export function AppShell({
 
         <nav className="nav-stack">
           <p className="nav-section-label">İş axını</p>
-          {primaryNavItems.map((item) => {
+          {visiblePrimaryNavItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -268,7 +272,18 @@ export function AppShell({
             className="nav-icon"
             aria-label={`${currentUser.fullName} (${currentUser.roles.join(", ")})`}
           >
-            <div className="sidebar-avatar">{initials || "A"}</div>
+            {currentUser.profilePhotoUrl ? (
+              <Image
+                className="sidebar-avatar sidebar-avatar-image"
+                src={currentUser.profilePhotoUrl}
+                alt=""
+                width={32}
+                height={32}
+                unoptimized
+              />
+            ) : (
+              <div className="sidebar-avatar">{initials || "A"}</div>
+            )}
           </div>
           <form action={signOutAction}>
             <button className="nav-icon" type="submit" aria-label="Çıxış">

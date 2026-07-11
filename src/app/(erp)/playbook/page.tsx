@@ -1,14 +1,12 @@
-import type { Route } from "next";
-import { redirect } from "next/navigation";
 import { PlaybookWorkspace } from "@/modules/playbook/playbook-workspace";
 import { getPlaybookData } from "@/modules/playbook/queries";
-import { getCurrentErpUser } from "@/server/auth/session";
+import { requireErpActor } from "@/server/auth/actor";
 
 export default async function PlaybookPage() {
-  const currentUser = await getCurrentErpUser();
-  if (!currentUser) redirect("/login" as Route);
+  const [actor, data] = await Promise.all([
+    requireErpActor("playbook.read"),
+    getPlaybookData(),
+  ]);
 
-  const data = await getPlaybookData();
-
-  return <PlaybookWorkspace initialData={data} />;
+  return <PlaybookWorkspace initialData={data} canManage={actor.permissions.has("playbook.manage")} />;
 }

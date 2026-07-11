@@ -41,6 +41,7 @@ export type StudentListData = {
     canConvertLead: boolean;
     canRecordPayment: boolean;
     canChangeStatus: boolean;
+    canDeleteStudent: boolean;
     canManagePrograms: boolean;
     canExport: boolean;
   };
@@ -52,6 +53,7 @@ export type StudentListData = {
       source: string;
       programId: string;
       managerId: string;
+      campaignId: string;
       note: string;
     }>;
     programs: Array<{
@@ -64,6 +66,7 @@ export type StudentListData = {
     }>;
     teachers: Array<{ id: string; fullName: string }>;
     managers: Array<{ id: string; fullName: string }>;
+    campaigns: Array<{ id: string; name: string }>;
     sourceOptions: string[];
     defaultRegisteredDate: string;
     defaultPaymentDate: string;
@@ -114,6 +117,7 @@ export type StudentListData = {
     phone: string;
     program: string;
     teacher: string;
+    group: string;
     dueDate: string;
     overdueDays: number;
     balance: string;
@@ -122,6 +126,7 @@ export type StudentListData = {
     lifecycleTone: StudentTone;
     paymentStatus: string;
     paymentTone: StudentTone;
+    paidThisMonth: string;
     lastContact: string;
     clv: {
       totalPaid: string;
@@ -135,6 +140,7 @@ export type StudentListData = {
       paymentDefaultAmount: string;
       paymentDefaultDate: string;
       paymentDefaultMonth: string;
+      monthlyFee: string;
       invoices: Array<{
         id: string;
         period: string;
@@ -149,6 +155,7 @@ export type StudentListData = {
         amount: string;
         paidAt: string;
         paymentMonth: string;
+        nextPaymentDate: string;
         method: string;
         note: string;
         createdBy: string;
@@ -258,10 +265,10 @@ const summaryMeta: Record<
 };
 
 const paymentOptions: Array<FilterOption & { value: StudentPaymentFilter }> = [
-  { value: "all", label: "Bütün ödənişlər" },
+  { value: "all", label: "Ödəniş" },
   { value: "paid", label: "Ödənilib" },
-  { value: "open", label: "Açıq borc" },
-  { value: "overdue", label: "Gecikmiş borc" },
+  { value: "open", label: "Qalıq borc" },
+  { value: "overdue", label: "Gecikmiş ödəniş" },
 ];
 
 const invoiceStatusMeta: Record<InvoiceStatus, { label: string; tone: StudentTone }> = {
@@ -295,7 +302,7 @@ export async function getStudentListData(
     dateFrom: dateFromFilter.input,
     dateTo: dateToFilter.input,
   });
-  const { programs, teachers, managers, leads: convertibleLeads, sources } = options;
+  const { programs, teachers, managers, leads: convertibleLeads, sources, campaigns } = options;
 
   const summaryCounts = new Map(
     Object.entries(options.summaryCounts).map(([status, count]) => [
@@ -355,6 +362,7 @@ export async function getStudentListData(
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
       canChangeStatus: actor.permissions.has("student.status.change"),
+      canDeleteStudent: actor.permissions.has("student.update"),
       canManagePrograms: actor.permissions.has("settings.manage"),
       canExport: actor.permissions.has("report.export"),
     },
@@ -370,6 +378,7 @@ export async function getStudentListData(
       })),
       teachers,
       managers,
+      campaigns,
       sourceOptions: buildCrmSourceOptions(sources),
       defaultRegisteredDate: formatDateInput(new Date()),
       defaultPaymentDate: formatDateInput(new Date()),
@@ -437,6 +446,7 @@ export async function getStudentListData(
     students: rows.map((student) => {
       const balance = toNumber(student.balanceDue);
       const totalPaid = toNumber(student.totalPaid);
+      const currentMonthPaid = toNumber(student.currentMonthPaid);
       const paidMonths = toNumber(student.paidMonths);
       const lifecycleStatus = lifecycleMeta[student.lifecycleStatus];
       const paymentStatus = getPaymentStatus(
@@ -462,6 +472,7 @@ export async function getStudentListData(
         phone: student.phone ?? "-",
         program: student.programName ?? "Proqram yoxdur",
         teacher: student.teacherName ?? "Təyin edilməyib",
+        group: student.groupCode ?? "Qrupa təyin edilməyib",
         dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate) : "Ödənilib",
         overdueDays,
         balance: formatAmount(balance),
@@ -470,6 +481,7 @@ export async function getStudentListData(
         lifecycleTone: lifecycleStatus.tone,
         paymentStatus: paymentStatus.label,
         paymentTone: paymentStatus.tone,
+        paidThisMonth: formatAmount(currentMonthPaid),
         lastContact: `Qeydiyyat: ${formatShortDate(student.registeredAt)}`,
         clv: {
           totalPaid: formatAmount(totalPaid),
@@ -483,6 +495,7 @@ export async function getStudentListData(
           paymentDefaultAmount: defaultPaymentAmount,
           paymentDefaultDate: formatDateInput(new Date()),
           paymentDefaultMonth: formatMonthInput(new Date()),
+          monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
           invoices: student.invoices.slice(0, 6).map((invoice) => {
             const status = invoiceStatusMeta[invoice.status];
 
@@ -501,6 +514,7 @@ export async function getStudentListData(
             amount: formatAmount(payment.amount),
             paidAt: formatShortDate(payment.paidAt),
             paymentMonth: formatMonthInput(payment.paymentMonth),
+            nextPaymentDate: payment.nextPaymentAt ? formatShortDate(payment.nextPaymentAt) : "—",
             method: getStudentPaymentMethodLabel(payment.method),
             note: payment.note ?? "-",
             createdBy: payment.createdByName ?? "Sistem",
@@ -532,7 +546,9 @@ type StudentListQueryRow = {
   monthlyFee: unknown;
   programName: string | null;
   teacherName: string | null;
+  groupCode: string | null;
   balanceDue: unknown;
+  currentMonthPaid: unknown;
   nextDueDate: Date | string | null;
   totalPaid: unknown;
   paidMonths: unknown;
@@ -569,6 +585,7 @@ type StudentPaymentRecord = {
   amount: unknown;
   paidAt: Date | string;
   paymentMonth: Date | string;
+  nextPaymentAt: Date | string | null;
   method: string;
   note: string | null;
   createdByName: string | null;
@@ -644,7 +661,9 @@ async function getStudentRows(
       ae.monthly_fee as "monthlyFee",
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
+      (select g.code from erp.group_memberships gm join erp.groups g on g.id = gm.group_id join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null order by gm.joined_at desc, gm.created_at desc limit 1) as "groupCode",
       inv.balance_due as "balanceDue",
+      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', current_date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
       clv.paid_months as "paidMonths",
@@ -670,21 +689,21 @@ async function getStudentRows(
     ) ae on true
     left join lateral (
       select
-        coalesce((
+        greatest(coalesce((
           select sum(i.balance_due)
           from erp.invoices i
           where i.student_id = ps.id
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
-        ), 0) as balance_due,
-        (
-          select i.due_date
-          from erp.invoices i
-          where i.student_id = ps.id
-            and i.status <> 'VOID'::"erp"."InvoiceStatus"
-            and i.balance_due > 0
-          order by i.due_date asc, i.created_at asc
-          limit 1
+        ), 0), greatest(coalesce(ae.monthly_fee, 0) - coalesce((
+          select sum(p.amount)
+          from erp.payments p
+          where p.student_id = ps.id
+            and date_trunc('month', p.paid_at) = date_trunc('month', current_date)
+        ), 0), 0)) as balance_due,
+        coalesce(
+          (select p.next_payment_at from erp.payments p where p.student_id = ps.id and p.next_payment_at is not null order by p.paid_at desc, p.created_at desc limit 1),
+          current_date
         ) as next_due_date,
         coalesce((
           select jsonb_agg(
@@ -722,6 +741,7 @@ async function getStudentRows(
           'amount', ordered.amount,
           'paidAt', ordered.paid_at,
           'paymentMonth', ordered.payment_month,
+          'nextPaymentAt', ordered.next_payment_at,
           'method', ordered.method::text,
           'note', ordered.note,
           'createdByName', ordered.created_by_name
@@ -729,7 +749,7 @@ async function getStudentRows(
         order by ordered.paid_at desc, ordered.created_at desc
       ), '[]'::jsonb) as payments
       from (
-        select p.id, p.amount, p.paid_at, p.payment_month, p.method, p.note, p.created_at, u.full_name as created_by_name
+        select p.id, p.amount, p.paid_at, p.payment_month, p.next_payment_at, p.method, p.note, p.created_at, u.full_name as created_by_name
         from erp.payments p
         left join erp.users u on u.id = p.created_by_id
         where p.student_id = ps.id
@@ -791,6 +811,7 @@ type StudentCreateOptionRows = {
   }>;
   teachers: Array<{ id: string; fullName: string }>;
   managers: Array<{ id: string; fullName: string }>;
+  campaigns: Array<{ id: string; name: string }>;
   sources: string[];
   leads: StudentListData["createOptions"]["leads"];
 };
@@ -801,6 +822,7 @@ type StudentCreateOptionsRawRow = {
   programs: unknown;
   teachers: unknown;
   managers: unknown;
+  campaigns: unknown;
   sources: unknown;
   leads: unknown;
 };
@@ -990,6 +1012,11 @@ async function getStudentCreateOptions(
         ) source_rows
       ), '[]'::jsonb) as "sources",
       coalesce((
+        select jsonb_agg(jsonb_build_object('id', mc.id::text, 'name', mc.name) order by mc.name asc)
+        from erp.marketing_campaigns mc
+        where mc.status = 'ACTIVE'::"erp"."MarketingCampaignStatus"
+      ), '[]'::jsonb) as "campaigns",
+      coalesce((
         select jsonb_agg(
           jsonb_build_object(
             'id', ordered.id,
@@ -998,6 +1025,7 @@ async function getStudentCreateOptions(
             'source', ordered.source,
             'programId', ordered.program_id,
             'managerId', ordered.manager_id,
+            'campaignId', ordered.campaign_id,
             'note', ordered.note
           )
           order by ordered.updated_at desc, ordered.created_at desc
@@ -1010,6 +1038,7 @@ async function getStudentCreateOptions(
             coalesce(l.source, 'Manual') as source,
             coalesce(l.program_interest_id::text, '') as program_id,
             coalesce(l.manager_id::text, '') as manager_id,
+            coalesce(l.campaign_id::text, '') as campaign_id,
             coalesce(last_history.reason, '') as note,
             l.updated_at,
             l.created_at
@@ -1042,6 +1071,7 @@ async function getStudentCreateOptions(
     managers: asJsonArray<StudentCreateOptionRows["managers"][number]>(
       row?.managers
     ),
+    campaigns: asJsonArray<StudentCreateOptionRows["campaigns"][number]>(row?.campaigns),
     sources: asJsonArray<string>(row?.sources),
     leads: asJsonArray<StudentCreateOptionRows["leads"][number]>(row?.leads),
   };
@@ -1122,22 +1152,46 @@ function buildStudentWhereSql({
   }
 
   if (paymentFilter === "paid") {
-    conditions.push(Prisma.sql`not exists (
-      select 1
-      from erp.invoices i
-      where i.student_id = s.id
-        and i.status <> 'VOID'::"erp"."InvoiceStatus"
-        and i.balance_due > 0
+    conditions.push(Prisma.sql`not (
+      exists (
+        select 1 from erp.invoices i
+        where i.student_id = s.id
+          and i.status <> 'VOID'::"erp"."InvoiceStatus"
+          and i.balance_due > 0
+      )
+      or exists (
+        select 1
+        from erp.enrollments e
+        where e.student_id = s.id
+          and e.status in ('ACTIVE'::"erp"."EnrollmentStatus", 'PAUSED'::"erp"."EnrollmentStatus")
+          and e.monthly_fee > coalesce((
+            select sum(p.amount) from erp.payments p
+            where p.student_id = s.id
+              and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)
+          ), 0)
+      )
     )`);
   }
 
   if (paymentFilter === "open") {
-    conditions.push(Prisma.sql`exists (
-      select 1
-      from erp.invoices i
-      where i.student_id = s.id
-        and i.status <> 'VOID'::"erp"."InvoiceStatus"
-        and i.balance_due > 0
+    conditions.push(Prisma.sql`(
+      exists (
+        select 1 from erp.invoices i
+        where i.student_id = s.id
+          and i.status <> 'VOID'::"erp"."InvoiceStatus"
+          and i.balance_due > 0
+      )
+      or exists (
+        select 1
+        from erp.enrollments e
+        where e.student_id = s.id
+          and e.status in ('ACTIVE'::"erp"."EnrollmentStatus", 'PAUSED'::"erp"."EnrollmentStatus")
+          and e.monthly_fee > coalesce((
+            select sum(p.amount) from erp.payments p
+            where p.student_id = s.id
+              and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)
+          ), 0)
+      )
     )`);
   }
 
@@ -1235,10 +1289,10 @@ function getPaymentStatus(
   }
 
   if (nextDueDate && nextDueDate < today) {
-    return { label: "Gecikmiş borc", tone: "danger" };
+    return { label: "Gecikmiş ödəniş", tone: "danger" };
   }
 
-  return { label: "Açıq borc", tone: "warning" };
+  return { label: "Qalıq borc", tone: "warning" };
 }
 
 function getOverdueDays(nextDueDate: Date | undefined, today: Date) {
@@ -1396,7 +1450,9 @@ export async function getStudentDetailData(studentId: string) {
       ae.monthly_fee as "monthlyFee",
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
+      (select g.code from erp.group_memberships gm join erp.groups g on g.id = gm.group_id join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null order by gm.joined_at desc, gm.created_at desc limit 1) as "groupCode",
       inv.balance_due as "balanceDue",
+      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', current_date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
       clv.paid_months as "paidMonths",
@@ -1423,21 +1479,21 @@ export async function getStudentDetailData(studentId: string) {
     ) ae on true
     left join lateral (
       select
-        coalesce((
+        greatest(coalesce((
           select sum(i.balance_due)
           from erp.invoices i
           where i.student_id = ps.id
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
-        ), 0) as balance_due,
-        (
-          select i.due_date
-          from erp.invoices i
-          where i.student_id = ps.id
-            and i.status <> 'VOID'::"erp"."InvoiceStatus"
-            and i.balance_due > 0
-          order by i.due_date asc, i.created_at asc
-          limit 1
+        ), 0), greatest(coalesce(ae.monthly_fee, 0) - coalesce((
+          select sum(p.amount)
+          from erp.payments p
+          where p.student_id = ps.id
+            and date_trunc('month', p.paid_at) = date_trunc('month', current_date)
+        ), 0), 0)) as balance_due,
+        coalesce(
+          (select p.next_payment_at from erp.payments p where p.student_id = ps.id and p.next_payment_at is not null order by p.paid_at desc, p.created_at desc limit 1),
+          current_date
         ) as next_due_date,
         coalesce((
           select jsonb_agg(
@@ -1494,6 +1550,7 @@ export async function getStudentDetailData(studentId: string) {
           'amount', ordered.amount,
           'paidAt', ordered.paid_at,
           'paymentMonth', ordered.payment_month,
+          'nextPaymentAt', ordered.next_payment_at,
           'method', ordered.method::text,
           'note', ordered.note,
           'createdByName', ordered.created_by_name
@@ -1501,7 +1558,7 @@ export async function getStudentDetailData(studentId: string) {
         order by ordered.paid_at desc, ordered.created_at desc
       ), '[]'::jsonb) as payments
       from (
-        select p.id, p.amount, p.paid_at, p.payment_month, p.method, p.note, p.created_at, u.full_name as created_by_name
+        select p.id, p.amount, p.paid_at, p.payment_month, p.next_payment_at, p.method, p.note, p.created_at, u.full_name as created_by_name
         from erp.payments p
         left join erp.users u on u.id = p.created_by_id
         where p.student_id = ps.id
@@ -1539,6 +1596,7 @@ export async function getStudentDetailData(studentId: string) {
   const student = rows[0];
   const balance = toNumber(student.balanceDue);
   const totalPaid = toNumber(student.totalPaid);
+  const currentMonthPaid = toNumber(student.currentMonthPaid);
   const paidMonths = toNumber(student.paidMonths);
   const lifecycleStatus = lifecycleMeta[student.lifecycleStatus as StudentLifecycleStatus];
   const paymentStatus = getPaymentStatus(
@@ -1566,6 +1624,7 @@ export async function getStudentDetailData(studentId: string) {
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
       canChangeStatus: actor.permissions.has("student.status.change"),
+      canDeleteStudent: actor.permissions.has("student.update"),
     },
     createOptions: {
       leads: options.leads,
@@ -1577,6 +1636,7 @@ export async function getStudentDetailData(studentId: string) {
       })),
       teachers: options.teachers,
       managers: options.managers,
+      campaigns: options.campaigns,
       defaultRegisteredDate: formatDateInput(new Date()),
       defaultPaymentDate: formatDateInput(new Date()),
       defaultPaymentMonth: formatMonthInput(new Date()),
@@ -1588,6 +1648,7 @@ export async function getStudentDetailData(studentId: string) {
       phone: student.phone ?? "-",
       program: student.programName ?? "Proqram yoxdur",
       teacher: student.teacherName ?? "Təyin edilməyib",
+      group: student.groupCode ?? "Qrupa təyin edilməyib",
       dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate as Date) : "Ödənilib",
       overdueDays,
       balance: formatAmount(balance),
@@ -1596,6 +1657,7 @@ export async function getStudentDetailData(studentId: string) {
       lifecycleTone: lifecycleStatus.tone,
       paymentStatus: paymentStatus.label,
       paymentTone: paymentStatus.tone,
+      paidThisMonth: formatAmount(currentMonthPaid),
       lastContact: `Qeydiyyat: ${formatShortDate(student.registeredAt as Date)}`,
       clv: {
         totalPaid: formatAmount(totalPaid),
@@ -1609,6 +1671,7 @@ export async function getStudentDetailData(studentId: string) {
         paymentDefaultAmount: defaultPaymentAmount,
         paymentDefaultDate: formatDateInput(new Date()),
         paymentDefaultMonth: formatMonthInput(new Date()),
+        monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
         invoices: asJsonArray<StudentInvoiceRecord>(student.invoices).slice(0, 6).map((invoice) => {
           const status = invoiceStatusMeta[invoice.status];
           return {
@@ -1626,6 +1689,7 @@ export async function getStudentDetailData(studentId: string) {
           amount: formatAmount(payment.amount),
           paidAt: formatShortDate(payment.paidAt),
           paymentMonth: formatMonthInput(payment.paymentMonth),
+          nextPaymentDate: payment.nextPaymentAt ? formatShortDate(payment.nextPaymentAt) : "—",
           method: getStudentPaymentMethodLabel(payment.method),
           note: payment.note ?? "-",
           createdBy: payment.createdByName ?? "Sistem",

@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
 import { formatAmount } from "@/modules/shared/format";
+import { getTeacherPayrollPreviews } from "@/modules/hr/teacher-payroll";
 
 export type TeacherDirectoryStudent = {
   id: string;
@@ -47,12 +48,19 @@ export type TeacherDirectoryTeacher = {
   students: TeacherDirectoryStudent[];
   lessons: TeacherDirectoryLesson[];
   assignmentHistory: TeacherAssignmentFallback[];
+  salaryPercent: number;
+  paidRevenue: number;
+  eligibleRevenue: number;
+  estimatedSalary: number;
+  attendedLessons: number;
+  plannedLessons: number;
 };
 
 export type TeacherDirectoryData = {
   permissions: {
     canReadTeachers: boolean;
     canManageTeacherAccounts: boolean;
+    canManageTeacherRules: boolean;
   };
   accountOptions: Array<{ id: string; name: string; email: string }>;
   teachers: TeacherDirectoryTeacher[];
@@ -112,6 +120,7 @@ export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
       permissions: {
         canReadTeachers: false,
         canManageTeacherAccounts: false,
+        canManageTeacherRules: false,
       },
       accountOptions: [],
       teachers: [],
@@ -295,29 +304,30 @@ export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
     order by t.is_active desc, t.full_name asc
   `);
 
+  const [payrollPreviews, accountOptions] = await Promise.all([
+    getTeacherPayrollPreviews(),
+    actor.permissions.has("teacher.account.manage")
+      ? prisma.user.findMany({
+          where: { isActive: true, roles: { some: { role: { code: "TEACHER" } } } },
+          select: { id: true, fullName: true, email: true },
+          orderBy: { fullName: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
   const canManageTeacherAccounts = actor.permissions.has("teacher.account.manage");
-  const accountOptions = canManageTeacherAccounts
-    ? await prisma.user.findMany({
-        where: {
-          isActive: true,
-          roles: { some: { role: { code: "TEACHER" } } },
-        },
-        select: { id: true, fullName: true, email: true },
-        orderBy: { fullName: "asc" },
-      })
-    : [];
 
   return {
     permissions: {
       canReadTeachers: actor.permissions.has("teacher.read"),
       canManageTeacherAccounts,
+      canManageTeacherRules: actor.permissions.has("teacher.rule.manage"),
     },
     accountOptions: accountOptions.map((user) => ({ id: user.id, name: user.fullName, email: user.email })),
-    teachers: rows.map(mapTeacherRow),
+    teachers: rows.map((row) => mapTeacherRow(row, payrollPreviews.get(row.id))),
   };
 }
 
-function mapTeacherRow(row: TeacherRawRow): TeacherDirectoryTeacher {
+function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teacher-payroll").TeacherPayrollPreview): TeacherDirectoryTeacher {
   const capacity = Number(row.capacity ?? 0);
   const activeStudentCount = Number(row.activeStudentCount ?? 0);
 
@@ -331,6 +341,12 @@ function mapTeacherRow(row: TeacherRawRow): TeacherDirectoryTeacher {
     isActive: row.isActive,
     activeStudentCount,
     utilization: capacity > 0 ? Math.round((activeStudentCount / capacity) * 100) : 0,
+    salaryPercent: payroll?.salaryPercent ?? 0,
+    paidRevenue: payroll?.paidRevenue ?? 0,
+    eligibleRevenue: payroll?.eligibleRevenue ?? 0,
+    estimatedSalary: payroll?.payoutAmount ?? 0,
+    attendedLessons: payroll?.attendedLessons ?? 0,
+    plannedLessons: payroll?.plannedLessons ?? 0,
     nextLesson:
       row.nextLessonDate && row.nextLessonTime
         ? `${formatDate(row.nextLessonDate)} / ${row.nextLessonTime}`

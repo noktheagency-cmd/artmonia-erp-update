@@ -9,22 +9,20 @@ import {
   ArrowRight,
   Banknote,
   CalendarDays,
-  ChevronDown,
   CircleDollarSign,
-  Filter,
+  Info,
   MapPin,
   Plus,
-  Search,
   SlidersHorizontal,
   Sparkles,
   TrendingUp,
   UserPlus,
   UsersRound,
   WalletCards,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { notifyCaughtError } from "@/lib/app-notifications";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -37,9 +35,10 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
+import type { WorkshopOfferAudience, WorkshopOfferInput, WorkshopOfferResult } from "@/modules/workshops/offer-actions";
+import { WorkshopOfferDialog } from "@/modules/workshops/workshop-offer-dialog";
 import type { WorkshopData, WorkshopEventRow } from "@/modules/workshops/queries";
 
 type WorkshopAction = (formData: FormData) => unknown | Promise<unknown>;
@@ -63,9 +62,13 @@ const durationOptions = [90, 120, 180, 240].map((value) => ({
 export function WorkshopWorkspace({
   data,
   createWorkshopEventAction,
+  loadOfferAudienceAction,
+  generateOfferAction,
 }: {
   data: WorkshopData;
   createWorkshopEventAction: WorkshopAction;
+  loadOfferAudienceAction: () => Promise<WorkshopOfferAudience>;
+  generateOfferAction: (input: WorkshopOfferInput) => Promise<WorkshopOfferResult>;
 }) {
   const [mobilePreviewId, setMobilePreviewId] = useState<string | null>(null);
   const mobilePreviewEvent = data.events.find((event) => event.id === mobilePreviewId) ?? null;
@@ -77,6 +80,12 @@ export function WorkshopWorkspace({
           <p>Tədbirləri, iştirakçıları və daxili maliyyəni vahid iş sahəsində idarə et.</p>
         </div>
         <div className="workshop-topbar-actions">
+          {data.permissions.canManage ? (
+            <WorkshopOfferDialog
+              loadAudienceAction={loadOfferAudienceAction}
+              generateOfferAction={generateOfferAction}
+            />
+          ) : null}
           {data.selectedEvent && data.permissions.canManage ? (
             <Link
               className="ui-button ui-button-outline ui-button-default"
@@ -100,7 +109,7 @@ export function WorkshopWorkspace({
         ))}
       </div>
 
-      <FilterPanel data={data} />
+      <CompactFilterPanel data={data} />
 
       <div className="workshop-command-layout">
         <section className="workshop-event-table-panel">
@@ -175,75 +184,22 @@ export function WorkshopWorkspace({
   );
 }
 
-function FilterPanel({ data }: { data: WorkshopData }) {
-  const [expanded, setExpanded] = useState(data.filters.activeCount > 1);
+function CompactFilterPanel({ data }: { data: WorkshopData }) {
   return (
     <section className="workshop-filter-panel">
       <form method="get" action="/workshops" className="workshop-filter-form">
-        <div className="workshop-filter-primary">
-          <InputGroup className="workshop-search-group">
-            <InputGroupAddon><Search /></InputGroupAddon>
-            <InputGroupInput
-              name="q"
-              defaultValue={data.filters.query}
-              placeholder="Tədbir, təlimçi, məkan və iştirakçı axtar"
-              aria-label="Tədbir axtar"
-            />
-          </InputGroup>
-          <Button type="button" variant="outline" onClick={() => setExpanded((value) => !value)}>
-            <Filter data-icon="inline-start" />
-            Filtrlər
-            <span className="workshop-filter-count">{data.filters.activeCount}</span>
-            <ChevronDown data-icon="inline-end" />
-          </Button>
+        <div className="workshop-filter-primary workshop-filter-primary-compact">
+          <FilterDate name="from" label="Başlanğıc tarixi" value={data.filters.from} />
+          <FilterDate name="to" label="Bitiş tarixi" value={data.filters.to} />
+          <FilterSelect
+            name="status"
+            label="Status"
+            value={data.filters.status}
+            options={[{ value: "all", label: "Hamısı" }, ...eventStatusOptions]}
+          />
           <Button type="submit">Tətbiq et</Button>
+          <Link href="/workshops" className="workshop-reset-link">Sıfırla</Link>
         </div>
-
-        {expanded ? (
-          <div className="workshop-filter-grid">
-            <FilterSelect name="type" label="Növ" value={data.filters.type} options={[
-              { value: "all", label: "Hamısı" }, ...eventTypeOptions,
-            ]} />
-            <FilterSelect name="status" label="Status" value={data.filters.status} options={[
-              { value: "all", label: "Hamısı" }, ...eventStatusOptions,
-            ]} />
-            <FilterDate name="from" label="Başlanğıc" value={data.filters.from} />
-            <FilterDate name="to" label="Son tarix" value={data.filters.to} />
-            <FilterSelect name="collection" label="Ödəniş statusu" value={data.filters.collection} options={[
-              { value: "all", label: "Hamısı" },
-              { value: "unpaid", label: "Ödənilməyib" },
-              { value: "advance", label: "Avans" },
-              { value: "paid", label: "Tam ödənilib" },
-              { value: "gift", label: "Hədiyyə var" },
-            ]} />
-            <FilterSelect name="profitability" label="Mənfəət" value={data.filters.profitability} options={[
-              { value: "all", label: "Hamısı" },
-              { value: "profit", label: "Mənfəətli" },
-              { value: "loss", label: "Zərər" },
-              { value: "breakeven", label: "Balans" },
-            ]} />
-            <FilterSelect name="instructor" label="Təlimçi" value={data.filters.instructor} options={[
-              { value: "", label: "Hamısı" }, ...data.filterOptions.instructors,
-            ]} />
-            <FilterSelect name="room" label="Məkan" value={data.filters.room} options={[
-              { value: "", label: "Hamısı" }, ...data.filterOptions.rooms,
-            ]} />
-            <FilterSelect name="sort" label="Sıralama" value={data.filters.sort} options={[
-              { value: "upcoming", label: "Yaxın tarix" },
-              { value: "newest", label: "Ən yeni" },
-              { value: "revenue", label: "Dövriyyə" },
-              { value: "expense", label: "Xərc" },
-              { value: "profit", label: "Mənfəət" },
-              { value: "participants", label: "İştirakçı" },
-            ]} />
-            <FilterSelect name="pageSize" label="Səhifədə" value={String(data.filters.pageSize)} options={
-              [10, 25, 50, 100].map((value) => ({ value: String(value), label: String(value) }))
-            } />
-            <Link href="/workshops" className="workshop-reset-link">
-              <X /> Filtrləri sıfırla
-            </Link>
-          </div>
-        ) : null}
       </form>
     </section>
   );
@@ -425,7 +381,7 @@ function CreateEventDialog({ defaultDate, action, disabled }: {
         setOpen(false);
         form.reset();
         router.refresh();
-      }).catch((error) => setNotice(error instanceof Error ? error.message : "Tədbir yaradıla bilmədi"));
+      }).catch((error) => setNotice(notifyCaughtError(error, "Tədbir yaradıla bilmədi", "Tədbir yaradılmadı")));
     });
   }
 
@@ -434,15 +390,16 @@ function CreateEventDialog({ defaultDate, action, disabled }: {
       <DialogTrigger asChild>
         <Button disabled={disabled}><Plus data-icon="inline-start" />Yeni tədbir</Button>
       </DialogTrigger>
-      <DialogContent className="workshop-dialog">
-        <DialogHeader>
+      <DialogContent className="workshop-dialog workshop-create-dialog">
+        <DialogHeader className="workshop-dialog-header">
           <DialogTitle>Yeni workshop / masterclass</DialogTitle>
           <DialogDescription>Tədbirin əsas detallarını və satış qiymətini daxil edin.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="workshop-dialog-form">
+        <div className="workshop-dialog-callout"><Info aria-hidden="true" />Yaratdıqdan sonra bütün məlumatları redaktə edə bilərsiniz.</div>
+        <form onSubmit={submit} className="workshop-dialog-form workshop-create-form">
           <FieldGroup>
             <div className="workshop-form-grid">
-              <Field><FieldLabel htmlFor="event-title">Tədbir adı</FieldLabel><Input id="event-title" name="title" required /></Field>
+              <Field><FieldLabel htmlFor="event-title">Tədbir adı</FieldLabel><Input id="event-title" name="title" placeholder="Məsələn: Rəqəmsal marketinq masterclass" required /></Field>
               <Field><FieldLabel>Növ</FieldLabel><FormSelect name="eventType" defaultValue="WORKSHOP" options={eventTypeOptions} /></Field>
               <Field><FieldLabel>Tarix</FieldLabel><DatePicker name="eventDate" defaultValue={defaultDate} required allowClear={false} popoverPlacement="floating" /></Field>
               <Field><FieldLabel htmlFor="event-time">Saat</FieldLabel><Input id="event-time" name="startTime" defaultValue="19:00" required /></Field>
@@ -450,15 +407,15 @@ function CreateEventDialog({ defaultDate, action, disabled }: {
               <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue="SCHEDULED" options={eventStatusOptions} /></Field>
               <Field><FieldLabel htmlFor="event-price">Giriş qiyməti</FieldLabel><Input id="event-price" name="entryPrice" inputMode="decimal" defaultValue="0" required /></Field>
               <Field><FieldLabel htmlFor="event-capacity">Tutum</FieldLabel><Input id="event-capacity" name="capacity" type="number" min={1} /></Field>
-              <Field><FieldLabel htmlFor="event-room">Məkan</FieldLabel><Input id="event-room" name="room" /></Field>
-              <Field><FieldLabel htmlFor="event-instructor">Təlimçi</FieldLabel><Input id="event-instructor" name="instructor" /></Field>
+              <Field><FieldLabel htmlFor="event-room">Məkan</FieldLabel><Input id="event-room" name="room" placeholder="Məsələn: Artmonia Ofis, Bakı" /></Field>
+              <Field><FieldLabel htmlFor="event-instructor">Təlimçi</FieldLabel><Input id="event-instructor" name="instructor" placeholder="Təlimçinin adı" /></Field>
             </div>
-            <Field><FieldLabel htmlFor="event-note">Qeyd</FieldLabel><textarea id="event-note" name="note" rows={3} /></Field>
+            <Field><FieldLabel htmlFor="event-note">Qeyd</FieldLabel><textarea id="event-note" name="note" rows={3} placeholder="Əlavə qeydlər və ya xüsusi məlumatlar..." /></Field>
           </FieldGroup>
           {notice ? <p className="workshop-form-error" role="alert">{notice}</p> : null}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button>
-            <Button disabled={pending}>{pending ? "Yaradılır..." : "Tədbir yarat"}</Button>
+            <Button type="submit" disabled={pending}>{pending ? "Yaradılır..." : "Tədbir yarat"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

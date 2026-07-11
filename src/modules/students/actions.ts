@@ -56,7 +56,7 @@ const studentLifecycleStatusValues = [
 ] as const;
 
 const createStudentSchema = z.object({
-  mode: z.enum(["lead", "manual"]).default("manual"),
+  mode: z.literal("lead").default("lead"),
   leadId: optionalUuid,
   fullName: z.string().trim().min(2).max(120),
   phone: z.string().trim().min(5).max(40),
@@ -65,6 +65,7 @@ const createStudentSchema = z.object({
   programId: z.string().uuid(),
   teacherId: optionalUuid,
   managerId: optionalUuid,
+  campaignId: optionalUuid,
   lifecycleStatus: z.enum(studentLifecycleStatusValues).default(StudentLifecycleStatus.GROUP_WAITING),
   registeredDate: z.string().trim().min(1).max(20),
   firstLessonDate: optionalText(20),
@@ -78,6 +79,7 @@ const createStudentSchema = z.object({
   paymentAmount: optionalAmount,
   paymentDate: optionalText(20),
   paymentMonth: optionalText(20),
+  nextPaymentDate: optionalText(20),
   paymentMethod: z.enum(studentPaymentMethodValues).default("CASH"),
   paymentNote: optionalText(240),
   returnTo: optionalText(260),
@@ -87,7 +89,8 @@ const recordPaymentSchema = z.object({
   studentId: z.string().uuid(),
   amount: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
   paidDate: z.string().trim().min(1).max(20),
-  paymentMonth: z.string().trim().min(1).max(20),
+  paymentMonth: optionalText(20),
+  nextPaymentDate: optionalText(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
   note: optionalText(240),
   returnTo: optionalText(260),
@@ -101,13 +104,17 @@ const updateStudentStatusSchema = z.object({
   returnTo: optionalText(260),
 });
 
+const deleteStudentSchema = z.object({
+  studentId: z.string().uuid(),
+});
+
 export async function createStudentAction(formData: FormData) {
   const actor = await requireMutationActor("student.create");
   const input = createStudentSchema.parse(Object.fromEntries(formData));
   const initialLifecycleStatus = StudentLifecycleStatus.GROUP_WAITING;
   input.lifecycleStatus = initialLifecycleStatus;
 
-  if (input.mode === "lead" && !actor.permissions.has("crm.lead.convert")) {
+  if (input.leadId && !actor.permissions.has("crm.lead.convert")) {
     throw new Error("Müraciəti tələbəyə çevirmək icazəsi yoxdur");
   }
 
@@ -139,8 +146,9 @@ export async function createStudentAction(formData: FormData) {
   const paymentDate = input.acceptPayment
     ? parseDateInput(input.paymentDate ?? "", "Ödəniş tarixi")
     : null;
-  const paymentMonth = input.acceptPayment
-    ? parseMonthInput(input.paymentMonth ?? "")
+  const paymentMonth = paymentDate ? startOfMonth(paymentDate) : null;
+  const nextPaymentAt = input.acceptPayment && input.nextPaymentDate
+    ? parseDateInput(input.nextPaymentDate, "Növbəti ödəniş tarixi")
     : null;
   const prisma = getPrisma();
 
@@ -154,7 +162,7 @@ export async function createStudentAction(formData: FormData) {
       throw new Error("Proqram tapılmadı");
     }
 
-    const lead = await resolveLeadForStudentCreation(tx, input.mode, input.leadId);
+    const lead = await resolveLeadForStudentCreation(tx, input.leadId);
     const contactId = lead
       ? await updateLeadContact(tx, {
           contactId: lead.contactId,
@@ -172,11 +180,17 @@ export async function createStudentAction(formData: FormData) {
     const studentCode = await generateStudentCode(tx);
     const managerId = input.managerId ?? lead?.managerId ?? actor.id;
 
+    const campaignId = input.campaignId ?? lead?.campaignId ?? null;
+    if (campaignId) {
+      const campaign = await tx.marketingCampaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+      if (!campaign) throw new Error("Kampaniya tapılmadı");
+    }
     const student = await tx.student.create({
       data: {
         code: studentCode,
         contactId,
         managerId,
+        campaignId,
         lifecycleStatus: input.lifecycleStatus,
         educationLevel: input.educationLevel ?? null,
         registeredAt,
@@ -185,10 +199,9 @@ export async function createStudentAction(formData: FormData) {
         statusHistory: {
           create: {
             newStatus: input.lifecycleStatus,
-            reason:
-              input.mode === "lead"
-                ? "Müraciətdən tələbə yaradıldı"
-                : "Tələbə sıfırdan yaradıldı",
+            reason: input.leadId
+              ? "Müraciətdən tələbə yaradıldı"
+              : "Tələbə birbaşa yaradıldı",
             note: input.notes ?? null,
             effectiveAt: firstLessonAt ?? registeredAt,
             changedById: actor.id,
@@ -241,6 +254,7 @@ export async function createStudentAction(formData: FormData) {
         amount: input.paymentAmount,
         paidAt: paymentDate,
         paymentMonth,
+        nextPaymentAt,
         method: input.paymentMethod,
         note: input.paymentNote ?? input.notes ?? null,
         actorId: actor.id,
@@ -278,6 +292,7 @@ export async function createStudentAction(formData: FormData) {
         studentCode: student.code,
         mode: input.mode,
         leadId: lead?.id ?? null,
+        campaignId,
         enrollmentId: enrollment.id,
         invoiceId: invoice?.id ?? null,
         paymentId: paymentResult?.payment.id ?? null,
@@ -301,6 +316,7 @@ export async function createStudentAction(formData: FormData) {
   revalidatePath("/crm");
   revalidatePath("/dashboard");
   revalidatePath("/finance");
+  revalidatePath("/marketing");
   invalidateStudentCaches();
   redirectToStudents(input.returnTo);
 }
@@ -309,7 +325,10 @@ export async function recordStudentPaymentAction(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = recordPaymentSchema.parse(Object.fromEntries(formData));
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
-  const paymentMonth = parseMonthInput(input.paymentMonth);
+  const paymentMonth = startOfMonth(paidAt);
+  const nextPaymentAt = input.nextPaymentDate
+    ? parseDateInput(input.nextPaymentDate, "Növbəti ödəniş tarixi")
+    : null;
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
@@ -318,6 +337,7 @@ export async function recordStudentPaymentAction(formData: FormData) {
       amount: input.amount,
       paidAt,
       paymentMonth,
+      nextPaymentAt,
       method: input.method,
       note: input.note ?? null,
       actorId: actor.id,
@@ -336,6 +356,7 @@ export async function recordStudentPaymentAction(formData: FormData) {
   revalidatePath("/students");
   revalidatePath("/dashboard");
   revalidatePath("/finance");
+  revalidatePath("/marketing");
   invalidatePaymentCaches();
   redirectToStudents(input.returnTo);
 }
@@ -416,17 +437,125 @@ export async function updateStudentStatusAction(formData: FormData) {
   redirectToStudents(input.returnTo);
 }
 
+export async function deleteStudentAction(formData: FormData) {
+  const actor = await requireMutationActor("student.update");
+  const input = deleteStudentSchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const student = await tx.student.findUnique({
+      where: { id: input.studentId },
+      select: { id: true, code: true, contactId: true },
+    });
+
+    if (!student) {
+      throw new Error("Tələbə tapılmadı");
+    }
+
+    const enrollmentIds = (
+      await tx.enrollment.findMany({
+        where: { studentId: student.id },
+        select: { id: true },
+      })
+    ).map((item) => item.id);
+    const paymentIds = (
+      await tx.payment.findMany({
+        where: { studentId: student.id },
+        select: { id: true },
+      })
+    ).map((item) => item.id);
+    const participantIds = (
+      await tx.workshopParticipant.findMany({
+        where: { studentId: student.id },
+        select: { id: true },
+      })
+    ).map((item) => item.id);
+
+    if (participantIds.length > 0) {
+      await tx.workshopPayment.deleteMany({
+        where: { participantId: { in: participantIds } },
+      });
+      await tx.workshopParticipant.deleteMany({
+        where: { id: { in: participantIds } },
+      });
+    }
+
+    if (enrollmentIds.length > 0 || paymentIds.length > 0) {
+      await tx.teacherPayoutLine.deleteMany({
+        where: {
+          OR: [
+            ...(enrollmentIds.length > 0
+              ? [{ enrollmentId: { in: enrollmentIds } }]
+              : []),
+            ...(paymentIds.length > 0
+              ? [{ paymentId: { in: paymentIds } }]
+              : []),
+          ],
+        },
+      });
+    }
+
+    await tx.refundAdjustment.deleteMany({ where: { studentId: student.id } });
+    await tx.invoice.deleteMany({ where: { studentId: student.id } });
+    await tx.payment.deleteMany({ where: { studentId: student.id } });
+    await tx.lead.updateMany({
+      where: { convertedStudentId: student.id },
+      data: { convertedStudentId: null },
+    });
+    await tx.task.deleteMany({
+      where: { entityType: "student", entityId: student.id },
+    });
+    await tx.student.delete({ where: { id: student.id } });
+
+    const contactStillUsed = await tx.contact.findUnique({
+      where: { id: student.contactId },
+      select: {
+        _count: {
+          select: {
+            leads: true,
+            students: true,
+            teacherProfiles: true,
+            studentRelationships: true,
+          },
+        },
+      },
+    });
+
+    if (
+      contactStillUsed &&
+      Object.values(contactStillUsed._count).every((count) => count === 0)
+    ) {
+      await tx.contact.delete({ where: { id: student.contactId } });
+    }
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "student.delete",
+      entityType: "student",
+      entityId: student.id,
+      before: { studentCode: student.code },
+      reason: `${student.code} kodlu tələbə bütün bağlı məlumatları ilə silindi`,
+    });
+  });
+
+  revalidatePath("/students");
+  revalidatePath("/crm");
+  revalidatePath("/dashboard");
+  revalidatePath("/finance");
+  revalidatePath("/marketing");
+  revalidatePath("/groups");
+  revalidatePath("/workshops");
+  invalidateStudentCaches();
+  invalidatePaymentCaches();
+  redirect("/students");
+}
+
 async function resolveLeadForStudentCreation(
   tx: Prisma.TransactionClient,
-  mode: "lead" | "manual",
   leadId: string | undefined
 ) {
-  if (mode !== "lead") {
-    return null;
-  }
-
   if (!leadId) {
-    throw new Error("Müraciət seçilməlidir");
+    return null;
   }
 
   const lead = await tx.lead.findUnique({
@@ -436,6 +565,7 @@ async function resolveLeadForStudentCreation(
       stage: true,
       contactId: true,
       managerId: true,
+      campaignId: true,
       convertedStudentId: true,
       contact: {
         select: {
@@ -566,6 +696,7 @@ async function createPaymentAndAllocate(
     amount: number;
     paidAt: Date;
     paymentMonth: Date;
+    nextPaymentAt: Date | null;
     method: (typeof studentPaymentMethodValues)[number];
     note: string | null;
     actorId: string;
@@ -590,11 +721,45 @@ async function createPaymentAndAllocate(
           dueDate: true,
         },
       },
+      enrollments: {
+        where: { status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] } },
+        orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: { monthlyFee: true },
+      },
     },
   });
 
   if (!student) {
     throw new Error("Tələbə tapılmadı");
+  }
+
+  const monthlyFee = toNumber(student.enrollments[0]?.monthlyFee);
+  const nextPaymentAt = input.nextPaymentAt ??
+    (monthlyFee > 0 && input.amount >= monthlyFee ? addUtcMonths(input.paidAt, 1) : null);
+  let invoices = student.invoices;
+  const periodMonth = startOfMonth(input.paidAt);
+
+  if (monthlyFee > 0 && invoices.length === 0) {
+    const invoice = await tx.invoice.upsert({
+      where: {
+        idempotencyKey: `student-month-${student.code}-${periodMonth.toISOString().slice(0, 10)}`,
+      },
+      update: {},
+      create: {
+        studentId: student.id,
+        enrollmentId: null,
+        periodMonth,
+        issueDate: input.paidAt,
+        dueDate: input.paidAt,
+        amount: monthlyFee,
+        balanceDue: monthlyFee,
+        status: InvoiceStatus.OPEN,
+        idempotencyKey: `student-month-${student.code}-${periodMonth.toISOString().slice(0, 10)}`,
+      },
+      select: { id: true, amount: true, balanceDue: true, dueDate: true },
+    });
+    invoices = [invoice];
   }
 
   const payment = await tx.payment.create({
@@ -603,6 +768,7 @@ async function createPaymentAndAllocate(
       amount: input.amount,
       paidAt: input.paidAt,
       paymentMonth: input.paymentMonth,
+      nextPaymentAt,
       method: input.method as PaymentMethod,
       note: input.note,
       createdById: input.actorId,
@@ -612,6 +778,7 @@ async function createPaymentAndAllocate(
       amount: true,
       paidAt: true,
       paymentMonth: true,
+      nextPaymentAt: true,
       method: true,
     },
   });
@@ -619,7 +786,7 @@ async function createPaymentAndAllocate(
   let remainingAmount = input.amount;
   const allocations: Array<{ invoiceId: string; amount: number }> = [];
 
-  for (const invoice of student.invoices) {
+  for (const invoice of invoices) {
     if (remainingAmount <= 0) {
       break;
     }
@@ -745,17 +912,6 @@ function parseDateInput(value: string, fieldName: string) {
   return date;
 }
 
-function parseMonthInput(value: string) {
-  const trimmed = value.trim();
-  const monthMatch = trimmed.match(/^(\d{4})-(\d{2})$/);
-
-  if (monthMatch) {
-    return new Date(`${monthMatch[1]}-${monthMatch[2]}-01T00:00:00.000Z`);
-  }
-
-  return parseDateInput(trimmed, "Ödəniş ayı");
-}
-
 function normalizeDateValue(value: string) {
   const trimmed = value.trim();
 
@@ -799,6 +955,12 @@ function resolveInvoiceStatus({
 
 function startOfMonth(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1));
+}
+
+function addUtcMonths(value: Date, months: number) {
+  const result = new Date(value);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  return result;
 }
 
 function roundMoney(value: number) {

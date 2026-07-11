@@ -93,41 +93,11 @@ export function StudentPaymentDialogClient({
               <strong><CreditCard />{selectedStudent.balance}</strong>
             </div>
 
+            <PaymentScheduleFields student={selectedStudent} />
             <div className="field-grid">
-              <label className="form-field">
-                <span>Məbləğ</span>
-                <Input
-                  name="amount"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  defaultValue={selectedStudent.detail.paymentDefaultAmount}
-                  required
-                />
-              </label>
               <label className="form-field">
                 <span>Metod</span>
                 <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
-              </label>
-            </div>
-
-            <div className="field-grid">
-              <label className="form-field">
-                <span>Ödəniş tarixi</span>
-                <DatePicker
-                  name="paidDate"
-                  defaultValue={selectedStudent.detail.paymentDefaultDate}
-                  allowClear={false}
-                  required
-                />
-              </label>
-              <label className="form-field">
-                <span>Ödəniş ayı</span>
-                <Input
-                  name="paymentMonth"
-                  type="month"
-                  defaultValue={selectedStudent.detail.paymentDefaultMonth}
-                  required
-                />
               </label>
             </div>
 
@@ -154,4 +124,72 @@ export function StudentPaymentDialogClient({
       </DialogContent>
     </Dialog>
   );
+}
+
+function PaymentScheduleFields({ student }: { student: StudentRow }) {
+  const [amount, setAmount] = useState(student.detail.paymentDefaultAmount);
+  const [paidDate, setPaidDate] = useState(student.detail.paymentDefaultDate);
+  const [nextPaymentDate, setNextPaymentDate] = useState(() => addOneMonth(paidDate));
+
+  function updateAutomaticDate(nextAmount: string, nextPaidDate: string) {
+    if (toAmount(nextAmount) >= toAmount(student.detail.monthlyFee)) {
+      setNextPaymentDate(addOneMonth(nextPaidDate));
+    }
+  }
+
+  return (
+    <div className="student-payment-schedule-grid">
+      <label className="form-field">
+        <span>Məbləğ</span>
+        <Input
+          name="amount"
+          inputMode="decimal"
+          placeholder="0.00"
+          value={amount}
+          onChange={(event) => {
+            setAmount(event.target.value);
+            updateAutomaticDate(event.target.value, paidDate);
+          }}
+          required
+        />
+      </label>
+      <label className="form-field">
+        <span>Ödəniş tarixi</span>
+        <DatePicker
+          name="paidDate"
+          value={paidDate}
+          onValueChange={(value) => {
+            setPaidDate(value);
+            updateAutomaticDate(amount, value);
+          }}
+          allowClear={false}
+          popoverPlacement="floating"
+          required
+        />
+      </label>
+      <label className="form-field">
+        <span>Növbəti ödəniş tarixi</span>
+        <DatePicker
+          name="nextPaymentDate"
+          value={nextPaymentDate}
+          onValueChange={setNextPaymentDate}
+          allowClear={false}
+          popoverPlacement="floating"
+          required
+        />
+      </label>
+    </div>
+  );
+}
+
+function toAmount(value: string) {
+  return Number(value.replace(",", ".")) || 0;
+}
+
+function addOneMonth(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  return date.toISOString().slice(0, 10);
 }

@@ -1,6 +1,7 @@
 import { TaskStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
+import { scopeFor } from "@/server/rbac/permissions";
 
 export type TaskRow = {
   id: string;
@@ -28,11 +29,13 @@ export type TaskData = {
 export async function getTaskData(): Promise<TaskData> {
   const actor = await requireErpActor("task.read");
   const prisma = getPrisma();
-  const canManage = actor.permissions.has("task.manage");
+  const manageScope = scopeFor(actor.permissions, "task.manage");
+  const canManage = manageScope !== null;
+  const canManageAll = manageScope === "ALL";
 
   const [tasks, employees] = await Promise.all([
     prisma.task.findMany({
-      where: canManage ? undefined : { ownerUserId: actor.id },
+      where: canManageAll ? undefined : { ownerUserId: actor.id },
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
       take: 250,
       select: {
@@ -45,13 +48,13 @@ export async function getTaskData(): Promise<TaskData> {
         ownerUser: { select: { fullName: true } },
       },
     }),
-    canManage
+    canManageAll
       ? prisma.user.findMany({
           where: { isActive: true },
           orderBy: { fullName: "asc" },
           select: { id: true, fullName: true },
         })
-      : Promise.resolve([]),
+      : Promise.resolve(canManage ? [{ id: actor.id, fullName: actor.fullName }] : []),
   ]);
 
   const now = new Date();

@@ -1,0 +1,143 @@
+.workspace { min-height: calc(100vh - 72px); color: #15233a; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 10px; padding: 15px 18px; border: 1px solid #e2e8f0; border-radius: 16px; background: linear-gradient(135deg, #fff 0%, #fbfcff 68%, #fff4e8 100%); box-shadow: 0 8px 24px rgb(15 23 42 / 5%); }
+.titleBlock, .matrixToolbar > div:first-child, .panelHeading, .moduleHeader, .saveBar, .headerStats { display: flex; align-items: center; gap: 12px; }
+.titleIcon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(135deg, #e57615, #c85c05); box-shadow: 0 7px 15px rgb(217 106 8 / 22%); }
+.titleIcon svg { width: 23px; height: 23px; }
+.titleBlock p { margin: 0 0 2px; color: #d96a08; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.titleBlock h1 { margin: 0; color: #15233a; font-size: 21px; letter-spacing: -.03em; }
+.titleBlock > div > span { color: #718096; font-size: 12.5px; }
+.headerStats { flex-wrap: wrap; justify-content: flex-end; }
+.headerStats > span { display: grid; padding: 8px 12px; border: 1px solid #e8edf4; border-radius: 11px; background: #fff; color: #7b8798; font-size: 10px; }
+.headerStats strong { color: #26364f; font-size: 15px; }
+.layout { display: grid; grid-template-columns: 226px minmax(0, 1fr); gap: 10px; align-items: start; }
+.rolePanel, .matrixPanel { border: 1px solid #e2e8f0; border-radius: 15px; background: #fff; box-shadow: 0 8px 24px rgb(15 23 42 / 4%); }
+.rolePanel { position: sticky; top: 12px; padding: 14px; }
+.panelHeading { justify-content: space-between; padding: 2px 2px 9px; }
+.panelHeading button { height: 29px; padding-inline: 9px; font-size: 10px; }
+.panelHeading > div { display: grid; gap: 2px; }
+.panelHeading span { font-size: 14px; font-weight: 800; }
+.panelHeading small { color: #8a96a8; font-size: 10px; }
+.roleList { display: flex; flex-direction: column; gap: 5px; }
+.roleButton, .activeRole { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; min-height: 47px; padding: 7px; border: 1px solid transparent; border-radius: 10px; color: #53627a; text-align: left; background: transparent; }
+.roleButton:hover { border-color: #e4e9f1; background: #f8fafc; }
+.activeRole { border-color: #f0c89f; color: #a84700; background: #fff5ea; box-shadow: inset 3px 0 #d96a08; }
+.roleButton > svg, .activeRole > svg { width: 16px; height: 16px; color: #a3adbb; }
+.roleAvatar, .selectedRoleAvatar { display: grid; place-items: center; border-radius: 10px; color: #53627a; background: #edf1f6; font-size: 10px; font-weight: 850; }
+.roleAvatar { width: 30px; height: 30px; }
+.activeRole .roleAvatar, .selectedRoleAvatar { color: #fff; background: linear-gradient(135deg, #e57615, #c85c05); }
+.roleCopy { display: grid; gap: 3px; min-width: 0; }
+.roleCopy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.roleCopy small { display: flex; align-items: center; gap: 4px; color: #8a96a8; font-size: 9px; }
+.roleCopy small svg { width: 11px; height: 11px; }
+.roleNotice { display: flex; gap: 9px; margin-top: 13px; padding: 10px; border: 1px solid #e6eaf0; border-radius: 12px; color: #6e7b8e; background: #f8fafc; }
+.roleNotice > svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 2px; }
+.roleNotice p { display: grid; gap: 3px; margin: 0; }
+.roleNotice strong { color: #42516a; font-size: 10px; }
+.roleNotice span { font-size: 9px; line-height: 1.45; }
+.matrixPanel { min-width: 0; overflow: hidden; }
+.matrixToolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 17px 19px; border-bottom: 1px solid #e7ebf1; }
+.toolbarActions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; width: min(380px, 48%); }
+.toolbarActions .searchBox { width: 100%; }
+.selectedRoleAvatar { width: 42px; height: 42px; font-size: 12px; }
+.matrixToolbar h2 { margin: 0; font-size: 17px; }
+.matrixToolbar p { margin: 3px 0 0; color: #8894a5; font-size: 10px; }
+.searchBox { position: relative; width: min(330px, 40%); }
+.searchBox > svg { position: absolute; top: 50%; left: 11px; z-index: 1; width: 15px; height: 15px; color: #929daf; transform: translateY(-50%); }
+.searchBox input { height: 38px; padding-left: 34px; border-radius: 11px; background: #f8fafc; font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 10px 19px; border-bottom: 1px solid #edf0f4; color: #758297; background: #fbfcfd; font-size: 9px; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend i { width: 7px; height: 7px; border-radius: 50%; }
+.allowedDot { background: #d96a08; }
+.sensitiveDot { background: #d43f5e; }
+.moduleStack { display: flex; flex-direction: column; gap: 12px; padding: 14px; padding-bottom: 86px; }
+.moduleCard { overflow: hidden; border: 1px solid #e4e9f0; border-radius: 15px; background: #fff; }
+.moduleHeader { justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid #e8ecf2; background: linear-gradient(90deg, #f8fafc, #fff); }
+.moduleHeader h3 { margin: 0; color: #28384f; font-size: 12px; }
+.moduleHeader p { margin: 3px 0 0; color: #929daf; font-size: 9px; }
+.moduleHeader > div:last-child { display: flex; gap: 4px; }
+.moduleHeader button { height: 28px; font-size: 9px; }
+.tableScroll { overflow-x: auto; }
+.matrixTable { width: 100%; min-width: 920px; border-collapse: collapse; table-layout: fixed; }
+.matrixTable th { height: 35px; padding: 7px 8px; border-bottom: 1px solid #e8ecf2; color: #7c889b; background: #fbfcfd; font-size: 8.5px; font-weight: 750; text-align: center; }
+.matrixTable th:first-child { width: 220px; text-align: left; }
+.matrixTable th:last-child { width: 190px; }
+.matrixTable td { padding: 9px 8px; border-bottom: 1px solid #edf0f4; color: #526077; font-size: 9px; text-align: center; vertical-align: middle; }
+.matrixTable tr:last-child td { border-bottom: 0; }
+.matrixTable td:first-child { text-align: left; }
+.matrixTable td:first-child strong { display: block; color: #34445c; font-size: 10.5px; }
+.matrixTable td:first-child small { display: -webkit-box; margin-top: 3px; overflow: hidden; color: #9aa4b2; font-size: 8.5px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.cellStack { display: flex; flex-direction: column; gap: 5px; align-items: center; }
+.permissionControl, .changedPermission { display: flex; flex-direction: column; gap: 4px; align-items: center; padding: 3px; border-radius: 8px; }
+.changedPermission { background: #fff2e5; box-shadow: 0 0 0 1px #f1c89e; }
+.permissionControl label, .changedPermission label { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 20px; }
+.permissionControl input, .changedPermission input { width: 15px; height: 15px; accent-color: #d96a08; }
+.permissionControl label span, .changedPermission label span { max-width: 100px; font-size: 8px; }
+.permissionControl label i, .changedPermission label i { width: 5px; height: 5px; border-radius: 50%; background: #d43f5e; }
+.permissionControl select, .changedPermission select { max-width: 88px; height: 22px; padding: 0 5px; border: 1px solid #dce2ea; border-radius: 6px; color: #66758b; background: #fff; font-size: 7.5px; }
+.unavailable { color: #c2c9d2; }
+.saveBar { position: absolute; right: 15px; bottom: 15px; left: 15px; justify-content: space-between; padding: 12px 14px; border: 1px solid #dde3eb; border-radius: 14px; background: rgb(255 255 255 / 96%); box-shadow: 0 12px 34px rgb(15 23 42 / 12%); backdrop-filter: blur(12px); }
+.matrixPanel { position: relative; }
+.saveBar > div { display: grid; gap: 2px; }
+.saveBar strong { font-size: 10px; }
+.saveBar span { color: #8a96a8; font-size: 8.5px; }
+.success, .error { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 13px; border: 1px solid; border-radius: 11px; font-size: 10px; font-weight: 650; }
+.success { border-color: #bce3d1; color: #14734b; background: #edf9f3; }
+.error { border-color: #f0c2cb; color: #ad2945; background: #fff1f3; }
+.success svg, .error svg { width: 15px; height: 15px; }
+.confirmDialog { width: min(calc(100vw - 32px), 600px); }
+.createRoleDialog { width: min(calc(100vw - 28px), 980px); max-width: 980px; }
+.createRoleLayout { display: grid; gap: 14px; min-height: 0; }
+.permissionPickerHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #e1e6ed; border-radius: 11px; background: #f8fafc; }
+.permissionPickerHeading > div { display: grid; gap: 2px; }
+.permissionPickerHeading strong { color: #334158; font-size: 11px; }
+.permissionPickerHeading span { color: #8994a5; font-size: 9px; }
+.permissionPicker { display: grid; gap: 9px; max-height: 48vh; padding-right: 4px; overflow-y: auto; }
+.permissionPicker > section { overflow: hidden; border: 1px solid #e3e8ef; border-radius: 11px; }
+.permissionPicker > section > header { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: #f7f9fc; }
+.permissionPicker > section > header strong { color: #35435a; font-size: 10.5px; }
+.permissionPicker > section > header div { display: flex; gap: 8px; }
+.permissionPicker > section > header button { padding: 0; border: 0; color: #c65b06; background: transparent; font-size: 8.5px; font-weight: 700; }
+.permissionPickerRow { display: grid; grid-template-columns: minmax(145px, .7fr) minmax(0, 2fr); gap: 10px; align-items: start; padding: 8px 10px; border-top: 1px solid #edf0f4; }
+.permissionPickerRow > div:first-child { display: grid; gap: 2px; }
+.permissionPickerRow > div:first-child strong { font-size: 9.5px; }
+.permissionPickerRow > div:first-child small { color: #949eac; font-size: 8px; }
+.permissionPickerRow > div:last-child { display: flex; flex-wrap: wrap; gap: 5px; }
+.permissionPickerRow label { display: flex; align-items: center; gap: 4px; min-height: 26px; padding: 3px 6px; border: 1px solid #e2e7ee; border-radius: 7px; color: #647187; background: #fff; font-size: 8px; }
+.permissionPickerRow label:has(input:checked) { border-color: #efc69f; color: #ad4c04; background: #fff6ed; }
+.permissionPickerRow input { accent-color: #d96a08; }
+.permissionPickerRow select { width: auto; height: 20px; padding: 0 4px; border: 1px solid #dce2ea; border-radius: 5px; font-size: 7px; }
+.changeSummary { display: flex; flex-wrap: wrap; gap: 6px; max-height: 130px; overflow: auto; }
+.confirmDialog textarea { width: 100%; min-height: 86px; padding: 10px 12px; resize: vertical; border: 1px solid #d8dee8; border-radius: 10px; color: #26364f; background: #fff; font: inherit; font-size: 11px; }
+.confirmDialog textarea:focus { border-color: #d96a08; outline: 3px solid rgb(217 106 8 / 12%); }
+.confirmDialog select, .auditToolbar select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #d8dee8; border-radius: 9px; color: #445169; background: #fff; font-size: 11px; }
+.mainTabs > [role="tablist"] { width: fit-content; margin: 0 0 10px 2px; }
+.mainTabs [role="tab"] { gap: 7px; font-size: 11px; }
+.mainTabs [role="tabpanel"] { margin: 0; }
+.auditPanel { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 15px; background: #fff; box-shadow: 0 8px 24px rgb(15 23 42 / 4%); }
+.auditStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px; border-bottom: 1px solid #edf0f4; background: #fbfcfd; }
+.auditStats > div { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border: 1px solid #e7ebf1; border-radius: 10px; background: #fff; color: #7a8799; font-size: 10px; }
+.auditStats svg { width: 16px; color: #d96a08; }
+.auditStats span { display: grid; }
+.auditStats strong { color: #26364f; font-size: 15px; }
+.auditToolbar { display: grid; grid-template-columns: minmax(240px, 1fr) 190px 140px auto; gap: 8px; align-items: center; padding: 11px 13px; border-bottom: 1px solid #e7ebf1; }
+.auditToolbar .searchBox { width: 100%; }
+.auditTableWrap { overflow-x: auto; }
+.auditTable { width: 100%; min-width: 900px; border-collapse: collapse; }
+.auditTable th { padding: 8px 12px; color: #7c889b; background: #fbfcfd; font-size: 9px; text-align: left; }
+.auditTable td { padding: 9px 12px; border-top: 1px solid #edf0f4; color: #536178; font-size: 10px; vertical-align: middle; }
+.auditTable td strong, .auditTable td small { display: block; }
+.auditTable td strong { color: #35445a; font-size: 10.5px; }
+.auditTable td small { max-width: 210px; margin-top: 2px; overflow: hidden; color: #929daf; font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+.auditTable td > span { display: -webkit-box; max-width: 260px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.auditDialog { width: min(calc(100vw - 32px), 850px); }
+.auditDetail dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 12px; }
+.auditDetail dl div { padding: 9px; border-radius: 9px; background: #f7f9fc; }
+.auditDetail dt { color: #8a96a8; font-size: 9px; }
+.auditDetail dd { margin: 3px 0 0; overflow-wrap: anywhere; color: #3d4b61; font-size: 10px; }
+.jsonGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.jsonGrid section { min-width: 0; overflow: hidden; border: 1px solid #e4e9f0; border-radius: 10px; }
+.jsonGrid h4 { margin: 0; padding: 8px 10px; border-bottom: 1px solid #e4e9f0; background: #f8fafc; font-size: 10px; }
+.jsonGrid pre { max-height: 340px; margin: 0; padding: 10px; overflow: auto; color: #445169; background: #fff; font-size: 9px; white-space: pre-wrap; }
+.empty { display: grid; min-height: 180px; place-items: center; color: #8a96a8; font-size: 12px; }
+@media (max-width: 1050px) { .layout { grid-template-columns: 1fr; } .rolePanel { position: static; } .roleList { display: grid; grid-template-columns: repeat(3, 1fr); } .roleNotice { display: none; } }
+@media (max-width: 760px) { .header, .matrixToolbar { align-items: flex-start; flex-direction: column; } .headerStats { justify-content: flex-start; } .layout { gap: 10px; } .roleList { grid-template-columns: 1fr 1fr; } .searchBox, .toolbarActions { width: 100%; } .moduleStack { padding: 8px; padding-bottom: 95px; } .saveBar { align-items: stretch; flex-direction: column; } .saveBar button { width: 100%; } .auditStats { grid-template-columns: 1fr; } .auditToolbar { grid-template-columns: 1fr 1fr; } .auditToolbar .searchBox { grid-column: 1 / -1; } .jsonGrid, .auditDetail dl { grid-template-columns: 1fr; } }

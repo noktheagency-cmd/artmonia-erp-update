@@ -1,0 +1,26 @@
+- generic [ref=f41e1]:
+  - main [ref=f41e2]:
+    - generic:
+      - generic:
+        - generic: A
+        - generic: R
+        - generic: T
+        - generic: M
+        - generic: O
+        - generic: "N"
+        - generic: I
+        - generic: A
+    - generic "Artmonia ERP" [ref=f41e3]:
+      - img "Artmonia" [ref=f41e4]
+    - region "Sign in" [ref=f41e5]:
+      - heading "Sign in" [level=1] [ref=f41e8]
+      - generic [ref=f41e9]:
+        - generic [ref=f41e10]:
+          - generic [ref=f41e11]: Email
+          - textbox "Email" [active] [ref=f41e13]
+        - generic [ref=f41e15]:
+          - generic [ref=f41e16]: Password
+          - textbox "Password" [ref=f41e18]
+        - button "Sign in" [ref=f41e20] [cursor=pointer]
+  - generic "Sistem bildirişləri"
+  - button "Open Next.js Dev Tools" [ref=f41e31] [cursor=pointer]

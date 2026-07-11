@@ -11,15 +11,13 @@ import {
   LeadStage,
   PaymentAllocationMode,
   PaymentMethod,
+  PermissionScope,
   PrismaClient,
   StudentLifecycleStatus,
   TaskStatus,
   type Teacher,
 } from "../src/generated/prisma/client";
-import {
-  permissionCatalog,
-  rolePermissionMap,
-} from "../src/server/rbac/permissions";
+import { permissionCatalog } from "../src/server/rbac/permissions";
 
 dotenv.config({ path: ".env.local" });
 dotenv.config();
@@ -43,14 +41,6 @@ function date(value: string) {
 
 function month(value: string) {
   return date(`${value}-01`);
-}
-
-function roleName(role: AppRole) {
-  return role
-    .toLowerCase()
-    .split("_")
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 async function resetDemoData() {
@@ -93,10 +83,12 @@ async function resetDemoData() {
 
 async function seedRolesAndUsers() {
   await prisma.role.createMany({
-    data: Object.values(AppRole).map((code) => ({
-      code,
-      name: roleName(code),
-    })),
+    data: [
+      { code: AppRole.SUPER_ADMIN, key: "super_admin", name: "Super Admin", isSystem: true },
+      { code: AppRole.SALES, key: "sales", name: "Satış təmsilçisi", isSystem: true },
+      { code: AppRole.TEACHER, key: "teacher", name: "Müəllim", isSystem: true },
+      { code: null, key: "marketing", name: "Marketing", isSystem: false },
+    ],
   });
 
   await prisma.permission.createMany({
@@ -109,28 +101,45 @@ async function seedRolesAndUsers() {
   const roles = await prisma.role.findMany();
   const permissions = await prisma.permission.findMany();
   const roleByCode = new Map(roles.map((role) => [role.code, role]));
+  const roleByKey = new Map(roles.map((role) => [role.key, role]));
   const permissionByCode = new Map(permissions.map((permission) => [permission.code, permission]));
 
+  const grants = [
+    ...permissionCatalog.map(([code]) => ({ roleKey: "super_admin", code, scope: PermissionScope.ALL })),
+    { roleKey: "sales", code: "dashboard.sales.read", scope: PermissionScope.ALL },
+    { roleKey: "sales", code: "hr.bonus.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "crm.lead.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "crm.lead.create", scope: PermissionScope.ALL },
+    { roleKey: "sales", code: "crm.lead.update", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "crm.lead.delete", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "crm.lead.convert", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "student.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "task.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "task.manage", scope: PermissionScope.ASSIGNED },
+    { roleKey: "sales", code: "playbook.read", scope: PermissionScope.ALL },
+    { roleKey: "teacher", code: "dashboard.teacher.read", scope: PermissionScope.ALL },
+    { roleKey: "teacher", code: "hr.bonus.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "teacher", code: "group.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "teacher", code: "attendance.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "teacher", code: "attendance.manage", scope: PermissionScope.ASSIGNED },
+    { roleKey: "teacher", code: "task.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "teacher", code: "task.manage", scope: PermissionScope.ASSIGNED },
+    { roleKey: "teacher", code: "playbook.read", scope: PermissionScope.ALL },
+    { roleKey: "marketing", code: "dashboard.marketing.read", scope: PermissionScope.ALL },
+    { roleKey: "marketing", code: "hr.bonus.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "marketing", code: "marketing.read", scope: PermissionScope.ALL },
+    { roleKey: "marketing", code: "marketing.manage", scope: PermissionScope.ALL },
+    { roleKey: "marketing", code: "task.read", scope: PermissionScope.ASSIGNED },
+    { roleKey: "marketing", code: "task.manage", scope: PermissionScope.ASSIGNED },
+    { roleKey: "marketing", code: "playbook.read", scope: PermissionScope.ALL },
+  ] as const;
+
   await prisma.rolePermission.createMany({
-    data: Object.entries(rolePermissionMap).flatMap(([roleCode, permissionCodes]) => {
-      const role = roleByCode.get(roleCode as AppRole);
+    data: grants.flatMap(({ roleKey, code, scope }) => {
+      const role = roleByKey.get(roleKey);
+      const permission = permissionByCode.get(code);
 
-      if (!role) {
-        return [];
-      }
-
-      return permissionCodes.flatMap((permissionCode) => {
-        const permission = permissionByCode.get(permissionCode);
-
-        return permission
-          ? [
-              {
-                roleId: role.id,
-                permissionId: permission.id,
-              },
-            ]
-          : [];
-      });
+      return role && permission ? [{ roleId: role.id, permissionId: permission.id, scope }] : [];
     }),
   });
 
@@ -166,10 +175,8 @@ async function seedRolesAndUsers() {
 
   const userByEmail = new Map(users.map((user) => [user.email, user]));
   const assignments: Array<[string, AppRole]> = [
-    ["owner@artmonia.local", AppRole.OWNER],
-    ["admin@artmonia.local", AppRole.ADMIN],
+    ["owner@artmonia.local", AppRole.SUPER_ADMIN],
     ["sales@artmonia.local", AppRole.SALES],
-    ["finance@artmonia.local", AppRole.FINANCE],
     ["aysel.teacher@artmonia.local", AppRole.TEACHER],
   ];
 
@@ -665,6 +672,7 @@ async function seedFinanceExpenseLedger(input: {
     ["Kommunal", "Isiq, su, internet ve gundelik ofis xercleri"],
     ["Marketing", "Reklam, kontent ve satis kampaniyalari"],
     ["Material", "Ders materiallari ve inventar"],
+    ["Diger", "Diger cari ve birdəfəlik xercler"],
   ] as const;
 
   const categories = await prisma.financeExpenseCategory.createManyAndReturn({

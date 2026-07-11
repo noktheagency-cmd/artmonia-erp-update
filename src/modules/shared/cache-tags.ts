@@ -6,4 +6,5 @@ export const erpCacheTags = {
   workshops: "erp:workshops",
   groups: "erp:groups",
   attendance: "erp:attendance",
+  marketing: "erp:marketing",
 } as const;

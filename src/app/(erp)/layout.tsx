@@ -22,7 +22,9 @@ export default async function ErpLayout({
       currentUser={{
         fullName: actor.fullName,
         email: actor.email,
+        profilePhotoUrl: actor.profilePhotoUrl,
         roles: actor.roles,
+        permissions: [...actor.permissions.keys()],
       }}
       signOutAction={signOutAction}
     >

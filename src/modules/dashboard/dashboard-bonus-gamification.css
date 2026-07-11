@@ -1,0 +1,75 @@
+.dashboard-bonus-card {
+  --bonus-accent: var(--role-accent, #5d62de);
+  min-width: 0;
+  border: 0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 14px 42px rgba(35, 43, 74, .075);
+}
+
+.dashboard-bonus-header { align-items: center; }
+.dashboard-bonus-header [data-slot="card-title"] { color: #20283a; font-size: 16px; font-weight: 760; letter-spacing: -.025em; }
+.dashboard-bonus-header [data-slot="card-description"] { margin-top: 2px; font-size: 10px; }
+.dashboard-bonus-actions { display: flex; align-items: center; gap: 8px; }
+.dashboard-bonus-actions > a { display: grid; place-items: center; width: 30px; height: 30px; color: var(--bonus-accent); border: 1px solid #e2e5ec; border-radius: 9px; }
+.dashboard-bonus-actions svg { width: 15px; }
+
+.dashboard-bonus-content { display: grid; gap: 14px; }
+.dashboard-bonus-scene { display: grid; grid-template-columns: minmax(300px, 1.3fr) minmax(260px, .7fr); min-height: 290px; overflow: hidden; background: #f8f9fd; border: 1px solid #e7e9f0; border-radius: 15px; }
+.dashboard-bonus-illustration-wrap { position: relative; min-height: 290px; overflow: hidden; background: #fff; }
+.dashboard-bonus-illustration-wrap .hr-bonus-illustration-backdrop { inset: -1% -6% -10%; }
+.dashboard-bonus-illustration-wrap .hr-bonus-mascot-anchor { bottom: 2%; width: clamp(170px, 42%, 245px); }
+.dashboard-bonus-illustration-wrap .hr-bonus-mascot-shadow { bottom: 5%; }
+.dashboard-bonus-progress-panel { display: flex; flex-direction: column; gap: 14px; justify-content: center; padding: 20px; border-left: 1px solid #e6e8f0; }
+.dashboard-bonus-score { display: grid; gap: 2px; }
+.dashboard-bonus-score span { color: #858e9f; font-size: 9px; font-weight: 720; }
+.dashboard-bonus-score strong { color: var(--bonus-accent); font-size: 38px; line-height: 1; letter-spacing: -.055em; }
+.dashboard-bonus-score small { color: #7b8495; font-size: 9px; }
+.dashboard-bonus-progress-panel [data-slot="progress"] { gap: 7px; }
+.dashboard-bonus-progress-panel [data-slot="progress-label"],
+.dashboard-bonus-progress-panel [data-slot="progress-value"] { font-size: 9px; }
+.dashboard-bonus-progress-panel [data-slot="progress-track"] { height: 7px; background: #e4e7ef; }
+.dashboard-bonus-progress-panel [data-slot="progress-indicator"] { background: linear-gradient(90deg, var(--bonus-accent), color-mix(in srgb, var(--bonus-accent) 68%, #fff)); }
+.dashboard-bonus-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dashboard-bonus-stat-grid > div { display: grid; grid-template-columns: 20px 1fr; gap: 1px 7px; align-items: center; min-width: 0; padding: 9px; background: #fff; border: 1px solid #e6e9ef; border-radius: 10px; }
+.dashboard-bonus-stat-grid svg { grid-row: 1 / 3; width: 16px; color: var(--bonus-accent); }
+.dashboard-bonus-stat-grid span { color: #8a93a3; font-size: 8px; }
+.dashboard-bonus-stat-grid strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+.dashboard-bonus-milestones { position: relative; display: grid; grid-template-columns: repeat(var(--dashboard-milestones, 4), minmax(0, 1fr)); gap: 6px; }
+.dashboard-bonus-milestones::before { position: absolute; top: 17px; right: 8%; left: 8%; height: 3px; background: #e4e7ed; border-radius: 99px; content: ""; }
+.dashboard-bonus-milestones > div { position: relative; display: grid; justify-items: center; gap: 3px; text-align: center; }
+.dashboard-bonus-milestones > div > span { z-index: 1; display: grid; width: 34px; height: 34px; place-items: center; color: #9ca4b2; background: #f0f2f5; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #dfe3ea; }
+.dashboard-bonus-milestones svg { width: 13px; }
+.dashboard-bonus-milestones .is-reached > span { color: #fff; background: var(--bonus-accent); box-shadow: 0 0 0 1px var(--bonus-accent), 0 8px 18px color-mix(in srgb, var(--bonus-accent) 22%, transparent); }
+.dashboard-bonus-milestones .is-current > span { color: var(--bonus-accent); background: #fff; box-shadow: 0 0 0 2px var(--bonus-accent), 0 0 0 7px color-mix(in srgb, var(--bonus-accent) 9%, transparent); }
+.dashboard-bonus-milestones strong { color: #374056; font-size: 10px; }
+.dashboard-bonus-milestones small { color: #939baa; font-size: 8px; }
+
+.dashboard-bonus-card.is-empty { min-height: 250px; }
+.dashboard-bonus-empty-content { display: grid; grid-template-columns: minmax(260px, .9fr) minmax(260px, 1.1fr); align-items: center; gap: 14px; min-height: 170px; }
+.dashboard-bonus-empty-scene { position: relative; min-height: 170px; overflow: hidden; background: #f8f9fd; border: 1px solid #e7e9f0; border-radius: 13px; }
+.dashboard-bonus-empty-scene .hr-bonus-illustration-backdrop { inset: -2% -8% -12%; }
+.dashboard-bonus-empty-scene .hr-bonus-mascot-anchor { bottom: -2%; width: clamp(130px, 39%, 180px); }
+.dashboard-bonus-empty-copy { display: flex; align-items: center; gap: 13px; padding: 14px; }
+.dashboard-bonus-empty-icon { display: grid; width: 52px; height: 52px; flex: 0 0 auto; place-items: center; color: var(--bonus-accent); background: color-mix(in srgb, var(--bonus-accent) 9%, #fff); border-radius: 15px; }
+.dashboard-bonus-empty-icon svg { width: 22px; }
+.dashboard-bonus-empty-content strong,
+.dashboard-bonus-empty-content span { display: block; }
+.dashboard-bonus-empty-content strong { font-size: 12px; }
+.dashboard-bonus-empty-content span { margin-top: 4px; color: #8b94a4; font-size: 9px; }
+
+@media (max-width: 920px) {
+  .dashboard-bonus-scene { grid-template-columns: 1fr; }
+  .dashboard-bonus-progress-panel { border-top: 1px solid #e6e8f0; border-left: 0; }
+}
+
+@media (max-width: 560px) {
+  .dashboard-bonus-scene { min-height: 0; }
+  .dashboard-bonus-illustration-wrap { min-height: 250px; }
+  .dashboard-bonus-progress-panel { padding: 15px; }
+  .dashboard-bonus-stat-grid { grid-template-columns: 1fr; }
+  .dashboard-bonus-milestones { overflow-x: auto; grid-template-columns: repeat(var(--dashboard-milestones, 4), minmax(100px, 1fr)); padding: 7px 2px; }
+  .dashboard-bonus-milestones::before { display: none; }
+  .dashboard-bonus-empty-content { grid-template-columns: 1fr; }
+}

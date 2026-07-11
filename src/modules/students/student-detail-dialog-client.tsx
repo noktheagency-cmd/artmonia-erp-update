@@ -143,15 +143,17 @@ export function StudentDetailDialogClient({
                     name="paidDate"
                     defaultValue={student.detail.paymentDefaultDate}
                     allowClear={false}
+                    popoverPlacement="floating"
                     required
                   />
                 </label>
                 <label className="form-field">
-                  <span>Ödəniş ayı</span>
-                  <Input
-                    name="paymentMonth"
-                    type="month"
-                    defaultValue={student.detail.paymentDefaultMonth}
+                  <span>Növbəti ödəniş tarixi</span>
+                  <DatePicker
+                    name="nextPaymentDate"
+                    defaultValue={addOneMonth(student.detail.paymentDefaultDate)}
+                    allowClear={false}
+                    popoverPlacement="floating"
                     required
                   />
                 </label>
@@ -199,7 +201,7 @@ export function StudentDetailDialogClient({
                     <span>
                       {payment.paidAt} - {payment.method} - {payment.createdBy}
                     </span>
-                    <small>{payment.note}</small>
+                    <small>Növbəti ödəniş: {payment.nextPaymentDate} · {payment.note}</small>
                   </div>
                 ))
               ) : (
@@ -238,4 +240,12 @@ export function StudentDetailDialogClient({
       </DialogContent>
     </Dialog>
   );
+}
+
+function addOneMonth(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  return date.toISOString().slice(0, 10);
 }

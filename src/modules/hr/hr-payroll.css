@@ -1,0 +1,12 @@
+.hr-table-section table { min-width: 1020px; }
+.hr-donut-chart { width: 100%; height: 100%; }
+.hr-salary-cell { display: block; color: #273147; font-size: 11.5px; }
+.hr-salary-mode { display: block; margin-top: 3px; color: #929aaa; font-size: 9.5px; }
+.hr-inline-create { display: grid !important; grid-template-columns: 1fr auto; align-items: center; gap: 7px; padding: 7px; background: #f7f8fb; border: 1px solid #e2e6ed; border-radius: 10px; }
+.hr-inline-create .ui-button { align-self: stretch; }
+.hr-teacher-salary-form { display: grid; gap: 15px; }
+.hr-teacher-salary-form > label { display: grid; gap: 6px; }
+.hr-teacher-salary-form > label > span { color: #687184; font-size: 11px; font-weight: 700; }
+.hr-formula-preview { display: grid; grid-template-columns: 1fr auto; gap: 9px; padding: 13px; background: #f7f8fc; border: 1px solid #e3e7ee; border-radius: 12px; font-size: 11px; }
+.hr-formula-preview span { color: #788194; }
+.hr-formula-preview strong { color: #273147; text-align: right; }

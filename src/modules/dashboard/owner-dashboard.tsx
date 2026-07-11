@@ -14,7 +14,9 @@ import type { DashboardData } from "@/modules/dashboard/queries";
 import { DashboardTasksPanel } from "@/modules/dashboard/dashboard-tasks-panel";
 import { DashboardDateFilter } from "@/modules/dashboard/dashboard-date-filter";
 import { DashboardInsights } from "@/modules/dashboard/dashboard-insights";
+import { DashboardBonusGamification } from "@/modules/dashboard/dashboard-bonus-gamification";
 import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashboard-visuals";
+import type { HrBonusData } from "@/modules/hr/bonus-data";
 import type { TaskData } from "@/modules/tasks/queries";
 
 type TaskAction = (formData: FormData) => void | Promise<void>;
@@ -34,10 +36,12 @@ const kpiPresentation: readonly KpiPresentation[] = [
 
 export function OwnerDashboard({
   data,
+  bonusData,
   taskData,
   createTaskAction,
 }: {
   data: DashboardData;
+  bonusData: HrBonusData | null;
   taskData: TaskData;
   createTaskAction: TaskAction;
 }) {
@@ -91,6 +95,8 @@ export function OwnerDashboard({
           createTaskAction={createTaskAction}
         />
       </div>
+
+      {bonusData ? <DashboardBonusGamification data={bonusData} /> : null}
     </section>
   );
 }

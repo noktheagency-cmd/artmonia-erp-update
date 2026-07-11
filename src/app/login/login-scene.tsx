@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
+const artworkLetters = [..."ARTMONIA"];
+
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
 
@@ -17,6 +19,7 @@ const fragmentShader = /* glsl */ `
 
   uniform float uTime;
   uniform float uMobile;
+  uniform float uHover;
   uniform vec2 uResolution;
   uniform vec2 uPointer;
 
@@ -56,8 +59,8 @@ const fragmentShader = /* glsl */ `
     p.yz *= rotate2d(-phase * 0.17 + uPointer.y * 0.12);
 
     float bloom = 0.5 + 0.5 * sin(phase * 1.05);
-    p.y += 0.18 * sin(p.x * 2.7 + phase * 2.0);
-    p.z += 0.16 * sin(p.y * 3.2 - phase * 1.55);
+    p.y += (0.18 + uHover * 0.06) * sin(p.x * 2.7 + phase * 2.0);
+    p.z += (0.16 + uHover * 0.04) * sin(p.y * 3.2 - phase * 1.55);
 
     vec3 ribbonA = p;
     ribbonA.xy *= rotate2d(0.66 + 0.22 * sin(phase));
@@ -113,7 +116,7 @@ const fragmentShader = /* glsl */ `
     vec3 reflected = reflect(rayDirection, normal);
     float specular = pow(max(dot(reflected, keyLight), 0.0), 34.0);
 
-    return base * (0.22 + diffuse * 0.86)
+    return base * (0.22 + diffuse * 0.86 + uHover * 0.12)
       + rim * mix(cobalt, pearl, 0.3) * 1.18
       + hotRim * amber * 0.7
       + specular * pearl * 1.5;
@@ -134,14 +137,23 @@ const fragmentShader = /* glsl */ `
     float vignette = 1.0 - smoothstep(0.45, 1.75, length(screen * vec2(0.72, 0.92)));
     color *= 0.64 + vignette * 0.52;
 
+    vec2 galaxyPoint = screen - vec2(mix(-0.2, 0.0, uMobile), mix(0.0, 0.36, uMobile));
+    galaxyPoint.x *= 0.78;
+    float galaxyRadius = length(galaxyPoint);
+    float galaxyAngle = atan(galaxyPoint.y, galaxyPoint.x);
+    float galaxyArms = pow(max(0.0, cos(galaxyAngle * 2.7 - log(galaxyRadius + 0.08) * 7.2 - uTime * 0.08)), 10.0);
+    float galaxyFade = smoothstep(1.28, 0.08, galaxyRadius) * smoothstep(0.05, 0.24, galaxyRadius);
+    color += galaxyArms * galaxyFade * mix(vec3(0.03, 0.1, 0.56), vec3(0.38, 0.05, 0.68), 0.52) * 0.55;
+    color += exp(-galaxyRadius * 10.0) * vec3(0.16, 0.09, 0.52) * 0.58;
+
     vec2 starGrid = gl_FragCoord.xy / 22.0;
     vec2 starCell = floor(starGrid);
     vec2 starPoint = fract(starGrid);
     float starSeed = hash21(starCell);
     vec2 starCenter = vec2(hash21(starCell + 1.7), hash21(starCell + 8.3));
     float starShape = 1.0 - smoothstep(0.025, 0.13, length(starPoint - starCenter));
-    float star = step(0.982, starSeed) * starShape * (0.35 + 0.65 * sin(uTime * 1.8 + starSeed * 18.0));
-    color += max(star, 0.0) * mix(vec3(0.12, 0.24, 1.0), vec3(1.0, 0.28, 0.03), starSeed) * 0.56;
+    float star = step(0.955, starSeed) * starShape * (0.35 + 0.65 * sin(uTime * 1.8 + starSeed * 18.0));
+    color += max(star, 0.0) * mix(vec3(0.12, 0.24, 1.0), vec3(1.0, 0.28, 0.03), starSeed) * (1.35 + uHover * 0.24);
 
     vec2 orbitPoint = screen - vec2(mix(-0.72, 0.0, uMobile), mix(-0.02, 0.55, uMobile));
     float orbit = abs(length(orbitPoint * vec2(0.72, 1.0)) - 0.78);
@@ -168,7 +180,7 @@ const fragmentShader = /* glsl */ `
       }
     }
 
-    color += glow * mix(vec3(0.03, 0.08, 0.8), vec3(1.0, 0.15, 0.01), 0.5 + 0.5 * sin(uTime * 0.5)) * 0.055;
+    color += glow * mix(vec3(0.03, 0.08, 0.8), vec3(1.0, 0.15, 0.01), 0.5 + 0.5 * sin(uTime * 0.5)) * (0.055 + uHover * 0.022);
 
     if (hit) {
       vec3 point = rayOrigin + rayDirection * distanceTravelled;
@@ -197,6 +209,8 @@ export function LoginScene() {
     const pointerTarget = new THREE.Vector2();
     const pointerCurrent = new THREE.Vector2();
     const resolution = new THREE.Vector2(1, 1);
+    let hoverTarget = 0;
+    let artworkActive = false;
 
     let renderer: THREE.WebGLRenderer;
 
@@ -221,6 +235,7 @@ export function LoginScene() {
     const uniforms = {
       uTime: { value: reduceMotion ? 5.4 : 0 },
       uMobile: { value: 0 },
+      uHover: { value: 0 },
       uResolution: { value: resolution },
       uPointer: { value: pointerCurrent },
     };
@@ -252,19 +267,38 @@ export function LoginScene() {
       uniforms.uMobile.value = mobile ? 1 : 0;
     };
 
+    const setArtworkState = (nextActive: boolean) => {
+      if (artworkActive === nextActive) {
+        return;
+      }
+
+      artworkActive = nextActive;
+      hoverTarget = nextActive ? 1 : 0;
+      container.dataset.artworkActive = String(nextActive);
+    };
+
     const onPointerMove = (event: PointerEvent) => {
-      pointerTarget.set(
-        event.clientX / window.innerWidth * 2 - 1,
-        -(event.clientY / window.innerHeight * 2 - 1),
-      );
+      const x = event.clientX / window.innerWidth;
+      const y = event.clientY / window.innerHeight;
+      const mobile = window.innerWidth <= 760;
+      const centerX = mobile ? 0.5 : 0.3;
+      const centerY = mobile ? 0.32 : 0.5;
+      const radiusX = mobile ? 0.47 : 0.27;
+      const radiusY = mobile ? 0.26 : 0.38;
+      const insideArtwork = ((x - centerX) / radiusX) ** 2 + ((y - centerY) / radiusY) ** 2 < 1;
+
+      pointerTarget.set(x * 2 - 1, -(y * 2 - 1));
+      setArtworkState(insideArtwork);
     };
 
     const resetPointer = () => {
       pointerTarget.set(0, 0);
+      setArtworkState(false);
     };
 
     const render = (timestamp: number) => {
       pointerCurrent.lerp(pointerTarget, 0.045);
+      uniforms.uHover.value += (hoverTarget - uniforms.uHover.value) * 0.065;
       if (!reduceMotion) {
         uniforms.uTime.value = (timestamp - startedAt) / 1000;
       }
@@ -304,5 +338,15 @@ export function LoginScene() {
     };
   }, []);
 
-  return <div ref={sceneRef} className="kinetic-scene" aria-hidden="true" />;
+  return (
+    <div ref={sceneRef} className="kinetic-scene" aria-hidden="true">
+      <div className="kinetic-artwork-word" data-word="ARTMONIA">
+        {artworkLetters.map((letter, index) => (
+          <span key={`${letter}-${index}`} style={{ "--letter-index": index } as React.CSSProperties}>
+            {letter}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }

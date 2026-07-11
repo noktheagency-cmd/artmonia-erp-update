@@ -17,6 +17,7 @@ import {
   getDefaultExportFields,
   type ExportModule,
 } from "@/modules/exports/export-config";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
 type ExportDialogProps = {
   module: ExportModule;
@@ -81,8 +82,9 @@ export function ExportDialog({ module, filters, resultCount, previewRows = [], i
       link.remove();
       URL.revokeObjectURL(url);
       setFeedback(`${format.toUpperCase()} faylı hazırlandı.`);
+      notifySuccess("İxrac hazırdır", `${format.toUpperCase()} faylı uğurla yaradıldı.`);
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "İxrac hazırlanmadı.");
+      setFeedback(notifyCaughtError(error, "İxrac hazırlanmadı.", "İxrac alınmadı"));
     } finally {
       setIsExporting(false);
     }
@@ -91,8 +93,8 @@ export function ExportDialog({ module, filters, resultCount, previewRows = [], i
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" className="export-trigger">
-          <Download data-icon="inline-start" /> İxrac et
+        <Button type="button" variant="outline" size="icon" className="export-trigger" aria-label="İxrac et" title="İxrac et">
+          <Download />
         </Button>
       </DialogTrigger>
       <DialogContent className="export-dialog-content" aria-describedby="export-dialog-description">

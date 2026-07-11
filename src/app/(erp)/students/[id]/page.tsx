@@ -1,8 +1,9 @@
-import { ChevronLeft, Banknote, Phone, ReceiptText, UserRound, CalendarDays, History, Clock3, TrendingUp } from "lucide-react";
+import { ChevronLeft, Banknote, Phone, ReceiptText, UserRound, Users, CalendarDays, History, Clock3, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { getStudentDetailData } from "@/modules/students/queries";
 import {
   recordStudentPaymentAction,
+  deleteStudentAction,
   updateStudentStatusAction,
 } from "@/modules/students/actions";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -47,6 +48,7 @@ export default async function StudentDetailPage({
           permissions={permissions}
           recordPaymentAction={recordStudentPaymentAction}
           updateStudentStatusAction={updateStudentStatusAction}
+          deleteStudentAction={deleteStudentAction}
         />
       </div>
 
@@ -62,6 +64,10 @@ export default async function StudentDetailPage({
         <div className="student-profile-quick-item">
           <UserRound />
           <span><small>Müəllim</small><strong>{student.teacher}</strong></span>
+        </div>
+        <div className="student-profile-quick-item">
+          <Users />
+          <span><small>Qrup</small><strong>{student.group}</strong></span>
         </div>
         <div className="student-profile-quick-item is-balance">
           <Banknote />
@@ -151,7 +157,7 @@ export default async function StudentDetailPage({
                   <span>
                     {payment.paidAt} - {payment.method} - {payment.createdBy}
                   </span>
-                  <small>{payment.note}</small>
+                  <small>Növbəti ödəniş: {payment.nextPaymentDate} · {payment.note}</small>
                 </div>
               ))
             ) : (

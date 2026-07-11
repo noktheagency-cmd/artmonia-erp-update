@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   CalendarClock,
   CircleUserRound,
@@ -8,6 +9,7 @@ import {
   History,
   Pencil,
   Phone,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,7 @@ export function LeadDetailDialogClient({
   sourceOptions,
   returnTo,
   updateLeadAction,
+  deleteLeadAction,
 }: {
   lead: LeadRow;
   programs: CrmData["programs"];
@@ -54,7 +57,10 @@ export function LeadDetailDialogClient({
   sourceOptions: CrmData["sourceOptions"];
   returnTo: string;
   updateLeadAction: (formData: FormData) => void | Promise<void>;
+  deleteLeadAction: (formData: FormData) => void | Promise<void>;
 }) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -218,10 +224,38 @@ export function LeadDetailDialogClient({
           </div>
 
           <DialogFooter className="crm-dialog-actions">
+            <Button
+              className="crm-detail-delete-trigger"
+              type="button"
+              variant="ghost"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 data-icon="inline-start" />
+              Müraciəti sil
+            </Button>
             <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
             <Button type="submit"><Pencil data-icon="inline-start" />Yadda saxla</Button>
           </DialogFooter>
         </form>
+
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogContent className="crm-modern-dialog crm-delete-dialog">
+            <DialogHeader>
+              <DialogTitle>Müraciəti silmək istəyirsiniz?</DialogTitle>
+              <DialogDescription>
+                <strong>{lead.name}</strong> üçün olan müraciət profili, tarixçə və açıq izləmə tapşırıqları silinəcək. Bu əməliyyatı geri qaytarmaq mümkün deyil.
+              </DialogDescription>
+            </DialogHeader>
+            <form action={deleteLeadAction}>
+              <input name="leadId" type="hidden" value={lead.id} />
+              <input name="returnTo" type="hidden" value={returnTo} />
+              <DialogFooter className="crm-dialog-actions">
+                <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
+                <Button type="submit" variant="destructive"><Trash2 data-icon="inline-start" />Bəli, sil</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

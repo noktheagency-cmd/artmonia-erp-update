@@ -11,6 +11,8 @@ import {
   toNumber,
 } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { requireErpActor } from "@/server/auth/actor";
+import type { PermissionCode } from "@/server/rbac/permissions";
 
 export type DashboardKpi = {
   label: string;
@@ -180,6 +182,11 @@ const agingBuckets = [
 ] as const;
 
 export async function getOwnerDashboardData(filters: DashboardFilters = {}): Promise<DashboardData> {
+  const actor = await requireErpActor();
+  const dashboardPermissions: PermissionCode[] = ["dashboard.owner.read", "dashboard.sales.read", "dashboard.finance.read", "dashboard.teacher.read"];
+  if (!dashboardPermissions.some((code) => actor.permissions.has(code))) {
+    throw new Error("Missing permission: dashboard.read");
+  }
   const prisma = getPrisma();
   const dateRange = resolveDashboardDateRange(filters);
   const today = dateRange.toDate;

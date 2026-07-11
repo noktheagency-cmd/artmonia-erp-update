@@ -11,6 +11,7 @@ import {
 import { getPrisma } from "@/server/db/prisma";
 import { isPrivilegedActor, requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
+import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import {
   buildStudentStatusUpdateData,
@@ -340,7 +341,7 @@ export async function saveAttendanceAction(formData: FormData) {
     : await prisma.teacher.findUnique({ where: { userId: actor.id }, select: { id: true } });
   if (!privileged && !teacherProfile) throw new Error("Müəllim profili ERP hesabına bağlanmayıb");
 
-  await prisma.$transaction(async (tx) => {
+  const affectedTeacherIds = await prisma.$transaction(async (tx) => {
     const group = await tx.studentGroup.findUnique({
       where: { id: input.groupId },
       include: { schedules: true },
@@ -417,7 +418,10 @@ export async function saveAttendanceAction(formData: FormData) {
       after: { groupId: group.id, date: input.date, items: input.items } as Prisma.InputJsonValue,
       reason: "Qrup jurnalı yeniləndi",
     });
+    return [...new Set(memberships.map((membership) => membership.teacherId))];
   });
+
+  await recalculateTeacherPayoutsForMonth(dateFromInput(input.date), actor.id, affectedTeacherIds);
 
   revalidateGroupSurfaces();
 }

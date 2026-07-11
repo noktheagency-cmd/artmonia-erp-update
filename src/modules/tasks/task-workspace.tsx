@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import type { TaskData, TaskRow, TaskStatusValue } from "@/modules/tasks/queries";
+import { notifyCaughtError } from "@/lib/app-notifications";
 import "./tasks.css";
 
 type TaskAction = (formData: FormData) => void | Promise<void>;
@@ -216,7 +217,7 @@ function CreateTaskDialog({ employees, action }: { employees: TaskData["employee
         setOpen(false);
         router.refresh();
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Task yaradılmadı");
+        setError(notifyCaughtError(caught, "Task yaradılmadı", "Task yaradılmadı"));
       }
     });
   }

@@ -54,6 +54,7 @@ const createLeadSchema = z.object({
   source: optionalText(60),
   programId: optionalUuid,
   managerId: optionalUuid,
+  campaignId: optionalUuid,
   stage: z.enum(leadStageOptions).default(LeadStage.NEW),
   priority: z.enum(leadPriorityOptions).default("NORMAL"),
   nextActionType: optionalNextActionType,
@@ -88,6 +89,11 @@ const convertLeadSchema = z.object({
   returnTo: optionalText(260),
 });
 
+const deleteLeadSchema = z.object({
+  leadId: z.string().uuid(),
+  returnTo: optionalText(260),
+});
+
 const duplicatePhoneSchema = z.object({
   phone: z.string().max(40),
 });
@@ -110,6 +116,7 @@ export async function createLeadAction(formData: FormData) {
 
   revalidatePath("/crm");
   revalidatePath("/dashboard");
+  revalidatePath("/marketing");
   invalidateCrmCaches();
   redirect("/crm?tab=list&leadCreated=1" as Route);
 }
@@ -129,6 +136,7 @@ export async function createLeadClientAction(
 
     revalidatePath("/crm");
     revalidatePath("/dashboard");
+    revalidatePath("/marketing");
     invalidateCrmCaches();
 
     return {
@@ -174,6 +182,7 @@ async function createLead(formData: FormData) {
         stage: input.stage,
         source: input.source ?? "Manual",
         managerId,
+        campaignId: input.campaignId ?? null,
         programInterestId: input.programId ?? null,
         nextFollowUpAt: followUpAt,
         nextActionType: input.nextActionType ?? null,
@@ -386,6 +395,74 @@ export async function updateLeadAction(formData: FormData) {
 
   revalidatePath("/crm");
   revalidatePath("/dashboard");
+  revalidatePath("/marketing");
+  invalidateCrmCaches();
+  redirectToCrm(input.returnTo);
+}
+
+export async function deleteLeadAction(formData: FormData) {
+  const actor = await requireMutationActor("crm.lead.update");
+  const input = deleteLeadSchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const lead = await tx.lead.findUnique({
+      where: { id: input.leadId },
+      select: {
+        id: true,
+        managerId: true,
+        stage: true,
+        source: true,
+        contactId: true,
+        contact: { select: { fullName: true, phoneDisplay: true } },
+      },
+    });
+
+    assertCanAccessLead(actor, lead, "crm.lead.update");
+
+    await tx.task.deleteMany({
+      where: { entityType: "lead", entityId: lead.id },
+    });
+    await tx.lead.delete({ where: { id: lead.id } });
+
+    const contactStillUsed = await tx.contact.findUnique({
+      where: { id: lead.contactId },
+      select: {
+        _count: {
+          select: {
+            leads: true,
+            students: true,
+            teacherProfiles: true,
+            studentRelationships: true,
+          },
+        },
+      },
+    });
+
+    if (
+      contactStillUsed &&
+      Object.values(contactStillUsed._count).every((count) => count === 0)
+    ) {
+      await tx.contact.delete({ where: { id: lead.contactId } });
+    }
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "lead.delete",
+      entityType: "lead",
+      entityId: lead.id,
+      before: {
+        stage: lead.stage,
+        source: lead.source,
+        contact: lead.contact,
+      },
+      reason: "Müraciət profili və bağlı izləmə tapşırıqları silindi",
+    });
+  });
+
+  revalidatePath("/crm");
+  revalidatePath("/dashboard");
+  revalidatePath("/marketing");
   invalidateCrmCaches();
   redirectToCrm(input.returnTo);
 }
@@ -406,6 +483,7 @@ export async function convertLeadToStudentAction(formData: FormData) {
         managerId: true,
         programInterestId: true,
         convertedStudentId: true,
+        campaignId: true,
         contact: {
           select: {
             fullName: true,
@@ -471,6 +549,7 @@ export async function convertLeadToStudentAction(formData: FormData) {
         code: studentCode,
         contactId: lead.contactId,
         managerId: lead.managerId ?? actor.id,
+        campaignId: lead.campaignId,
         lifecycleStatus: StudentLifecycleStatus.GROUP_WAITING,
         billingPaused: isBillingPausedStatus(StudentLifecycleStatus.GROUP_WAITING),
         registeredAt: today,
@@ -550,6 +629,7 @@ export async function convertLeadToStudentAction(formData: FormData) {
   revalidatePath("/crm");
   revalidatePath("/students");
   revalidatePath("/dashboard");
+  revalidatePath("/marketing");
   invalidateCrmCaches();
   updateTag(erpCacheTags.students);
   redirectToCrm(input.returnTo);

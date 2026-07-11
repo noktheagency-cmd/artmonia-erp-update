@@ -91,6 +91,14 @@ export function StudentList({ data }: { data: StudentListData }) {
     navigate(`/students?${params.toString()}`);
   }
 
+  function handleDebtQuickFilter() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("status");
+    params.set("payment", "open");
+    params.set("tab", "list");
+    navigate(`/students?${params.toString()}`);
+  }
+
   function handleClearFilters() {
     navigate(`/students?tab=${activeTab}`);
   }
@@ -112,10 +120,6 @@ export function StudentList({ data }: { data: StudentListData }) {
         <header className="students-page-header">
           <div>
             <h1 id="students-page-title">Tələbələr və Balans</h1>
-            <p>
-              Tələbələrin qeydiyyat, proqram, ödəniş statusu və maliyyə balansları bir
-              yerdə aydın görünür.
-            </p>
           </div>
           <div className="students-page-actions">
             {data.permissions.canExport ? (
@@ -181,7 +185,13 @@ export function StudentList({ data }: { data: StudentListData }) {
               type="button"
               className={`students-kpi students-kpi-${item.tone} students-enter`}
               style={sequenceStyle(index + 1)}
-              onClick={() => handleQuickFilter("status", visibleStatuses[index] ?? "")}
+              onClick={() => {
+                if (index === 1) {
+                  handleDebtQuickFilter();
+                  return;
+                }
+                handleQuickFilter("status", visibleStatuses[index] ?? "");
+              }}
               key={item.label}
               aria-label={`${item.label} siyahısını aç`}
             >
@@ -355,7 +365,11 @@ function StudentDataTable({
                   <TableCell>
                     <div className="students-payment-cell">
                       <StatusChip tone={student.paymentTone}>{student.paymentStatus}</StatusChip>
-                      <small data-debt={hasDebt}>{student.balance}</small>
+                      <small data-debt={hasDebt}>
+                        {student.paymentTone === "success"
+                          ? `Ödənən: ${student.paidThisMonth}`
+                          : student.balance}
+                      </small>
                     </div>
                   </TableCell>
                   <TableCell>
