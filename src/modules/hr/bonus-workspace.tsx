@@ -42,11 +42,12 @@ const VanGoghBonusIllustration = dynamic(
 );
 
 type BonusAction = (formData: FormData) => Promise<unknown>;
-type StageDraft = { threshold: number; bonusPool: number };
+type StageDraft = { threshold: number; bonusPool: number; bonusPercent: number; fixedAmount: number };
 
 const metricOptions = [
   { value: "DEPARTMENT_COLLECTED_REVENUE", label: "Toplanmış gəlir" },
   { value: "DEPARTMENT_SALES_COUNT", label: "Satış sayı" },
+  { value: "TEACHER_RETENTION_RATE", label: "Müəllim retention faizi" },
   { value: "MANUAL_KPI", label: "Manual KPI" },
 ] as const;
 
@@ -108,7 +109,7 @@ export function BonusWorkspace({
           <p>Departament hədəflərini etaplara bölün, nəticəni şəffaf göstərin və hər uğuru Van Gogh ilə qeyd edin.</p>
         </div>
         {data.permissions.canManage ? <Button onClick={() => setCreateOpen(true)}><Plus data-icon="inline-start" /> Bonus yarat</Button> : <p className="hr-bonus-empty-note">Sizin departament üçün aktiv kampaniya yoxdur.</p>}
-        <CreateBonusDialog open={createOpen} departments={data.departments} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Bonus kampaniyası yaradıldı.", () => setCreateOpen(false))} />
+        <CreateBonusDialog open={createOpen} departments={data.departments} teacherDepartments={data.teacherDepartments} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Bonus kampaniyası yaradıldı.", () => setCreateOpen(false))} />
       </section>
     );
   }
@@ -117,7 +118,13 @@ export function BonusWorkspace({
   const nextStage = selected.stages.find((stage) => !stage.reachedAt);
   const latestStage = reachedStages.at(-1);
   const status = statusMeta[selected.status];
-  const unit = selected.metricKind === "DEPARTMENT_SALES_COUNT" ? "satış" : selected.metricKind === "MANUAL_KPI" ? "xal" : "₼";
+  const unit = selected.metricKind === "DEPARTMENT_SALES_COUNT"
+    ? "satış"
+    : selected.metricKind === "TEACHER_RETENTION_RATE"
+      ? "% retention"
+      : selected.metricKind === "MANUAL_KPI"
+        ? "xal"
+        : "₼";
 
   return (
     <section className="hr-bonus-board" aria-busy={pending}>
@@ -164,8 +171,8 @@ export function BonusWorkspace({
           <dl>
             <div><dt><UsersRound /> Departament</dt><dd>{selected.department}</dd></div>
             <div><dt><CalendarDays /> Dövr</dt><dd>{formatDate(selected.startsAt)} – {formatDate(selected.endsAt)}</dd></div>
-            <div><dt><CircleDollarSign /> Ümumi bonus fondu</dt><dd>{formatMoney(selected.totalBonusPool)}</dd></div>
-            <div><dt><Target /> Növbəti etap</dt><dd>{nextStage ? `${formatMetric(nextStage.threshold, unit)} → ${formatMoney(nextStage.bonusPool)}` : "Bütün etaplar tamamlandı"}</dd></div>
+            <div><dt><CircleDollarSign /> Maksimum bonus qaydası</dt><dd>{formatRewardRule(selected.stages.at(-1))}</dd></div>
+            <div><dt><Target /> Növbəti etap</dt><dd>{nextStage ? `${formatMetric(nextStage.threshold, unit)} → ${formatRewardRule(nextStage)}` : "Bütün etaplar tamamlandı"}</dd></div>
             <div><dt><UsersRound /> İştirak edən əməkdaşlar</dt><dd>{selected.participantCount} nəfər</dd></div>
           </dl>
           <div className="hr-bonus-inspector-progress">
@@ -174,7 +181,8 @@ export function BonusWorkspace({
             <small>{formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</small>
           </div>
           {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
-          {data.permissions.canManage ? <div className="hr-bonus-inspector-actions"><Button variant="outline" onClick={() => setAdjustOpen(true)}>Nəticəyə düzəliş</Button><Button variant="ghost" onClick={() => setCancelOpen(true)}>Kampaniyanı ləğv et</Button></div> : null}
+          {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Ədalətli ölçmə</strong><span>Minimum {selected.teacherMinCohortSize} uyğun tələbə · {selected.teacherMinTenureDays} gün minimum müəllim əlaqəsi · {selected.teacherReferenceStudentCount} tələbə baza yükü. Dondurma churn sayılmır.</span></div> : null}
+          {data.permissions.canManage ? <div className="hr-bonus-inspector-actions">{selected.metricKind !== "TEACHER_RETENTION_RATE" ? <Button variant="outline" onClick={() => setAdjustOpen(true)}>Nəticəyə düzəliş</Button> : null}<Button variant="ghost" onClick={() => setCancelOpen(true)}>Kampaniyanı ləğv et</Button></div> : null}
         </aside>
       </div>
 
@@ -183,7 +191,7 @@ export function BonusWorkspace({
         {latestStage ? <StageHistoryRow stage={latestStage} campaign={selected} canApprove={data.permissions.canApprove} canPost={data.permissions.canPost} pending={pending} onApprove={() => { const form = new FormData(); form.set("stageId", latestStage.id); run(() => actions.approve(form), "Bonus payları HR tərəfindən təsdiqləndi."); }} onPost={() => { const form = new FormData(); form.set("stageId", latestStage.id); run(() => actions.post(form), "Bonus payları Maliyyə xərclərinə göndərildi."); }} /> : <div className="hr-bonus-history-empty">İlk etap açıldıqda uğur burada görünəcək.</div>}
       </section>
 
-      <CreateBonusDialog open={createOpen} departments={data.departments} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Bonus kampaniyası yaradıldı.", () => setCreateOpen(false))} />
+      <CreateBonusDialog open={createOpen} departments={data.departments} teacherDepartments={data.teacherDepartments} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Bonus kampaniyası yaradıldı.", () => setCreateOpen(false))} />
       <AdjustmentDialog open={adjustOpen} campaign={selected} pending={pending} onClose={() => setAdjustOpen(false)} onSubmit={(formData) => run(() => actions.adjust(formData), "Nəticə düzəlişi qeydə alındı.", () => setAdjustOpen(false))} />
       <CancelDialog open={cancelOpen} campaign={selected} pending={pending} onClose={() => setCancelOpen(false)} onSubmit={(formData) => run(() => actions.cancel(formData), "Kampaniya ləğv edildi.", () => setCancelOpen(false))} />
     </section>
@@ -199,18 +207,91 @@ function StageHistoryRow({ stage, campaign, canApprove, canPost, pending, onAppr
   const pendingCount = stage.awards.filter((award) => award.status === "PENDING_HR").length;
   const approvedCount = stage.awards.filter((award) => award.status === "APPROVED").length;
   const postedCount = stage.awards.filter((award) => award.status === "POSTED").length;
-  return <div className="hr-bonus-history-row"><span className="hr-bonus-history-medal"><Star /></span><div><Badge variant="secondary">ETAP AÇILDI</Badge><strong>{Math.round((stage.threshold / campaign.maxThreshold) * 100)}% — {stage.sortOrder + 1}. mərhələ</strong><p>Komanda {formatMetric(stage.threshold, campaign.metricKind === "DEPARTMENT_SALES_COUNT" ? "satış" : campaign.metricKind === "MANUAL_KPI" ? "xal" : "₼")} hədəfini keçdi.</p></div><div><span>Qeydiyyat vaxtı</span><strong>{formatDateTime(stage.reachedAt)}</strong></div><div><span>Bonus statusu</span><strong>{postedCount ? "Maliyyəyə göndərilib" : approvedCount ? "HR təsdiqləyib" : "HR təsdiqi gözlənilir"}</strong></div><div className="hr-bonus-history-actions">{canApprove && pendingCount ? <Button size="sm" variant="outline" disabled={pending} onClick={onApprove}><BadgeCheck data-icon="inline-start" /> Təsdiqlə</Button> : null}{canPost && approvedCount ? <Button size="sm" disabled={pending} onClick={onPost}><Banknote data-icon="inline-start" /> Maliyyəyə göndər</Button> : null}</div></div>;
+  const unit = campaign.metricKind === "DEPARTMENT_SALES_COUNT" ? "satış" : campaign.metricKind === "TEACHER_RETENTION_RATE" ? "% retention" : campaign.metricKind === "MANUAL_KPI" ? "xal" : "₼";
+  return <div className="hr-bonus-history-row"><span className="hr-bonus-history-medal"><Star /></span><div><Badge variant="secondary">ETAP AÇILDI</Badge><strong>{formatMetric(stage.threshold, unit)} — {formatRewardRule(stage)}</strong><p>{campaign.metricKind === "TEACHER_RETENTION_RATE" ? `${stage.awards.length} müəllim retention və minimum kohort şərtini keçdi.` : `Komanda ${formatMetric(stage.threshold, unit)} hədəfini keçdi.`}</p></div><div><span>Qeydiyyat vaxtı</span><strong>{formatDateTime(stage.reachedAt)}</strong></div><div><span>Bonus statusu</span><strong>{postedCount ? "Maliyyəyə göndərilib" : approvedCount ? "HR təsdiqləyib" : "HR təsdiqi gözlənilir"}</strong></div><div className="hr-bonus-history-actions">{canApprove && pendingCount ? <Button size="sm" variant="outline" disabled={pending} onClick={onApprove}><BadgeCheck data-icon="inline-start" /> Təsdiqlə</Button> : null}{canPost && approvedCount ? <Button size="sm" disabled={pending} onClick={onPost}><Banknote data-icon="inline-start" /> Maliyyəyə göndər</Button> : null}</div></div>;
 }
 
-function CreateBonusDialog({ open, departments, pending, onClose, onSubmit }: { open: boolean; departments: string[]; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) {
+function CreateBonusDialog({ open, departments, teacherDepartments, pending, onClose, onSubmit }: {
+  open: boolean;
+  departments: string[];
+  teacherDepartments: string[];
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (formData: FormData) => void;
+}) {
+  const initialTeacherDepartment = teacherDepartments.includes(departments[0] ?? "");
   const [targetMode, setTargetMode] = useState<"single" | "staged">("staged");
-  const [metricKind, setMetricKind] = useState("DEPARTMENT_COLLECTED_REVENUE");
-  const [stages, setStages] = useState<StageDraft[]>([{ threshold: 5000, bonusPool: 250 }, { threshold: 10000, bonusPool: 500 }, { threshold: 20000, bonusPool: 1250 }]);
+  const [department, setDepartment] = useState(departments[0] ?? "");
+  const [metricKind, setMetricKind] = useState(initialTeacherDepartment ? "TEACHER_RETENTION_RATE" : "DEPARTMENT_COLLECTED_REVENUE");
+  const [stages, setStages] = useState<StageDraft[]>(() => initialTeacherDepartment ? teacherStages() : salesStages());
+  const isTeacherMetric = metricKind === "TEACHER_RETENTION_RATE";
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = useMemo(() => { const value = new Date(); value.setDate(value.getDate() + 30); return value.toISOString().slice(0, 10); }, []);
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const formData = new FormData(event.currentTarget); formData.set("metricKind", metricKind); formData.set("stages", JSON.stringify(targetMode === "single" ? stages.slice(0, 1) : stages)); onSubmit(formData); }
-  function updateStage(index: number, field: keyof StageDraft, value: number) { setStages((current) => current.map((stage, stageIndex) => stageIndex === index ? { ...stage, [field]: value } : stage)); }
-  return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="hr-bonus-drawer"><DialogHeader><DialogTitle>Bonus yarat</DialogTitle><DialogDescription>Departament üçün hədəf və bonus etaplarını qurun.</DialogDescription></DialogHeader><form className="hr-bonus-create-form" onSubmit={submit}><FieldGroup><Field><FieldLabel htmlFor="bonus-name">Kampaniya adı</FieldLabel><Input id="bonus-name" name="name" placeholder="Məsələn: İyul satış sprinti" required minLength={3} /></Field><Field><FieldLabel>Departament</FieldLabel><FormSelect name="department" options={departments.map((department) => ({ value: department, label: department }))} placeholder="Departament seçin" required /></Field><div className="hr-bonus-form-grid"><Field><FieldLabel htmlFor="bonus-start">Başlama tarixi</FieldLabel><Input id="bonus-start" name="startsAt" type="date" defaultValue={today} required /></Field><Field><FieldLabel htmlFor="bonus-end">Bitmə tarixi</FieldLabel><Input id="bonus-end" name="endsAt" type="date" defaultValue={nextMonth} required /></Field></div><Field><FieldLabel>Nəticə mənbəyi</FieldLabel><FormSelect name="metricKind" value={metricKind} onValueChange={setMetricKind} options={metricOptions} required /><FieldDescription>{metricKind === "DEPARTMENT_COLLECTED_REVENUE" ? "Məsul menecerə bağlı tələbə ödənişlərindən avtomatik hesablanır." : metricKind === "DEPARTMENT_SALES_COUNT" ? "Departament əməkdaşlarına bağlı yeni qeydiyyatlardan hesablanır." : "Cari nəticə HR düzəlişləri ilə daxil edilir."}</FieldDescription></Field><Field><FieldLabel>Hədəf tipi</FieldLabel><div className="hr-bonus-segment"><button type="button" className={targetMode === "single" ? "is-active" : ""} onClick={() => setTargetMode("single")}>Tək hədəf</button><button type="button" className={targetMode === "staged" ? "is-active" : ""} onClick={() => setTargetMode("staged")}>Etaplı</button></div></Field><Field><FieldLabel>Etaplar</FieldLabel><div className="hr-bonus-stage-editor">{(targetMode === "single" ? stages.slice(0, 1) : stages).map((stage, index) => <div key={index}><span>{index + 1}</span><Input aria-label={`${index + 1}. etap hədəfi`} type="number" min="1" step={metricKind === "DEPARTMENT_SALES_COUNT" ? "1" : "0.01"} value={stage.threshold} onChange={(event) => updateStage(index, "threshold", Number(event.target.value))} /><i>→</i><Input aria-label={`${index + 1}. etap bonusu`} type="number" min="0.01" step="0.01" value={stage.bonusPool} onChange={(event) => updateStage(index, "bonusPool", Number(event.target.value))} /><small>₼</small>{targetMode === "staged" && stages.length > 1 ? <button type="button" aria-label="Etapı sil" onClick={() => setStages((current) => current.filter((_, stageIndex) => stageIndex !== index))}>×</button> : null}</div>)}{targetMode === "staged" && stages.length < 6 ? <Button type="button" variant="outline" size="sm" onClick={() => setStages((current) => [...current, { threshold: (current.at(-1)?.threshold ?? 0) + 5000, bonusPool: 500 }])}><Plus data-icon="inline-start" /> Etap əlavə et</Button> : null}</div></Field><Field><FieldLabel>Mükafat bölgüsü</FieldLabel><FormSelect name="distributionMode" options={distributionOptions} defaultValue="EQUAL" required /></Field></FieldGroup><DialogFooter className="hr-bonus-drawer-footer"><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>{pending ? "Yaradılır…" : "Bonus yarat"}</Button></DialogFooter></form></DialogContent></Dialog>;
+
+  function selectDepartment(value: string) {
+    setDepartment(value);
+    if (teacherDepartments.includes(value)) {
+      setTargetMode("staged");
+      setMetricKind("TEACHER_RETENTION_RATE");
+      setStages(teacherStages());
+    } else if (metricKind === "TEACHER_RETENTION_RATE") {
+      setMetricKind("DEPARTMENT_SALES_COUNT");
+      setStages(salesStages());
+    }
+  }
+
+  function selectMetric(value: string) {
+    setMetricKind(value);
+    if (value === "TEACHER_RETENTION_RATE") {
+      setTargetMode("staged");
+      setStages(teacherStages());
+    }
+    else if (metricKind === "TEACHER_RETENTION_RATE") setStages(salesStages());
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    formData.set("department", department);
+    formData.set("metricKind", metricKind);
+    formData.set("stages", JSON.stringify(targetMode === "single" ? stages.slice(0, 1) : stages));
+    onSubmit(formData);
+  }
+
+  function updateStage(index: number, field: keyof StageDraft, value: number) {
+    setStages((current) => current.map((stage, stageIndex) => stageIndex === index ? { ...stage, [field]: value } : stage));
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
+      <DialogContent className="hr-bonus-drawer">
+        <DialogHeader>
+          <DialogTitle>Bonus yarat</DialogTitle>
+          <DialogDescription>Hədəfi, maaşa əlavə faizi və istəyə bağlı sabit ödənişi qurun.</DialogDescription>
+        </DialogHeader>
+        <form className="hr-bonus-create-form" onSubmit={submit}>
+          <FieldGroup>
+            <Field><FieldLabel htmlFor="bonus-name">Kampaniya adı</FieldLabel><Input id="bonus-name" name="name" placeholder="Məsələn: İyul satış sprinti" required minLength={3} /></Field>
+            <Field><FieldLabel>Departament</FieldLabel><FormSelect name="department" value={department} onValueChange={selectDepartment} options={departments.map((item) => ({ value: item, label: item }))} placeholder="Departament seçin" required /></Field>
+            <div className="hr-bonus-form-grid"><Field><FieldLabel htmlFor="bonus-start">Başlama tarixi</FieldLabel><Input id="bonus-start" name="startsAt" type="date" defaultValue={today} required /></Field><Field><FieldLabel htmlFor="bonus-end">Bitmə tarixi</FieldLabel><Input id="bonus-end" name="endsAt" type="date" defaultValue={nextMonth} required /></Field></div>
+            <Field><FieldLabel>Nəticə mənbəyi</FieldLabel><FormSelect name="metricKind" value={metricKind} onValueChange={selectMetric} options={metricOptions} required /><FieldDescription>{metricDescription(metricKind)}</FieldDescription></Field>
+            {isTeacherMetric ? <div className="hr-bonus-teacher-policy"><strong>Müəllim üçün etik retention modeli</strong><p>Dövrün əvvəlində kohort dondurulur. STOPPED və DECLINED churn sayılır, FROZEN cəzalandırılmır. Transferdən sonrakı 7 günlük handover pəncərəsi nəzərə alınır; bonus yalnız dövr bitəndə hesablanır.</p><div className="hr-bonus-form-grid"><Field><FieldLabel htmlFor="teacher-min-cohort">Minimum kohort</FieldLabel><Input id="teacher-min-cohort" name="teacherMinCohortSize" type="number" min="5" max="100" defaultValue="10" required /></Field><Field><FieldLabel htmlFor="teacher-min-tenure">Minimum əlaqə günü</FieldLabel><Input id="teacher-min-tenure" name="teacherMinTenureDays" type="number" min="0" max="90" defaultValue="14" required /></Field><Field><FieldLabel htmlFor="teacher-reference-count">Baza tələbə sayı</FieldLabel><Input id="teacher-reference-count" name="teacherReferenceStudentCount" type="number" min="5" max="200" defaultValue="20" required /></Field></div></div> : null}
+            {!isTeacherMetric ? <Field><FieldLabel>Hədəf tipi</FieldLabel><div className="hr-bonus-segment"><button type="button" className={targetMode === "single" ? "is-active" : ""} onClick={() => setTargetMode("single")}>Tək hədəf</button><button type="button" className={targetMode === "staged" ? "is-active" : ""} onClick={() => setTargetMode("staged")}>Etaplı</button></div></Field> : null}
+            <Field>
+              <FieldLabel>Etaplar</FieldLabel>
+              <FieldDescription>Faiz maaş/hesablanmış müəllim ödənişi üzərindən, sabit hissə isə AZN ilə hesablanır. Yuxarı etap əvvəlki etabı əvəz edir.</FieldDescription>
+              <div className="hr-bonus-stage-editor is-reward-rule">
+                {(targetMode === "single" ? stages.slice(0, 1) : stages).map((stage, index) => <div key={index}><span>{index + 1}</span><Input aria-label={`${index + 1}. etap hədəfi`} title="Hədəf" type="number" min="1" max={isTeacherMetric ? "100" : undefined} step={metricKind === "DEPARTMENT_SALES_COUNT" ? "1" : "0.01"} value={stage.threshold} onChange={(event) => updateStage(index, "threshold", Number(event.target.value))} /><i>→</i><Input aria-label={`${index + 1}. etap bonus faizi`} title="Bonus faizi" type="number" min="0" max="100" step="0.01" value={stage.bonusPercent} onChange={(event) => updateStage(index, "bonusPercent", Number(event.target.value))} /><small>%</small><b>+</b><Input aria-label={`${index + 1}. etap sabit ödənişi`} title="Sabit ödəniş (optional)" type="number" min="0" step="0.01" value={stage.fixedAmount} onChange={(event) => updateStage(index, "fixedAmount", Number(event.target.value))} /><small>₼</small>{targetMode === "staged" && stages.length > 1 ? <button type="button" aria-label="Etapı sil" onClick={() => setStages((current) => current.filter((_, stageIndex) => stageIndex !== index))}>×</button> : null}</div>)}
+                {targetMode === "staged" && stages.length < 6 ? <Button type="button" variant="outline" size="sm" onClick={() => setStages((current) => { const last = current.at(-1); return [...current, { threshold: (last?.threshold ?? 0) + (isTeacherMetric ? 2 : 10), bonusPool: 0, bonusPercent: Math.min(100, (last?.bonusPercent ?? 0) + 10), fixedAmount: last?.fixedAmount ?? 0 }]; })}><Plus data-icon="inline-start" /> Etap əlavə et</Button> : null}
+              </div>
+            </Field>
+            <Field><FieldLabel>Təsdiq axını</FieldLabel><FormSelect name="distributionMode" options={distributionOptions} defaultValue="HR_APPROVAL" required /></Field>
+          </FieldGroup>
+          <DialogFooter className="hr-bonus-drawer-footer"><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>{pending ? "Yaradılır…" : "Bonus yarat"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function AdjustmentDialog({ open, campaign, pending, onClose, onSubmit }: { open: boolean; campaign: HrBonusCampaignDto; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) { return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="hr-bonus-small-dialog"><DialogHeader><DialogTitle>Nəticəyə düzəliş</DialogTitle><DialogDescription>Avtomatik nəticəyə auditli müsbət və ya mənfi dəyişiklik əlavə edin.</DialogDescription></DialogHeader><form onSubmit={(event) => { event.preventDefault(); onSubmit(new FormData(event.currentTarget)); }}><input type="hidden" name="campaignId" value={campaign.id} /><FieldGroup><Field><FieldLabel htmlFor="adjustment-amount">Düzəliş</FieldLabel><Input id="adjustment-amount" name="amount" type="number" step="0.01" placeholder="Məsələn: 250 və ya -100" required /></Field><Field><FieldLabel htmlFor="adjustment-reason">Səbəb</FieldLabel><textarea id="adjustment-reason" name="reason" rows={4} minLength={3} maxLength={500} required /></Field></FieldGroup><DialogFooter><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>Düzəlişi saxla</Button></DialogFooter></form></DialogContent></Dialog>; }
@@ -218,6 +299,34 @@ function AdjustmentDialog({ open, campaign, pending, onClose, onSubmit }: { open
 function CancelDialog({ open, campaign, pending, onClose, onSubmit }: { open: boolean; campaign: HrBonusCampaignDto; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) { return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="hr-bonus-small-dialog"><DialogHeader><DialogTitle>Kampaniyanı ləğv etmək?</DialogTitle><DialogDescription>“{campaign.name}” dayandırılacaq. Maliyyəyə göndərilmiş bonuslar varsa ləğv bloklanacaq.</DialogDescription></DialogHeader><form onSubmit={(event) => { event.preventDefault(); onSubmit(new FormData(event.currentTarget)); }}><input type="hidden" name="campaignId" value={campaign.id} /><Field><FieldLabel htmlFor="cancel-reason">Ləğv səbəbi</FieldLabel><textarea id="cancel-reason" name="reason" rows={4} minLength={3} maxLength={500} required /></Field><DialogFooter><Button type="button" variant="outline" onClick={onClose}>Geri qayıt</Button><Button type="submit" variant="destructive" disabled={pending}>Kampaniyanı ləğv et</Button></DialogFooter></form></DialogContent></Dialog>; }
 
 function metricLabel(kind: HrBonusCampaignDto["metricKind"]) { return metricOptions.find((option) => option.value === kind)?.label ?? kind; }
+function metricDescription(kind: string) {
+  if (kind === "DEPARTMENT_COLLECTED_REVENUE") return "Məsul menecerə bağlı tələbə ödənişlərindən avtomatik hesablanır.";
+  if (kind === "DEPARTMENT_SALES_COUNT") return "Departament əməkdaşlarına bağlı yeni qeydiyyatlardan hesablanır.";
+  if (kind === "TEACHER_RETENTION_RATE") return "Müəllimin dövr əvvəli tələbə kohortunun saxlanma faizi ilə hesablanır.";
+  return "Cari nəticə HR düzəlişləri ilə daxil edilir.";
+}
+function salesStages(): StageDraft[] {
+  return [
+    { threshold: 20, bonusPool: 0, bonusPercent: 20, fixedAmount: 0 },
+    { threshold: 30, bonusPool: 0, bonusPercent: 30, fixedAmount: 100 },
+  ];
+}
+function teacherStages(): StageDraft[] {
+  return [
+    { threshold: 90, bonusPool: 0, bonusPercent: 10, fixedAmount: 0 },
+    { threshold: 95, bonusPool: 0, bonusPercent: 20, fixedAmount: 50 },
+    { threshold: 98, bonusPool: 0, bonusPercent: 30, fixedAmount: 100 },
+  ];
+}
+function formatRewardRule(stage?: Pick<HrBonusStageDto, "bonusPool" | "bonusPercent" | "fixedAmount">) {
+  if (!stage) return "—";
+  if (stage.bonusPercent > 0 || stage.fixedAmount > 0) {
+    const percent = stage.bonusPercent > 0 ? `${stage.bonusPercent}%` : "";
+    const fixed = stage.fixedAmount > 0 ? `${formatMoney(stage.fixedAmount)} sabit` : "";
+    return [percent, fixed].filter(Boolean).join(" + ");
+  }
+  return formatMoney(stage.bonusPool);
+}
 const azMonths = ["yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avq", "sen", "okt", "noy", "dek"];
 function formatMoney(value: number) { return `${new Intl.NumberFormat("az-AZ", { maximumFractionDigits: 2 }).format(value)} ₼`; }
 function formatMetric(value: number, unit: string) { const formatted = new Intl.NumberFormat("az-AZ", { maximumFractionDigits: 2 }).format(value); return unit === "₼" ? `${formatted} ₼` : `${formatted} ${unit}`; }

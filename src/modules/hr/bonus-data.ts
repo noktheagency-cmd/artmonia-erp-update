@@ -12,6 +12,12 @@ export type HrBonusAwardDto = {
   employeeId: string;
   amount: number;
   status: "PENDING_HR" | "APPROVED" | "POSTED" | "VOIDED";
+  baseAmount: number;
+  percentAmount: number;
+  fixedAmount: number;
+  workloadMultiplier: number;
+  metricValue: number;
+  calculationNote: string;
 };
 
 export type HrBonusStageDto = {
@@ -19,6 +25,8 @@ export type HrBonusStageDto = {
   sortOrder: number;
   threshold: number;
   bonusPool: number;
+  bonusPercent: number;
+  fixedAmount: number;
   reachedAt: string;
   reachedValue: number;
   awards: HrBonusAwardDto[];
@@ -30,7 +38,7 @@ export type HrBonusCampaignDto = {
   department: string;
   startsAt: string;
   endsAt: string;
-  metricKind: "DEPARTMENT_COLLECTED_REVENUE" | "DEPARTMENT_SALES_COUNT" | "MANUAL_KPI";
+  metricKind: "DEPARTMENT_COLLECTED_REVENUE" | "DEPARTMENT_SALES_COUNT" | "TEACHER_RETENTION_RATE" | "MANUAL_KPI";
   distributionMode: "EQUAL" | "HR_APPROVAL";
   status: "SCHEDULED" | "ACTIVE" | "ACHIEVED" | "EXPIRED" | "CANCELLED";
   currentValue: number;
@@ -40,6 +48,9 @@ export type HrBonusCampaignDto = {
   progress: number;
   totalBonusPool: number;
   participantCount: number;
+  teacherMinCohortSize: number;
+  teacherMinTenureDays: number;
+  teacherReferenceStudentCount: number;
   ownAwardTotal: number;
   stages: HrBonusStageDto[];
 };
@@ -48,6 +59,7 @@ export type HrBonusData = {
   asOf: string;
   campaigns: HrBonusCampaignDto[];
   departments: string[];
+  teacherDepartments: string[];
   actorDepartment: string;
   actorEmployeeId: string;
   permissions: {
@@ -65,6 +77,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
       asOf: new Date().toISOString(),
       campaigns: [],
       departments: [],
+      teacherDepartments: [],
       actorDepartment: "",
       actorEmployeeId: "",
       permissions: { canManage: false, canApprove: false, canPost: false, canSeeAll: false },
@@ -75,10 +88,18 @@ export async function getHrBonusData(): Promise<HrBonusData> {
   const canApprove = actor.permissions.has("hr.bonus.approve");
   const canPost = actor.permissions.has("billing.expense.create");
   const canSeeAll = canManage || scopeFor(actor.permissions, "hr.bonus.read") === "ALL";
-  const [actorEmployee, departmentRows] = await Promise.all([
-    prisma.hrEmployee.findUnique({ where: { userId: actor.id }, select: { id: true, department: true } }),
+  const [actorEmployee, departmentRows, teacherDepartmentRows] = await Promise.all([
+    prisma.hrEmployee.findUnique({ where: { userId: actor.id }, select: { id: true, department: true, teacherId: true } }),
     canManage
       ? prisma.hrEmployee.findMany({ distinct: ["department"], select: { department: true }, orderBy: { department: "asc" } })
+      : Promise.resolve([]),
+    canManage
+      ? prisma.hrEmployee.findMany({
+          where: { teacherId: { not: null }, status: { in: ["ACTIVE", "PROBATION"] } },
+          distinct: ["department"],
+          select: { department: true },
+          orderBy: { department: "asc" },
+        })
       : Promise.resolve([]),
   ]);
 
@@ -135,6 +156,9 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         progress: bonusProgress(value.currentValue, maxThreshold),
         totalBonusPool: campaign.stages.reduce((sum, stage) => sum + Number(stage.bonusPool), 0),
         participantCount: campaign.participants.filter((participant) => participant.isEligible).length,
+        teacherMinCohortSize: campaign.teacherMinCohortSize,
+        teacherMinTenureDays: campaign.teacherMinTenureDays,
+        teacherReferenceStudentCount: campaign.teacherReferenceStudentCount,
         ownAwardTotal: ownParticipant?.awards
           .filter((award) => award.status !== "VOIDED")
           .reduce((sum, award) => sum + Number(award.amount), 0) ?? 0,
@@ -143,6 +167,8 @@ export async function getHrBonusData(): Promise<HrBonusData> {
           sortOrder: stage.sortOrder,
           threshold: Number(stage.threshold),
           bonusPool: Number(stage.bonusPool),
+          bonusPercent: Number(stage.bonusPercent),
+          fixedAmount: Number(stage.fixedAmount),
           reachedAt: stage.reachedAt?.toISOString() ?? "",
           reachedValue: Number(stage.reachedValue ?? 0),
           awards: canManage || canApprove || canPost
@@ -152,6 +178,12 @@ export async function getHrBonusData(): Promise<HrBonusData> {
                 employeeId: award.participant.employeeId ?? "",
                 amount: Number(award.amount),
                 status: award.status,
+                baseAmount: Number(award.baseAmount),
+                percentAmount: Number(award.percentAmount),
+                fixedAmount: Number(award.fixedAmount),
+                workloadMultiplier: Number(award.workloadMultiplier),
+                metricValue: Number(award.metricValue ?? 0),
+                calculationNote: award.calculationNote ?? "",
               }))
             : [],
         })),
@@ -160,6 +192,11 @@ export async function getHrBonusData(): Promise<HrBonusData> {
     departments: canManage
       ? departmentRows.map((row) => row.department)
       : actorEmployee
+        ? [actorEmployee.department]
+        : [],
+    teacherDepartments: canManage
+      ? teacherDepartmentRows.map((row) => row.department)
+      : actorEmployee?.teacherId
         ? [actorEmployee.department]
         : [],
     actorDepartment: actorEmployee?.department ?? "",

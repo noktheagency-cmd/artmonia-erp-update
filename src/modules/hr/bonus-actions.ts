@@ -16,7 +16,9 @@ import { getPrisma } from "@/server/db/prisma";
 
 const stageSchema = z.object({
   threshold: z.coerce.number().positive().max(1_000_000_000),
-  bonusPool: z.coerce.number().positive().max(1_000_000),
+  bonusPool: z.coerce.number().nonnegative().max(1_000_000).default(0),
+  bonusPercent: z.coerce.number().nonnegative().max(100).default(0),
+  fixedAmount: z.coerce.number().nonnegative().max(1_000_000).default(0),
 });
 
 const createCampaignSchema = z.object({
@@ -24,8 +26,11 @@ const createCampaignSchema = z.object({
   department: z.string().trim().min(2).max(80),
   startsAt: z.string().date(),
   endsAt: z.string().date(),
-  metricKind: z.enum(["DEPARTMENT_COLLECTED_REVENUE", "DEPARTMENT_SALES_COUNT", "MANUAL_KPI"]),
+  metricKind: z.enum(["DEPARTMENT_COLLECTED_REVENUE", "DEPARTMENT_SALES_COUNT", "TEACHER_RETENTION_RATE", "MANUAL_KPI"]),
   distributionMode: z.enum(["EQUAL", "HR_APPROVAL"]),
+  teacherMinCohortSize: z.coerce.number().int().min(5).max(100).default(10),
+  teacherMinTenureDays: z.coerce.number().int().min(0).max(90).default(14),
+  teacherReferenceStudentCount: z.coerce.number().int().min(5).max(200).default(20),
   stages: z.string().transform((value, context) => {
     try {
       return z.array(stageSchema).parse(JSON.parse(value));
@@ -46,6 +51,9 @@ export async function createBonusCampaignAction(formData: FormData) {
   if (input.metricKind === "DEPARTMENT_SALES_COUNT" && stages.some((stage) => !Number.isInteger(stage.threshold))) {
     throw new Error("Satış sayı hədəfləri tam ədəd olmalıdır");
   }
+  if (input.metricKind === "TEACHER_RETENTION_RATE" && stages.some((stage) => stage.threshold > 100)) {
+    throw new Error("Müəllim retention hədəfi 100%-dən böyük ola bilməz");
+  }
 
   const prisma = getPrisma();
   const [overlap, participants] = await Promise.all([
@@ -60,7 +68,11 @@ export async function createBonusCampaignAction(formData: FormData) {
       select: { name: true },
     }),
     prisma.hrEmployee.findMany({
-      where: { department: input.department, status: { in: ["ACTIVE", "PROBATION"] } },
+      where: {
+        department: input.department,
+        status: { in: ["ACTIVE", "PROBATION"] },
+        ...(input.metricKind === "TEACHER_RETENTION_RATE" ? { teacherId: { not: null } } : {}),
+      },
       select: { id: true, fullName: true, email: true },
       orderBy: { fullName: "asc" },
     }),
@@ -78,6 +90,9 @@ export async function createBonusCampaignAction(formData: FormData) {
         endsAt,
         metricKind: input.metricKind as HrBonusMetricKind,
         distributionMode: input.distributionMode as HrBonusDistributionMode,
+        teacherMinCohortSize: input.teacherMinCohortSize,
+        teacherMinTenureDays: input.teacherMinTenureDays,
+        teacherReferenceStudentCount: input.teacherReferenceStudentCount,
         status: startsAt > now ? "SCHEDULED" : "ACTIVE",
         createdById: actor.id,
         stages: {
@@ -85,6 +100,8 @@ export async function createBonusCampaignAction(formData: FormData) {
             sortOrder: index,
             threshold: stage.threshold,
             bonusPool: stage.bonusPool,
+            bonusPercent: stage.bonusPercent,
+            fixedAmount: stage.fixedAmount,
           })),
         },
         participants: {
@@ -109,6 +126,11 @@ export async function createBonusCampaignAction(formData: FormData) {
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         stages,
+        teacherPolicy: input.metricKind === "TEACHER_RETENTION_RATE" ? {
+          minCohortSize: input.teacherMinCohortSize,
+          minTenureDays: input.teacherMinTenureDays,
+          referenceStudentCount: input.teacherReferenceStudentCount,
+        } : null,
         participantCount: participants.length,
       } as Prisma.InputJsonValue,
       reason: "Bonus kampaniyası yaradıldı",
@@ -129,8 +151,11 @@ export async function addBonusProgressAdjustmentAction(formData: FormData) {
     reason: z.string().trim().min(3).max(500),
   }).parse(Object.fromEntries(formData));
   const adjustment = await getPrisma().$transaction(async (tx) => {
-    const campaign = await tx.hrBonusCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true, status: true } });
+    const campaign = await tx.hrBonusCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true, status: true, metricKind: true } });
     if (!campaign || campaign.status === "CANCELLED") throw new Error("Aktiv bonus kampaniyası tapılmadı");
+    if (campaign.metricKind === "TEACHER_RETENTION_RATE") {
+      throw new Error("Müəllim retention nəticəsi auditli lifecycle məlumatından hesablanır və manual dəyişdirilə bilməz");
+    }
     const created = await tx.hrBonusProgressAdjustment.create({ data: { campaignId: campaign.id, amount: input.amount, reason: input.reason, createdById: actor.id } });
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.bonus.progress.adjust", entityType: "hr_bonus_campaign", entityId: campaign.id, after: { amount: input.amount }, reason: input.reason });
     return created;
@@ -170,9 +195,8 @@ export async function postBonusStageAwardsAction(formData: FormData) {
       create: { name: "Əməkdaş bonusu", description: "HR bonus kampaniyalarından təsdiqlənmiş ödənişlər", isSystem: true },
       update: { isSystem: true },
     });
-    for (const award of stage.awards) {
-      await tx.financeExpense.create({
-        data: {
+    await tx.financeExpense.createMany({
+      data: stage.awards.map((award) => ({
           categoryId: category.id,
           amount: award.amount,
           expenseDate: new Date(),
@@ -182,10 +206,12 @@ export async function postBonusStageAwardsAction(formData: FormData) {
           hrEmployeeId: award.participant.employeeId,
           bonusAwardId: award.id,
           createdById: actor.id,
-        },
-      });
-      await tx.hrBonusAward.update({ where: { id: award.id }, data: { status: "POSTED", postedAt: new Date() } });
-    }
+      })),
+    });
+    await tx.hrBonusAward.updateMany({
+      where: { id: { in: stage.awards.map((award) => award.id) } },
+      data: { status: "POSTED", postedAt: new Date() },
+    });
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.bonus.awards.post", entityType: "hr_bonus_stage", entityId: stage.id, after: { postedCount: stage.awards.length }, reason: "Təsdiqlənmiş bonuslar Maliyyə xərclərinə göndərildi" });
   });
   revalidateBonusPaths();

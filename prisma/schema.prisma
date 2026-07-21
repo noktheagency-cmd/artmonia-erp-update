@@ -222,6 +222,7 @@ enum HrLookupKind {
 enum HrBonusMetricKind {
   DEPARTMENT_COLLECTED_REVENUE
   DEPARTMENT_SALES_COUNT
+  TEACHER_RETENTION_RATE
   MANUAL_KPI
 
   @@schema("erp")
@@ -412,22 +413,27 @@ model HrLookupOption {
 }
 
 model HrBonusCampaign {
-  id               String                  @id @default(uuid()) @db.Uuid
-  name             String
-  department       String
-  startsAt         DateTime                @map("starts_at") @db.Date
-  endsAt           DateTime                @map("ends_at") @db.Date
-  metricKind       HrBonusMetricKind       @map("metric_kind")
-  distributionMode HrBonusDistributionMode @default(EQUAL) @map("distribution_mode")
-  status           HrBonusCampaignStatus   @default(ACTIVE)
-  createdById      String?                 @map("created_by_id") @db.Uuid
-  createdAt        DateTime                @default(now()) @map("created_at")
-  updatedAt        DateTime                @updatedAt @map("updated_at")
+  id                           String                  @id @default(uuid()) @db.Uuid
+  name                         String
+  department                   String
+  startsAt                     DateTime                @map("starts_at") @db.Date
+  endsAt                       DateTime                @map("ends_at") @db.Date
+  metricKind                   HrBonusMetricKind       @map("metric_kind")
+  distributionMode             HrBonusDistributionMode @default(EQUAL) @map("distribution_mode")
+  status                       HrBonusCampaignStatus   @default(ACTIVE)
+  teacherMinCohortSize         Int                     @default(10) @map("teacher_min_cohort_size")
+  teacherMinTenureDays         Int                     @default(14) @map("teacher_min_tenure_days")
+  teacherReferenceStudentCount Int                     @default(20) @map("teacher_reference_student_count")
+  teacherMaxLoadMultiplier     Decimal                 @default(1.25) @map("teacher_max_load_multiplier") @db.Decimal(4, 2)
+  createdById                  String?                 @map("created_by_id") @db.Uuid
+  createdAt                    DateTime                @default(now()) @map("created_at")
+  updatedAt                    DateTime                @updatedAt @map("updated_at")
 
-  createdBy    User?                       @relation("HrBonusCampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  stages       HrBonusStage[]
-  participants HrBonusParticipant[]
-  adjustments  HrBonusProgressAdjustment[]
+  createdBy     User?                       @relation("HrBonusCampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  stages        HrBonusStage[]
+  participants  HrBonusParticipant[]
+  adjustments   HrBonusProgressAdjustment[]
+  teacherCohort HrBonusTeacherCohort[]
 
   @@index([department, startsAt, endsAt])
   @@index([status, startsAt, endsAt])
@@ -441,7 +447,9 @@ model HrBonusStage {
   campaignId   String    @map("campaign_id") @db.Uuid
   sortOrder    Int       @map("sort_order")
   threshold    Decimal   @db.Decimal(14, 2)
-  bonusPool    Decimal   @map("bonus_pool") @db.Decimal(12, 2)
+  bonusPool    Decimal   @default(0) @map("bonus_pool") @db.Decimal(12, 2)
+  bonusPercent Decimal   @default(0) @map("bonus_percent") @db.Decimal(5, 2)
+  fixedAmount  Decimal   @default(0) @map("fixed_amount") @db.Decimal(12, 2)
   reachedAt    DateTime? @map("reached_at")
   reachedValue Decimal?  @map("reached_value") @db.Decimal(14, 2)
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -464,13 +472,39 @@ model HrBonusParticipant {
   isEligible    Boolean  @default(true) @map("is_eligible")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  campaign HrBonusCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  employee HrEmployee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  awards   HrBonusAward[]
+  campaign      HrBonusCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  employee      HrEmployee?            @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  awards        HrBonusAward[]
+  teacherCohort HrBonusTeacherCohort[]
 
   @@unique([campaignId, employeeId])
   @@index([employeeId])
   @@map("hr_bonus_participants")
+  @@schema("erp")
+}
+
+model HrBonusTeacherCohort {
+  id            String   @id @default(uuid()) @db.Uuid
+  campaignId    String   @map("campaign_id") @db.Uuid
+  participantId String   @map("participant_id") @db.Uuid
+  teacherId     String   @map("teacher_id") @db.Uuid
+  membershipId  String   @map("membership_id") @db.Uuid
+  enrollmentId  String   @map("enrollment_id") @db.Uuid
+  studentId     String   @map("student_id") @db.Uuid
+  assignedAt    DateTime @map("assigned_at") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  campaign    HrBonusCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  participant HrBonusParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  teacher     Teacher            @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  membership  GroupMembership    @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  enrollment  Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, studentId])
+  @@index([participantId])
+  @@index([teacherId, campaignId])
+  @@map("hr_bonus_teacher_cohorts")
   @@schema("erp")
 }
 
@@ -492,17 +526,23 @@ model HrBonusProgressAdjustment {
 }
 
 model HrBonusAward {
-  id            String             @id @default(uuid()) @db.Uuid
-  stageId       String             @map("stage_id") @db.Uuid
-  participantId String             @map("participant_id") @db.Uuid
-  amount        Decimal            @db.Decimal(12, 2)
-  status        HrBonusAwardStatus @default(PENDING_HR)
-  approvedById  String?            @map("approved_by_id") @db.Uuid
-  approvedAt    DateTime?          @map("approved_at")
-  postedAt      DateTime?          @map("posted_at")
-  voidReason    String?            @map("void_reason")
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
+  id                 String             @id @default(uuid()) @db.Uuid
+  stageId            String             @map("stage_id") @db.Uuid
+  participantId      String             @map("participant_id") @db.Uuid
+  amount             Decimal            @db.Decimal(12, 2)
+  baseAmount         Decimal            @default(0) @map("base_amount") @db.Decimal(12, 2)
+  percentAmount      Decimal            @default(0) @map("percent_amount") @db.Decimal(12, 2)
+  fixedAmount        Decimal            @default(0) @map("fixed_amount") @db.Decimal(12, 2)
+  workloadMultiplier Decimal            @default(1) @map("workload_multiplier") @db.Decimal(4, 2)
+  metricValue        Decimal?           @map("metric_value") @db.Decimal(7, 2)
+  calculationNote    String?            @map("calculation_note")
+  status             HrBonusAwardStatus @default(PENDING_HR)
+  approvedById       String?            @map("approved_by_id") @db.Uuid
+  approvedAt         DateTime?          @map("approved_at")
+  postedAt           DateTime?          @map("posted_at")
+  voidReason         String?            @map("void_reason")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
 
   stage          HrBonusStage       @relation(fields: [stageId], references: [id], onDelete: Cascade)
   participant    HrBonusParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -758,18 +798,19 @@ model Teacher {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user              User?                      @relation("TeacherUser", fields: [userId], references: [id], onDelete: SetNull)
-  contact           Contact?                   @relation(fields: [contactId], references: [id])
-  enrollments       Enrollment[]
-  oldAssignments    TeacherAssignmentHistory[] @relation("OldTeacher")
-  newAssignments    TeacherAssignmentHistory[] @relation("NewTeacher")
-  contractRules     TeacherContractRule[]
-  payouts           TeacherPayout[]
-  financeExpenses   FinanceExpense[]           @relation("FinanceExpenseTeacher")
-  lessons           Lesson[]
-  groupMemberships  GroupMembership[]
-  attendanceRecords AttendanceRecord[]
-  hrEmployee        HrEmployee?
+  user                User?                      @relation("TeacherUser", fields: [userId], references: [id], onDelete: SetNull)
+  contact             Contact?                   @relation(fields: [contactId], references: [id])
+  enrollments         Enrollment[]
+  oldAssignments      TeacherAssignmentHistory[] @relation("OldTeacher")
+  newAssignments      TeacherAssignmentHistory[] @relation("NewTeacher")
+  contractRules       TeacherContractRule[]
+  payouts             TeacherPayout[]
+  financeExpenses     FinanceExpense[]           @relation("FinanceExpenseTeacher")
+  lessons             Lesson[]
+  groupMemberships    GroupMembership[]
+  attendanceRecords   AttendanceRecord[]
+  bonusTeacherCohorts HrBonusTeacherCohort[]
+  hrEmployee          HrEmployee?
 
   @@map("teachers")
   @@schema("erp")
@@ -804,6 +845,7 @@ model Student {
   refundAdjustments    RefundAdjustment[]
   lessons              Lesson[]
   workshopParticipants WorkshopParticipant[]
+  bonusTeacherCohorts  HrBonusTeacherCohort[]
 
   @@index([contactId])
   @@index([lifecycleStatus])
@@ -847,6 +889,7 @@ model StudentStatusHistory {
   changedBy User?   @relation("StatusChanger", fields: [changedById], references: [id])
 
   @@index([studentId, createdAt])
+  @@index([studentId, effectiveAt])
   @@index([changedById])
   @@map("student_status_history")
   @@schema("erp")
@@ -865,14 +908,15 @@ model Enrollment {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  student           Student                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  program           Program                    @relation(fields: [programId], references: [id])
-  teacher           Teacher?                   @relation(fields: [teacherId], references: [id])
-  invoices          Invoice[]
-  assignmentHistory TeacherAssignmentHistory[]
-  payoutLines       TeacherPayoutLine[]
-  lessons           Lesson[]
-  groupMemberships  GroupMembership[]
+  student             Student                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program             Program                    @relation(fields: [programId], references: [id])
+  teacher             Teacher?                   @relation(fields: [teacherId], references: [id])
+  invoices            Invoice[]
+  assignmentHistory   TeacherAssignmentHistory[]
+  payoutLines         TeacherPayoutLine[]
+  lessons             Lesson[]
+  groupMemberships    GroupMembership[]
+  bonusTeacherCohorts HrBonusTeacherCohort[]
 
   @@index([studentId])
   @@index([teacherId, status])
@@ -931,11 +975,12 @@ model GroupMembership {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  group             StudentGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  enrollment        Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  teacher           Teacher            @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  assignedBy        User?              @relation("GroupMembershipAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
-  attendanceRecords AttendanceRecord[]
+  group               StudentGroup           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  enrollment          Enrollment             @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  teacher             Teacher                @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  assignedBy          User?                  @relation("GroupMembershipAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  attendanceRecords   AttendanceRecord[]
+  bonusTeacherCohorts HrBonusTeacherCohort[]
 
   @@index([groupId, endedAt])
   @@index([enrollmentId, endedAt])

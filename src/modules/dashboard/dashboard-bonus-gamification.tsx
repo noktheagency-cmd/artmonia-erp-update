@@ -121,7 +121,7 @@ export function DashboardBonusGamification({ data }: { data: HrBonusData }) {
               <div className={reached ? "is-reached" : current ? "is-current" : ""} key={stage.id}>
                 <span>{reached ? <BadgeCheck /> : current ? <Flag /> : <LockKeyhole />}</span>
                 <strong>{formatMetric(stage.threshold, unit)}</strong>
-                <small>{formatMoney(stage.bonusPool)} fond</small>
+                <small>{formatReward(stage)}</small>
               </div>
             );
           })}
@@ -143,7 +143,14 @@ function preferredCampaign(campaigns: HrBonusCampaignDto[], department: string) 
 }
 
 function metricUnit(kind: HrBonusCampaignDto["metricKind"]) {
-  return kind === "DEPARTMENT_SALES_COUNT" ? "satış" : kind === "MANUAL_KPI" ? "xal" : "₼";
+  return kind === "DEPARTMENT_SALES_COUNT" ? "satış" : kind === "TEACHER_RETENTION_RATE" ? "% retention" : kind === "MANUAL_KPI" ? "xal" : "₼";
+}
+
+function formatReward(stage: HrBonusCampaignDto["stages"][number]) {
+  if (stage.bonusPercent > 0 || stage.fixedAmount > 0) {
+    return [stage.bonusPercent > 0 ? `${stage.bonusPercent}%` : "", stage.fixedAmount > 0 ? formatMoney(stage.fixedAmount) : ""].filter(Boolean).join(" + ");
+  }
+  return `${formatMoney(stage.bonusPool)} fond`;
 }
 
 function formatMetric(value: number, unit: string) {

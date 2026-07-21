@@ -1,10 +1,47 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bonusProgress, splitBonusPool, validateBonusStages } from "./bonus-rules";
+import {
+  bonusProgress,
+  calculateTierAward,
+  splitBonusPool,
+  teacherWorkloadMultiplier,
+  validateBonusStages,
+} from "./bonus-rules";
 
 test("bonus stages must be ascending", () => {
-  assert.equal(validateBonusStages([{ threshold: 5000, bonusPool: 250 }, { threshold: 10000, bonusPool: 500 }]).length, 2);
-  assert.throws(() => validateBonusStages([{ threshold: 5000, bonusPool: 250 }, { threshold: 4000, bonusPool: 500 }]), /artan/);
+  assert.equal(validateBonusStages([
+    { threshold: 20, bonusPool: 0, bonusPercent: 20, fixedAmount: 0 },
+    { threshold: 30, bonusPool: 0, bonusPercent: 30, fixedAmount: 100 },
+  ]).length, 2);
+  assert.throws(() => validateBonusStages([
+    { threshold: 20, bonusPool: 0, bonusPercent: 20, fixedAmount: 0 },
+    { threshold: 15, bonusPool: 0, bonusPercent: 30, fixedAmount: 100 },
+  ]), /artan/);
+  assert.throws(() => validateBonusStages([
+    { threshold: 20, bonusPool: 0, bonusPercent: 20, fixedAmount: 100 },
+    { threshold: 30, bonusPool: 0, bonusPercent: 10, fixedAmount: 100 },
+  ]), /azalmamalıdır/);
+});
+
+test("percentage and fixed tiers pay only the incremental difference", () => {
+  const first = calculateTierAward({ baseAmount: 1000, bonusPercent: 20, fixedAmount: 0 });
+  const second = calculateTierAward({
+    baseAmount: 1000,
+    bonusPercent: 30,
+    fixedAmount: 100,
+    previousBonusPercent: 20,
+    previousFixedAmount: 0,
+  });
+  assert.deepEqual(first, { baseAmount: 1000, percentAmount: 200, fixedAmount: 0, amount: 200, workloadMultiplier: 1 });
+  assert.deepEqual(second, { baseAmount: 1000, percentAmount: 100, fixedAmount: 100, amount: 200, workloadMultiplier: 1 });
+  assert.equal(first.amount + second.amount, 400);
+});
+
+test("teacher workload uses a bounded square-root scale", () => {
+  assert.equal(teacherWorkloadMultiplier(20), 1);
+  assert.equal(teacherWorkloadMultiplier(30), 1.22);
+  assert.equal(teacherWorkloadMultiplier(5), 0.75);
+  assert.equal(teacherWorkloadMultiplier(100), 1.25);
 });
 
 test("the complete pool is split to cents deterministically", () => {

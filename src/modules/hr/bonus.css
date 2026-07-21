@@ -152,7 +152,7 @@
 .hr-bonus-empty p { max-width: 520px; margin: 0; color: var(--bonus-muted); font-size: 11px; line-height: 1.6; }
 .hr-bonus-empty-note { font-weight: 650; }
 
-.hr-bonus-drawer.ui-dialog-content { top: 0; right: 0; left: auto; width: min(430px, 100vw); height: 100vh; max-height: 100vh; padding: 24px; background: #fff; border: 0; border-left: 1px solid var(--bonus-line); border-radius: 0; transform: none; animation: hr-bonus-drawer-in 280ms cubic-bezier(.2,.8,.2,1); }
+.hr-bonus-drawer.ui-dialog-content { top: 0; right: 0; left: auto; width: min(620px, 100vw); height: 100vh; max-height: 100vh; padding: 24px; background: #fff; border: 0; border-left: 1px solid var(--bonus-line); border-radius: 0; transform: none; animation: hr-bonus-drawer-in 280ms cubic-bezier(.2,.8,.2,1); }
 .hr-bonus-create-form { display: grid; gap: 18px; margin-top: 18px; }
 .hr-bonus-create-form .ui-field-group { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
 .hr-bonus-create-form .ui-field { display: grid; min-width: 0; gap: 6px; }
@@ -170,6 +170,15 @@
 .hr-bonus-stage-editor i { color: #9097a6; text-align: center; font-style: normal; }
 .hr-bonus-stage-editor small { color: #6c7588; font-weight: 700; }
 .hr-bonus-stage-editor > div > button { color: #a35a5a; background: transparent; border: 0; font-size: 18px; }
+.hr-bonus-stage-editor.is-reward-rule > div { grid-template-columns: 20px minmax(76px, 1fr) 16px minmax(70px, .8fr) 14px 12px minmax(76px, .9fr) 14px 24px; }
+.hr-bonus-stage-editor b { color: #8d94a3; text-align: center; font-size: 11px; }
+.hr-bonus-teacher-policy,
+.hr-bonus-method-note { display: grid; gap: 7px; padding: 12px; color: #40536d; background: #f4f8ff; border: 1px solid #dce8fb; border-radius: 12px; }
+.hr-bonus-teacher-policy strong,
+.hr-bonus-method-note strong { color: #244a78; font-size: 11px; }
+.hr-bonus-teacher-policy p,
+.hr-bonus-method-note span { margin: 0; font-size: 9px; line-height: 1.55; }
+.hr-bonus-method-note { margin-top: 12px; }
 .hr-bonus-drawer-footer { position: sticky; bottom: -24px; gap: 8px; padding: 16px 0 24px; background: #fff; }
 .hr-bonus-drawer-footer .ui-button:last-child,
 .hr-bonus-command-actions .ui-button:last-child,
@@ -255,6 +264,8 @@
   .hr-bonus-history-actions { grid-column: 1 / -1; justify-content: stretch; }
   .hr-bonus-history-actions .ui-button { flex: 1; }
   .hr-bonus-form-grid { grid-template-columns: 1fr; }
+  .hr-bonus-stage-editor.is-reward-rule { overflow-x: auto; }
+  .hr-bonus-stage-editor.is-reward-rule > div { min-width: 500px; }
   .hr-bonus-drawer.ui-dialog-content { width: 100vw; }
 }
 
