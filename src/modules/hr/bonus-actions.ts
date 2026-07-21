@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -14,11 +15,17 @@ import { syncActiveBonusCampaigns, syncBonusCampaign } from "@/modules/hr/bonus-
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 
+const teacherChurnRuleSchema = z.object({
+  churnThreshold: z.coerce.number().int().positive().max(500),
+  deductionAmount: z.coerce.number().nonnegative().max(1_000_000),
+});
+
 const stageSchema = z.object({
   threshold: z.coerce.number().positive().max(1_000_000_000),
   bonusPool: z.coerce.number().nonnegative().max(1_000_000).default(0),
   bonusPercent: z.coerce.number().nonnegative().max(100).default(0),
   fixedAmount: z.coerce.number().nonnegative().max(1_000_000).default(0),
+  churnRules: z.array(teacherChurnRuleSchema).max(8).default([]),
 });
 
 const createCampaignSchema = z.object({
@@ -28,9 +35,7 @@ const createCampaignSchema = z.object({
   endsAt: z.string().date(),
   metricKind: z.enum(["DEPARTMENT_COLLECTED_REVENUE", "DEPARTMENT_SALES_COUNT", "TEACHER_RETENTION_RATE", "MANUAL_KPI"]),
   distributionMode: z.enum(["EQUAL", "HR_APPROVAL"]),
-  teacherMinCohortSize: z.coerce.number().int().min(5).max(100).default(10),
-  teacherMinTenureDays: z.coerce.number().int().min(0).max(90).default(14),
-  teacherReferenceStudentCount: z.coerce.number().int().min(5).max(200).default(20),
+  recursMonthly: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   stages: z.string().transform((value, context) => {
     try {
       return z.array(stageSchema).parse(JSON.parse(value));
@@ -51,8 +56,11 @@ export async function createBonusCampaignAction(formData: FormData) {
   if (input.metricKind === "DEPARTMENT_SALES_COUNT" && stages.some((stage) => !Number.isInteger(stage.threshold))) {
     throw new Error("Satış sayı hədəfləri tam ədəd olmalıdır");
   }
-  if (input.metricKind === "TEACHER_RETENTION_RATE" && stages.some((stage) => stage.threshold > 100)) {
-    throw new Error("Müəllim retention hədəfi 100%-dən böyük ola bilməz");
+  if (input.metricKind === "TEACHER_RETENTION_RATE" && stages.some((stage) => stage.threshold > 500)) {
+    throw new Error("Müəllim tələbə sayı düzgün deyil");
+  }
+  if (input.metricKind === "TEACHER_RETENTION_RATE" && stages.some((stage) => !Number.isInteger(stage.threshold) || stage.fixedAmount <= 0 || stage.bonusPercent > 0)) {
+    throw new Error("Müəllim pilləsində tələbə sayı tam ədəd, bonus isə sıfırdan böyük olmalıdır");
   }
 
   const prisma = getPrisma();
@@ -81,18 +89,19 @@ export async function createBonusCampaignAction(formData: FormData) {
   if (participants.length === 0) throw new Error("Seçilmiş departamentdə uyğun əməkdaş yoxdur");
 
   const now = new Date();
+  const campaignId = randomUUID();
   const campaign = await prisma.$transaction(async (tx) => {
     const created = await tx.hrBonusCampaign.create({
       data: {
+        id: campaignId,
         name: input.name,
         department: input.department,
         startsAt,
         endsAt,
         metricKind: input.metricKind as HrBonusMetricKind,
         distributionMode: input.distributionMode as HrBonusDistributionMode,
-        teacherMinCohortSize: input.teacherMinCohortSize,
-        teacherMinTenureDays: input.teacherMinTenureDays,
-        teacherReferenceStudentCount: input.teacherReferenceStudentCount,
+        recursMonthly: input.recursMonthly,
+        recurrenceGroupId: input.recursMonthly ? campaignId : null,
         status: startsAt > now ? "SCHEDULED" : "ACTIVE",
         createdById: actor.id,
         stages: {
@@ -102,6 +111,13 @@ export async function createBonusCampaignAction(formData: FormData) {
             bonusPool: stage.bonusPool,
             bonusPercent: stage.bonusPercent,
             fixedAmount: stage.fixedAmount,
+            churnRules: input.metricKind === "TEACHER_RETENTION_RATE" ? {
+              create: (stage.churnRules ?? []).map((rule, ruleIndex) => ({
+                sortOrder: ruleIndex,
+                churnThreshold: rule.churnThreshold,
+                deductionAmount: rule.deductionAmount,
+              })),
+            } : undefined,
           })),
         },
         participants: {
@@ -125,12 +141,8 @@ export async function createBonusCampaignAction(formData: FormData) {
         distributionMode: input.distributionMode,
         startsAt: input.startsAt,
         endsAt: input.endsAt,
+        recursMonthly: input.recursMonthly,
         stages,
-        teacherPolicy: input.metricKind === "TEACHER_RETENTION_RATE" ? {
-          minCohortSize: input.teacherMinCohortSize,
-          minTenureDays: input.teacherMinTenureDays,
-          referenceStudentCount: input.teacherReferenceStudentCount,
-        } : null,
         participantCount: participants.length,
       } as Prisma.InputJsonValue,
       reason: "Bonus kampaniyası yaradıldı",
@@ -154,7 +166,7 @@ export async function addBonusProgressAdjustmentAction(formData: FormData) {
     const campaign = await tx.hrBonusCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true, status: true, metricKind: true } });
     if (!campaign || campaign.status === "CANCELLED") throw new Error("Aktiv bonus kampaniyası tapılmadı");
     if (campaign.metricKind === "TEACHER_RETENTION_RATE") {
-      throw new Error("Müəllim retention nəticəsi auditli lifecycle məlumatından hesablanır və manual dəyişdirilə bilməz");
+      throw new Error("Müəllim nəticəsi tələbə və churn məlumatından avtomatik hesablanır və manual dəyişdirilə bilməz");
     }
     const created = await tx.hrBonusProgressAdjustment.create({ data: { campaignId: campaign.id, amount: input.amount, reason: input.reason, createdById: actor.id } });
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.bonus.progress.adjust", entityType: "hr_bonus_campaign", entityId: campaign.id, after: { amount: input.amount }, reason: input.reason });

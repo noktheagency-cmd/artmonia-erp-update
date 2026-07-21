@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   bonusProgress,
+  calculateTeacherStudentBonus,
   calculateTierAward,
+  nextMonthlyBonusPeriod,
   splitBonusPool,
-  teacherWorkloadMultiplier,
   validateBonusStages,
 } from "./bonus-rules";
 
@@ -37,11 +38,25 @@ test("percentage and fixed tiers pay only the incremental difference", () => {
   assert.equal(first.amount + second.amount, 400);
 });
 
-test("teacher workload uses a bounded square-root scale", () => {
-  assert.equal(teacherWorkloadMultiplier(20), 1);
-  assert.equal(teacherWorkloadMultiplier(30), 1.22);
-  assert.equal(teacherWorkloadMultiplier(5), 0.75);
-  assert.equal(teacherWorkloadMultiplier(100), 1.25);
+test("teacher bonus uses student tier base and the highest matching churn deduction", () => {
+  const rules = [
+    { churnThreshold: 3, deductionAmount: 60 },
+    { churnThreshold: 6, deductionAmount: 100 },
+  ];
+  assert.deepEqual(calculateTeacherStudentBonus(300, 2, rules), { baseBonus: 300, deductionAmount: 0, amount: 300 });
+  assert.deepEqual(calculateTeacherStudentBonus(300, 3, rules), { baseBonus: 300, deductionAmount: 60, amount: 240 });
+  assert.deepEqual(calculateTeacherStudentBonus(300, 7, rules), { baseBonus: 300, deductionAmount: 100, amount: 200 });
+  assert.deepEqual(calculateTeacherStudentBonus(80, 7, rules), { baseBonus: 80, deductionAmount: 100, amount: 0 });
+});
+
+test("monthly recurrence starts the next day and preserves a calendar-month period", () => {
+  const regular = nextMonthlyBonusPeriod(new Date("2026-07-31T00:00:00.000Z"));
+  assert.equal(regular.startsAt.toISOString(), "2026-08-01T00:00:00.000Z");
+  assert.equal(regular.endsAt.toISOString(), "2026-08-31T00:00:00.000Z");
+
+  const leapYear = nextMonthlyBonusPeriod(new Date("2024-01-31T00:00:00.000Z"));
+  assert.equal(leapYear.startsAt.toISOString(), "2024-02-01T00:00:00.000Z");
+  assert.equal(leapYear.endsAt.toISOString(), "2024-02-29T00:00:00.000Z");
 });
 
 test("the complete pool is split to cents deterministically", () => {

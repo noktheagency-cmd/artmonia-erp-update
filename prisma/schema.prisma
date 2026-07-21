@@ -421,6 +421,8 @@ model HrBonusCampaign {
   metricKind                   HrBonusMetricKind       @map("metric_kind")
   distributionMode             HrBonusDistributionMode @default(EQUAL) @map("distribution_mode")
   status                       HrBonusCampaignStatus   @default(ACTIVE)
+  recursMonthly                Boolean                 @default(false) @map("recurs_monthly")
+  recurrenceGroupId            String?                 @map("recurrence_group_id") @db.Uuid
   teacherMinCohortSize         Int                     @default(10) @map("teacher_min_cohort_size")
   teacherMinTenureDays         Int                     @default(14) @map("teacher_min_tenure_days")
   teacherReferenceStudentCount Int                     @default(20) @map("teacher_reference_student_count")
@@ -435,6 +437,7 @@ model HrBonusCampaign {
   adjustments   HrBonusProgressAdjustment[]
   teacherCohort HrBonusTeacherCohort[]
 
+  @@unique([recurrenceGroupId, startsAt])
   @@index([department, startsAt, endsAt])
   @@index([status, startsAt, endsAt])
   @@index([createdById])
@@ -454,12 +457,29 @@ model HrBonusStage {
   reachedValue Decimal?  @map("reached_value") @db.Decimal(14, 2)
   createdAt    DateTime  @default(now()) @map("created_at")
 
-  campaign HrBonusCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  awards   HrBonusAward[]
+  campaign   HrBonusCampaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  awards     HrBonusAward[]
+  churnRules HrBonusTeacherChurnRule[]
 
   @@unique([campaignId, sortOrder])
   @@index([campaignId, threshold])
   @@map("hr_bonus_stages")
+  @@schema("erp")
+}
+
+model HrBonusTeacherChurnRule {
+  id              String   @id @default(uuid()) @db.Uuid
+  stageId         String   @map("stage_id") @db.Uuid
+  sortOrder       Int      @map("sort_order")
+  churnThreshold  Int      @map("churn_threshold")
+  deductionAmount Decimal  @map("deduction_amount") @db.Decimal(12, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  stage HrBonusStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@unique([stageId, sortOrder])
+  @@unique([stageId, churnThreshold])
+  @@map("hr_bonus_teacher_churn_rules")
   @@schema("erp")
 }
 

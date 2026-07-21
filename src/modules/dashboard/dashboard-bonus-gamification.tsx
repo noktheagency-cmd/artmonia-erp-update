@@ -143,7 +143,7 @@ function preferredCampaign(campaigns: HrBonusCampaignDto[], department: string) 
 }
 
 function metricUnit(kind: HrBonusCampaignDto["metricKind"]) {
-  return kind === "DEPARTMENT_SALES_COUNT" ? "satış" : kind === "TEACHER_RETENTION_RATE" ? "% retention" : kind === "MANUAL_KPI" ? "xal" : "₼";
+  return kind === "DEPARTMENT_SALES_COUNT" ? "satış" : kind === "TEACHER_RETENTION_RATE" ? "tələbə (orta)" : kind === "MANUAL_KPI" ? "xal" : "₼";
 }
 
 function formatReward(stage: HrBonusCampaignDto["stages"][number]) {

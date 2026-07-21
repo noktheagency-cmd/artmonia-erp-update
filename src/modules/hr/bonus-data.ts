@@ -27,6 +27,7 @@ export type HrBonusStageDto = {
   bonusPool: number;
   bonusPercent: number;
   fixedAmount: number;
+  churnRules: Array<{ id: string; churnThreshold: number; deductionAmount: number }>;
   reachedAt: string;
   reachedValue: number;
   awards: HrBonusAwardDto[];
@@ -41,6 +42,7 @@ export type HrBonusCampaignDto = {
   metricKind: "DEPARTMENT_COLLECTED_REVENUE" | "DEPARTMENT_SALES_COUNT" | "TEACHER_RETENTION_RATE" | "MANUAL_KPI";
   distributionMode: "EQUAL" | "HR_APPROVAL";
   status: "SCHEDULED" | "ACTIVE" | "ACHIEVED" | "EXPIRED" | "CANCELLED";
+  recursMonthly: boolean;
   currentValue: number;
   baseValue: number;
   adjustmentValue: number;
@@ -48,9 +50,6 @@ export type HrBonusCampaignDto = {
   progress: number;
   totalBonusPool: number;
   participantCount: number;
-  teacherMinCohortSize: number;
-  teacherMinTenureDays: number;
-  teacherReferenceStudentCount: number;
   ownAwardTotal: number;
   stages: HrBonusStageDto[];
 };
@@ -118,6 +117,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
       stages: {
         orderBy: { sortOrder: "asc" },
         include: {
+          churnRules: { orderBy: { sortOrder: "asc" } },
           awards: {
             include: { participant: { select: { employeeId: true, employeeName: true } } },
             orderBy: { participant: { employeeName: "asc" } },
@@ -149,6 +149,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         metricKind: campaign.metricKind,
         distributionMode: campaign.distributionMode,
         status: campaign.status,
+        recursMonthly: campaign.recursMonthly,
         currentValue: value.currentValue,
         baseValue: value.baseValue,
         adjustmentValue: value.adjustmentValue,
@@ -156,9 +157,6 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         progress: bonusProgress(value.currentValue, maxThreshold),
         totalBonusPool: campaign.stages.reduce((sum, stage) => sum + Number(stage.bonusPool), 0),
         participantCount: campaign.participants.filter((participant) => participant.isEligible).length,
-        teacherMinCohortSize: campaign.teacherMinCohortSize,
-        teacherMinTenureDays: campaign.teacherMinTenureDays,
-        teacherReferenceStudentCount: campaign.teacherReferenceStudentCount,
         ownAwardTotal: ownParticipant?.awards
           .filter((award) => award.status !== "VOIDED")
           .reduce((sum, award) => sum + Number(award.amount), 0) ?? 0,
@@ -169,6 +167,11 @@ export async function getHrBonusData(): Promise<HrBonusData> {
           bonusPool: Number(stage.bonusPool),
           bonusPercent: Number(stage.bonusPercent),
           fixedAmount: Number(stage.fixedAmount),
+          churnRules: stage.churnRules.map((rule) => ({
+            id: rule.id,
+            churnThreshold: rule.churnThreshold,
+            deductionAmount: Number(rule.deductionAmount),
+          })),
           reachedAt: stage.reachedAt?.toISOString() ?? "",
           reachedValue: Number(stage.reachedValue ?? 0),
           awards: canManage || canApprove || canPost

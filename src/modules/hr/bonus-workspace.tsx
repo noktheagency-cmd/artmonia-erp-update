@@ -43,11 +43,12 @@ const VanGoghBonusIllustration = dynamic(
 
 type BonusAction = (formData: FormData) => Promise<unknown>;
 type StageDraft = { threshold: number; bonusPool: number; bonusPercent: number; fixedAmount: number };
+type TeacherPenaltyDraft = { tierIndex: number; churnThreshold: number; deductionAmount: number };
 
 const metricOptions = [
   { value: "DEPARTMENT_COLLECTED_REVENUE", label: "Toplanmış gəlir" },
   { value: "DEPARTMENT_SALES_COUNT", label: "Satış sayı" },
-  { value: "TEACHER_RETENTION_RATE", label: "Müəllim retention faizi" },
+  { value: "TEACHER_RETENTION_RATE", label: "Müəllim: tələbə sayı və churn" },
   { value: "MANUAL_KPI", label: "Manual KPI" },
 ] as const;
 
@@ -121,7 +122,7 @@ export function BonusWorkspace({
   const unit = selected.metricKind === "DEPARTMENT_SALES_COUNT"
     ? "satış"
     : selected.metricKind === "TEACHER_RETENTION_RATE"
-      ? "% retention"
+      ? "tələbə (orta)"
       : selected.metricKind === "MANUAL_KPI"
         ? "xal"
         : "₼";
@@ -171,6 +172,7 @@ export function BonusWorkspace({
           <dl>
             <div><dt><UsersRound /> Departament</dt><dd>{selected.department}</dd></div>
             <div><dt><CalendarDays /> Dövr</dt><dd>{formatDate(selected.startsAt)} – {formatDate(selected.endsAt)}</dd></div>
+            <div><dt><RefreshCw /> Davam etmə</dt><dd>{selected.recursMonthly ? "Hər ay avtomatik" : "Yalnız bu dövr"}</dd></div>
             <div><dt><CircleDollarSign /> Maksimum bonus qaydası</dt><dd>{formatRewardRule(selected.stages.at(-1))}</dd></div>
             <div><dt><Target /> Növbəti etap</dt><dd>{nextStage ? `${formatMetric(nextStage.threshold, unit)} → ${formatRewardRule(nextStage)}` : "Bütün etaplar tamamlandı"}</dd></div>
             <div><dt><UsersRound /> İştirak edən əməkdaşlar</dt><dd>{selected.participantCount} nəfər</dd></div>
@@ -181,7 +183,7 @@ export function BonusWorkspace({
             <small>{formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</small>
           </div>
           {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
-          {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Ədalətli ölçmə</strong><span>Minimum {selected.teacherMinCohortSize} uyğun tələbə · {selected.teacherMinTenureDays} gün minimum müəllim əlaqəsi · {selected.teacherReferenceStudentCount} tələbə baza yükü. Dondurma churn sayılmır.</span></div> : null}
+          {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Sadə hesab</strong><span>Tələbə sayına uyğun bonus seçilir, sonra həmin pillə üçün churn kəsintisi çıxılır.</span></div> : null}
           {data.permissions.canManage ? <div className="hr-bonus-inspector-actions">{selected.metricKind !== "TEACHER_RETENTION_RATE" ? <Button variant="outline" onClick={() => setAdjustOpen(true)}>Nəticəyə düzəliş</Button> : null}<Button variant="ghost" onClick={() => setCancelOpen(true)}>Kampaniyanı ləğv et</Button></div> : null}
         </aside>
       </div>
@@ -207,8 +209,8 @@ function StageHistoryRow({ stage, campaign, canApprove, canPost, pending, onAppr
   const pendingCount = stage.awards.filter((award) => award.status === "PENDING_HR").length;
   const approvedCount = stage.awards.filter((award) => award.status === "APPROVED").length;
   const postedCount = stage.awards.filter((award) => award.status === "POSTED").length;
-  const unit = campaign.metricKind === "DEPARTMENT_SALES_COUNT" ? "satış" : campaign.metricKind === "TEACHER_RETENTION_RATE" ? "% retention" : campaign.metricKind === "MANUAL_KPI" ? "xal" : "₼";
-  return <div className="hr-bonus-history-row"><span className="hr-bonus-history-medal"><Star /></span><div><Badge variant="secondary">ETAP AÇILDI</Badge><strong>{formatMetric(stage.threshold, unit)} — {formatRewardRule(stage)}</strong><p>{campaign.metricKind === "TEACHER_RETENTION_RATE" ? `${stage.awards.length} müəllim retention və minimum kohort şərtini keçdi.` : `Komanda ${formatMetric(stage.threshold, unit)} hədəfini keçdi.`}</p></div><div><span>Qeydiyyat vaxtı</span><strong>{formatDateTime(stage.reachedAt)}</strong></div><div><span>Bonus statusu</span><strong>{postedCount ? "Maliyyəyə göndərilib" : approvedCount ? "HR təsdiqləyib" : "HR təsdiqi gözlənilir"}</strong></div><div className="hr-bonus-history-actions">{canApprove && pendingCount ? <Button size="sm" variant="outline" disabled={pending} onClick={onApprove}><BadgeCheck data-icon="inline-start" /> Təsdiqlə</Button> : null}{canPost && approvedCount ? <Button size="sm" disabled={pending} onClick={onPost}><Banknote data-icon="inline-start" /> Maliyyəyə göndər</Button> : null}</div></div>;
+  const unit = campaign.metricKind === "DEPARTMENT_SALES_COUNT" ? "satış" : campaign.metricKind === "TEACHER_RETENTION_RATE" ? "tələbə" : campaign.metricKind === "MANUAL_KPI" ? "xal" : "₼";
+  return <div className="hr-bonus-history-row"><span className="hr-bonus-history-medal"><Star /></span><div><Badge variant="secondary">ETAP AÇILDI</Badge><strong>{formatMetric(stage.threshold, unit)} — {formatRewardRule(stage)}</strong><p>{campaign.metricKind === "TEACHER_RETENTION_RATE" ? `${stage.awards.length} müəllim tələbə sayı pilləsinə uyğun bonus qazandı.` : `Komanda ${formatMetric(stage.threshold, unit)} hədəfini keçdi.`}</p></div><div><span>Qeydiyyat vaxtı</span><strong>{formatDateTime(stage.reachedAt)}</strong></div><div><span>Bonus statusu</span><strong>{postedCount ? "Maliyyəyə göndərilib" : approvedCount ? "HR təsdiqləyib" : "HR təsdiqi gözlənilir"}</strong></div><div className="hr-bonus-history-actions">{canApprove && pendingCount ? <Button size="sm" variant="outline" disabled={pending} onClick={onApprove}><BadgeCheck data-icon="inline-start" /> Təsdiqlə</Button> : null}{canPost && approvedCount ? <Button size="sm" disabled={pending} onClick={onPost}><Banknote data-icon="inline-start" /> Maliyyəyə göndər</Button> : null}</div></div>;
 }
 
 function CreateBonusDialog({ open, departments, teacherDepartments, pending, onClose, onSubmit }: {
@@ -224,6 +226,7 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
   const [department, setDepartment] = useState(departments[0] ?? "");
   const [metricKind, setMetricKind] = useState(initialTeacherDepartment ? "TEACHER_RETENTION_RATE" : "DEPARTMENT_COLLECTED_REVENUE");
   const [stages, setStages] = useState<StageDraft[]>(() => initialTeacherDepartment ? teacherStages() : salesStages());
+  const [teacherPenalties, setTeacherPenalties] = useState<TeacherPenaltyDraft[]>(() => teacherPenaltyDefaults());
   const isTeacherMetric = metricKind === "TEACHER_RETENTION_RATE";
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = useMemo(() => { const value = new Date(); value.setDate(value.getDate() + 30); return value.toISOString().slice(0, 10); }, []);
@@ -234,6 +237,7 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
       setTargetMode("staged");
       setMetricKind("TEACHER_RETENTION_RATE");
       setStages(teacherStages());
+      setTeacherPenalties(teacherPenaltyDefaults());
     } else if (metricKind === "TEACHER_RETENTION_RATE") {
       setMetricKind("DEPARTMENT_SALES_COUNT");
       setStages(salesStages());
@@ -245,6 +249,7 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
     if (value === "TEACHER_RETENTION_RATE") {
       setTargetMode("staged");
       setStages(teacherStages());
+      setTeacherPenalties(teacherPenaltyDefaults());
     }
     else if (metricKind === "TEACHER_RETENTION_RATE") setStages(salesStages());
   }
@@ -254,12 +259,32 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
     const formData = new FormData(event.currentTarget);
     formData.set("department", department);
     formData.set("metricKind", metricKind);
-    formData.set("stages", JSON.stringify(targetMode === "single" ? stages.slice(0, 1) : stages));
+    const submittedStages = (targetMode === "single" ? stages.slice(0, 1) : stages).map((stage, stageIndex) => ({
+      ...stage,
+      churnRules: isTeacherMetric
+        ? teacherPenalties
+            .filter((rule) => rule.tierIndex === stageIndex)
+            .toSorted((first, second) => first.churnThreshold - second.churnThreshold)
+            .map(({ churnThreshold, deductionAmount }) => ({ churnThreshold, deductionAmount }))
+        : [],
+    }));
+    formData.set("stages", JSON.stringify(submittedStages));
     onSubmit(formData);
   }
 
   function updateStage(index: number, field: keyof StageDraft, value: number) {
     setStages((current) => current.map((stage, stageIndex) => stageIndex === index ? { ...stage, [field]: value } : stage));
+  }
+
+  function updatePenalty(index: number, field: keyof TeacherPenaltyDraft, value: number) {
+    setTeacherPenalties((current) => current.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, [field]: value } : rule));
+  }
+
+  function removeTeacherStage(index: number) {
+    setStages((current) => current.filter((_, stageIndex) => stageIndex !== index));
+    setTeacherPenalties((current) => current
+      .filter((rule) => rule.tierIndex !== index)
+      .map((rule) => ({ ...rule, tierIndex: rule.tierIndex > index ? rule.tierIndex - 1 : rule.tierIndex })));
   }
 
   return (
@@ -274,17 +299,34 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
             <Field><FieldLabel htmlFor="bonus-name">Kampaniya adı</FieldLabel><Input id="bonus-name" name="name" placeholder="Məsələn: İyul satış sprinti" required minLength={3} /></Field>
             <Field><FieldLabel>Departament</FieldLabel><FormSelect name="department" value={department} onValueChange={selectDepartment} options={departments.map((item) => ({ value: item, label: item }))} placeholder="Departament seçin" required /></Field>
             <div className="hr-bonus-form-grid"><Field><FieldLabel htmlFor="bonus-start">Başlama tarixi</FieldLabel><Input id="bonus-start" name="startsAt" type="date" defaultValue={today} required /></Field><Field><FieldLabel htmlFor="bonus-end">Bitmə tarixi</FieldLabel><Input id="bonus-end" name="endsAt" type="date" defaultValue={nextMonth} required /></Field></div>
+            <label className="hr-bonus-recurring"><input type="checkbox" name="recursMonthly" value="true" /><span><strong>Hər ay avtomatik davam et</strong><small>Bu dövr bitəndə eyni qaydalarla növbəti ay yaradılacaq.</small></span></label>
             <Field><FieldLabel>Nəticə mənbəyi</FieldLabel><FormSelect name="metricKind" value={metricKind} onValueChange={selectMetric} options={metricOptions} required /><FieldDescription>{metricDescription(metricKind)}</FieldDescription></Field>
-            {isTeacherMetric ? <div className="hr-bonus-teacher-policy"><strong>Müəllim üçün etik retention modeli</strong><p>Dövrün əvvəlində kohort dondurulur. STOPPED və DECLINED churn sayılır, FROZEN cəzalandırılmır. Transferdən sonrakı 7 günlük handover pəncərəsi nəzərə alınır; bonus yalnız dövr bitəndə hesablanır.</p><div className="hr-bonus-form-grid"><Field><FieldLabel htmlFor="teacher-min-cohort">Minimum kohort</FieldLabel><Input id="teacher-min-cohort" name="teacherMinCohortSize" type="number" min="5" max="100" defaultValue="10" required /></Field><Field><FieldLabel htmlFor="teacher-min-tenure">Minimum əlaqə günü</FieldLabel><Input id="teacher-min-tenure" name="teacherMinTenureDays" type="number" min="0" max="90" defaultValue="14" required /></Field><Field><FieldLabel htmlFor="teacher-reference-count">Baza tələbə sayı</FieldLabel><Input id="teacher-reference-count" name="teacherReferenceStudentCount" type="number" min="5" max="200" defaultValue="20" required /></Field></div></div> : null}
             {!isTeacherMetric ? <Field><FieldLabel>Hədəf tipi</FieldLabel><div className="hr-bonus-segment"><button type="button" className={targetMode === "single" ? "is-active" : ""} onClick={() => setTargetMode("single")}>Tək hədəf</button><button type="button" className={targetMode === "staged" ? "is-active" : ""} onClick={() => setTargetMode("staged")}>Etaplı</button></div></Field> : null}
-            <Field>
+            {isTeacherMetric ? <>
+              <Field>
+                <FieldLabel>Tələbə sayına görə bonus</FieldLabel>
+                <FieldDescription>Müəllim hansı pilləyə çatırsa, həmin pillənin baza bonusu götürülür.</FieldDescription>
+                <div className="hr-bonus-stage-editor is-teacher-tier">
+                  {stages.map((stage, index) => <div key={index}><span>{index + 1}</span><FormSelect name={`teacherTier-${index}`} aria-label={`${index + 1}. tələbə sayı pilləsi`} value={String(stage.threshold)} onValueChange={(value) => updateStage(index, "threshold", Number(value))} options={teacherTierOptions(stages, index)} searchable searchPlaceholder="Pillə axtar..." /><i>→</i><Input aria-label={`${index + 1}. müəllim bonusu`} type="number" min="0.01" step="0.01" value={stage.fixedAmount} onChange={(event) => updateStage(index, "fixedAmount", Number(event.target.value))} /><small>₼ bonus</small>{stages.length > 1 ? <button type="button" aria-label="Pilləni sil" onClick={() => removeTeacherStage(index)}>×</button> : null}</div>)}
+                  {stages.length < 6 && (stages.at(-1)?.threshold ?? 0) < 500 ? <Button type="button" variant="outline" size="sm" onClick={() => setStages((current) => { const last = current.at(-1); return [...current, { threshold: (last?.threshold ?? 10) + 10, bonusPool: 0, bonusPercent: 0, fixedAmount: (last?.fixedAmount ?? 0) + 100 }]; })}><Plus data-icon="inline-start" /> Tələbə pilləsi əlavə et</Button> : null}
+                </div>
+              </Field>
+              <Field>
+                <FieldLabel>Churn kəsintiləri</FieldLabel>
+                <FieldDescription>Pilləni seçin, churn sayını və bonusdan çıxılacaq məbləği yazın.</FieldDescription>
+                <div className="hr-bonus-penalty-editor">
+                  {teacherPenalties.map((rule, index) => <div key={index}><FormSelect name={`teacherPenaltyTier-${index}`} aria-label={`${index + 1}. churn pilləsi`} value={String(rule.tierIndex)} onValueChange={(value) => updatePenalty(index, "tierIndex", Number(value))} options={stages.map((stage, stageIndex) => ({ value: String(stageIndex), label: `${stage.threshold}+ tələbə` }))} /><Input aria-label={`${index + 1}. churn sayı`} type="number" min="1" max="500" step="1" value={rule.churnThreshold} onChange={(event) => updatePenalty(index, "churnThreshold", Number(event.target.value))} /><small>churn</small><i>→</i><Input aria-label={`${index + 1}. churn kəsintisi`} type="number" min="0" step="0.01" value={rule.deductionAmount} onChange={(event) => updatePenalty(index, "deductionAmount", Number(event.target.value))} /><small>₼ çıx</small><button type="button" aria-label="Churn qaydasını sil" onClick={() => setTeacherPenalties((current) => current.filter((_, ruleIndex) => ruleIndex !== index))}>×</button></div>)}
+                  {teacherPenalties.length < 12 ? <Button type="button" variant="outline" size="sm" onClick={() => setTeacherPenalties((current) => [...current, { tierIndex: Math.max(0, stages.length - 1), churnThreshold: (current.at(-1)?.churnThreshold ?? 0) + 1, deductionAmount: (current.at(-1)?.deductionAmount ?? 0) + 20 }])}><Plus data-icon="inline-start" /> Churn qaydası əlavə et</Button> : null}
+                </div>
+              </Field>
+            </> : <Field>
               <FieldLabel>Etaplar</FieldLabel>
               <FieldDescription>Faiz maaş/hesablanmış müəllim ödənişi üzərindən, sabit hissə isə AZN ilə hesablanır. Yuxarı etap əvvəlki etabı əvəz edir.</FieldDescription>
               <div className="hr-bonus-stage-editor is-reward-rule">
-                {(targetMode === "single" ? stages.slice(0, 1) : stages).map((stage, index) => <div key={index}><span>{index + 1}</span><Input aria-label={`${index + 1}. etap hədəfi`} title="Hədəf" type="number" min="1" max={isTeacherMetric ? "100" : undefined} step={metricKind === "DEPARTMENT_SALES_COUNT" ? "1" : "0.01"} value={stage.threshold} onChange={(event) => updateStage(index, "threshold", Number(event.target.value))} /><i>→</i><Input aria-label={`${index + 1}. etap bonus faizi`} title="Bonus faizi" type="number" min="0" max="100" step="0.01" value={stage.bonusPercent} onChange={(event) => updateStage(index, "bonusPercent", Number(event.target.value))} /><small>%</small><b>+</b><Input aria-label={`${index + 1}. etap sabit ödənişi`} title="Sabit ödəniş (optional)" type="number" min="0" step="0.01" value={stage.fixedAmount} onChange={(event) => updateStage(index, "fixedAmount", Number(event.target.value))} /><small>₼</small>{targetMode === "staged" && stages.length > 1 ? <button type="button" aria-label="Etapı sil" onClick={() => setStages((current) => current.filter((_, stageIndex) => stageIndex !== index))}>×</button> : null}</div>)}
-                {targetMode === "staged" && stages.length < 6 ? <Button type="button" variant="outline" size="sm" onClick={() => setStages((current) => { const last = current.at(-1); return [...current, { threshold: (last?.threshold ?? 0) + (isTeacherMetric ? 2 : 10), bonusPool: 0, bonusPercent: Math.min(100, (last?.bonusPercent ?? 0) + 10), fixedAmount: last?.fixedAmount ?? 0 }]; })}><Plus data-icon="inline-start" /> Etap əlavə et</Button> : null}
+                {(targetMode === "single" ? stages.slice(0, 1) : stages).map((stage, index) => <div key={index}><span>{index + 1}</span><Input aria-label={`${index + 1}. etap hədəfi`} title="Hədəf" type="number" min="1" step={metricKind === "DEPARTMENT_SALES_COUNT" ? "1" : "0.01"} value={stage.threshold} onChange={(event) => updateStage(index, "threshold", Number(event.target.value))} /><i>→</i><Input aria-label={`${index + 1}. etap bonus faizi`} title="Bonus faizi" type="number" min="0" max="100" step="0.01" value={stage.bonusPercent} onChange={(event) => updateStage(index, "bonusPercent", Number(event.target.value))} /><small>%</small><b>+</b><Input aria-label={`${index + 1}. etap sabit ödənişi`} title="Sabit ödəniş (optional)" type="number" min="0" step="0.01" value={stage.fixedAmount} onChange={(event) => updateStage(index, "fixedAmount", Number(event.target.value))} /><small>₼</small>{targetMode === "staged" && stages.length > 1 ? <button type="button" aria-label="Etapı sil" onClick={() => setStages((current) => current.filter((_, stageIndex) => stageIndex !== index))}>×</button> : null}</div>)}
+                {targetMode === "staged" && stages.length < 6 ? <Button type="button" variant="outline" size="sm" onClick={() => setStages((current) => { const last = current.at(-1); return [...current, { threshold: (last?.threshold ?? 0) + 10, bonusPool: 0, bonusPercent: Math.min(100, (last?.bonusPercent ?? 0) + 10), fixedAmount: last?.fixedAmount ?? 0 }]; })}><Plus data-icon="inline-start" /> Etap əlavə et</Button> : null}
               </div>
-            </Field>
+            </Field>}
             <Field><FieldLabel>Təsdiq axını</FieldLabel><FormSelect name="distributionMode" options={distributionOptions} defaultValue="HR_APPROVAL" required /></Field>
           </FieldGroup>
           <DialogFooter className="hr-bonus-drawer-footer"><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>{pending ? "Yaradılır…" : "Bonus yarat"}</Button></DialogFooter>
@@ -302,7 +344,7 @@ function metricLabel(kind: HrBonusCampaignDto["metricKind"]) { return metricOpti
 function metricDescription(kind: string) {
   if (kind === "DEPARTMENT_COLLECTED_REVENUE") return "Məsul menecerə bağlı tələbə ödənişlərindən avtomatik hesablanır.";
   if (kind === "DEPARTMENT_SALES_COUNT") return "Departament əməkdaşlarına bağlı yeni qeydiyyatlardan hesablanır.";
-  if (kind === "TEACHER_RETENTION_RATE") return "Müəllimin dövr əvvəli tələbə kohortunun saxlanma faizi ilə hesablanır.";
+  if (kind === "TEACHER_RETENTION_RATE") return "Dövrün əvvəlində müəllimdə olan tələbə sayı və dövr ərzindəki churn sayı ilə hesablanır.";
   return "Cari nəticə HR düzəlişləri ilə daxil edilir.";
 }
 function salesStages(): StageDraft[] {
@@ -313,10 +355,27 @@ function salesStages(): StageDraft[] {
 }
 function teacherStages(): StageDraft[] {
   return [
-    { threshold: 90, bonusPool: 0, bonusPercent: 10, fixedAmount: 0 },
-    { threshold: 95, bonusPool: 0, bonusPercent: 20, fixedAmount: 50 },
-    { threshold: 98, bonusPool: 0, bonusPercent: 30, fixedAmount: 100 },
+    { threshold: 20, bonusPool: 0, bonusPercent: 0, fixedAmount: 200 },
+    { threshold: 30, bonusPool: 0, bonusPercent: 0, fixedAmount: 300 },
+    { threshold: 40, bonusPool: 0, bonusPercent: 0, fixedAmount: 400 },
   ];
+}
+function teacherPenaltyDefaults(): TeacherPenaltyDraft[] {
+  return [
+    { tierIndex: 0, churnThreshold: 3, deductionAmount: 60 },
+    { tierIndex: 2, churnThreshold: 6, deductionAmount: 100 },
+  ];
+}
+function teacherTierOptions(stages: StageDraft[], editingIndex: number) {
+  const selectedByOtherRows = new Set(stages.filter((_, index) => index !== editingIndex).map((stage) => stage.threshold));
+  const lowerBound = stages[editingIndex - 1]?.threshold ?? 0;
+  const upperBound = stages[editingIndex + 1]?.threshold ?? 501;
+  const standardValues = Array.from({ length: 50 }, (_, index) => (index + 1) * 10);
+  const values = [...new Set([...standardValues, stages[editingIndex].threshold])]
+    .filter((value) => value > lowerBound && value < upperBound)
+    .filter((value) => !selectedByOtherRows.has(value))
+    .toSorted((first, second) => first - second);
+  return values.map((value) => ({ value: String(value), label: `${value}+ tələbə` }));
 }
 function formatRewardRule(stage?: Pick<HrBonusStageDto, "bonusPool" | "bonusPercent" | "fixedAmount">) {
   if (!stage) return "—";

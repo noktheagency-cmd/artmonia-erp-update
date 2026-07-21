@@ -3,6 +3,12 @@ export type BonusStageInput = {
   bonusPool: number;
   bonusPercent: number;
   fixedAmount: number;
+  churnRules?: TeacherChurnRuleInput[];
+};
+
+export type TeacherChurnRuleInput = {
+  churnThreshold: number;
+  deductionAmount: number;
 };
 
 export function validateBonusStages(stages: BonusStageInput[]) {
@@ -32,12 +38,69 @@ export function validateBonusStages(stages: BonusStageInput[]) {
     if (stage.bonusPool === 0 && (stage.bonusPercent < previousPercent || stage.fixedAmount < previousFixedAmount)) {
       throw new Error("Faiz və sabit ödəniş etaplar üzrə azalmamalıdır");
     }
+    validateTeacherChurnRules(stage.churnRules ?? []);
     previousThreshold = stage.threshold;
     previousPercent = stage.bonusPercent;
     previousFixedAmount = stage.fixedAmount;
   }
 
   return stages;
+}
+
+export function validateTeacherChurnRules(rules: TeacherChurnRuleInput[]) {
+  let previousThreshold = 0;
+  let previousDeduction = -1;
+  for (const rule of rules) {
+    if (!Number.isInteger(rule.churnThreshold) || rule.churnThreshold <= previousThreshold) {
+      throw new Error("Churn sayı müsbət tam ədəd və artan sıra ilə olmalıdır");
+    }
+    if (!Number.isFinite(rule.deductionAmount) || rule.deductionAmount < 0) {
+      throw new Error("Churn kəsintisi mənfi ola bilməz");
+    }
+    if (rule.deductionAmount < previousDeduction) {
+      throw new Error("Churn artdıqca kəsinti azalmamalıdır");
+    }
+    previousThreshold = rule.churnThreshold;
+    previousDeduction = rule.deductionAmount;
+  }
+  return rules;
+}
+
+export function calculateTeacherStudentBonus(
+  baseBonus: number,
+  churnCount: number,
+  rules: TeacherChurnRuleInput[],
+) {
+  const matchingRule = rules.findLast((rule) => churnCount >= rule.churnThreshold);
+  const deductionAmount = money(matchingRule?.deductionAmount ?? 0);
+  return {
+    baseBonus: money(baseBonus),
+    deductionAmount,
+    amount: money(Math.max(0, baseBonus - deductionAmount)),
+  };
+}
+
+export function nextMonthlyBonusPeriod(previousEndsAt: Date) {
+  const startsAt = new Date(Date.UTC(
+    previousEndsAt.getUTCFullYear(),
+    previousEndsAt.getUTCMonth(),
+    previousEndsAt.getUTCDate() + 1,
+  ));
+  const targetMonth = startsAt.getUTCMonth() + 1;
+  const targetYear = startsAt.getUTCFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = targetMonth % 12;
+  const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  const monthLater = new Date(Date.UTC(
+    targetYear,
+    normalizedMonth,
+    Math.min(startsAt.getUTCDate(), lastDay),
+  ));
+  const endsAt = new Date(Date.UTC(
+    monthLater.getUTCFullYear(),
+    monthLater.getUTCMonth(),
+    monthLater.getUTCDate() - 1,
+  ));
+  return { startsAt, endsAt };
 }
 
 export type TierAwardInput = {
@@ -62,11 +125,6 @@ export function calculateTierAward(input: TierAwardInput) {
     amount: money(percentAmount + fixedAmount),
     workloadMultiplier: money(multiplier),
   };
-}
-
-export function teacherWorkloadMultiplier(studentCount: number, referenceCount = 20, maxMultiplier = 1.25) {
-  if (studentCount <= 0 || referenceCount <= 0) return 0;
-  return money(clamp(Math.sqrt(studentCount / referenceCount), 0.75, maxMultiplier));
 }
 
 export function splitBonusPool(pool: number, participantIds: string[]) {
