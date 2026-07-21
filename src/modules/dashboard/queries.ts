@@ -19,6 +19,8 @@ export type DashboardKpi = {
   value: string;
   delta: string;
   helper: string;
+  trend: "up" | "down" | "flat";
+  detail?: string;
   tone: "primary" | "light";
 };
 
@@ -112,8 +114,12 @@ export type DashboardFilters = {
 type DashboardRawRow = {
   activeStudents: unknown;
   activeMrr: unknown;
+  previousActiveStudents: unknown;
+  previousActiveMrr: unknown;
   periodRevenue: unknown;
   periodExpenses: unknown;
+  previousPeriodRevenue: unknown;
+  previousPeriodExpenses: unknown;
   debtAmount: unknown;
   revenueRows: unknown;
   expenseRows: unknown;
@@ -125,6 +131,7 @@ type DashboardRawRow = {
   programStats: unknown;
   totalLeadsThisMonth: unknown;
   convertedLeadsThisMonth: unknown;
+  previousConvertedLeads: unknown;
   studentStatusCounts: unknown;
   teamPerformance: unknown;
 };
@@ -193,6 +200,8 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const cachedToday = getCacheTimeBucket(today);
   const periodStart = dateRange.fromDate;
   const periodEndExclusive = addUtcDays(dateRange.toDate, 1);
+  const previousPeriodStart = shiftUtcMonthClamped(dateRange.fromDate, -1);
+  const previousPeriodEndExclusive = addUtcDays(shiftUtcMonthClamped(dateRange.toDate, -1), 1);
   const selectedMonthStart = startOfMonth(today);
   const firstRevenueMonth = addMonths(selectedMonthStart, -11);
   const nextRevenueMonth = addMonths(selectedMonthStart, 1);
@@ -213,6 +222,40 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "activeMrr",
       coalesce((
+        select count(*)::int
+        from erp.students s
+        where s.registered_at < ${previousPeriodEndExclusive}
+          and coalesce(
+            (
+              select h.new_status
+              from erp.student_status_history h
+              where h.student_id = s.id
+                and h.effective_at < ${previousPeriodEndExclusive}
+              order by h.effective_at desc, h.created_at desc
+              limit 1
+            ),
+            s.lifecycle_status
+          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+      ), 0) as "previousActiveStudents",
+      coalesce((
+        select sum(e.monthly_fee)
+        from erp.enrollments e
+        join erp.students s on s.id = e.student_id
+        where e.start_date < ${previousPeriodEndExclusive}
+          and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
+          and coalesce(
+            (
+              select h.new_status
+              from erp.student_status_history h
+              where h.student_id = s.id
+                and h.effective_at < ${previousPeriodEndExclusive}
+              order by h.effective_at desc, h.created_at desc
+              limit 1
+            ),
+            s.lifecycle_status
+          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+      ), 0) as "previousActiveMrr",
+      coalesce((
         select sum(p.amount)
         from erp.payments p
         where p.paid_at >= ${periodStart}
@@ -224,6 +267,18 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         where fe.expense_date >= ${periodStart}
           and fe.expense_date < ${periodEndExclusive}
       ), 0) as "periodExpenses",
+      coalesce((
+        select sum(p.amount)
+        from erp.payments p
+        where p.paid_at >= ${previousPeriodStart}
+          and p.paid_at < ${previousPeriodEndExclusive}
+      ), 0) as "previousPeriodRevenue",
+      coalesce((
+        select sum(fe.amount)
+        from erp.finance_expenses fe
+        where fe.expense_date >= ${previousPeriodStart}
+          and fe.expense_date < ${previousPeriodEndExclusive}
+      ), 0) as "previousPeriodExpenses",
       coalesce((
         select sum(i.balance_due)
         from erp.invoices i
@@ -404,6 +459,13 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
       ), 0) as "convertedLeadsThisMonth",
       coalesce((
+        select count(*)::int
+        from erp.leads l
+        where l.created_at >= ${previousPeriodStart}
+          and l.created_at < ${previousPeriodEndExclusive}
+          and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
+      ), 0) as "previousConvertedLeads",
+      coalesce((
         select jsonb_agg(
           jsonb_build_object(
             'status', status_counts.status,
@@ -456,6 +518,8 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       nextRevenueMonth.toISOString(),
       periodStart.toISOString(),
       periodEndExclusive.toISOString(),
+      previousPeriodStart.toISOString(),
+      previousPeriodEndExclusive.toISOString(),
       cachedToday.toISOString(),
     ],
     {
@@ -540,7 +604,15 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   
   const activeStudents = toNumber(row?.activeStudents);
   const activeMrr = toNumber(row?.activeMrr);
-  const netProfit = toNumber(row?.periodRevenue) - toNumber(row?.periodExpenses);
+  const previousActiveStudents = toNumber(row?.previousActiveStudents);
+  const previousActiveMrr = toNumber(row?.previousActiveMrr);
+  const periodRevenue = toNumber(row?.periodRevenue);
+  const periodExpenses = toNumber(row?.periodExpenses);
+  const previousPeriodRevenue = toNumber(row?.previousPeriodRevenue);
+  const previousPeriodExpenses = toNumber(row?.previousPeriodExpenses);
+  const netProfit = periodRevenue - periodExpenses;
+  const previousNetProfit = previousPeriodRevenue - previousPeriodExpenses;
+  const netProfitMargin = periodRevenue !== 0 ? (netProfit / periodRevenue) * 100 : 0;
   const totalDebt = toNumber(row?.debtAmount);
   const payoutPreview = toNumber(row?.payoutPreview);
   const waitingLeads = toNumber(row?.waitingLeads);
@@ -548,6 +620,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
 
   const totalLeadsThisMonth = toNumber(row?.totalLeadsThisMonth);
   const convertedLeadsThisMonth = toNumber(row?.convertedLeadsThisMonth);
+  const previousConvertedLeads = toNumber(row?.previousConvertedLeads);
   const conversionRate = totalLeadsThisMonth > 0 
     ? `${Math.round((convertedLeadsThisMonth / totalLeadsThisMonth) * 100)}%`
     : "0%";
@@ -605,6 +678,11 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     };
   });
 
+  const activeStudentsTrend = calculateKpiTrend(activeStudents, previousActiveStudents);
+  const activeMrrTrend = calculateKpiTrend(activeMrr, previousActiveMrr);
+  const netProfitTrend = calculateKpiTrend(netProfit, previousNetProfit);
+  const salesTrend = calculateKpiTrend(convertedLeadsThisMonth, previousConvertedLeads);
+
   return {
     filters: {
       from: dateRange.from,
@@ -615,29 +693,34 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       {
         label: "Aktiv tələbə",
         value: formatCount(activeStudents),
-        delta: "Tədris alan",
-        helper: "Bu ay dərslərdə iştirak edənlər",
+        delta: activeStudentsTrend.delta,
+        helper: "Ötən aya nisbətən",
+        trend: activeStudentsTrend.direction,
         tone: "primary",
       },
       {
         label: "Aylıq dövriyyə (MRR)",
         value: formatAmount(activeMrr),
-        delta: "Abunəlik",
-        helper: "Aktiv müqavilələr üzrə dövriyyə",
+        delta: activeMrrTrend.delta,
+        helper: "Ötən aya nisbətən",
+        trend: activeMrrTrend.direction,
         tone: "light",
       },
       {
         label: "Net Profit",
         value: formatAmount(netProfit),
-        delta: "Xalis gəlir",
-        helper: "Daxil olan ödənişlərdən xərclər çıxıldıqdan sonra",
+        delta: netProfitTrend.delta,
+        helper: "Ötən aya nisbətən",
+        trend: netProfitTrend.direction,
+        detail: `${formatPercentage(netProfitMargin)} xalis mənfəət marjası`,
         tone: "light",
       },
       {
         label: "Satış sayı",
         value: formatCount(convertedLeadsThisMonth),
-        delta: "Yeni satışlar",
-        helper: `${totalLeadsThisMonth} müraciətdən çevrilib`,
+        delta: salesTrend.delta,
+        helper: "Ötən aya nisbətən",
+        trend: salesTrend.direction,
         tone: "light",
       },
     ],
@@ -744,6 +827,26 @@ function getCacheTimeBucket(value: Date) {
   return new Date(Math.floor(value.getTime() / bucketMs) * bucketMs);
 }
 
+function calculateKpiTrend(current: number, previous: number) {
+  const direction = current > previous ? "up" : current < previous ? "down" : "flat";
+  const change = previous === 0
+    ? (current === 0 ? 0 : 100)
+    : Math.abs(((current - previous) / Math.abs(previous)) * 100);
+  const prefix = direction === "up" ? "+" : direction === "down" ? "−" : "";
+
+  return {
+    direction,
+    delta: `${prefix}${formatPercentage(change)}`,
+  } as const;
+}
+
+function formatPercentage(value: number) {
+  return `${new Intl.NumberFormat("az-AZ", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(value)}%`;
+}
+
 function resolveDashboardDateRange(filters: DashboardFilters) {
   const today = startOfUtcDay(new Date());
   const defaultFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
@@ -821,6 +924,22 @@ function addUtcDays(value: Date, days: number) {
   const next = new Date(value);
   next.setUTCDate(next.getUTCDate() + days);
   return next;
+}
+
+function shiftUtcMonthClamped(value: Date, amount: number) {
+  const targetMonth = value.getUTCMonth() + amount;
+  const targetMonthStart = new Date(Date.UTC(value.getUTCFullYear(), targetMonth, 1));
+  const targetMonthEnd = new Date(Date.UTC(
+    targetMonthStart.getUTCFullYear(),
+    targetMonthStart.getUTCMonth() + 1,
+    0
+  ));
+
+  return new Date(Date.UTC(
+    targetMonthStart.getUTCFullYear(),
+    targetMonthStart.getUTCMonth(),
+    Math.min(value.getUTCDate(), targetMonthEnd.getUTCDate())
+  ));
 }
 
 function sameUtcDay(left: Date, right: Date) {

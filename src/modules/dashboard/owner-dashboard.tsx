@@ -4,9 +4,11 @@ import type { Route } from "next";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
+  Minus,
   ArrowUpRight,
   BadgeDollarSign,
   GraduationCap,
+  TrendingDown,
   TrendingUp,
   WalletCards,
 } from "lucide-react";
@@ -111,6 +113,7 @@ function DashboardKpiLink({
   index: number;
 }) {
   const Icon = presentation.icon;
+  const TrendIcon = item.trend === "up" ? TrendingUp : item.trend === "down" ? TrendingDown : Minus;
 
   return (
     <Link
@@ -125,7 +128,17 @@ function DashboardKpiLink({
         <span>{item.label}</span>
         <ArrowRight className="owner-dashboard-kpi-arrow" size={18} aria-hidden="true" />
       </div>
-      <strong>{item.value}</strong>
+      <div className="owner-dashboard-kpi-value">
+        <strong>{item.value}</strong>
+        {item.detail ? <span>{item.detail}</span> : null}
+      </div>
+      <div className={`owner-dashboard-kpi-meta is-${item.trend}`}>
+        <span className="owner-dashboard-kpi-trend">
+          <TrendIcon size={15} strokeWidth={2.2} aria-hidden="true" />
+          <em>{item.delta}</em>
+        </span>
+        <small>{item.helper}</small>
+      </div>
     </Link>
   );
 }
