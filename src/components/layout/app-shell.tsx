@@ -8,6 +8,7 @@ import {
   type MouseEvent,
   type PointerEvent,
   type SyntheticEvent,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -19,6 +20,7 @@ import {
   Gauge,
   GraduationCap,
   LogOut,
+  Menu,
   Megaphone,
   PanelLeftClose,
   PanelLeftOpen,
@@ -26,6 +28,7 @@ import {
   Settings2,
   ListTodo,
   UsersRound,
+  X,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
 
@@ -74,6 +77,7 @@ export function AppShell({
   const searchParams = useSearchParams();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [isSidebarCompact, setIsSidebarCompact] = useState(false);
+  const [mobileSidebarPathname, setMobileSidebarPathname] = useState<string | null>(null);
   const prefetchedHrefs = useRef<Set<string>>(new Set());
   const currentParams = searchParams.toString();
   const currentHref = currentParams ? `${pathname}?${currentParams}` : pathname;
@@ -91,6 +95,36 @@ export function AppShell({
   const isVisible = (item: NavItem) => item.requiredPermissions.some((permission) => permissionSet.has(permission));
   const visiblePrimaryNavItems = primaryNavItems.filter(isVisible);
   const visibleSecondaryNavItems = secondaryNavItems.filter(isVisible);
+  const isMobileSidebarOpen = mobileSidebarPathname === pathname;
+
+  useEffect(() => {
+    if (!isMobileSidebarOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    const desktopQuery = window.matchMedia("(min-width: 961px)");
+    const closeOnDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setMobileSidebarPathname(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileSidebarPathname(null);
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    desktopQuery.addEventListener("change", closeOnDesktop);
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      desktopQuery.removeEventListener("change", closeOnDesktop);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isMobileSidebarOpen]);
 
   function markNavigation(href: string | null) {
     if (href && href !== currentHref) {
@@ -114,6 +148,7 @@ export function AppShell({
     }
 
     markNavigation(href);
+    setMobileSidebarPathname(null);
   }
 
   function handleNavPointerDown(href: Route, event: PointerEvent<HTMLAnchorElement>) {
@@ -190,12 +225,44 @@ export function AppShell({
       className={cx(
         "app-stage",
         isNavigating && "is-navigating",
-        isSidebarCompact && "is-sidebar-compact"
+        isSidebarCompact && "is-sidebar-compact",
+        isMobileSidebarOpen && "is-mobile-sidebar-open"
       )}
     >
       <div className="studio-wash" aria-hidden="true" />
       <div className="route-progress" aria-hidden={!isNavigating} data-visible={isNavigating} />
-      <aside className="side-rail" aria-label="Əsas naviqasiya">
+      <header className="mobile-shell-bar">
+        <button
+          className="mobile-menu-button"
+          type="button"
+          aria-label="Menyunu aç"
+          aria-controls="primary-sidebar"
+          aria-expanded={isMobileSidebarOpen}
+          onClick={() => setMobileSidebarPathname(pathname)}
+        >
+          <Menu size={21} strokeWidth={2} />
+        </button>
+        <Link
+          href="/dashboard"
+          className="mobile-shell-brand"
+          aria-label="Artmonia ERP ana səhifə"
+          onClick={(event) => handleNavClick("/dashboard", event)}
+          prefetch={false}
+        >
+          <Image src="/logo.png" alt="" width={30} height={30} priority />
+          <span>Artmonia ERP</span>
+        </Link>
+      </header>
+
+      <button
+        className="mobile-sidebar-backdrop"
+        type="button"
+        aria-label="Menyunu bağla"
+        tabIndex={isMobileSidebarOpen ? 0 : -1}
+        onClick={() => setMobileSidebarPathname(null)}
+      />
+
+      <aside id="primary-sidebar" className="side-rail" aria-label="Əsas naviqasiya">
         <Link
           href="/dashboard"
           className="brand-mark"
@@ -208,6 +275,14 @@ export function AppShell({
         >
           <Image className="brand-logo" src="/logo.png" alt="" width={34} height={34} priority />
         </Link>
+        <button
+          className="mobile-sidebar-close"
+          type="button"
+          aria-label="Menyunu bağla"
+          onClick={() => setMobileSidebarPathname(null)}
+        >
+          <X size={19} strokeWidth={2} />
+        </button>
         <button
           className="sidebar-toggle"
           type="button"
@@ -278,9 +353,15 @@ export function AppShell({
         </nav>
 
         <div className="rail-bottom-stack">
-          <div
+          <Link
+            href={"/profile" as Route}
             className="nav-icon"
             aria-label={`${currentUser.fullName} (${currentUser.roles.join(", ")})`}
+            onClick={(event) => handleNavClick("/profile" as Route, event)}
+            onPointerDown={(event) => handleNavPointerDown("/profile" as Route, event)}
+            onMouseEnter={() => handleNavHover("/profile" as Route)}
+            onFocus={() => handleNavHover("/profile" as Route)}
+            prefetch={false}
           >
             {currentUser.profilePhotoUrl ? (
               <Image
@@ -294,7 +375,7 @@ export function AppShell({
             ) : (
               <div className="sidebar-avatar">{initials || "A"}</div>
             )}
-          </div>
+          </Link>
           <form action={signOutAction}>
             <button className="nav-icon" type="submit" aria-label="Çıxış">
               <LogOut size={18} strokeWidth={1.9} />

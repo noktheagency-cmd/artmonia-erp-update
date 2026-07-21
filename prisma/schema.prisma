@@ -253,6 +253,34 @@ enum HrBonusAwardStatus {
   @@schema("erp")
 }
 
+enum HrNotificationCategory {
+  RULE_VIOLATION
+  PERFORMANCE_WARNING
+  INFORMATION
+  APPRECIATION
+  MANUAL
+
+  @@schema("erp")
+}
+
+enum HrNotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@schema("erp")
+}
+
+enum HrNotificationStatus {
+  SENT
+  READ
+  ACKNOWLEDGED
+  RESOLVED
+
+  @@schema("erp")
+}
+
 model User {
   id         String   @id @default(uuid()) @db.Uuid
   authUserId String?  @unique @map("auth_user_id") @db.Uuid
@@ -303,6 +331,7 @@ model User {
   createdBonusCampaigns         HrBonusCampaign[]           @relation("HrBonusCampaignCreator")
   bonusProgressAdjustments      HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
   approvedBonusAwards           HrBonusAward[]              @relation("HrBonusAwardApprover")
+  createdHrNotifications        HrStaffNotification[]       @relation("HrNotificationCreator")
 
   @@map("users")
   @@schema("erp")
@@ -330,14 +359,41 @@ model HrEmployee {
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
-  user                 User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
-  teacher              Teacher?             @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  teacher              Teacher?              @relation(fields: [teacherId], references: [id], onDelete: SetNull)
   bonusParticipants    HrBonusParticipant[]
-  bonusFinanceExpenses FinanceExpense[]     @relation("FinanceExpenseHrEmployee")
+  bonusFinanceExpenses FinanceExpense[]      @relation("FinanceExpenseHrEmployee")
+  notifications        HrStaffNotification[]
 
   @@index([status])
   @@index([department])
   @@map("hr_employees")
+  @@schema("erp")
+}
+
+model HrStaffNotification {
+  id             String                 @id @default(uuid()) @db.Uuid
+  employeeId     String                 @map("employee_id") @db.Uuid
+  creatorUserId  String                 @map("creator_user_id") @db.Uuid
+  category       HrNotificationCategory
+  priority       HrNotificationPriority @default(NORMAL)
+  title          String
+  message        String
+  status         HrNotificationStatus   @default(SENT)
+  sentAt         DateTime               @default(now()) @map("sent_at")
+  readAt         DateTime?              @map("read_at")
+  acknowledgedAt DateTime?              @map("acknowledged_at")
+  resolvedAt     DateTime?              @map("resolved_at")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  employee HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  creator  User       @relation("HrNotificationCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, createdAt])
+  @@index([employeeId, status])
+  @@index([creatorUserId, createdAt])
+  @@map("hr_staff_notifications")
   @@schema("erp")
 }
 

@@ -22,3 +22,6 @@
 .hr-account-grid .is-wide { grid-column: 1 / -1; }
 .hr-table-section table { min-width: 1080px; }
 @media (max-width: 760px) { .hr-account-grid { grid-template-columns: 1fr; } .hr-account-grid .is-wide { grid-column: auto; } }
+.hr-person-link { color: inherit; text-decoration: none; }
+.hr-person-link:hover strong { color: #5e52c4; }
+.hr-person-link:focus-visible { outline: 2px solid #8b80df; outline-offset: 4px; border-radius: 8px; }

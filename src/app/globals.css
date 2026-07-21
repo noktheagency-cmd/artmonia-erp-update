@@ -21019,7 +21019,7 @@ body .erp-frame th {
   box-shadow: none;
 }
 
-@media (max-width: 820px) {
+@media (max-width: 960px) {
   .erp-frame {
     margin: 0;
     border-radius: 0;
@@ -21436,4 +21436,437 @@ body:has(.workshop-dialog) .ui-select-content {
   .student-create-dialog { width: min(calc(100vw - 20px), 620px); max-height: calc(100vh - 20px); }
   .student-create-form { max-height: calc(100vh - 88px); padding-inline: 12px; }
   .student-create-toolbar { margin-inline: -12px; padding-inline: 12px; }
+}
+
+/* Responsive application shell — authoritative mobile layer. */
+.mobile-shell-bar,
+.mobile-sidebar-close,
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  html,
+  body,
+  .app-stage,
+  .erp-frame,
+  .route-content-shell {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .app-stage {
+    min-width: 0;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .mobile-shell-bar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 900;
+    display: flex;
+    min-width: 0;
+    height: calc(64px + env(safe-area-inset-top));
+    align-items: center;
+    gap: 11px;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+    background: rgb(255 255 255 / 90%);
+    border-bottom: 1px solid rgb(221 227 235 / 88%);
+    box-shadow: 0 8px 24px rgb(29 41 57 / 7%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .mobile-menu-button,
+  .mobile-sidebar-close {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    place-items: center;
+    padding: 0;
+    color: #344054;
+    background: #f7f9fc;
+    border: 1px solid #dfe5ed;
+    border-radius: 13px;
+    box-shadow: 0 4px 12px rgb(29 41 57 / 5%);
+  }
+
+  .mobile-menu-button:focus-visible,
+  .mobile-sidebar-close:focus-visible {
+    outline: 3px solid rgb(217 106 8 / 22%);
+    outline-offset: 2px;
+  }
+
+  .mobile-shell-brand {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+    color: #202939;
+    font-size: 14px;
+    font-weight: 760;
+    letter-spacing: -0.015em;
+  }
+
+  .mobile-shell-brand img {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
+
+  .mobile-shell-brand span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    display: block;
+    width: 100%;
+    height: 100dvh;
+    padding: 0;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    background: rgb(15 23 42 / 42%);
+    border: 0;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    transition: opacity 220ms ease, visibility 0s linear 220ms;
+  }
+
+  .app-stage.is-mobile-sidebar-open .mobile-sidebar-backdrop {
+    pointer-events: auto;
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 220ms ease;
+  }
+
+  .side-rail,
+  .app-stage.is-sidebar-compact .side-rail {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1100;
+    display: flex;
+    width: min(84vw, 320px);
+    height: 100dvh;
+    min-height: 0;
+    align-items: stretch;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: calc(16px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom));
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+    border: 0 !important;
+    border-right: 1px solid #e1e7ef !important;
+    border-radius: 0 24px 24px 0;
+    box-shadow: 20px 0 54px rgb(15 23 42 / 18%) !important;
+    transform: translate3d(-104%, 0, 0);
+    transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 260ms;
+  }
+
+  .app-stage.is-mobile-sidebar-open .side-rail {
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate3d(0, 0, 0);
+    transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .side-rail .brand-mark,
+  .app-stage.is-sidebar-compact .side-rail .brand-mark {
+    width: 48px;
+    height: 48px;
+    align-self: flex-start;
+    margin: 0 0 18px 4px;
+    border-radius: 14px;
+  }
+
+  .side-rail .brand-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .mobile-sidebar-close {
+    position: absolute;
+    top: calc(18px + env(safe-area-inset-top));
+    right: 16px;
+  }
+
+  .sidebar-toggle {
+    display: none;
+  }
+
+  .side-rail .nav-stack,
+  .app-stage.is-sidebar-compact .side-rail .nav-stack {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    align-items: stretch;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+    padding: 2px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .side-rail .nav-section-label,
+  .side-rail .nav-divider,
+  .app-stage.is-sidebar-compact .side-rail .nav-section-label,
+  .app-stage.is-sidebar-compact .side-rail .nav-divider {
+    display: block;
+    width: auto;
+    height: auto;
+    pointer-events: auto;
+    opacity: 1;
+    transform: none;
+  }
+
+  .side-rail .nav-section-label,
+  .app-stage.is-sidebar-compact .side-rail .nav-section-label {
+    margin: 9px 10px 5px;
+    overflow: visible;
+  }
+
+  .side-rail .nav-divider,
+  .app-stage.is-sidebar-compact .side-rail .nav-divider {
+    height: 1px;
+    margin: 10px 8px 2px;
+  }
+
+  .side-rail .nav-icon,
+  .app-stage.is-sidebar-compact .side-rail .nav-icon {
+    display: flex;
+    width: 100%;
+    min-height: 46px;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 0 13px;
+    border-radius: 13px;
+  }
+
+  .side-rail .nav-icon > span,
+  .app-stage.is-sidebar-compact .side-rail .nav-icon > span {
+    display: block;
+    width: auto;
+    min-width: 0;
+    opacity: 1;
+    transform: none;
+  }
+
+  .side-rail .rail-bottom-stack,
+  .app-stage.is-sidebar-compact .side-rail .rail-bottom-stack {
+    display: grid;
+    width: 100%;
+    align-items: stretch;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgb(130 148 178 / 18%);
+  }
+
+  .side-rail .rail-bottom-stack .nav-icon,
+  .side-rail .rail-bottom-stack form .nav-icon {
+    justify-content: center;
+  }
+
+  .side-rail .rail-bottom-stack form {
+    width: 46px;
+  }
+
+  .erp-frame,
+  .app-stage.is-sidebar-compact .erp-frame,
+  .erp-frame[data-dashboard-section="false"] {
+    width: 100%;
+    min-width: 0;
+    min-height: 100dvh;
+    margin: 0;
+    padding: calc(78px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+  }
+
+  .route-content-shell,
+  .route-content-shell > * {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .route-pending-overlay {
+    top: calc(72px + env(safe-area-inset-top));
+    right: 14px;
+  }
+
+  .erp-frame :is(
+    .page-stack,
+    .owner-dashboard,
+    .crm-command-page,
+    .students-command-page,
+    .finance-command-page,
+    .hr-command,
+    .tasks-page,
+    .marketing-redesign,
+    .playbook-page,
+    .workshop-shell,
+    .workshop-detail-shell
+  ) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .erp-frame :is(
+    .page-heading,
+    .panel-head,
+    .table-toolbar,
+    .students-page-header,
+    .students-table-heading,
+    .finance-command-hero,
+    .finance-hero-head,
+    .hr-command-header,
+    .marketing-topbar,
+    .playbook-header,
+    .workshop-topbar,
+    .workshop-detail-topbar
+  ) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .erp-frame :is(
+    .data-table-wrap,
+    .students-table-scroll,
+    .crm-table-scroll,
+    .finance-table-scroll,
+    .hr-table-scroll,
+    .workshop-data-table-wrap,
+    .table-scroll
+  ) {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .owner-dashboard-kpi,
+  .owner-dashboard-panel,
+  .owner-dashboard-revenue-panel,
+  .owner-dashboard-compact-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .owner-dashboard-kpi {
+    padding-inline: 16px;
+  }
+
+  .owner-dashboard-kpi-head {
+    grid-template-columns: 38px minmax(0, 1fr) 20px;
+    gap: 9px;
+  }
+
+  .owner-dashboard-revenue-panel .owner-dashboard-panel-head,
+  .owner-dashboard-monthly-metrics-head,
+  .owner-dashboard-compact-heading {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .owner-dashboard-monthly-metrics-scroll,
+  .finance-command-page .finance-tabs,
+  .students-tabs,
+  .crm-quick-periods,
+  .filter-chips,
+  .section-tabs,
+  .hr-ops-tabs,
+  .workshop-detail-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .owner-dashboard-monthly-metrics-scroll::-webkit-scrollbar,
+  .finance-command-page .finance-tabs::-webkit-scrollbar,
+  .students-tabs::-webkit-scrollbar,
+  .crm-quick-periods::-webkit-scrollbar,
+  .filter-chips::-webkit-scrollbar,
+  .section-tabs::-webkit-scrollbar,
+  .hr-ops-tabs::-webkit-scrollbar,
+  .workshop-detail-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ui-dialog-content,
+  [role="dialog"] {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+}
+
+@media (max-width: 480px) {
+  .mobile-shell-bar {
+    height: calc(60px + env(safe-area-inset-top));
+    padding-inline: 10px;
+  }
+
+  .mobile-menu-button {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+
+  .erp-frame,
+  .app-stage.is-sidebar-compact .erp-frame,
+  .erp-frame[data-dashboard-section="false"] {
+    padding: calc(72px + env(safe-area-inset-top)) 10px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .owner-dashboard-header h1,
+  .erp-frame[data-dashboard-section="false"] .page-heading h1,
+  .students-page-header h1,
+  .crm-command-header h1,
+  .finance-title-block h1,
+  .workshop-topbar h1,
+  .workshop-detail-topbar h1 {
+    font-size: clamp(23px, 8vw, 28px);
+    line-height: 1.12;
+  }
+
+  .owner-dashboard-revenue-summary,
+  .owner-dashboard-lower-grid,
+  .summary-grid,
+  .hr-metric-grid,
+  .hr-employee-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-dashboard-revenue-stat,
+  .owner-dashboard-best-month {
+    border-right: 0;
+    border-bottom: 1px solid var(--dashboard-line);
+  }
+
+  .owner-dashboard-revenue-summary > :last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-rail,
+  .mobile-sidebar-backdrop {
+    transition: none !important;
+  }
 }

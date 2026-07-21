@@ -35,6 +35,8 @@ export type TeacherAssignmentFallback = {
 
 export type TeacherDirectoryTeacher = {
   id: string;
+  hrEmployeeId: string;
+  salaryMode: "STATIC" | "PERCENT";
   userId: string;
   userName: string;
   fullName: string;
@@ -68,6 +70,10 @@ export type TeacherDirectoryData = {
 
 type TeacherRawRow = {
   id: string;
+  hrEmployeeId: string | null;
+  salaryMode: string | null;
+  salaryAmount: Prisma.Decimal | number | string | null;
+  employeeSalaryPercent: Prisma.Decimal | number | string | null;
   userId: string | null;
   userName: string | null;
   fullName: string;
@@ -112,10 +118,14 @@ type TeacherAssignmentRaw = {
   reason: string | null;
 };
 
-export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
+export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<TeacherDirectoryData> {
   const actor = await requireErpActor();
+  const canReadTeachers = actor.permissions.has("teacher.read");
+  const ownTeacher = !canReadTeachers && ownTeacherId
+    ? await getPrisma().teacher.findFirst({ where: { id: ownTeacherId, userId: actor.id }, select: { id: true } })
+    : null;
 
-  if (!actor.permissions.has("teacher.read")) {
+  if (!canReadTeachers && !ownTeacher) {
     return {
       permissions: {
         canReadTeachers: false,
@@ -128,9 +138,14 @@ export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
   }
 
   const prisma = getPrisma();
+  const teacherScope = canReadTeachers ? Prisma.empty : Prisma.sql`where t.id = ${ownTeacher!.id}::uuid`;
   const rows = await prisma.$queryRaw<TeacherRawRow[]>(Prisma.sql`
     select
       t.id::text as "id",
+      he.id::text as "hrEmployeeId",
+      he.salary_mode::text as "salaryMode",
+      he.salary_amount as "salaryAmount",
+      he.salary_percent as "employeeSalaryPercent",
       t.user_id::text as "userId",
       linked_user.full_name as "userName",
       t.full_name as "fullName",
@@ -145,6 +160,7 @@ export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
       coalesce(lessons.items, '[]'::jsonb) as "lessons",
       coalesce(assignments.items, '[]'::jsonb) as "assignmentHistory"
     from erp.teachers t
+    left join erp.hr_employees he on he.teacher_id = t.id
     left join erp.users linked_user on linked_user.id = t.user_id
     left join erp.contacts tc on tc.id = t.contact_id
     left join lateral (
@@ -301,6 +317,7 @@ export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
         limit 12
       ) assignment_rows
     ) assignments on true
+    ${teacherScope}
     order by t.is_active desc, t.full_name asc
   `);
 
@@ -318,7 +335,7 @@ export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
 
   return {
     permissions: {
-      canReadTeachers: actor.permissions.has("teacher.read"),
+      canReadTeachers,
       canManageTeacherAccounts,
       canManageTeacherRules: actor.permissions.has("teacher.rule.manage"),
     },
@@ -330,9 +347,15 @@ export async function getTeacherDirectoryData(): Promise<TeacherDirectoryData> {
 function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teacher-payroll").TeacherPayrollPreview): TeacherDirectoryTeacher {
   const capacity = Number(row.capacity ?? 0);
   const activeStudentCount = Number(row.activeStudentCount ?? 0);
+  const salaryMode = row.salaryMode === "STATIC" ? "STATIC" : "PERCENT";
+  const salaryPercent = row.hrEmployeeId
+    ? Number(row.employeeSalaryPercent ?? payroll?.salaryPercent ?? 0)
+    : payroll?.salaryPercent ?? 0;
 
   return {
     id: row.id,
+    hrEmployeeId: row.hrEmployeeId ?? "",
+    salaryMode,
     userId: row.userId ?? "",
     userName: row.userName ?? "Bağlanmayıb",
     fullName: row.fullName,
@@ -341,10 +364,12 @@ function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teache
     isActive: row.isActive,
     activeStudentCount,
     utilization: capacity > 0 ? Math.round((activeStudentCount / capacity) * 100) : 0,
-    salaryPercent: payroll?.salaryPercent ?? 0,
+    salaryPercent,
     paidRevenue: payroll?.paidRevenue ?? 0,
     eligibleRevenue: payroll?.eligibleRevenue ?? 0,
-    estimatedSalary: payroll?.payoutAmount ?? 0,
+    estimatedSalary: salaryMode === "STATIC"
+      ? Number(row.salaryAmount ?? 0)
+      : payroll?.payoutAmount ?? 0,
     attendedLessons: payroll?.attendedLessons ?? 0,
     plannedLessons: payroll?.plannedLessons ?? 0,
     nextLesson:

@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import type { Route } from "next";
 import { useMemo, useState, useTransition, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Cell, Pie, PieChart, Tooltip } from "recharts";
@@ -689,7 +691,7 @@ function EmployeeTable({
               employees.map((employee) => (
                 <tr key={employee.id}>
                   <td>
-                    <div className="hr-person">
+                    <Link href={`/hr/${employee.id}` as Route} className="hr-person hr-person-link">
                       <span>{initials(employee.fullName)}</span>
                       <div>
                         <strong>{employee.fullName}</strong>
@@ -699,7 +701,7 @@ function EmployeeTable({
                             "Əlaqə qeyd edilməyib"}
                         </small>
                       </div>
-                    </div>
+                    </Link>
                   </td>
                   <td>
                     <Badge
@@ -819,13 +821,13 @@ function TeacherTable({
               teachers.map((teacher) => (
                 <tr key={teacher.id}>
                   <td>
-                    <div className="hr-person">
+                    <Link href={(teacher.hrEmployeeId ? `/hr/${teacher.hrEmployeeId}` : "/hr") as Route} className="hr-person hr-person-link">
                       <span>{initials(teacher.fullName)}</span>
                       <div>
                         <strong>{teacher.fullName}</strong>
                         <small>{teacher.activeStudentCount} aktiv tələbə</small>
                       </div>
-                    </div>
+                    </Link>
                   </td>
                   <td>
                     <strong>
@@ -841,7 +843,9 @@ function TeacherTable({
                   </td>
                   <td>
                     <Badge variant="secondary">
-                      {teacher.salaryPercent
+                      {teacher.salaryMode === "STATIC"
+                        ? "Statik maaş"
+                        : teacher.salaryPercent
                         ? `${teacher.salaryPercent}%`
                         : "Təyin edilməyib"}
                     </Badge>
@@ -870,13 +874,15 @@ function TeacherTable({
                         >
                           Profil
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onEditSalary(teacher)}
-                        >
-                          Faiz
-                        </Button>
+                        {!teacher.hrEmployeeId && teacher.salaryMode === "PERCENT" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onEditSalary(teacher)}
+                          >
+                            Faiz
+                          </Button>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="icon-sm"

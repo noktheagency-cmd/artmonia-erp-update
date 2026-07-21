@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppRole, FinanceSalaryMode, HrStaffType, Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
+import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
@@ -69,7 +70,9 @@ export async function createStaffAction(formData: FormData) {
       if (input.staffType === "TEACHER") {
         const teacher = await tx.teacher.create({ data: { userId: erpUser?.id ?? null, fullName: input.fullName, phone: input.phone || null, capacity: input.teacherCapacity } });
         teacherId = teacher.id;
-        await tx.teacherContractRule.create({ data: { teacherId, salaryPercent: input.salaryPercent, validFrom: currentMonth(), createdById: actor.id } });
+        if (input.salaryMode === "PERCENT") {
+          await tx.teacherContractRule.create({ data: { teacherId, salaryPercent: input.salaryPercent, validFrom: currentMonth(), createdById: actor.id } });
+        }
       }
 
       const employee = await tx.hrEmployee.create({ data: {
@@ -131,6 +134,9 @@ export async function updateStaffAction(formData: FormData) {
     await getPrisma().$transaction(async (tx) => {
       await tx.hrEmployee.update({ where: { id: input.id }, data: employeeData });
       if (before.teacherId) await tx.teacher.update({ where: { id: before.teacherId }, data: { fullName: input.fullName, phone: input.phone || null, capacity: input.teacherCapacity || undefined, isActive: input.status !== "INACTIVE" } });
+      if (before.teacherId && input.salaryMode === "PERCENT") {
+        await syncTeacherSalaryRule(tx, before.teacherId, input.salaryPercent, actor.id);
+      }
       await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.employee.update", entityType: "hr_employee", entityId: input.id, before, after: employeeData as Prisma.InputJsonValue, reason: "Əməkdaş profili yeniləndi" });
     });
   } catch (error) {
@@ -140,7 +146,45 @@ export async function updateStaffAction(formData: FormData) {
   if (uploadedProfilePhotoUrl && before.profilePhotoUrl && before.profilePhotoUrl !== uploadedProfilePhotoUrl) {
     await deleteLocalProfilePhoto(before.profilePhotoUrl);
   }
+  if (before.teacherId && input.salaryMode === "PERCENT") {
+    await recalculateTeacherPayoutsForMonth(currentMonth(), actor.id, [before.teacherId]);
+  }
   revalidateHr();
+}
+
+async function syncTeacherSalaryRule(
+  tx: Prisma.TransactionClient,
+  teacherId: string,
+  salaryPercent: number,
+  actorId: string,
+) {
+  const periodMonth = currentMonth();
+  const current = await tx.teacherContractRule.findFirst({
+    where: {
+      teacherId,
+      validFrom: { lte: periodMonth },
+      OR: [{ validTo: null }, { validTo: { gte: periodMonth } }],
+    },
+    orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }],
+  });
+
+  if (current?.validFrom.getTime() === periodMonth.getTime()) {
+    await tx.teacherContractRule.update({
+      where: { id: current.id },
+      data: { salaryPercent },
+    });
+    return;
+  }
+
+  if (current) {
+    await tx.teacherContractRule.update({
+      where: { id: current.id },
+      data: { validTo: new Date(periodMonth.getTime() - 86_400_000) },
+    });
+  }
+  await tx.teacherContractRule.create({
+    data: { teacherId, salaryPercent, validFrom: periodMonth, createdById: actorId },
+  });
 }
 
 const profilePhotoExtensions: Record<string, string> = {
