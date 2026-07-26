@@ -18,6 +18,7 @@ export type WorkshopFilters = {
   q?: string;
   type?: string;
   status?: string;
+  dateRange?: string;
   from?: string;
   to?: string;
   instructor?: string;
@@ -220,6 +221,7 @@ type NormalizedWorkshopFilters = {
   query: string;
   type: "all" | WorkshopKind;
   status: "all" | WorkshopStatus;
+  dateRange: "month" | "all";
   from: string;
   to: string;
   instructor: string;
@@ -454,7 +456,7 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     filters.room,
     filters.collection !== "all" ? filters.collection : "",
     filters.profitability !== "all" ? filters.profitability : "",
-  ].filter(Boolean).length + 1;
+  ].filter(Boolean).length + (filters.dateRange === "all" ? 0 : 1);
 
   return {
     defaultDate: toDateInput(new Date()),
@@ -632,10 +634,13 @@ export async function getWorkshopDetailData(
 }
 
 function buildEventConditions(filters: NormalizedWorkshopFilters) {
-  const conditions: Prisma.Sql[] = [
-    Prisma.sql`er.event_date >= ${new Date(`${filters.from}T00:00:00.000Z`)}`,
-    Prisma.sql`er.event_date <= ${new Date(`${filters.to}T00:00:00.000Z`)}`,
-  ];
+  const conditions: Prisma.Sql[] = [];
+  if (filters.dateRange !== "all") {
+    conditions.push(
+      Prisma.sql`er.event_date >= ${new Date(`${filters.from}T00:00:00.000Z`)}`,
+      Prisma.sql`er.event_date <= ${new Date(`${filters.to}T00:00:00.000Z`)}`,
+    );
+  }
   if (filters.query) {
     const like = `%${filters.query}%`;
     conditions.push(Prisma.sql`(
@@ -811,6 +816,7 @@ function normalizeWorkshopFilters(input: WorkshopFilters): NormalizedWorkshopFil
     type: input.type === "WORKSHOP" || input.type === "MASTERCLASS" ? input.type : "all",
     status: ["DRAFT", "SCHEDULED", "COMPLETED", "CANCELLED"].includes(input.status ?? "")
       ? input.status as WorkshopStatus : "all",
+    dateRange: input.dateRange === "all" ? "all" : "month",
     from: normalizeDateInput(input.from) ?? toDateInput(monthStart),
     to: normalizeDateInput(input.to) ?? toDateInput(monthEnd),
     instructor: formFilterString(input.instructor),

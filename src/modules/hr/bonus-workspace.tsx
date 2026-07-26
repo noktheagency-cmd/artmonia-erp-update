@@ -227,6 +227,7 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
   const [metricKind, setMetricKind] = useState(initialTeacherDepartment ? "TEACHER_RETENTION_RATE" : "DEPARTMENT_COLLECTED_REVENUE");
   const [stages, setStages] = useState<StageDraft[]>(() => initialTeacherDepartment ? teacherStages() : salesStages());
   const [teacherPenalties, setTeacherPenalties] = useState<TeacherPenaltyDraft[]>(() => teacherPenaltyDefaults());
+  const [useUniformPercent, setUseUniformPercent] = useState(false);
   const isTeacherMetric = metricKind === "TEACHER_RETENTION_RATE";
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = useMemo(() => { const value = new Date(); value.setDate(value.getDate() + 30); return value.toISOString().slice(0, 10); }, []);
@@ -238,6 +239,7 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
       setMetricKind("TEACHER_RETENTION_RATE");
       setStages(teacherStages());
       setTeacherPenalties(teacherPenaltyDefaults());
+      setUseUniformPercent(false);
     } else if (metricKind === "TEACHER_RETENTION_RATE") {
       setMetricKind("DEPARTMENT_SALES_COUNT");
       setStages(salesStages());
@@ -250,6 +252,7 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
       setTargetMode("staged");
       setStages(teacherStages());
       setTeacherPenalties(teacherPenaltyDefaults());
+      setUseUniformPercent(false);
     }
     else if (metricKind === "TEACHER_RETENTION_RATE") setStages(salesStages());
   }
@@ -273,7 +276,19 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
   }
 
   function updateStage(index: number, field: keyof StageDraft, value: number) {
-    setStages((current) => current.map((stage, stageIndex) => stageIndex === index ? { ...stage, [field]: value } : stage));
+    setStages((current) => current.map((stage, stageIndex) => {
+      if (field === "bonusPercent" && useUniformPercent) return { ...stage, bonusPercent: value };
+      return stageIndex === index ? { ...stage, [field]: value } : stage;
+    }));
+  }
+
+  function toggleUniformPercent() {
+    const next = !useUniformPercent;
+    if (next) {
+      const sharedPercent = stages[0]?.bonusPercent ?? 0;
+      setStages((items) => items.map((stage) => ({ ...stage, bonusPercent: sharedPercent })));
+    }
+    setUseUniformPercent(next);
   }
 
   function updatePenalty(index: number, field: keyof TeacherPenaltyDraft, value: number) {
@@ -322,9 +337,15 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
             </> : <Field>
               <FieldLabel>Etaplar</FieldLabel>
               <FieldDescription>Faiz maaş/hesablanmış müəllim ödənişi üzərindən, sabit hissə isə AZN ilə hesablanır. Yuxarı etap əvvəlki etabı əvəz edir.</FieldDescription>
+              {targetMode === "staged" ? <div className="hr-bonus-uniform-percent">
+                <Button type="button" variant={useUniformPercent ? "default" : "outline"} size="sm" aria-pressed={useUniformPercent} onClick={toggleUniformPercent}>
+                  {useUniformPercent ? "Eyni faiz aktivdir" : "Eyni faizi bütün etaplara tətbiq et"}
+                </Button>
+                <small>{useUniformPercent ? "Bir faiz sahəsini dəyişəndə bütün etaplar yenilənir. Faiz yekundur, etaplar üzrə toplanmır." : "Aktiv etdikdə ilk etabın faizi bütün etaplara köçürülür."}</small>
+              </div> : null}
               <div className="hr-bonus-stage-editor is-reward-rule">
                 {(targetMode === "single" ? stages.slice(0, 1) : stages).map((stage, index) => <div key={index}><span>{index + 1}</span><Input aria-label={`${index + 1}. etap hədəfi`} title="Hədəf" type="number" min="1" step={metricKind === "DEPARTMENT_SALES_COUNT" ? "1" : "0.01"} value={stage.threshold} onChange={(event) => updateStage(index, "threshold", Number(event.target.value))} /><i>→</i><Input aria-label={`${index + 1}. etap bonus faizi`} title="Bonus faizi" type="number" min="0" max="100" step="0.01" value={stage.bonusPercent} onChange={(event) => updateStage(index, "bonusPercent", Number(event.target.value))} /><small>%</small><b>+</b><Input aria-label={`${index + 1}. etap sabit ödənişi`} title="Sabit ödəniş (optional)" type="number" min="0" step="0.01" value={stage.fixedAmount} onChange={(event) => updateStage(index, "fixedAmount", Number(event.target.value))} /><small>₼</small>{targetMode === "staged" && stages.length > 1 ? <button type="button" aria-label="Etapı sil" onClick={() => setStages((current) => current.filter((_, stageIndex) => stageIndex !== index))}>×</button> : null}</div>)}
-                {targetMode === "staged" && stages.length < 6 ? <Button type="button" variant="outline" size="sm" onClick={() => setStages((current) => { const last = current.at(-1); return [...current, { threshold: (last?.threshold ?? 0) + 10, bonusPool: 0, bonusPercent: Math.min(100, (last?.bonusPercent ?? 0) + 10), fixedAmount: last?.fixedAmount ?? 0 }]; })}><Plus data-icon="inline-start" /> Etap əlavə et</Button> : null}
+                {targetMode === "staged" && stages.length < 6 ? <Button type="button" variant="outline" size="sm" onClick={() => setStages((current) => { const last = current.at(-1); return [...current, { threshold: (last?.threshold ?? 0) + 10, bonusPool: 0, bonusPercent: useUniformPercent ? (current[0]?.bonusPercent ?? 0) : Math.min(100, (last?.bonusPercent ?? 0) + 10), fixedAmount: last?.fixedAmount ?? 0 }]; })}><Plus data-icon="inline-start" /> Etap əlavə et</Button> : null}
               </div>
             </Field>}
             <Field><FieldLabel>Təsdiq axını</FieldLabel><FormSelect name="distributionMode" options={distributionOptions} defaultValue="HR_APPROVAL" required /></Field>

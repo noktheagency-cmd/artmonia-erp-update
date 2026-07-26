@@ -9,23 +9,34 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   DIRECT_URL: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+  META_BUSINESS_ID: z.string().regex(/^\d+$/).optional(),
+  META_AD_ACCOUNT_ID: z.string().regex(/^act_\d+$/).optional(),
+  META_APP_ID: z.string().regex(/^\d+$/).optional(),
+  META_SYSTEM_USER_ID: z.string().regex(/^\d+$/).optional(),
+  META_ACCESS_TOKEN: z.string().min(20).optional(),
+  META_APP_SECRET: z.string().min(16).optional(),
+  META_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v25.0"),
+  META_SYNC_MONTHS: z.coerce.number().int().min(1).max(24).default(8),
+  META_SYNC_LOOKBACK_DAYS: z.coerce.number().int().min(1).max(90).default(14),
 });
+
+type AppEnv = z.infer<typeof envSchema>;
 
 export function getEnv() {
   return envSchema.parse(process.env);
 }
 
-export function requireEnv(name: keyof z.infer<typeof envSchema>) {
+export function requireEnv<K extends keyof AppEnv>(name: K): NonNullable<AppEnv[K]> {
   const value = getEnv()[name];
 
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
 
-  return value;
+  return value as NonNullable<AppEnv[K]>;
 }
 
-export function hasEnv(name: keyof z.infer<typeof envSchema>) {
+export function hasEnv(name: keyof AppEnv) {
   return Boolean(getEnv()[name]);
 }
 

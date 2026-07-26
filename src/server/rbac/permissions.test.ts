@@ -22,10 +22,10 @@ test("Super Admin always receives the full permission catalog", () => {
   for (const definition of permissionDefinitions) assert.equal(permissions.get(definition.code), "ALL");
 });
 
-test("Owner can read but cannot manage role permissions by default", () => {
+test("Owner can read and manage role permissions by default", () => {
   const permissions = getPermissionsForRoles([AppRole.OWNER]);
   assert.equal(permissions.has("auth.role.read"), true);
-  assert.equal(permissions.has("auth.role.manage"), false);
+  assert.equal(permissions.has("auth.role.manage"), true);
 });
 
 test("multiple roles are merged without removing broader grants", () => {

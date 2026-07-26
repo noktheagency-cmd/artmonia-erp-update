@@ -157,6 +157,14 @@ enum GroupWeekday {
   @@schema("erp")
 }
 
+enum ClassShift {
+  MORNING
+  AFTERNOON
+  EVENING
+
+  @@schema("erp")
+}
+
 enum AttendanceMark {
   PRESENT
   ABSENT
@@ -192,6 +200,25 @@ enum MarketingCampaignStatus {
 enum MarketingReportOutcome {
   SUCCESSFUL
   UNSUCCESSFUL
+
+  @@schema("erp")
+}
+
+enum MarketingContentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  REVISION_REQUIRED
+
+  @@schema("erp")
+}
+
+enum MarketingContentAction {
+  CREATED
+  UPDATED
+  SUBMITTED
+  APPROVED
+  REVISION_REQUESTED
 
   @@schema("erp")
 }
@@ -292,47 +319,56 @@ model User {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  roles                         UserRole[]
-  managedLeads                  Lead[]                      @relation("LeadManager")
-  managedStudents               Student[]                   @relation("StudentManager")
-  leadStageChanges              LeadStageHistory[]          @relation("LeadStageChanger")
-  statusChanges                 StudentStatusHistory[]      @relation("StatusChanger")
-  createdPricingVersions        ProgramPricingVersion[]     @relation("PricingCreator")
-  teacherAssignmentChanges      TeacherAssignmentHistory[]  @relation("TeacherAssignmentChanger")
-  createdPayments               Payment[]                   @relation("PaymentCreator")
-  requestedRefundAdjustments    RefundAdjustment[]          @relation("RefundRequestedBy")
-  financeApprovedAdjustments    RefundAdjustment[]          @relation("RefundFinanceApprovedBy")
-  ownerApprovedAdjustments      RefundAdjustment[]          @relation("RefundOwnerApprovedBy")
-  createdTeacherRules           TeacherContractRule[]       @relation("TeacherRuleCreator")
-  generatedPayouts              TeacherPayout[]             @relation("PayoutGeneratedBy")
-  approvedPayouts               TeacherPayout[]             @relation("PayoutApprovedBy")
-  ownedTasks                    Task[]                      @relation("TaskOwner")
-  createdTasks                  Task[]                      @relation("TaskCreator")
-  ownedTargets                  Target[]                    @relation("TargetOwner")
-  managedTargets                Target[]                    @relation("TargetManager")
-  auditLogs                     AuditLog[]                  @relation("AuditActor")
-  exports                       DataExport[]                @relation("ExportRequestedBy")
-  createdFinanceExpenses        FinanceExpense[]            @relation("FinanceExpenseCreator")
-  employeeFinanceExpenses       FinanceExpense[]            @relation("FinanceExpenseEmployee")
-  createdLessons                Lesson[]                    @relation("LessonCreator")
-  teacherProfile                Teacher?                    @relation("TeacherUser")
-  createdGroups                 StudentGroup[]              @relation("GroupCreator")
-  assignedGroupMemberships      GroupMembership[]           @relation("GroupMembershipAssigner")
-  createdGroupSessions          GroupSession[]              @relation("GroupSessionCreator")
-  markedAttendanceRecords       AttendanceRecord[]          @relation("AttendanceMarker")
-  createdWorkshopEvents         WorkshopEvent[]             @relation("WorkshopEventCreator")
-  assignedWorkshopParticipants  WorkshopParticipant[]       @relation("WorkshopParticipantAssigner")
-  cancelledWorkshopParticipants WorkshopParticipant[]       @relation("WorkshopParticipantCanceller")
-  createdWorkshopPayments       WorkshopPayment[]           @relation("WorkshopPaymentCreator")
-  voidedWorkshopPayments        WorkshopPayment[]           @relation("WorkshopPaymentVoider")
-  voidedFinanceExpenses         FinanceExpense[]            @relation("FinanceExpenseVoider")
-  createdMarketingCampaigns     MarketingCampaign[]         @relation("MarketingCampaignCreator")
-  createdMarketingReports       MarketingCampaignReport[]
-  hrEmployeeProfile             HrEmployee?
-  createdBonusCampaigns         HrBonusCampaign[]           @relation("HrBonusCampaignCreator")
-  bonusProgressAdjustments      HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
-  approvedBonusAwards           HrBonusAward[]              @relation("HrBonusAwardApprover")
-  createdHrNotifications        HrStaffNotification[]       @relation("HrNotificationCreator")
+  roles                            UserRole[]
+  managedLeads                     Lead[]                      @relation("LeadManager")
+  managedStudents                  Student[]                   @relation("StudentManager")
+  leadStageChanges                 LeadStageHistory[]          @relation("LeadStageChanger")
+  statusChanges                    StudentStatusHistory[]      @relation("StatusChanger")
+  createdPricingVersions           ProgramPricingVersion[]     @relation("PricingCreator")
+  teacherAssignmentChanges         TeacherAssignmentHistory[]  @relation("TeacherAssignmentChanger")
+  createdPayments                  Payment[]                   @relation("PaymentCreator")
+  requestedRefundAdjustments       RefundAdjustment[]          @relation("RefundRequestedBy")
+  financeApprovedAdjustments       RefundAdjustment[]          @relation("RefundFinanceApprovedBy")
+  ownerApprovedAdjustments         RefundAdjustment[]          @relation("RefundOwnerApprovedBy")
+  createdTeacherRules              TeacherContractRule[]       @relation("TeacherRuleCreator")
+  generatedPayouts                 TeacherPayout[]             @relation("PayoutGeneratedBy")
+  approvedPayouts                  TeacherPayout[]             @relation("PayoutApprovedBy")
+  ownedTasks                       Task[]                      @relation("TaskOwner")
+  createdTasks                     Task[]                      @relation("TaskCreator")
+  ownedTargets                     Target[]                    @relation("TargetOwner")
+  managedTargets                   Target[]                    @relation("TargetManager")
+  auditLogs                        AuditLog[]                  @relation("AuditActor")
+  exports                          DataExport[]                @relation("ExportRequestedBy")
+  createdFinanceExpenses           FinanceExpense[]            @relation("FinanceExpenseCreator")
+  employeeFinanceExpenses          FinanceExpense[]            @relation("FinanceExpenseEmployee")
+  createdLessons                   Lesson[]                    @relation("LessonCreator")
+  teacherProfile                   Teacher?                    @relation("TeacherUser")
+  createdGroups                    StudentGroup[]              @relation("GroupCreator")
+  assignedGroupMemberships         GroupMembership[]           @relation("GroupMembershipAssigner")
+  createdClassSlots                ClassSlot[]                 @relation("ClassSlotCreator")
+  assignedStudentSchedules         StudentScheduleAssignment[] @relation("StudentScheduleAssigner")
+  createdGroupSessions             GroupSession[]              @relation("GroupSessionCreator")
+  markedAttendanceRecords          AttendanceRecord[]          @relation("AttendanceMarker")
+  createdWorkshopEvents            WorkshopEvent[]             @relation("WorkshopEventCreator")
+  assignedWorkshopParticipants     WorkshopParticipant[]       @relation("WorkshopParticipantAssigner")
+  cancelledWorkshopParticipants    WorkshopParticipant[]       @relation("WorkshopParticipantCanceller")
+  createdWorkshopPayments          WorkshopPayment[]           @relation("WorkshopPaymentCreator")
+  voidedWorkshopPayments           WorkshopPayment[]           @relation("WorkshopPaymentVoider")
+  voidedFinanceExpenses            FinanceExpense[]            @relation("FinanceExpenseVoider")
+  createdMarketingCampaigns        MarketingCampaign[]         @relation("MarketingCampaignCreator")
+  createdMarketingReports          MarketingCampaignReport[]
+  responsibleMarketingContent      MarketingContentItem[]      @relation("MarketingContentResponsible")
+  createdMarketingContent          MarketingContentItem[]      @relation("MarketingContentCreator")
+  approvedMarketingContent         MarketingContentItem[]      @relation("MarketingContentApprover")
+  marketingContentActivities       MarketingContentActivity[]  @relation("MarketingContentActivityActor")
+  responsibleMarketingStrategies   MarketingStrategy[]         @relation("MarketingStrategyResponsible")
+  createdMarketingStrategies       MarketingStrategy[]         @relation("MarketingStrategyCreator")
+  createdMarketingStrategyExpenses MarketingStrategyExpense[]  @relation("MarketingStrategyExpenseCreator")
+  hrEmployeeProfile                HrEmployee?
+  createdBonusCampaigns            HrBonusCampaign[]           @relation("HrBonusCampaignCreator")
+  bonusProgressAdjustments         HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
+  approvedBonusAwards              HrBonusAward[]              @relation("HrBonusAwardApprover")
+  createdHrNotifications           HrStaffNotification[]       @relation("HrNotificationCreator")
 
   @@map("users")
   @@schema("erp")
@@ -577,29 +613,136 @@ model HrBonusAward {
 }
 
 model MarketingCampaign {
-  id          String                  @id @default(uuid()) @db.Uuid
-  name        String
-  channel     String
-  owner       String?
-  objective   String?
-  notes       String?
-  status      MarketingCampaignStatus @default(DRAFT)
-  budget      Decimal                 @default(0) @db.Decimal(12, 2)
-  startsAt    DateTime                @map("starts_at") @db.Date
-  endsAt      DateTime?               @map("ends_at") @db.Date
-  createdById String?                 @map("created_by_id") @db.Uuid
-  createdAt   DateTime                @default(now()) @map("created_at")
-  updatedAt   DateTime                @updatedAt @map("updated_at")
+  id              String                  @id @default(uuid()) @db.Uuid
+  name            String
+  channel         String
+  owner           String?
+  objective       String?
+  notes           String?
+  status          MarketingCampaignStatus @default(DRAFT)
+  budget          Decimal                 @default(0) @db.Decimal(12, 2)
+  startsAt        DateTime                @map("starts_at") @db.Date
+  endsAt          DateTime?               @map("ends_at") @db.Date
+  createdById     String?                 @map("created_by_id") @db.Uuid
+  metaAdAccountId String?                 @map("meta_ad_account_id")
+  metaCampaignId  String?                 @map("meta_campaign_id")
+  metaSyncedAt    DateTime?               @map("meta_synced_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
 
-  createdBy User?                     @relation("MarketingCampaignCreator", fields: [createdById], references: [id])
-  stats     MarketingCampaignStat[]
-  leads     Lead[]
-  students  Student[]
-  reports   MarketingCampaignReport[]
+  createdBy    User?                     @relation("MarketingCampaignCreator", fields: [createdById], references: [id])
+  stats        MarketingCampaignStat[]
+  adSets       MarketingAdSet[]
+  ads          MarketingAd[]
+  leads        Lead[]
+  students     Student[]
+  reports      MarketingCampaignReport[]
+  contentItems MarketingContentItem[]
 
+  @@unique([metaAdAccountId, metaCampaignId])
   @@index([status, startsAt])
   @@index([channel, startsAt])
   @@map("marketing_campaigns")
+  @@schema("erp")
+}
+
+model MarketingContentItem {
+  id                String                 @id @default(uuid()) @db.Uuid
+  title             String
+  platform          String
+  format            String
+  scheduledAt       DateTime?              @map("scheduled_at")
+  responsibleUserId String?                @map("responsible_user_id") @db.Uuid
+  campaignId        String?                @map("campaign_id") @db.Uuid
+  caption           String?
+  notes             String?
+  mediaUrl          String?                @map("media_url")
+  mediaPath         String?                @map("media_path")
+  status            MarketingContentStatus @default(DRAFT)
+  createdById       String?                @map("created_by_id") @db.Uuid
+  submittedAt       DateTime?              @map("submitted_at")
+  approvedById      String?                @map("approved_by_id") @db.Uuid
+  approvedAt        DateTime?              @map("approved_at")
+  revisionNote      String?                @map("revision_note")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  responsible User?                      @relation("MarketingContentResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  campaign    MarketingCampaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdBy   User?                      @relation("MarketingContentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy  User?                      @relation("MarketingContentApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  activities  MarketingContentActivity[]
+
+  @@index([scheduledAt])
+  @@index([status, scheduledAt])
+  @@index([responsibleUserId, scheduledAt])
+  @@index([campaignId])
+  @@map("marketing_content_items")
+  @@schema("erp")
+}
+
+model MarketingContentActivity {
+  id          String                 @id @default(uuid()) @db.Uuid
+  contentId   String                 @map("content_id") @db.Uuid
+  action      MarketingContentAction
+  actorUserId String?                @map("actor_user_id") @db.Uuid
+  note        String?
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  content MarketingContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  actor   User?                @relation("MarketingContentActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([contentId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("marketing_content_activities")
+  @@schema("erp")
+}
+
+model MarketingStrategy {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  month             DateTime @db.Date
+  objective         String
+  status            String   @default("ACTIVE")
+  responsibleUserId String?  @map("responsible_user_id") @db.Uuid
+  salesGoal         Int      @default(0) @map("sales_goal")
+  leadGoal          Int      @default(0) @map("lead_goal")
+  revenueGoal       Decimal  @default(0) @map("revenue_goal") @db.Decimal(14, 2)
+  budget            Decimal  @default(0) @db.Decimal(14, 2)
+  notes             String?
+  createdById       String?  @map("created_by_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  responsible User?                      @relation("MarketingStrategyResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  createdBy   User?                      @relation("MarketingStrategyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  expenses    MarketingStrategyExpense[]
+
+  @@unique([month, name])
+  @@index([month, status])
+  @@index([responsibleUserId])
+  @@index([createdById])
+  @@map("marketing_strategies")
+  @@schema("erp")
+}
+
+model MarketingStrategyExpense {
+  id          String   @id @default(uuid()) @db.Uuid
+  strategyId  String   @map("strategy_id") @db.Uuid
+  title       String
+  category    String
+  amount      Decimal  @db.Decimal(14, 2)
+  spentOn     DateTime @map("spent_on") @db.Date
+  notes       String?
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  strategy  MarketingStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("MarketingStrategyExpenseCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([strategyId, spentOn])
+  @@index([createdById])
+  @@map("marketing_strategy_expenses")
   @@schema("erp")
 }
 
@@ -620,21 +763,110 @@ model MarketingCampaignReport {
 }
 
 model MarketingCampaignStat {
-  id          String   @id @default(uuid()) @db.Uuid
-  campaignId  String   @map("campaign_id") @db.Uuid
-  recordedOn  DateTime @map("recorded_on") @db.Date
-  spend       Decimal  @default(0) @db.Decimal(12, 2)
-  revenue     Decimal  @default(0) @db.Decimal(12, 2)
-  leads       Int      @default(0)
-  conversions Int      @default(0)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid()) @db.Uuid
+  campaignId          String    @map("campaign_id") @db.Uuid
+  recordedOn          DateTime  @map("recorded_on") @db.Date
+  spend               Decimal   @default(0) @db.Decimal(12, 2)
+  revenue             Decimal   @default(0) @db.Decimal(12, 2)
+  leads               Int       @default(0)
+  conversions         Int       @default(0)
+  impressions         Int       @default(0)
+  reach               Int       @default(0)
+  clicks              Int       @default(0)
+  conversations       Int       @default(0)
+  costPerConversation Decimal   @default(0) @map("cost_per_conversation") @db.Decimal(14, 4)
+  cpc                 Decimal   @default(0) @db.Decimal(14, 4)
+  cpm                 Decimal   @default(0) @db.Decimal(14, 4)
+  ctr                 Decimal   @default(0) @db.Decimal(14, 4)
+  frequency           Decimal   @default(0) @db.Decimal(14, 4)
+  currency            String    @default("AZN")
+  source              String    @default("MANUAL")
+  syncedAt            DateTime? @map("synced_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   campaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, recordedOn])
   @@index([recordedOn])
   @@map("marketing_campaign_stats")
+  @@schema("erp")
+}
+
+model MarketingAdSet {
+  id               String    @id @default(uuid()) @db.Uuid
+  campaignId       String    @map("campaign_id") @db.Uuid
+  metaAdSetId      String    @unique @map("meta_ad_set_id")
+  name             String
+  status           String
+  optimizationGoal String?   @map("optimization_goal")
+  startsAt         DateTime? @map("starts_at")
+  endsAt           DateTime? @map("ends_at")
+  metaSyncedAt     DateTime  @map("meta_synced_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ads      MarketingAd[]
+
+  @@index([campaignId, status])
+  @@map("marketing_ad_sets")
+  @@schema("erp")
+}
+
+model MarketingAd {
+  id                     String   @id @default(uuid()) @db.Uuid
+  campaignId             String   @map("campaign_id") @db.Uuid
+  adSetId                String   @map("ad_set_id") @db.Uuid
+  metaAdId               String   @unique @map("meta_ad_id")
+  name                   String
+  status                 String
+  metaCreativeId         String?  @map("meta_creative_id")
+  creativeName           String?  @map("creative_name")
+  creativeTitle          String?  @map("creative_title")
+  creativeBody           String?  @map("creative_body") @db.Text
+  callToActionType       String?  @map("call_to_action_type")
+  thumbnailUrl           String?  @map("thumbnail_url") @db.Text
+  instagramPermalinkUrl  String?  @map("instagram_permalink_url") @db.Text
+  effectiveObjectStoryId String?  @map("effective_object_story_id")
+  metaSyncedAt           DateTime @map("meta_synced_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  adSet    MarketingAdSet    @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+  stats    MarketingAdStat[]
+
+  @@index([campaignId, status])
+  @@index([adSetId, status])
+  @@map("marketing_ads")
+  @@schema("erp")
+}
+
+model MarketingAdStat {
+  id                  String   @id @default(uuid()) @db.Uuid
+  adId                String   @map("ad_id") @db.Uuid
+  recordedOn          DateTime @map("recorded_on") @db.Date
+  spend               Decimal  @default(0) @db.Decimal(12, 2)
+  impressions         Int      @default(0)
+  reach               Int      @default(0)
+  clicks              Int      @default(0)
+  conversations       Int      @default(0)
+  costPerConversation Decimal  @default(0) @map("cost_per_conversation") @db.Decimal(14, 4)
+  cpc                 Decimal  @default(0) @db.Decimal(14, 4)
+  cpm                 Decimal  @default(0) @db.Decimal(14, 4)
+  ctr                 Decimal  @default(0) @db.Decimal(14, 4)
+  frequency           Decimal  @default(0) @db.Decimal(14, 4)
+  currency            String   @default("AZN")
+  syncedAt            DateTime @map("synced_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  ad MarketingAd @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, recordedOn])
+  @@index([recordedOn])
+  @@map("marketing_ad_stats")
   @@schema("erp")
 }
 
@@ -828,6 +1060,7 @@ model Teacher {
   financeExpenses     FinanceExpense[]           @relation("FinanceExpenseTeacher")
   lessons             Lesson[]
   groupMemberships    GroupMembership[]
+  classSlots          ClassSlot[]
   attendanceRecords   AttendanceRecord[]
   bonusTeacherCohorts HrBonusTeacherCohort[]
   hrEmployee          HrEmployee?
@@ -959,6 +1192,7 @@ model StudentGroup {
   schedules   GroupSchedule[]
   memberships GroupMembership[]
   sessions    GroupSession[]
+  classSlots  ClassSlot[]
 
   @@index([isActive, code])
   @@index([createdById])
@@ -984,6 +1218,59 @@ model GroupSchedule {
   @@schema("erp")
 }
 
+model ClassSlot {
+  id          String       @id @default(uuid()) @db.Uuid
+  groupId     String       @map("group_id") @db.Uuid
+  teacherId   String       @map("teacher_id") @db.Uuid
+  weekday     GroupWeekday
+  shift       ClassShift
+  startTime   String       @map("start_time")
+  endTime     String       @map("end_time")
+  room        String?
+  capacity    Int
+  validFrom   DateTime     @map("valid_from") @db.Date
+  validTo     DateTime?    @map("valid_to") @db.Date
+  isActive    Boolean      @default(true) @map("is_active")
+  createdById String?      @map("created_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  group       StudentGroup                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  teacher     Teacher                     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  createdBy   User?                       @relation("ClassSlotCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  assignments StudentScheduleAssignment[]
+
+  @@unique([groupId, weekday, startTime, teacherId, validFrom])
+  @@index([weekday, startTime, isActive])
+  @@index([teacherId, isActive])
+  @@index([groupId, isActive])
+  @@index([createdById])
+  @@map("class_slots")
+  @@schema("erp")
+}
+
+model StudentScheduleAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  slotId       String    @map("slot_id") @db.Uuid
+  membershipId String    @map("membership_id") @db.Uuid
+  validFrom    DateTime  @map("valid_from") @db.Date
+  validTo      DateTime? @map("valid_to") @db.Date
+  assignedById String?   @map("assigned_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  slot       ClassSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  membership GroupMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  assignedBy User?           @relation("StudentScheduleAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([slotId, membershipId, validFrom])
+  @@index([slotId, validFrom, validTo])
+  @@index([membershipId, validFrom, validTo])
+  @@index([assignedById])
+  @@map("student_schedule_assignments")
+  @@schema("erp")
+}
+
 model GroupMembership {
   id           String    @id @default(uuid()) @db.Uuid
   groupId      String    @map("group_id") @db.Uuid
@@ -995,11 +1282,12 @@ model GroupMembership {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  group               StudentGroup           @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  enrollment          Enrollment             @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  teacher             Teacher                @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  assignedBy          User?                  @relation("GroupMembershipAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  group               StudentGroup                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  enrollment          Enrollment                  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  teacher             Teacher                     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  assignedBy          User?                       @relation("GroupMembershipAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
   attendanceRecords   AttendanceRecord[]
+  scheduleAssignments StudentScheduleAssignment[]
   bonusTeacherCohorts HrBonusTeacherCohort[]
 
   @@index([groupId, endedAt])

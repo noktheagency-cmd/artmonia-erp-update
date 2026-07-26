@@ -89,7 +89,7 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
           ? definition.dependsOn
           : null,
     })),
-    canManage: actor.roles.includes(AppRole.SUPER_ADMIN),
+    canManage: actor.permissions.has("auth.role.manage"),
     canViewAudit: actor.permissions.has("audit.read"),
   };
 }

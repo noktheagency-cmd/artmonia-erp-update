@@ -13,7 +13,6 @@ type SubmittedGrant = { code?: unknown; scope?: unknown };
 export async function updateRolePermissionsAction(formData: FormData): Promise<UpdateRolePermissionsResult> {
   try {
     const actor = await requireMutationActor("auth.role.manage");
-    if (!actor.roles.includes(AppRole.SUPER_ADMIN)) return failure("FORBIDDEN", "Yalnız Super Admin icazələri dəyişə bilər.");
     const roleId = String(formData.get("roleId") ?? "");
     const expectedUpdatedAt = String(formData.get("updatedAt") ?? "");
     const reason = String(formData.get("reason") ?? "").trim();
@@ -66,7 +65,6 @@ export async function updateRolePermissionsAction(formData: FormData): Promise<U
 export async function createRoleAction(formData: FormData): Promise<CreateRoleResult> {
   try {
     const actor = await requireMutationActor("auth.role.manage");
-    if (!actor.roles.includes(AppRole.SUPER_ADMIN)) return failure("FORBIDDEN", "Yalnız Super Admin yeni rol yarada bilər.");
     const name = String(formData.get("name") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     const copyFromRoleId = String(formData.get("copyFromRoleId") ?? "").trim();
@@ -106,7 +104,6 @@ export async function createRoleAction(formData: FormData): Promise<CreateRoleRe
 export async function deleteRoleAction(formData: FormData): Promise<DeleteRoleResult> {
   try {
     const actor = await requireMutationActor("auth.role.manage");
-    if (!actor.roles.includes(AppRole.SUPER_ADMIN)) return failure("FORBIDDEN", "Bu əməliyyat üçün icazəniz yoxdur.");
     const roleId = String(formData.get("roleId") ?? "");
     if (!isUuid(roleId)) return failure("VALIDATION", "Rol etibarlı deyil.");
     const result = await getPrisma().$transaction(async (tx) => {

@@ -4,6 +4,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { MarketingCampaignStatus, MarketingReportOutcome, Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
+import { syncMetaMarketing, type MetaSyncResult } from "@/modules/marketing/meta-ads";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -136,8 +137,9 @@ export async function saveMarketingStatAction(formData: FormData) {
   const input = saveStatSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   await prisma.$transaction(async (tx) => {
-    const campaign = await tx.marketingCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true, name: true } });
+    const campaign = await tx.marketingCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true, name: true, metaCampaignId: true } });
     if (!campaign) throw new Error("Kampaniya tapılmadı");
+    if (campaign.metaCampaignId) throw new Error("Meta kampaniyasının xərci API-dən avtomatik sinxronlaşdırılır.");
     const stat = await tx.marketingCampaignStat.upsert({
       where: { campaignId_recordedOn: { campaignId: input.campaignId, recordedOn: parseDate(input.recordedOn) } },
       create: { campaignId: input.campaignId, recordedOn: parseDate(input.recordedOn), spend: input.spend },
@@ -153,6 +155,32 @@ export async function saveMarketingStatAction(formData: FormData) {
     });
   });
   invalidateMarketing();
+}
+
+export async function syncMetaMarketingAction(): Promise<MetaSyncResult> {
+  const actor = await requireMutationActor("marketing.manage");
+  const result = await syncMetaMarketing();
+  await writeAuditLog(getPrisma(), {
+    actorUserId: actor.id,
+    action: "marketing.meta.sync",
+    entityType: "marketing_integration",
+    entityId: null,
+    after: {
+      campaigns: result.campaigns,
+      adSets: result.adSets,
+      ads: result.ads,
+      insightRows: result.insightRows,
+      adInsightRows: result.adInsightRows,
+      since: result.since,
+      until: result.until,
+      syncedAt: result.syncedAt,
+    },
+    reason: "Meta reklam nəticələri sinxronlaşdırıldı",
+  });
+  invalidateMarketing();
+  revalidatePath("/dashboard");
+  updateTag(erpCacheTags.dashboard);
+  return result;
 }
 
 export async function createMarketingReportAction(formData: FormData) {

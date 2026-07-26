@@ -357,8 +357,36 @@
 
 .workshop-filter-form { padding: 0; }
 .workshop-filter-primary { display: grid; grid-template-columns: minmax(280px, 1fr) auto auto; gap: 12px; }
-.workshop-filter-primary-compact { grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto; align-items: end; }
+.workshop-filter-primary-compact { grid-template-columns: repeat(2, minmax(150px, 1fr)) auto minmax(150px, 1fr) auto auto; align-items: end; }
 .workshop-filter-primary-compact .workshop-filter-field { min-width: 150px; }
+
+.workshop-all-dates-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: 8px;
+  color: var(--ws-muted);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.workshop-all-dates-link:hover {
+  border-color: var(--ws-primary);
+  color: var(--ws-primary);
+  background: var(--ws-primary-soft);
+}
+
+.workshop-all-dates-link.is-active {
+  border-color: var(--ws-primary);
+  color: #fff;
+  background: var(--ws-primary);
+  box-shadow: 0 7px 16px var(--ws-primary-glow);
+}
 
 .workshop-search-group {
   min-height: 44px;
@@ -1559,6 +1587,11 @@
 
 /* Responsive styles */
 @media (max-width: 1280px) {
+  .workshop-filter-primary-compact {
+    grid-template-columns: repeat(2, minmax(120px, 1fr)) auto minmax(120px, 1fr) auto auto;
+    gap: 8px;
+  }
+  .workshop-filter-primary-compact .workshop-filter-field { min-width: 120px; }
   .workshop-filter-grid { grid-template-columns: repeat(4, minmax(130px, 1fr)); }
   .workshop-command-layout { grid-template-columns: minmax(0, 1fr); }
   .workshop-preview-panel { position: relative; top: auto; }
@@ -1718,6 +1751,310 @@
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Authoritative workshop dialog layer.
+   Dialogs are portalled to <body>, so their design tokens must live on the
+   dialog itself instead of depending on .workshop-shell ancestry. */
+.workshop-dialog.ui-dialog-content {
+  --ws-primary: #3158e8;
+  --ws-primary-strong: #2448d8;
+  --ws-primary-soft: #eef3ff;
+  --ws-primary-glow: rgba(49, 88, 232, 0.14);
+  --ws-danger: #d93658;
+  --ws-danger-soft: #fff1f3;
+  --ws-violet: #7c3aed;
+  --ws-ink: #172b4d;
+  --ws-muted: #687892;
+  --ws-surface-soft: #f7f9fd;
+  --ws-line: #e2e8f2;
+  --ws-line-strong: #cbd6e5;
+  --ws-shadow-glow: 0 10px 22px rgba(49, 88, 232, 0.24);
+  --ws-radius-md: 11px;
+  width: min(860px, calc(100vw - 28px)) !important;
+  max-width: 860px !important;
+  max-height: calc(100dvh - 28px) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #dbe4f0 !important;
+  border-radius: 22px !important;
+  color: var(--ws-ink) !important;
+  background: #ffffff !important;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.26) !important;
+}
+
+.workshop-dialog .workshop-dialog-header {
+  position: relative;
+  margin: 0 !important;
+  padding: 19px 70px 17px 24px !important;
+  border-bottom: 1px solid #e5eaf2 !important;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(49, 88, 232, 0.11), transparent 30%),
+    linear-gradient(120deg, #ffffff 0%, #f6f8ff 100%) !important;
+}
+
+.workshop-dialog-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 13px;
+}
+
+.workshop-dialog-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.workshop-dialog-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid #cdd8ff;
+  border-radius: 13px;
+  color: #3158e8;
+  background: linear-gradient(145deg, #f5f7ff, #e8eeff);
+  box-shadow: 0 8px 18px rgba(49, 88, 232, 0.12);
+}
+
+.workshop-dialog-icon.is-danger {
+  border-color: #f5c1cc;
+  color: var(--ws-danger);
+  background: linear-gradient(145deg, #fff7f8, #ffe7ec);
+  box-shadow: 0 8px 18px rgba(217, 54, 88, 0.1);
+}
+
+.workshop-dialog-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.2;
+}
+
+.workshop-dialog .ui-dialog-title {
+  color: var(--ws-ink) !important;
+  font-size: 21px !important;
+  font-weight: 780 !important;
+  line-height: 1.2 !important;
+}
+
+.workshop-dialog .ui-dialog-description {
+  margin: 0 !important;
+  color: var(--ws-muted) !important;
+  font-size: 12.5px !important;
+  line-height: 1.45 !important;
+}
+
+.workshop-dialog .ui-dialog-close {
+  top: 17px !important;
+  right: 19px !important;
+  width: 38px !important;
+  height: 38px !important;
+  border: 1px solid #d9e2ef !important;
+  border-radius: 12px !important;
+  color: #50627d !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.07) !important;
+}
+
+.workshop-dialog .ui-dialog-close:hover {
+  border-color: #b9c8f7 !important;
+  color: var(--ws-primary) !important;
+  background: #f1f5ff !important;
+}
+
+.workshop-dialog-callout {
+  margin: 13px 24px 0 !important;
+  padding: 9px 12px !important;
+  border-color: #cbd7ff !important;
+  color: #405ca8 !important;
+  background: #f4f7ff !important;
+}
+
+.workshop-dialog-form {
+  gap: 13px !important;
+  max-height: calc(100dvh - 110px) !important;
+  padding: 16px 24px 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-gutter: stable;
+}
+
+.workshop-create-form {
+  max-height: calc(100dvh - 174px) !important;
+}
+
+.workshop-dialog-form .ui-field-group {
+  gap: 13px !important;
+}
+
+.workshop-dialog .workshop-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 14px !important;
+}
+
+.workshop-field-span-2 {
+  grid-column: span 2;
+}
+
+.workshop-dialog-form .ui-field {
+  gap: 6px !important;
+}
+
+.workshop-dialog-form .ui-field-label {
+  color: #263b5d !important;
+  font-size: 12px !important;
+  font-weight: 720 !important;
+}
+
+.workshop-dialog-form :is(.ui-input, .ui-select-trigger, .date-picker-trigger, textarea) {
+  min-height: 42px !important;
+  border: 1px solid var(--ws-line-strong) !important;
+  border-radius: 10px !important;
+  color: var(--ws-ink) !important;
+  background: #fbfcff !important;
+  box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.02) !important;
+}
+
+.workshop-dialog-form textarea {
+  min-height: 76px !important;
+}
+
+.workshop-dialog-form .workshop-check-field input[type="checkbox"] {
+  width: 18px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  min-height: 0 !important;
+  flex: 0 0 18px;
+  padding: 0 !important;
+}
+
+.workshop-dialog-form :is(.ui-input, .ui-select-trigger, .date-picker-trigger, textarea):focus,
+.workshop-dialog-form :is(.ui-select-trigger, .date-picker-trigger)[data-state="open"] {
+  border-color: var(--ws-primary) !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 4px var(--ws-primary-glow) !important;
+}
+
+.workshop-dialog-form .ui-dialog-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  min-height: 66px;
+  align-items: center;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  margin: 2px -24px 0 !important;
+  padding: 12px 24px !important;
+  border-top: 1px solid #e5eaf2 !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  box-shadow: 0 -10px 22px rgba(31, 45, 73, 0.06) !important;
+  backdrop-filter: blur(12px);
+}
+
+.workshop-dialog-form button[type="submit"] {
+  min-width: 138px;
+  min-height: 42px !important;
+  border: 1px solid #2448d8 !important;
+  border-radius: 10px !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #3158e8 0%, #2448d8 100%) !important;
+  box-shadow: 0 9px 18px rgba(45, 82, 224, 0.24) !important;
+}
+
+.workshop-dialog-form button[type="submit"]:hover {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #244ed9 0%, #193bbf 100%) !important;
+}
+
+.workshop-dialog-form button[type="submit"].is-destructive {
+  border-color: #c52d4c !important;
+  background: linear-gradient(135deg, #e04362 0%, #c52d4c 100%) !important;
+}
+
+.workshop-dialog-form button[type="button"] {
+  min-height: 42px !important;
+  border: 1px solid #c6d2e3 !important;
+  border-radius: 10px !important;
+  color: #3a506f !important;
+  background: #ffffff !important;
+}
+
+.workshop-dialog-form button[type="button"]:hover {
+  border-color: #9eb2d2 !important;
+  color: #213550 !important;
+  background: #f5f8fc !important;
+}
+
+@media (max-width: 800px) {
+  .workshop-dialog .workshop-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .workshop-dialog.ui-dialog-content {
+    width: calc(100vw - 14px) !important;
+    max-height: calc(100dvh - 14px) !important;
+    border-radius: 16px !important;
+  }
+
+  .workshop-dialog .workshop-dialog-header {
+    padding: 16px 56px 14px 16px !important;
+  }
+
+  .workshop-dialog-icon {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .workshop-dialog .ui-dialog-title {
+    font-size: 18px !important;
+  }
+
+  .workshop-dialog-callout {
+    margin: 10px 14px 0 !important;
+  }
+
+  .workshop-dialog-form,
+  .workshop-create-form {
+    max-height: calc(100dvh - 148px) !important;
+    padding: 14px 14px 0 !important;
+  }
+
+  .workshop-create-form {
+    max-height: calc(100dvh - 198px) !important;
+  }
+
+  .workshop-dialog .workshop-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-field-span-2 {
+    grid-column: span 1;
+  }
+
+  .workshop-dialog-form .ui-dialog-footer {
+    min-height: auto;
+    flex-direction: column-reverse;
+    margin-inline: -14px !important;
+    padding: 12px 14px !important;
+  }
+
+  .workshop-dialog-form .ui-dialog-footer [data-slot="button"] {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workshop-dialog,
+  .workshop-dialog * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
 }

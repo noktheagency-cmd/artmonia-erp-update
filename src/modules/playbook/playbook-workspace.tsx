@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   AlertTriangle,
   Archive,
@@ -20,9 +19,7 @@ import {
   LoaderCircle,
   Megaphone,
   MoreHorizontal,
-  Pause,
   Pencil,
-  Play,
   Plus,
   Search,
   ShieldCheck,
@@ -57,6 +54,7 @@ import {
 
 const STORAGE_BUCKET = "playbook-documents";
 const MAX_FILE_SIZE = 6 * 1024 * 1024;
+const OFFICE_PREVIEW_EXTENSIONS = new Set(["DOC", "DOCX", "XLS", "XLSX", "PPT", "PPTX"]);
 
 const iconMap: Record<PlaybookIconName, LucideIcon> = {
   marketing: Megaphone,
@@ -124,7 +122,6 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
   const [documentName, setDocumentName] = useState("");
   const [documentDepartmentId, setDocumentDepartmentId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
-  const [motionPaused, setMotionPaused] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -405,21 +402,30 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
   async function openDocumentPreview(document: PlaybookDocument) {
     setPreviewDocument(document);
     setPreviewUrl(null);
-    setIsPreviewLoading(true);
+    setIsPreviewLoading(false);
 
-    const result = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .createSignedUrl(document.storagePath, 300);
-
-    if (result.error) {
-      setPreviewDocument(null);
-      announce(notifyCaughtError(result.error, "Sənəd açıla bilmədi.", "Sənəd açıla bilmədi"));
-      setIsPreviewLoading(false);
+    if (document.extension !== "PDF" && !OFFICE_PREVIEW_EXTENSIONS.has(document.extension)) {
       return;
     }
 
-    setPreviewUrl(result.data.signedUrl);
-    setIsPreviewLoading(false);
+    if (OFFICE_PREVIEW_EXTENSIONS.has(document.extension)) return;
+    await loadDocumentPreview(document);
+  }
+
+  async function loadDocumentPreview(document: PlaybookDocument) {
+    setIsPreviewLoading(true);
+    try {
+      const signedUrl = await requestDocumentSignedUrl(document.id);
+      setPreviewUrl(
+        document.extension === "PDF"
+          ? signedUrl
+          : createOfficePreviewUrl(signedUrl),
+      );
+    } catch (error) {
+      announce(notifyCaughtError(error, "Sənəd açıla bilmədi.", "Sənəd açıla bilmədi"));
+    } finally {
+      setIsPreviewLoading(false);
+    }
   }
 
   function closeDocumentPreview() {
@@ -429,17 +435,16 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
   }
 
   async function downloadDocument(document: PlaybookDocument) {
-    const result = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .createSignedUrl(document.storagePath, 300, { download: true });
-
-    if (result.error) {
-      announce(notifyCaughtError(result.error, "Sənəd endirilə bilmədi.", "Sənəd endirilə bilmədi"));
+    let signedUrl: string;
+    try {
+      signedUrl = await requestDocumentSignedUrl(document.id, true);
+    } catch (error) {
+      announce(notifyCaughtError(error, "Sənəd endirilə bilmədi.", "Sənəd endirilə bilmədi"));
       return;
     }
 
     const link = window.document.createElement("a");
-    link.href = result.data.signedUrl;
+    link.href = signedUrl;
     link.download = document.originalName;
     link.style.display = "none";
     window.document.body.append(link);
@@ -531,32 +536,6 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
           </button>
         </div> : null}
       </header>
-
-      <article className="playbook-hero">
-        <div className="playbook-hero-copy">
-          <h2>Biz necə işləyirik</h2>
-          <p>Artmonia-nın mədəniyyəti, prinsipləri və komandaların işləmə ritmi.</p>
-        </div>
-
-        <div className={cx("playbook-atlas", motionPaused && "is-paused")} aria-hidden="true">
-          <Image src="/playbook/knowledge-atlas.png" alt="" fill priority sizes="(max-width: 900px) 100vw, 70vw" />
-          <div className="playbook-atlas-marker marker-marketing"><Megaphone size={14} /> Marketing</div>
-          <div className="playbook-atlas-marker marker-sales"><HeartHandshake size={14} /> Satış</div>
-          <div className="playbook-atlas-marker marker-hr"><UsersRound size={14} /> HR</div>
-          <div className="playbook-atlas-marker marker-finance"><CircleDollarSign size={14} /> Maliyyə</div>
-        </div>
-
-        <button
-          className="playbook-motion-control"
-          type="button"
-          aria-label={motionPaused ? "Animasiyanı başlat" : "Animasiyanı dayandır"}
-          aria-pressed={motionPaused}
-          onClick={() => setMotionPaused((current) => !current)}
-        >
-          {motionPaused ? <Play size={13} fill="currentColor" /> : <Pause size={13} fill="currentColor" />}
-        </button>
-        <div className="playbook-hero-pagination" aria-hidden="true"><i /><i /><i /></div>
-      </article>
 
       <div className="playbook-department-bar" aria-label="Departament filtri">
         <DepartmentTab active={activeDepartment === "all"} color="#146cff" icon={Grid2X2} label="Hamısı" onClick={() => setActiveDepartment("all")} />
@@ -745,8 +724,22 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
             <div className="playbook-preview-body">
               {isPreviewLoading ? (
                 <div className="playbook-preview-loading"><LoaderCircle className="playbook-spin" size={26} /><span>Sənəd hazırlanır...</span></div>
-              ) : previewDocument.extension === "PDF" && previewUrl ? (
-                <iframe src={previewUrl} title={`${previewDocument.name} önbaxış`} />
+              ) : previewUrl ? (
+                <iframe
+                  src={previewUrl}
+                  title={`${previewDocument.name} önbaxış`}
+                  allowFullScreen
+                  referrerPolicy="no-referrer"
+                />
+              ) : OFFICE_PREVIEW_EXTENSIONS.has(previewDocument.extension) ? (
+                <div className="playbook-preview-consent">
+                  <FileText size={34} />
+                  <strong>Office önbaxışı hazırdır</strong>
+                  <span>Sənəd yalnız bu əməliyyatdan sonra 5 dəqiqəlik imzalı keçidlə Microsoft Office viewer-də açılacaq.</span>
+                  <button type="button" onClick={() => void loadDocumentPreview(previewDocument)}>
+                    Microsoft Office ilə önbaxışı aç
+                  </button>
+                </div>
               ) : (
                 <div className="playbook-preview-unavailable"><FileText size={30} /><strong>Bu format üçün daxili önbaxış yoxdur</strong><span>Sənədi cihazınızda açmaq üçün “Endir” düyməsindən istifadə edin.</span></div>
               )}
@@ -811,6 +804,30 @@ function createUniqueSlug(name: string, departments: PlaybookDepartment[]) {
   let suffix = 2;
   while (existing.has(`${base}-${suffix}`)) suffix += 1;
   return `${base}-${suffix}`;
+}
+
+async function requestDocumentSignedUrl(documentId: string, download = false) {
+  const response = await fetch(
+    `/api/playbook/documents/${encodeURIComponent(documentId)}/signed-url?download=${download ? "1" : "0"}`,
+    {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+    },
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | { url?: string; error?: string }
+    | null;
+
+  if (!response.ok || !payload?.url) {
+    throw new Error(payload?.error ?? "Sənəd üçün keçid yaradıla bilmədi.");
+  }
+
+  return payload.url;
+}
+
+function createOfficePreviewUrl(signedUrl: string) {
+  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}`;
 }
 
 function getFileExtension(fileName: string) {

@@ -390,6 +390,7 @@ function ParticipantDialog({ data, action, autoOpen = false }: { data: WorkshopD
       trigger={<Button><UserPlus data-icon="inline-start" />İştirakçı əlavə et</Button>}
       action={action}
       defaultOpen={autoOpen}
+      headerIcon={<UserPlus />}
     >
       <input type="hidden" name="eventId" value={data.event.id} />
       <FieldGroup>
@@ -413,7 +414,7 @@ function ParticipantDialog({ data, action, autoOpen = false }: { data: WorkshopD
 function PaymentDialog({ data, action, autoOpen = false }: { data: WorkshopDetailData; action: WorkshopAction; autoOpen?: boolean }) {
   const payable = data.participants.filter((row) => row.balanceValue > 0 && !row.isGift && row.paymentState !== "CANCELLED");
   return (
-    <ActionDialog title="Ödəniş qəbul et" description="İştirakçı üçün yeni ödəniş əməliyyatı yaradın." trigger={<Button disabled={payable.length === 0}><CreditCard data-icon="inline-start" />Ödəniş qəbul et</Button>} action={action} defaultOpen={autoOpen && payable.length > 0}>
+    <ActionDialog title="Ödəniş qəbul et" description="İştirakçı üçün yeni ödəniş əməliyyatı yaradın." trigger={<Button disabled={payable.length === 0}><CreditCard data-icon="inline-start" />Ödəniş qəbul et</Button>} action={action} defaultOpen={autoOpen && payable.length > 0} headerIcon={<CreditCard />}>
       <input type="hidden" name="eventId" value={data.event.id} />
       <FieldGroup>
         <Field><FieldLabel>İştirakçı</FieldLabel><FormSelect name="participantId" required searchable options={payable.map((row) => ({ value: row.id, label: `${row.fullName} / qalıq ${row.balance}` }))} /></Field>
@@ -433,7 +434,7 @@ function PaymentDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
 
 function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetailData; action: WorkshopAction; autoOpen?: boolean }) {
   return (
-    <ActionDialog title="Xərc əlavə et" description="Tədbirə bağlanan xərc ümumi Maliyyədə də görünəcək." trigger={<Button variant="outline"><CircleDollarSign data-icon="inline-start" />Xərc əlavə et</Button>} action={action} defaultOpen={autoOpen}>
+    <ActionDialog title="Xərc əlavə et" description="Tədbirə bağlanan xərc ümumi Maliyyədə də görünəcək." trigger={<Button variant="outline"><CircleDollarSign data-icon="inline-start" />Xərc əlavə et</Button>} action={action} defaultOpen={autoOpen} headerIcon={<CircleDollarSign />}>
       <input type="hidden" name="eventId" value={data.event.id} />
       <FieldGroup>
         <Field><FieldLabel>Kateqoriya</FieldLabel><FormSelect name="categoryId" required options={data.categories.map((category) => ({ value: category.id, label: category.name }))} /></Field>
@@ -454,10 +455,10 @@ function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
 function EditEventDialog({ data, action }: { data: WorkshopDetailData; action: WorkshopAction }) {
   const event = data.event;
   return (
-    <ActionDialog title="Tədbiri redaktə et" description="Yeni qiymət yalnız gələcək qeydiyyatlara default olacaq." trigger={<button type="button" className="workshop-event-menu-item" role="menuitem"><Edit3 />Redaktə et</button>} action={action}>
+    <ActionDialog title="Tədbiri redaktə et" description="Yeni qiymət yalnız gələcək qeydiyyatlara default olacaq." trigger={<button type="button" className="workshop-event-menu-item" role="menuitem"><Edit3 />Redaktə et</button>} action={action} headerIcon={<CalendarDays />}>
       <input type="hidden" name="eventId" value={event.id} />
       <FieldGroup><div className="workshop-form-grid">
-        <Field><FieldLabel>Ad</FieldLabel><Input name="title" defaultValue={event.title} required /></Field>
+        <Field className="workshop-field-span-2"><FieldLabel>Ad</FieldLabel><Input name="title" defaultValue={event.title} required /></Field>
         <Field><FieldLabel>Növ</FieldLabel><FormSelect name="eventType" defaultValue={event.eventType} options={eventTypeOptions} /></Field>
         <Field><FieldLabel>Tarix</FieldLabel><DatePicker name="eventDate" defaultValue={event.dateValue} required allowClear={false} popoverPlacement="floating" /></Field>
         <Field><FieldLabel>Saat</FieldLabel><Input name="startTime" defaultValue={event.time} required /></Field>
@@ -465,7 +466,7 @@ function EditEventDialog({ data, action }: { data: WorkshopDetailData; action: W
         <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue={event.status} options={eventStatusOptions} /></Field>
         <Field><FieldLabel>Qiymət</FieldLabel><Input name="entryPrice" defaultValue={event.entryPriceInput} required /></Field>
         <Field><FieldLabel>Tutum</FieldLabel><Input name="capacity" type="number" defaultValue={event.capacity ?? ""} /></Field>
-        <Field><FieldLabel>Məkan</FieldLabel><Input name="room" defaultValue={event.room === "Məkan seçilməyib" ? "" : event.room} /></Field>
+        <Field className="workshop-field-span-2"><FieldLabel>Məkan</FieldLabel><Input name="room" defaultValue={event.room === "Məkan seçilməyib" ? "" : event.room} /></Field>
         <Field><FieldLabel>Təlimçi</FieldLabel><Input name="instructor" defaultValue={event.instructor === "Təlimçi seçilməyib" ? "" : event.instructor} /></Field>
       </div><Field><FieldLabel>Qeyd</FieldLabel><textarea name="note" defaultValue={event.note} rows={3} /></Field></FieldGroup>
     </ActionDialog>
@@ -474,7 +475,7 @@ function EditEventDialog({ data, action }: { data: WorkshopDetailData; action: W
 
 function EditParticipantDialog({ row, action }: { row: WorkshopParticipantRow; action: WorkshopAction }) {
   return (
-    <ActionDialog title="İştirakçını redaktə et" description="Qiymət qəbul edilmiş ödənişdən aşağı ola bilməz." trigger={<button type="button" className="workshop-icon-action" aria-label="Redaktə et"><Edit3 /></button>} action={action}>
+    <ActionDialog title="İştirakçını redaktə et" description="Qiymət qəbul edilmiş ödənişdən aşağı ola bilməz." trigger={<button type="button" className="workshop-icon-action" aria-label="Redaktə et"><Edit3 /></button>} action={action} headerIcon={<UsersRound />}>
       <input type="hidden" name="participantId" value={row.id} />
       <FieldGroup><div className="workshop-form-grid">
         <Field><FieldLabel>Ad və soyad</FieldLabel><Input name="fullName" defaultValue={row.fullName} required /></Field>
@@ -497,6 +498,7 @@ function EventDangerDialog({ eventId, action }: { eventId: string; action: Works
       action={action}
       destructive
       onSuccess={() => router.replace("/workshops")}
+      headerIcon={<Trash2 />}
     >
       <input type="hidden" name="eventId" value={eventId} />
     </ActionDialog>
@@ -515,13 +517,13 @@ function ReasonDialog({ title, description, hiddenName, hiddenValue, action, ico
   title: string; description: string; hiddenName: string; hiddenValue: string; action: WorkshopAction; icon: ReactNode; onSuccess?: () => void;
 }) {
   return (
-    <ActionDialog title={title} description={description} trigger={<button type="button" className="workshop-icon-action" aria-label={title}>{icon}</button>} action={action} destructive onSuccess={onSuccess}>
+    <ActionDialog title={title} description={description} trigger={<button type="button" className="workshop-icon-action" aria-label={title}>{icon}</button>} action={action} destructive onSuccess={onSuccess} headerIcon={icon}>
       <input type="hidden" name={hiddenName} value={hiddenValue} />
     </ActionDialog>
   );
 }
 
-function ActionDialog({ title, description, trigger, action, children, defaultOpen = false, destructive = false, onSuccess }: {
+function ActionDialog({ title, description, trigger, action, children, defaultOpen = false, destructive = false, onSuccess, headerIcon }: {
   title: string;
   description: string;
   trigger: ReactNode;
@@ -530,6 +532,7 @@ function ActionDialog({ title, description, trigger, action, children, defaultOp
   defaultOpen?: boolean;
   destructive?: boolean;
   onSuccess?: () => void;
+  headerIcon?: ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
@@ -551,7 +554,15 @@ function ActionDialog({ title, description, trigger, action, children, defaultOp
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="workshop-dialog workshop-action-dialog">
-        <DialogHeader className="workshop-dialog-header"><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
+        <DialogHeader className="workshop-dialog-header">
+          <div className="workshop-dialog-heading">
+            {headerIcon ? <span className={destructive ? "workshop-dialog-icon is-danger" : "workshop-dialog-icon"} aria-hidden="true">{headerIcon}</span> : null}
+            <div>
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>{description}</DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
         <form onSubmit={submit} className="workshop-dialog-form">
           {children}
           {error ? <p className="workshop-form-error" role="alert">{error}</p> : null}

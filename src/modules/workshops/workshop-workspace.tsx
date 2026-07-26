@@ -187,10 +187,35 @@ export function WorkshopWorkspace({
 function CompactFilterPanel({ data }: { data: WorkshopData }) {
   return (
     <section className="workshop-filter-panel">
-      <form method="get" action="/workshops" className="workshop-filter-form">
+      <form
+        method="get"
+        action="/workshops"
+        className="workshop-filter-form"
+        onSubmit={(event) => {
+          const form = event.currentTarget;
+          const dateRangeInput = form.elements.namedItem("dateRange");
+          const fromInput = form.elements.namedItem("from");
+          const toInput = form.elements.namedItem("to");
+          const hasCustomDates =
+            fromInput instanceof HTMLInputElement && fromInput.value !== "" ||
+            toInput instanceof HTMLInputElement && toInput.value !== "";
+          if (hasCustomDates && dateRangeInput instanceof HTMLInputElement) {
+            dateRangeInput.disabled = true;
+          }
+        }}
+      >
+        {data.filters.dateRange === "all" ? <input type="hidden" name="dateRange" value="all" /> : null}
         <div className="workshop-filter-primary workshop-filter-primary-compact">
-          <FilterDate name="from" label="Başlanğıc tarixi" value={data.filters.from} />
-          <FilterDate name="to" label="Bitiş tarixi" value={data.filters.to} />
+          <FilterDate name="from" label="Başlanğıc tarixi" value={data.filters.dateRange === "all" ? "" : data.filters.from} />
+          <FilterDate name="to" label="Bitiş tarixi" value={data.filters.dateRange === "all" ? "" : data.filters.to} />
+          <Link
+            href={buildWorkshopUrl(data, { dateRange: "all", from: "", to: "", page: "1" })}
+            className={`workshop-all-dates-link${data.filters.dateRange === "all" ? " is-active" : ""}`}
+            aria-current={data.filters.dateRange === "all" ? "page" : undefined}
+            title="Bütün tarixlər üzrə tədbirləri göstər"
+          >
+            Ümumi
+          </Link>
           <FilterSelect
             name="status"
             label="Status"
@@ -225,7 +250,12 @@ function FilterDate({ name, label, value }: { name: string; label: string; value
   return (
     <label className="workshop-filter-field">
       <span>{label}</span>
-      <input type="date" name={name} defaultValue={value} />
+      <input
+        key={`${name}-${value}`}
+        type="date"
+        name={name}
+        defaultValue={value}
+      />
     </label>
   );
 }
@@ -392,14 +422,19 @@ function CreateEventDialog({ defaultDate, action, disabled }: {
       </DialogTrigger>
       <DialogContent className="workshop-dialog workshop-create-dialog">
         <DialogHeader className="workshop-dialog-header">
-          <DialogTitle>Yeni workshop / masterclass</DialogTitle>
-          <DialogDescription>Tədbirin əsas detallarını və satış qiymətini daxil edin.</DialogDescription>
+          <div className="workshop-dialog-heading">
+            <span className="workshop-dialog-icon" aria-hidden="true"><CalendarDays /></span>
+            <div>
+              <DialogTitle>Yeni workshop / masterclass</DialogTitle>
+              <DialogDescription>Tədbirin əsas detallarını və satış qiymətini daxil edin.</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
         <div className="workshop-dialog-callout"><Info aria-hidden="true" />Yaratdıqdan sonra bütün məlumatları redaktə edə bilərsiniz.</div>
         <form onSubmit={submit} className="workshop-dialog-form workshop-create-form">
           <FieldGroup>
             <div className="workshop-form-grid">
-              <Field><FieldLabel htmlFor="event-title">Tədbir adı</FieldLabel><Input id="event-title" name="title" placeholder="Məsələn: Rəqəmsal marketinq masterclass" required /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel htmlFor="event-title">Tədbir adı</FieldLabel><Input id="event-title" name="title" placeholder="Məsələn: Rəqəmsal marketinq masterclass" required /></Field>
               <Field><FieldLabel>Növ</FieldLabel><FormSelect name="eventType" defaultValue="WORKSHOP" options={eventTypeOptions} /></Field>
               <Field><FieldLabel>Tarix</FieldLabel><DatePicker name="eventDate" defaultValue={defaultDate} required allowClear={false} popoverPlacement="floating" /></Field>
               <Field><FieldLabel htmlFor="event-time">Saat</FieldLabel><Input id="event-time" name="startTime" defaultValue="19:00" required /></Field>
@@ -407,7 +442,7 @@ function CreateEventDialog({ defaultDate, action, disabled }: {
               <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue="SCHEDULED" options={eventStatusOptions} /></Field>
               <Field><FieldLabel htmlFor="event-price">Giriş qiyməti</FieldLabel><Input id="event-price" name="entryPrice" inputMode="decimal" defaultValue="0" required /></Field>
               <Field><FieldLabel htmlFor="event-capacity">Tutum</FieldLabel><Input id="event-capacity" name="capacity" type="number" min={1} /></Field>
-              <Field><FieldLabel htmlFor="event-room">Məkan</FieldLabel><Input id="event-room" name="room" placeholder="Məsələn: Artmonia Ofis, Bakı" /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel htmlFor="event-room">Məkan</FieldLabel><Input id="event-room" name="room" placeholder="Məsələn: Artmonia Ofis, Bakı" /></Field>
               <Field><FieldLabel htmlFor="event-instructor">Təlimçi</FieldLabel><Input id="event-instructor" name="instructor" placeholder="Təlimçinin adı" /></Field>
             </div>
             <Field><FieldLabel htmlFor="event-note">Qeyd</FieldLabel><textarea id="event-note" name="note" rows={3} placeholder="Əlavə qeydlər və ya xüsusi məlumatlar..." /></Field>
@@ -433,6 +468,7 @@ function buildWorkshopUrl(data: WorkshopData, overrides: Record<string, string>)
     q: data.filters.query,
     type: data.filters.type,
     status: data.filters.status,
+    dateRange: data.filters.dateRange === "all" ? "all" : "",
     from: data.filters.from,
     to: data.filters.to,
     instructor: data.filters.instructor,
@@ -446,7 +482,7 @@ function buildWorkshopUrl(data: WorkshopData, overrides: Record<string, string>)
     ...overrides,
   };
   Object.entries(values).forEach(([key, value]) => {
-    if (value && value !== "all") params.set(key, value);
+    if (value && (key === "dateRange" || value !== "all")) params.set(key, value);
   });
   return `/workshops?${params.toString()}` as Route;
 }
