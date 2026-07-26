@@ -8,6 +8,58 @@
   max-width: 1500px;
 }
 
+.marketing-redesign > .marketing-view-tabs {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  overflow-x: auto;
+  padding: 3px;
+  border: 1px solid var(--marketing-line);
+  border-radius: 11px;
+  background: #f7f6f4;
+  scrollbar-width: none;
+}
+
+.marketing-redesign > .marketing-view-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.marketing-redesign > .marketing-view-tabs a {
+  display: inline-flex;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: #746d68;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.marketing-redesign > .marketing-view-tabs a svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.marketing-redesign > .marketing-view-tabs a:hover {
+  color: var(--marketing-ink);
+  background: rgb(255 255 255 / 62%);
+}
+
+.marketing-redesign > .marketing-view-tabs a.is-active {
+  color: var(--marketing-ink);
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(38 31 27 / 8%);
+}
+
 .marketing-topbar,
 .marketing-filterbar,
 .marketing-title-block,
