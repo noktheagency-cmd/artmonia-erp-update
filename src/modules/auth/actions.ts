@@ -1,6 +1,5 @@
 "use server";
 
-import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getPrisma } from "@/server/db/prisma";
@@ -11,11 +10,18 @@ const signInSchema = z.object({
   password: z.string().min(6).max(160),
 });
 
-export async function signInAction(formData: FormData) {
+export type SignInState = {
+  error?: string;
+};
+
+export async function signInAction(
+  _previousState: SignInState,
+  formData: FormData,
+): Promise<SignInState> {
   const input = signInSchema.safeParse(Object.fromEntries(formData));
 
   if (!input.success) {
-    redirectToLogin("invalid");
+    return { error: "Düzgün e-poçt və şifrə daxil edin." };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -25,7 +31,7 @@ export async function signInAction(formData: FormData) {
   });
 
   if (error || !data.user) {
-    redirectToLogin("credentials");
+    return { error: "E-poçt və ya şifrə yanlışdır." };
   }
 
   const erpUser = await getPrisma().user.findUnique({
@@ -38,7 +44,7 @@ export async function signInAction(formData: FormData) {
 
   if (!erpUser?.isActive) {
     await supabase.auth.signOut();
-    redirectToLogin("unlinked");
+    return { error: "Bu hesab aktiv Artmonia ERP istifadəçisinə bağlı deyil." };
   }
 
   redirect("/dashboard");
@@ -47,9 +53,5 @@ export async function signInAction(formData: FormData) {
 export async function signOutAction() {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
-  redirect("/login" as Route);
-}
-
-function redirectToLogin(reason: string): never {
-  redirect(`/login?error=${encodeURIComponent(reason)}` as Route);
+  redirect("/login");
 }

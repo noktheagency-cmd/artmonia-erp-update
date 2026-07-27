@@ -1,90 +1,42 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
-import { AlertTriangle, ArrowUpRight, AtSign, LockKeyhole } from "lucide-react";
-import { signInAction } from "@/modules/auth/actions";
 import { getCurrentErpUser } from "@/server/auth/session";
+import { LoginForm } from "./login-form";
 import { LoginSceneLazy } from "./login-scene-lazy";
 
-const errorMessages: Record<string, string> = {
-  credentials: "Email or password is incorrect.",
-  invalid: "Enter a valid email and password.",
-  unlinked: "This Supabase user is not linked to an active ERP user.",
-};
-
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
+export default async function LoginPage() {
   const currentUser = await getCurrentErpUser();
 
   if (currentUser) {
     redirect("/dashboard");
   }
 
-  const { error } = await searchParams;
-  const message = error ? errorMessages[error] ?? errorMessages.credentials : null;
-
   return (
     <main className="kinetic-login">
-      <LoginSceneLazy />
+      <section className="kinetic-art" aria-label="Artmonia">
+        <LoginSceneLazy />
 
-      <header className="kinetic-wordmark" aria-label="Artmonia ERP">
-        <Image src="/logo.png" alt="Artmonia" width={1254} height={1254} priority />
-      </header>
+        <header className="kinetic-wordmark">
+          <Image
+            src="/logo-login.png"
+            alt="Artmonia"
+            width={1254}
+            height={1254}
+            priority
+            sizes="(max-width: 760px) 132px, 164px"
+          />
+        </header>
+      </section>
 
       <section className="kinetic-panel" aria-label="Sign in">
-        <div className="kinetic-panel-light" aria-hidden="true" />
-
         <div className="kinetic-heading">
-          <h1>Sign in</h1>
+          <h1>Xoş gəldiniz</h1>
+          <p>Artmonia ERP hesabınıza daxil olun.</p>
         </div>
 
-        <form action={signInAction} className="kinetic-form">
-          <label className="kinetic-field">
-            <span>Email</span>
-            <span className="kinetic-input-shell">
-              <AtSign aria-hidden="true" />
-              <input
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                autoFocus
-              />
-              <i aria-hidden="true" />
-            </span>
-          </label>
+        <LoginForm />
 
-          <label className="kinetic-field">
-            <span>Password</span>
-            <span className="kinetic-input-shell">
-              <LockKeyhole aria-hidden="true" />
-              <input
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                minLength={6}
-              />
-              <i aria-hidden="true" />
-            </span>
-          </label>
-
-          {message ? (
-            <p className="kinetic-error" role="alert">
-              <AlertTriangle aria-hidden="true" />
-              <span>{message}</span>
-            </p>
-          ) : null}
-
-          <button className="kinetic-submit" type="submit">
-            <span>Sign in</span>
-            <span className="kinetic-submit-icon" aria-hidden="true">
-              <ArrowUpRight />
-            </span>
-          </button>
-        </form>
+        <p className="kinetic-footer">Artmonia ERP <i /> Daxili idarəetmə sistemi</p>
       </section>
     </main>
   );
