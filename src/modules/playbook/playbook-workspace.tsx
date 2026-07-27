@@ -638,7 +638,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
       </div>
 
       {drawerOpen ? (
-        <div className="playbook-drawer-backdrop" role="presentation" onMouseDown={() => !isMutating && setDrawerOpen(false)}>
+        <div className="playbook-drawer-backdrop" role="presentation">
           <aside className="playbook-drawer" role="dialog" aria-modal="true" aria-labelledby="department-drawer-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="playbook-drawer-head">
               <div><span><FolderKanban size={17} /></span><h2 id="department-drawer-title">{drawerMode === "edit" ? "Departamenti redaktə et" : "Yeni departament"}</h2></div>
@@ -689,7 +689,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
       ) : null}
 
       {editingDocument ? (
-        <div className="playbook-modal-backdrop" role="presentation" onMouseDown={() => !isMutating && setEditingDocument(null)}>
+        <div className="playbook-modal-backdrop" role="presentation">
           <section className="playbook-document-modal" role="dialog" aria-modal="true" aria-labelledby="document-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="playbook-modal-head">
               <div><span><FileText size={18} /></span><div><h2 id="document-editor-title">Sənədi redaktə et</h2><p>{editingDocument.originalName}</p></div></div>
@@ -711,7 +711,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
       ) : null}
 
       {previewDocument ? (
-        <div className="playbook-modal-backdrop playbook-preview-backdrop" role="presentation" onMouseDown={closeDocumentPreview}>
+        <div className="playbook-modal-backdrop playbook-preview-backdrop" role="presentation">
           <section className="playbook-preview-modal" role="dialog" aria-modal="true" aria-labelledby="playbook-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="playbook-modal-head">
               <div><span><FileText size={18} /></span><div><h2 id="playbook-preview-title">Sənədə baxış</h2><p>{previewDocument.name}</p></div></div>
@@ -749,7 +749,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
       ) : null}
 
       {deleteTarget ? (
-        <div className="playbook-confirm-backdrop" role="presentation" onMouseDown={() => !isMutating && setDeleteTarget(null)}>
+        <div className="playbook-confirm-backdrop" role="presentation">
           <section className="playbook-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="playbook-confirm-title" onMouseDown={(event) => event.stopPropagation()}>
             <span className="playbook-confirm-icon"><AlertTriangle size={22} /></span>
             <h2 id="playbook-confirm-title">Silməni təsdiqləyin</h2>

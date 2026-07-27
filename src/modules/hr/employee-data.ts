@@ -50,35 +50,42 @@ export async function getHrEmployeeData(): Promise<HrEmployeeData> {
     getPrisma().hrLookupOption.findMany({ where: { isActive: true }, orderBy: [{ kind: "asc" }, { name: "asc" }] }),
     canCreateAccount ? getPrisma().role.findMany({ where: { OR: [{ code: null }, { code: { not: "SUPER_ADMIN" } }] }, orderBy: [{ isSystem: "desc" }, { name: "asc" }] }) : Promise.resolve([]),
   ]);
+  const employeeRows: HrEmployeeRow[] = employees.map((employee) => ({
+    id: employee.id,
+    staffType: employee.staffType,
+    teacherId: employee.teacherId ?? "",
+    teacherCapacity: employee.teacher?.capacity ?? 0,
+    userId: employee.userId ?? "",
+    hasLogin: Boolean(employee.user?.authUserId),
+    roles: employee.user?.roles.map(({ role }) => ({ id: role.id, name: role.name })) ?? [],
+    fullName: employee.fullName,
+    profilePhotoUrl: employee.profilePhotoUrl ?? "",
+    email: employee.email ?? "",
+    phone: employee.phone ?? "",
+    department: normalizeReservedLookup(
+      employee.department,
+      employee.staffType === "TEACHER" ? "Tədris" : "Ümumi",
+    ),
+    position: normalizeReservedLookup(
+      employee.position,
+      employee.staffType === "TEACHER" ? "Müəllim" : "Əməkdaş",
+    ),
+    hireDate: employee.hireDate.toISOString().slice(0, 10),
+    status: employee.status,
+    contractType: employee.contractType,
+    salaryMode: employee.salaryMode === "PERCENT" ? "PERCENT" : "STATIC",
+    salaryAmount: Number(employee.salaryAmount),
+    salaryPercent: Number(employee.salaryPercent ?? 0),
+    note: employee.note ?? "",
+    updatedAt: employee.updatedAt.toISOString(),
+  }));
 
   return {
     today: new Date().toISOString().slice(0, 10),
-    employees: employees.map((employee) => ({
-      id: employee.id,
-      staffType: employee.staffType,
-      teacherId: employee.teacherId ?? "",
-      teacherCapacity: employee.teacher?.capacity ?? 0,
-      userId: employee.userId ?? "",
-      hasLogin: Boolean(employee.user?.authUserId),
-      roles: employee.user?.roles.map(({ role }) => ({ id: role.id, name: role.name })) ?? [],
-      fullName: employee.fullName,
-      profilePhotoUrl: employee.profilePhotoUrl ?? "",
-      email: employee.email ?? "",
-      phone: employee.phone ?? "",
-      department: employee.department,
-      position: employee.position,
-      hireDate: employee.hireDate.toISOString().slice(0, 10),
-      status: employee.status,
-      contractType: employee.contractType,
-      salaryMode: employee.salaryMode === "PERCENT" ? "PERCENT" : "STATIC",
-      salaryAmount: Number(employee.salaryAmount),
-      salaryPercent: Number(employee.salaryPercent ?? 0),
-      note: employee.note ?? "",
-      updatedAt: employee.updatedAt.toISOString(),
-    })),
+    employees: employeeRows,
     lookups: {
-      departments: [...new Set([...lookups.filter((item) => item.kind === "DEPARTMENT").map((item) => item.name), ...employees.map((item) => item.department)])].toSorted((a, b) => a.localeCompare(b, "az")),
-      positions: [...new Set([...lookups.filter((item) => item.kind === "POSITION").map((item) => item.name), ...employees.map((item) => item.position)])].toSorted((a, b) => a.localeCompare(b, "az")),
+      departments: [...new Set([...lookups.filter((item) => item.kind === "DEPARTMENT" && item.name !== "__new").map((item) => item.name), ...employeeRows.map((item) => item.department)])].toSorted((a, b) => a.localeCompare(b, "az")),
+      positions: [...new Set([...lookups.filter((item) => item.kind === "POSITION" && item.name !== "__new").map((item) => item.name), ...employeeRows.map((item) => item.position)])].toSorted((a, b) => a.localeCompare(b, "az")),
     },
     roleOptions: roles.map((role) => ({ id: role.id, name: role.name, code: role.code, isSystem: role.isSystem })),
     permissions: {
@@ -88,4 +95,8 @@ export async function getHrEmployeeData(): Promise<HrEmployeeData> {
       canCreateAccount,
     },
   };
+}
+
+function normalizeReservedLookup(value: string, fallback: string) {
+  return value === "__new" ? fallback : value;
 }

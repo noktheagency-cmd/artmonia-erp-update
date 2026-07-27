@@ -39,6 +39,8 @@ import {
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { leadStageSelectOptions } from "@/modules/crm/stage";
+import { unwrapActionResult } from "@/lib/action-result";
+import { notifyCaughtError } from "@/lib/app-notifications";
 
 type LeadRow = CrmData["leads"][number];
 
@@ -56,10 +58,26 @@ export function LeadDetailDialogClient({
   managers: CrmData["managers"];
   sourceOptions: CrmData["sourceOptions"];
   returnTo: string;
-  updateLeadAction: (formData: FormData) => void | Promise<void>;
-  deleteLeadAction: (formData: FormData) => void | Promise<void>;
+  updateLeadAction: (formData: FormData) => unknown | Promise<unknown>;
+  deleteLeadAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  async function updateLead(formData: FormData) {
+    try {
+      unwrapActionResult(await updateLeadAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Müraciət yenilənmədi.");
+    }
+  }
+
+  async function deleteLead(formData: FormData) {
+    try {
+      unwrapActionResult(await deleteLeadAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Müraciət silinmədi.");
+    }
+  }
 
   return (
     <Dialog>
@@ -93,7 +111,7 @@ export function LeadDetailDialogClient({
           <div><Clock3 aria-hidden="true" /><span>Növbəti addım</span><strong>{lead.nextActionTypeLabel}</strong></div>
         </div>
 
-        <form action={updateLeadAction} className="crm-dialog-form">
+        <form action={updateLead} className="crm-dialog-form">
           <input name="leadId" type="hidden" value={lead.id} />
           <input name="returnTo" type="hidden" value={returnTo} />
 
@@ -246,7 +264,7 @@ export function LeadDetailDialogClient({
                 <strong>{lead.name}</strong> üçün olan müraciət profili, tarixçə və açıq izləmə tapşırıqları silinəcək. Bu əməliyyatı geri qaytarmaq mümkün deyil.
               </DialogDescription>
             </DialogHeader>
-            <form action={deleteLeadAction}>
+            <form action={deleteLead}>
               <input name="leadId" type="hidden" value={lead.id} />
               <input name="returnTo" type="hidden" value={returnTo} />
               <DialogFooter className="crm-dialog-actions">

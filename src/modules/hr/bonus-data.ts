@@ -193,19 +193,25 @@ export async function getHrBonusData(): Promise<HrBonusData> {
       };
     }),
     departments: canManage
-      ? departmentRows.map((row) => row.department)
+      ? [...new Set(departmentRows.map((row) => normalizeDepartment(row.department, false)))]
       : actorEmployee
-        ? [actorEmployee.department]
+        ? [normalizeDepartment(actorEmployee.department, Boolean(actorEmployee.teacherId))]
         : [],
     teacherDepartments: canManage
-      ? teacherDepartmentRows.map((row) => row.department)
+      ? [...new Set(teacherDepartmentRows.map((row) => normalizeDepartment(row.department, true)))]
       : actorEmployee?.teacherId
-        ? [actorEmployee.department]
+        ? [normalizeDepartment(actorEmployee.department, true)]
         : [],
-    actorDepartment: actorEmployee?.department ?? "",
+    actorDepartment: actorEmployee
+      ? normalizeDepartment(actorEmployee.department, Boolean(actorEmployee.teacherId))
+      : "",
     actorEmployeeId: actorEmployee?.id ?? "",
     permissions: { canManage, canApprove, canPost, canSeeAll },
   };
+}
+
+function normalizeDepartment(value: string, isTeacher: boolean) {
+  return value === "__new" ? (isTeacher ? "Tədris" : "Ümumi") : value;
 }
 
 function dateInput(value: Date) {

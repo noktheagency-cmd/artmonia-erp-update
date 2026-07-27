@@ -14,6 +14,10 @@ import { validateBonusStages } from "@/modules/hr/bonus-rules";
 import { syncActiveBonusCampaigns, syncBonusCampaign } from "@/modules/hr/bonus-service";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import {
+  PublicActionError,
+  safeServerAction,
+} from "@/server/actions/safe-action";
 
 const teacherChurnRuleSchema = z.object({
   churnThreshold: z.coerce.number().int().positive().max(500),
@@ -46,21 +50,28 @@ const createCampaignSchema = z.object({
   }),
 });
 
-export async function createBonusCampaignAction(formData: FormData) {
+async function createBonusCampaignActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.bonus.manage");
   const input = createCampaignSchema.parse(Object.fromEntries(formData));
-  const stages = validateBonusStages(input.stages);
+  let stages: ReturnType<typeof validateBonusStages>;
+  try {
+    stages = validateBonusStages(input.stages);
+  } catch (error) {
+    throw new PublicActionError(
+      error instanceof Error ? error.message : "Bonus etapları düzgün deyil",
+    );
+  }
   const startsAt = parseDate(input.startsAt);
   const endsAt = parseDate(input.endsAt);
-  if (endsAt < startsAt) throw new Error("Bitmə tarixi başlanğıc tarixindən əvvəl ola bilməz");
+  if (endsAt < startsAt) throw new PublicActionError("Bitmə tarixi başlanğıc tarixindən əvvəl ola bilməz");
   if (input.metricKind === "DEPARTMENT_SALES_COUNT" && stages.some((stage) => !Number.isInteger(stage.threshold))) {
-    throw new Error("Satış sayı hədəfləri tam ədəd olmalıdır");
+    throw new PublicActionError("Satış sayı hədəfləri tam ədəd olmalıdır");
   }
   if (input.metricKind === "TEACHER_RETENTION_RATE" && stages.some((stage) => stage.threshold > 500)) {
-    throw new Error("Müəllim tələbə sayı düzgün deyil");
+    throw new PublicActionError("Müəllim tələbə sayı düzgün deyil");
   }
   if (input.metricKind === "TEACHER_RETENTION_RATE" && stages.some((stage) => !Number.isInteger(stage.threshold) || stage.fixedAmount <= 0 || stage.bonusPercent > 0)) {
-    throw new Error("Müəllim pilləsində tələbə sayı tam ədəd, bonus isə sıfırdan böyük olmalıdır");
+    throw new PublicActionError("Müəllim pilləsində tələbə sayı tam ədəd, bonus isə sıfırdan böyük olmalıdır");
   }
 
   const prisma = getPrisma();
@@ -85,8 +96,8 @@ export async function createBonusCampaignAction(formData: FormData) {
       orderBy: { fullName: "asc" },
     }),
   ]);
-  if (overlap) throw new Error(`Bu dövr üçün artıq “${overlap.name}” kampaniyası aktivdir`);
-  if (participants.length === 0) throw new Error("Seçilmiş departamentdə uyğun əməkdaş yoxdur");
+  if (overlap) throw new PublicActionError(`Bu dövr üçün artıq “${overlap.name}” kampaniyası aktivdir`, "CONFLICT");
+  if (participants.length === 0) throw new PublicActionError("Seçilmiş departamentdə uyğun əməkdaş yoxdur", "NOT_FOUND");
 
   const now = new Date();
   const campaignId = randomUUID();
@@ -155,7 +166,7 @@ export async function createBonusCampaignAction(formData: FormData) {
   return { id: campaign.id };
 }
 
-export async function addBonusProgressAdjustmentAction(formData: FormData) {
+async function addBonusProgressAdjustmentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.bonus.manage");
   const input = z.object({
     campaignId: z.string().uuid(),
@@ -164,9 +175,9 @@ export async function addBonusProgressAdjustmentAction(formData: FormData) {
   }).parse(Object.fromEntries(formData));
   const adjustment = await getPrisma().$transaction(async (tx) => {
     const campaign = await tx.hrBonusCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true, status: true, metricKind: true } });
-    if (!campaign || campaign.status === "CANCELLED") throw new Error("Aktiv bonus kampaniyası tapılmadı");
+    if (!campaign || campaign.status === "CANCELLED") throw new PublicActionError("Aktiv bonus kampaniyası tapılmadı", "NOT_FOUND");
     if (campaign.metricKind === "TEACHER_RETENTION_RATE") {
-      throw new Error("Müəllim nəticəsi tələbə və churn məlumatından avtomatik hesablanır və manual dəyişdirilə bilməz");
+      throw new PublicActionError("Müəllim nəticəsi tələbə və churn məlumatından avtomatik hesablanır və manual dəyişdirilə bilməz", "CONFLICT");
     }
     const created = await tx.hrBonusProgressAdjustment.create({ data: { campaignId: campaign.id, amount: input.amount, reason: input.reason, createdById: actor.id } });
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.bonus.progress.adjust", entityType: "hr_bonus_campaign", entityId: campaign.id, after: { amount: input.amount }, reason: input.reason });
@@ -176,19 +187,19 @@ export async function addBonusProgressAdjustmentAction(formData: FormData) {
   revalidateBonusPaths();
 }
 
-export async function approveBonusStageAwardsAction(formData: FormData) {
+async function approveBonusStageAwardsActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.bonus.approve");
   const stageId = z.string().uuid().parse(formData.get("stageId"));
   await getPrisma().$transaction(async (tx) => {
     const stage = await tx.hrBonusStage.findUnique({ where: { id: stageId }, include: { campaign: true } });
-    if (!stage?.reachedAt) throw new Error("Açılmış bonus etapı tapılmadı");
+    if (!stage?.reachedAt) throw new PublicActionError("Açılmış bonus etapı tapılmadı", "NOT_FOUND");
     const result = await tx.hrBonusAward.updateMany({ where: { stageId, status: "PENDING_HR" }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: actor.id } });
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.bonus.awards.approve", entityType: "hr_bonus_stage", entityId: stageId, after: { approvedCount: result.count }, reason: `${stage.campaign.name} bonus payları təsdiqləndi` });
   });
   revalidateBonusPaths();
 }
 
-export async function postBonusStageAwardsAction(formData: FormData) {
+async function postBonusStageAwardsActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.expense.create");
   const stageId = z.string().uuid().parse(formData.get("stageId"));
   await getPrisma().$transaction(async (tx) => {
@@ -199,8 +210,8 @@ export async function postBonusStageAwardsAction(formData: FormData) {
         awards: { where: { status: "APPROVED" }, include: { participant: true } },
       },
     });
-    if (!stage?.reachedAt || stage.awards.length === 0) throw new Error("Maliyyəyə göndəriləcək təsdiqli bonus yoxdur");
-    if (stage.awards.some((award) => !award.participant.employeeId)) throw new Error("Bonus iştirakçılarından birinin HR profili artıq mövcud deyil");
+    if (!stage?.reachedAt || stage.awards.length === 0) throw new PublicActionError("Maliyyəyə göndəriləcək təsdiqli bonus yoxdur", "NOT_FOUND");
+    if (stage.awards.some((award) => !award.participant.employeeId)) throw new PublicActionError("Bonus iştirakçılarından birinin HR profili artıq mövcud deyil", "CONFLICT");
 
     const category = await tx.financeExpenseCategory.upsert({
       where: { name: "Əməkdaş bonusu" },
@@ -229,13 +240,13 @@ export async function postBonusStageAwardsAction(formData: FormData) {
   revalidateBonusPaths();
 }
 
-export async function cancelBonusCampaignAction(formData: FormData) {
+async function cancelBonusCampaignActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.bonus.manage");
   const input = z.object({ campaignId: z.string().uuid(), reason: z.string().trim().min(3).max(500) }).parse(Object.fromEntries(formData));
   await getPrisma().$transaction(async (tx) => {
     const campaign = await tx.hrBonusCampaign.findUnique({ where: { id: input.campaignId }, include: { stages: { include: { awards: true } } } });
-    if (!campaign) throw new Error("Bonus kampaniyası tapılmadı");
-    if (campaign.stages.some((stage) => stage.awards.some((award) => award.status === "POSTED"))) throw new Error("Maliyyəyə göndərilmiş kampaniya ləğv edilə bilməz");
+    if (!campaign) throw new PublicActionError("Bonus kampaniyası tapılmadı", "NOT_FOUND");
+    if (campaign.stages.some((stage) => stage.awards.some((award) => award.status === "POSTED"))) throw new PublicActionError("Maliyyəyə göndərilmiş kampaniya ləğv edilə bilməz", "CONFLICT");
     await tx.hrBonusAward.updateMany({ where: { stage: { campaignId: campaign.id }, status: { in: ["PENDING_HR", "APPROVED"] } }, data: { status: "VOIDED", voidReason: input.reason } });
     await tx.hrBonusCampaign.update({ where: { id: campaign.id }, data: { status: "CANCELLED" } });
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.bonus.campaign.cancel", entityType: "hr_bonus_campaign", entityId: campaign.id, before: { status: campaign.status }, after: { status: "CANCELLED" }, reason: input.reason });
@@ -243,11 +254,36 @@ export async function cancelBonusCampaignAction(formData: FormData) {
   revalidateBonusPaths();
 }
 
-export async function refreshBonusCampaignsAction() {
+async function refreshBonusCampaignsActionImpl() {
   const actor = await requireMutationActor("hr.bonus.manage");
   await syncActiveBonusCampaigns(actor.id);
   revalidateBonusPaths();
 }
+
+export const createBonusCampaignAction = safeServerAction(
+  createBonusCampaignActionImpl,
+  "Bonus kampaniyası yaradıla bilmədi.",
+);
+export const addBonusProgressAdjustmentAction = safeServerAction(
+  addBonusProgressAdjustmentActionImpl,
+  "Bonus göstəricisi yenilənə bilmədi.",
+);
+export const approveBonusStageAwardsAction = safeServerAction(
+  approveBonusStageAwardsActionImpl,
+  "Bonus təsdiqlənə bilmədi.",
+);
+export const postBonusStageAwardsAction = safeServerAction(
+  postBonusStageAwardsActionImpl,
+  "Bonus Maliyyəyə göndərilə bilmədi.",
+);
+export const cancelBonusCampaignAction = safeServerAction(
+  cancelBonusCampaignActionImpl,
+  "Bonus kampaniyası ləğv edilə bilmədi.",
+);
+export const refreshBonusCampaignsAction = safeServerAction(
+  refreshBonusCampaignsActionImpl,
+  "Bonus məlumatları yenilənə bilmədi.",
+);
 
 function parseDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);

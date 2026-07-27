@@ -22,10 +22,22 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ children, className, ...props }, ref) => (
+>(({ children, className, onEscapeKeyDown, onInteractOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
-    <DialogPrimitive.Content ref={ref} className={cx("ui-dialog-content", className)} {...props}>
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cx("ui-dialog-content", className)}
+      onEscapeKeyDown={(event) => {
+        onEscapeKeyDown?.(event);
+        event.preventDefault();
+      }}
+      onInteractOutside={(event) => {
+        onInteractOutside?.(event);
+        event.preventDefault();
+      }}
+      {...props}
+    >
       {children}
       <DialogPrimitive.Close className="ui-dialog-close" aria-label="Close">
         <X />

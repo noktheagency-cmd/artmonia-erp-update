@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { syncMetaMarketing } from "@/modules/marketing/meta-ads";
 import { getEnv, requireEnv } from "@/server/env";
+import { toActionFailure } from "@/server/actions/safe-action";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,9 +20,11 @@ export async function POST(request: Request) {
     const result = await syncMetaMarketing({ since, until });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Meta sync uğursuz oldu.";
-    console.error("Meta Ads scheduled sync failed", { message });
-    return NextResponse.json({ error: message }, { status: 502 });
+    const failure = toActionFailure(error, "Meta sinxronizasiya tamamlana bilmədi.");
+    return NextResponse.json(
+      { error: failure.message, code: failure.code, errorId: failure.errorId },
+      { status: 502, headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 }
 

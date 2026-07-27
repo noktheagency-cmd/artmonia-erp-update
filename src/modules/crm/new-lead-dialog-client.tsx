@@ -64,19 +64,26 @@ export function NewLeadDialogClient({
   createLeadAction: (formData: FormData) => Promise<CreateLeadFormState>;
 }) {
   const router = useRouter();
-  const formRef = useRef<HTMLFormElement>(null);
+  const duplicateRequestIdRef = useRef(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [formVersion, setFormVersion] = useState(0);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
   const [isChecking, startChecking] = useTransition();
   const [isSubmitting, startSubmitting] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   function resetDialogState() {
+    duplicateRequestIdRef.current += 1;
     setDuplicates([]);
     setSubmitError(null);
+    setFormVersion((current) => current + 1);
   }
 
   function handleOpenChange(open: boolean) {
+    if (!open && isSubmitting) {
+      return;
+    }
+
     setIsOpen(open);
     if (!open) resetDialogState();
   }
@@ -88,25 +95,32 @@ export function NewLeadDialogClient({
     setSubmitError(null);
 
     startSubmitting(async () => {
-      const result = await createLeadAction(formData);
-      if (result.status === "success") {
-        setIsOpen(false);
-        resetDialogState();
-        form.reset();
-        router.replace("/crm?tab=list&leadCreated=1", { scroll: false });
-        router.refresh();
-        return;
+      try {
+        const result = await createLeadAction(formData);
+        if (result.status === "success") {
+          setIsOpen(false);
+          resetDialogState();
+          router.replace("/crm?tab=list&leadCreated=1", { scroll: false });
+          router.refresh();
+          return;
+        }
+        setSubmitError(result.message ?? "Müraciət yaradılmadı.");
+      } catch {
+        setSubmitError("Gözlənilməz xəta baş verdi. Məlumatları yoxlayıb yenidən cəhd edin.");
       }
-      setSubmitError(result.message ?? "Müraciət yaradılmadı.");
     });
   }
 
   function checkPhone(value: string) {
+    const requestId = duplicateRequestIdRef.current + 1;
+    duplicateRequestIdRef.current = requestId;
+
     if (value.replace(/\D/g, "").length < 6) {
       setDuplicates([]);
       return;
     }
 
+    setDuplicates([]);
     startChecking(async () => {
       try {
         const response = await fetch(
@@ -114,13 +128,19 @@ export function NewLeadDialogClient({
           { cache: "no-store" }
         );
         if (!response.ok) {
-          setDuplicates([]);
+          if (requestId === duplicateRequestIdRef.current) {
+            setDuplicates([]);
+          }
           return;
         }
         const payload = (await response.json()) as DuplicateResponse;
-        setDuplicates(payload.matches);
+        if (requestId === duplicateRequestIdRef.current) {
+          setDuplicates(payload.matches);
+        }
       } catch {
-        setDuplicates([]);
+        if (requestId === duplicateRequestIdRef.current) {
+          setDuplicates([]);
+        }
       }
     });
   }
@@ -133,26 +153,45 @@ export function NewLeadDialogClient({
         </Button>
       </DialogTrigger>
       <DialogContent className="crm-modern-dialog crm-create-dialog">
-        <DialogHeader className="crm-create-accessible-header">
-          <DialogTitle>Yeni müraciət</DialogTitle>
-          <DialogDescription>
-            Müraciət məlumatlarını, maraq göstərilən proqramı, məsul şəxsi və ilk izləmə tarixini daxil edin.
-          </DialogDescription>
+        <DialogHeader className="crm-create-header">
+          <span className="crm-create-header-icon" aria-hidden="true">
+            <UserPlus />
+          </span>
+          <div>
+            <DialogTitle>Yeni müraciət</DialogTitle>
+            <DialogDescription>
+              Əlaqə məlumatlarını və növbəti izləmə addımını qeyd edin.
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
-        <form ref={formRef} onSubmit={handleSubmit} className="crm-dialog-form">
+        <form key={formVersion} onSubmit={handleSubmit} className="crm-dialog-form">
           <div className="crm-dialog-scroll">
-            <section className="crm-dialog-section">
-              <header>
-                <CircleUserRound aria-hidden="true" />
-                <h3>Əlaqə məlumatları</h3>
+            <section className="crm-dialog-section crm-section-contact">
+              <header className="crm-dialog-section-heading">
+                <span aria-hidden="true"><CircleUserRound /></span>
+                <div>
+                  <h3>Əlaqə məlumatları</h3>
+                  <p>Müraciət edən şəxsin əsas məlumatları və müraciət kanalı</p>
+                </div>
               </header>
               <FieldGroup className="crm-dialog-fields">
                 <Field className="is-full">
-                  <FieldLabel htmlFor="new-lead-name">Ad və soyad</FieldLabel>
+                  <FieldLabel htmlFor="new-lead-name">
+                    Ad və soyad <span className="crm-required" aria-hidden="true">*</span>
+                  </FieldLabel>
                   <InputGroup>
                     <InputGroupAddon aria-hidden="true"><CircleUserRound /></InputGroupAddon>
-                    <InputGroupInput id="new-lead-name" name="fullName" required minLength={2} maxLength={120} />
+                    <InputGroupInput
+                      id="new-lead-name"
+                      name="fullName"
+                      placeholder="Məsələn, Aysel Məmmədova"
+                      autoComplete="name"
+                      autoFocus
+                      required
+                      minLength={2}
+                      maxLength={120}
+                    />
                   </InputGroup>
                 </Field>
                 <Field>
@@ -162,6 +201,10 @@ export function NewLeadDialogClient({
                     <InputGroupInput
                       id="new-lead-phone"
                       name="phone"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="+994 50 000 00 00"
                       maxLength={40}
                       onBlur={(event) => checkPhone(event.currentTarget.value)}
                     />
@@ -202,10 +245,13 @@ export function NewLeadDialogClient({
               ) : null}
             </section>
 
-            <section className="crm-dialog-section">
-              <header>
-                <BookOpen aria-hidden="true" />
-                <h3>Maraq və məsuliyyət</h3>
+            <section className="crm-dialog-section crm-section-interest">
+              <header className="crm-dialog-section-heading">
+                <span aria-hidden="true"><BookOpen /></span>
+                <div>
+                  <h3>Maraq və məsuliyyət</h3>
+                  <p>Proqram seçimi, kampaniya, cavabdeh əməkdaş və prioritet</p>
+                </div>
               </header>
               <FieldGroup className="crm-dialog-fields">
                 <Field>
@@ -215,12 +261,22 @@ export function NewLeadDialogClient({
                     name="programId"
                     defaultValue=""
                     emptyLabel="Seçilməyib"
+                    searchable
+                    searchPlaceholder="Proqram axtar..."
                     options={programs.map((program) => ({ value: program.id, label: program.name }))}
                   />
                 </Field>
                 <Field>
                   <FieldLabel>Kampaniya</FieldLabel>
-                  <FormSelect aria-label="Kampaniya" name="campaignId" defaultValue="" emptyLabel="Kampaniya seçilməyib" options={campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))} />
+                  <FormSelect
+                    aria-label="Kampaniya"
+                    name="campaignId"
+                    defaultValue=""
+                    emptyLabel="Kampaniya seçilməyib"
+                    searchable
+                    searchPlaceholder="Kampaniya axtar..."
+                    options={campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))}
+                  />
                 </Field>
                 <Field>
                   <FieldLabel>Məsul şəxs</FieldLabel>
@@ -229,6 +285,8 @@ export function NewLeadDialogClient({
                     name="managerId"
                     defaultValue=""
                     emptyLabel="Avtomatik təyin et"
+                    searchable
+                    searchPlaceholder="Məsul şəxs axtar..."
                     options={managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
                   />
                 </Field>
@@ -243,10 +301,13 @@ export function NewLeadDialogClient({
               </FieldGroup>
             </section>
 
-            <section className="crm-dialog-section">
-              <header>
-                <CalendarClock aria-hidden="true" />
-                <h3>Növbəti addım</h3>
+            <section className="crm-dialog-section crm-section-next-step">
+              <header className="crm-dialog-section-heading">
+                <span aria-hidden="true"><CalendarClock /></span>
+                <div>
+                  <h3>Növbəti addım</h3>
+                  <p>İzləmə üsulunu, planlanan tarixi və vacib qeydləri əlavə edin</p>
+                </div>
               </header>
               <FieldGroup className="crm-dialog-fields">
                 <Field>
@@ -255,7 +316,12 @@ export function NewLeadDialogClient({
                 </Field>
                 <Field>
                   <FieldLabel>Növbəti addım tarixi</FieldLabel>
-                  <DatePicker name="nextFollowUpDate" compact popoverPlacement="floating" />
+                  <DatePicker
+                    aria-label="Növbəti addım tarixi"
+                    name="nextFollowUpDate"
+                    compact
+                    popoverPlacement="floating"
+                  />
                 </Field>
                 <Field className="is-full">
                   <FieldLabel htmlFor="new-lead-note">Qeyd</FieldLabel>
@@ -277,7 +343,7 @@ export function NewLeadDialogClient({
 
           <DialogFooter className="crm-dialog-actions">
             <DialogClose asChild>
-              <Button type="button" variant="outline">Ləğv et</Button>
+              <Button type="button" variant="outline" disabled={isSubmitting}>Ləğv et</Button>
             </DialogClose>
             <Button className="crm-create-submit" type="submit" disabled={isSubmitting}>
               {isSubmitting ? <LoaderCircle className="crm-spin" data-icon="inline-start" /> : <Plus data-icon="inline-start" />}

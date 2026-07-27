@@ -21,7 +21,7 @@ import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashb
 import type { HrBonusData } from "@/modules/hr/bonus-data";
 import type { TaskData } from "@/modules/tasks/queries";
 
-type TaskAction = (formData: FormData) => void | Promise<void>;
+type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 
 type KpiPresentation = {
   href: Route;

@@ -9,6 +9,8 @@ import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import {
   BriefcaseBusiness,
   Download,
+  Eye,
+  EyeOff,
   GraduationCap,
   MoreHorizontal,
   Plus,
@@ -36,6 +38,7 @@ import type { TeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 import type { HrBonusData } from "@/modules/hr/bonus-data";
 import { BonusWorkspace } from "@/modules/hr/bonus-workspace";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import "./hr.css";
 import "./hr-payroll.css";
 import "./staff.css";
@@ -136,7 +139,8 @@ export function HrWorkspace({
     startTransition(
       () =>
         void action()
-          .then(() => {
+          .then((result) => {
+            unwrapActionResult(result);
             setNotice(message);
             setEditor(null);
             setDeleting(null);
@@ -938,6 +942,7 @@ function EmployeeDialog({
     employee?.salaryMode ?? "STATIC",
   );
   const [createAccount, setCreateAccount] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(employee?.profilePhotoUrl ?? "");
   const [photoError, setPhotoError] = useState("");
   const teacherRole = roleOptions.find((role) => role.code === "TEACHER");
@@ -1178,14 +1183,24 @@ function EmployeeDialog({
                   </label>
                   <label>
                     <span>İlkin parol</span>
-                    <Input
-                      name="password"
-                      type="password"
-                      minLength={8}
-                      maxLength={72}
-                      autoComplete="new-password"
-                      required
-                    />
+                    <div className="hr-password-field">
+                      <Input
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        minLength={8}
+                        maxLength={72}
+                        autoComplete="new-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((value) => !value)}
+                        aria-label={showPassword ? "Şifrəni gizlət" : "Şifrəni göstər"}
+                        aria-pressed={showPassword}
+                      >
+                        {showPassword ? <EyeOff /> : <Eye />}
+                      </button>
+                    </div>
                   </label>
                   <label className="is-wide">
                     <span>Rol ver</span>
@@ -1275,11 +1290,14 @@ function CreatableLookup({
     form.set("name", next);
     startSaving(
       () =>
-        void action(form).then(() => {
+        void action(form).then((result) => {
+          unwrapActionResult(result);
           setOptions((current) => [...new Set([...current, next])].sort());
           setValue(next);
           setNewValue("");
           setCreating(false);
+        }).catch((error) => {
+          notifyCaughtError(error, "Yeni seçim əlavə edilmədi");
         }),
     );
   }

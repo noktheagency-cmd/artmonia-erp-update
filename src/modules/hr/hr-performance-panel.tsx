@@ -150,7 +150,7 @@ export function HrPerformancePanel({
 }: {
   data: HrPerformanceData;
   teacherData: TeacherDirectoryData;
-  teacherAccountAction: (formData: FormData) => Promise<void>;
+  teacherAccountAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const initialWorkspace = useMemo(() => createWorkspaceState(data), [data]);
   const [workspace, setWorkspace] = useState(initialWorkspace);

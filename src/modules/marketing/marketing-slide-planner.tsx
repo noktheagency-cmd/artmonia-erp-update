@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import {
   approveMarketingContentAction,
   requestMarketingContentRevisionAction,
@@ -130,7 +131,7 @@ export function MarketingSlidePlanner({ data }: { data: MarketingContentData }) 
     formData.set("scheduledTime", currentTime);
     startTransition(async () => {
       try {
-        await scheduleMarketingSlideAction(formData);
+        unwrapActionResult(await scheduleMarketingSlideAction(formData));
         router.refresh();
       } catch (error) {
         setScheduleOverrides((current) => {
@@ -148,7 +149,7 @@ export function MarketingSlidePlanner({ data }: { data: MarketingContentData }) 
     formData.set("id", item.id);
     startTransition(async () => {
       try {
-        await approveMarketingContentAction(formData);
+        unwrapActionResult(await approveMarketingContentAction(formData));
         router.refresh();
       } catch (error) {
         notifyCaughtError(error, "Slide təsdiqlənmədi", "Təsdiq uğursuz oldu");
@@ -162,7 +163,7 @@ export function MarketingSlidePlanner({ data }: { data: MarketingContentData }) 
     setScheduleOverrides((current) => ({ ...current, [item.id]: "" }));
     startTransition(async () => {
       try {
-        await unscheduleMarketingSlideAction(formData);
+        unwrapActionResult(await unscheduleMarketingSlideAction(formData));
         router.refresh();
       } catch (error) {
         setScheduleOverrides((current) => {
@@ -519,7 +520,7 @@ function SlideEditor({
           formData.set("mediaUrl", "");
           formData.set("mediaPath", "");
         }
-        await saveMarketingContentAction(formData);
+        unwrapActionResult(await saveMarketingContentAction(formData));
         if (item?.mediaPath && item.mediaPath !== uploadedPath && (uploadedPath || removeExistingMedia)) await deleteContentMedia(item.mediaPath);
         onOpenChange(false);
         router.refresh();
@@ -600,7 +601,7 @@ function RevisionDialog({ open, item, onOpenChange }: { open: boolean; item: Mar
     setError("");
     startTransition(async () => {
       try {
-        await requestMarketingContentRevisionAction(formData);
+        unwrapActionResult(await requestMarketingContentRevisionAction(formData));
         onOpenChange(false);
         router.refresh();
       } catch (caught) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getMarketingCampaignAds } from "@/modules/marketing/queries";
+import { toActionFailure } from "@/server/actions/safe-action";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,9 +29,16 @@ export async function GET(
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Sorğu parametrləri düzgün deyil." }, { status: 400 });
     }
-    console.error("Marketing campaign ads request failed", {
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
-    return NextResponse.json({ error: "Reklam məlumatları yüklənmədi." }, { status: 401 });
+    const failure = toActionFailure(error, "Reklam məlumatları yüklənmədi.");
+    const status =
+      failure.code === "UNAUTHORIZED"
+        ? 401
+        : failure.code === "FORBIDDEN"
+          ? 403
+          : 500;
+    return NextResponse.json(
+      { error: failure.message, code: failure.code, errorId: failure.errorId },
+      { status, headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 }

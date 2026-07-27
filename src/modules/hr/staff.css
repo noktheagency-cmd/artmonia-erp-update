@@ -20,6 +20,12 @@
 .hr-account-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 10px; border-top: 1px solid #e2e6ed; }
 .hr-account-grid label { display: grid; gap: 6px; }
 .hr-account-grid .is-wide { grid-column: 1 / -1; }
+.hr-password-field { position: relative; }
+.hr-password-field input { padding-right: 42px; }
+.hr-password-field button { position: absolute; top: 50%; right: 7px; display: grid; width: 30px; height: 30px; padding: 0; transform: translateY(-50%); place-items: center; color: #7e8798; background: transparent; border: 0; border-radius: 8px; cursor: pointer; transition: color 160ms ease, background 160ms ease; }
+.hr-password-field button:hover { color: #5e53bd; background: #f1efff; }
+.hr-password-field button:focus-visible { outline: 2px solid #6557d9; outline-offset: 1px; }
+.hr-password-field svg { width: 16px; height: 16px; }
 .hr-table-section table { min-width: 1080px; }
 @media (max-width: 760px) { .hr-account-grid { grid-template-columns: 1fr; } .hr-account-grid .is-wide { grid-column: auto; } }
 .hr-person-link { color: inherit; text-decoration: none; }

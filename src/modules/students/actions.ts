@@ -26,6 +26,7 @@ import {
   isBillingPausedStatus as isSharedBillingPausedStatus,
   syncActivationBilling as syncSharedActivationBilling,
 } from "@/modules/students/lifecycle-service";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -108,7 +109,14 @@ const deleteStudentSchema = z.object({
   studentId: z.string().uuid(),
 });
 
-export async function createStudentAction(formData: FormData) {
+const updateStudentProfileSchema = z.object({
+  studentId: z.string().uuid(),
+  fullName: z.string().trim().min(2).max(120),
+  phone: z.string().trim().min(6).max(40),
+  notes: optionalText(500),
+});
+
+async function createStudentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.create");
   const input = createStudentSchema.parse(Object.fromEntries(formData));
   const initialLifecycleStatus = StudentLifecycleStatus.GROUP_WAITING;
@@ -321,7 +329,7 @@ export async function createStudentAction(formData: FormData) {
   redirectToStudents(input.returnTo);
 }
 
-export async function recordStudentPaymentAction(formData: FormData) {
+async function recordStudentPaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = recordPaymentSchema.parse(Object.fromEntries(formData));
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
@@ -361,7 +369,7 @@ export async function recordStudentPaymentAction(formData: FormData) {
   redirectToStudents(input.returnTo);
 }
 
-export async function updateStudentStatusAction(formData: FormData) {
+async function updateStudentStatusActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.status.change");
   const input = updateStudentStatusSchema.parse(Object.fromEntries(formData));
   const effectiveAt = input.firstLessonDate
@@ -437,8 +445,82 @@ export async function updateStudentStatusAction(formData: FormData) {
   redirectToStudents(input.returnTo);
 }
 
-export async function deleteStudentAction(formData: FormData) {
+async function updateStudentProfileActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.update");
+  const input = updateStudentProfileSchema.parse(Object.fromEntries(formData));
+  const phoneNormalized = normalizePhone(input.phone);
+  if (!phoneNormalized) {
+    throw new Error("Telefon düzgün deyil");
+  }
+
+  const prisma = getPrisma();
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.student.findUnique({
+      where: { id: input.studentId },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            fullName: true,
+            phoneDisplay: true,
+            phoneNormalized: true,
+          },
+        },
+      },
+    });
+    if (!current) {
+      throw new Error("Tələbə tapılmadı");
+    }
+
+    const phoneOwner = await tx.contact.findFirst({
+      where: {
+        phoneNormalized,
+        id: { not: current.contact.id },
+      },
+      select: { fullName: true },
+    });
+    if (phoneOwner) {
+      throw new Error(`Telefon artıq ${phoneOwner.fullName} adına bağlıdır`);
+    }
+
+    await tx.contact.update({
+      where: { id: current.contact.id },
+      data: {
+        fullName: input.fullName,
+        phoneDisplay: input.phone,
+        phoneNormalized,
+      },
+    });
+    await tx.student.update({
+      where: { id: current.id },
+      data: { notes: input.notes ?? null },
+    });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "student.profile.update",
+      entityType: "student",
+      entityId: current.id,
+      before: {
+        fullName: current.contact.fullName,
+        phone: current.contact.phoneDisplay,
+        notes: current.notes,
+      } satisfies Prisma.InputJsonValue,
+      after: {
+        fullName: input.fullName,
+        phone: input.phone,
+        notes: input.notes ?? null,
+      } satisfies Prisma.InputJsonValue,
+      reason: "Tələbə profil məlumatları yeniləndi",
+    });
+  });
+
+  revalidatePath(`/students/${input.studentId}`);
+  revalidatePath("/students");
+  invalidateStudentCaches();
+}
+
+async function deleteStudentActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("student.delete");
   const input = deleteStudentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
 
@@ -992,3 +1074,24 @@ function invalidatePaymentCaches() {
   updateTag(erpCacheTags.dashboard);
   updateTag(erpCacheTags.finance);
 }
+
+export const createStudentAction = safeServerAction(
+  createStudentActionImpl,
+  "Tələbə yaradılmadı.",
+);
+export const recordStudentPaymentAction = safeServerAction(
+  recordStudentPaymentActionImpl,
+  "Ödəniş qeydə alınmadı.",
+);
+export const updateStudentStatusAction = safeServerAction(
+  updateStudentStatusActionImpl,
+  "Tələbə statusu yenilənmədi.",
+);
+export const updateStudentProfileAction = safeServerAction(
+  updateStudentProfileActionImpl,
+  "Tələbə profili yenilənmədi.",
+);
+export const deleteStudentAction = safeServerAction(
+  deleteStudentActionImpl,
+  "Tələbə silinmədi.",
+);

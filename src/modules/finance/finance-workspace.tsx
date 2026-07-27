@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore, useTransition } fro
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
+import { unwrapActionResult, type ActionResult } from "@/lib/action-result";
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -175,7 +176,9 @@ type FinanceMutationResult = {
   redirectTo: string;
 };
 
-type FinanceMutationAction = (formData: FormData) => Promise<FinanceMutationResult>;
+type FinanceMutationAction = (
+  formData: FormData,
+) => Promise<ActionResult<FinanceMutationResult>>;
 
 export function FinanceWorkspace({
   data,
@@ -628,7 +631,7 @@ function PaymentDialog({
 
     startSubmitTransition(async () => {
       try {
-        const result = await action(formData);
+        const result = unwrapActionResult(await action(formData));
         setIsOpen(false);
         router.push(result.redirectTo as Route);
       } catch (error) {
@@ -782,7 +785,7 @@ function PaymentDialog({
                 <Upload size={14} />
                 <strong>Fayl seç</strong>
                 <small>PDF / şəkil</small>
-                <Input name="receiptFile" type="file" accept="image/*,.pdf" />
+                <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
               </span>
             </label>
             <label className="form-field">
@@ -897,7 +900,7 @@ function ExpenseDialog({
 
     startSubmitTransition(async () => {
       try {
-        const result = await action(formData);
+        const result = unwrapActionResult(await action(formData));
         resetExpenseForm();
         setIsOpen(false);
         router.push(result.redirectTo as Route);
@@ -1068,7 +1071,7 @@ function ExpenseDialog({
                   <Upload size={14} />
                   <strong>Fayl seç</strong>
                   <small>PDF / şəkil</small>
-                  <Input name="receiptFile" type="file" accept="image/*,.pdf" />
+                  <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
                 </span>
               </label>
             </div>
@@ -1820,7 +1823,7 @@ function PaymentCrudActions({
   function runMutation(formData: FormData, action: FinanceMutationAction, successTitle: string) {
     startTransition(async () => {
       try {
-        const result = await action(formData);
+        const result = unwrapActionResult(await action(formData));
         setIsEditOpen(false);
         setIsDeleteOpen(false);
         onNotify({
@@ -1905,7 +1908,7 @@ function PaymentCrudActions({
                 <Upload size={14} />
                 <strong>Fayl seç</strong>
                 <small>PDF / şəkil</small>
-                <Input name="receiptFile" type="file" accept="image/*,.pdf" />
+                <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
               </span>
             </label>
             <label className="form-field">
@@ -2230,7 +2233,7 @@ function ExpenseCrudActions({
   function runMutation(formData: FormData, action: FinanceMutationAction, successTitle: string) {
     startTransition(async () => {
       try {
-        const result = await action(formData);
+        const result = unwrapActionResult(await action(formData));
         setIsEditOpen(false);
         setIsDeleteOpen(false);
         onNotify({
@@ -2312,7 +2315,7 @@ function ExpenseCrudActions({
                   <Upload size={14} />
                   <strong>Fayl seç</strong>
                   <small>PDF / şəkil</small>
-                  <Input name="receiptFile" type="file" accept="image/*,.pdf" />
+                  <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
                 </span>
               </label>
             </div>

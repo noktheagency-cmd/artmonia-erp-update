@@ -44,16 +44,17 @@ import { groupWeekdays, orderedWeekdays, weekdayMeta, type GroupWeekdayCode } fr
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import styles from "./groups.module.css";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 
 type GroupsTab = "groups" | "journal";
 type GroupActions = {
-  createGroup: (formData: FormData) => Promise<{ id: string }>;
-  updateGroup: (formData: FormData) => Promise<void>;
-  archiveGroup: (formData: FormData) => Promise<void>;
-  addMember: (formData: FormData) => Promise<void>;
-  changeTeacher: (formData: FormData) => Promise<void>;
-  endMembership: (formData: FormData) => Promise<void>;
-  saveAttendance: (formData: FormData) => Promise<void>;
+  createGroup: (formData: FormData) => Promise<unknown>;
+  updateGroup: (formData: FormData) => Promise<unknown>;
+  archiveGroup: (formData: FormData) => Promise<unknown>;
+  addMember: (formData: FormData) => Promise<unknown>;
+  changeTeacher: (formData: FormData) => Promise<unknown>;
+  endMembership: (formData: FormData) => Promise<unknown>;
+  saveAttendance: (formData: FormData) => Promise<unknown>;
 };
 
 export function GroupWorkspace({
@@ -98,11 +99,11 @@ export function GroupWorkspace({
     router.push(`/groups?${params.toString()}` as Route);
   }
 
-  function runAction(action: () => Promise<void>, success: string) {
+  function runAction(action: () => Promise<unknown>, success: string) {
     startTransition(() => {
       void (async () => {
         try {
-          await action();
+          unwrapActionResult(await action());
           setNotice(success);
           router.refresh();
         } catch (error) {
@@ -262,12 +263,14 @@ export function GroupWorkspace({
               void (async () => {
                 try {
                   if (groupDialog === "create") {
-                    const created = await actions.createGroup(formData);
+                    const created = unwrapActionResult(
+                      await actions.createGroup(formData),
+                    ) as { id: string };
                     setGroupDialog(null);
                     router.push(`/groups?tab=groups&group=${created.id}` as Route);
                     setNotice("Qrup yaradıldı.");
                   } else {
-                    await actions.updateGroup(formData);
+                    unwrapActionResult(await actions.updateGroup(formData));
                     setGroupDialog(null);
                     setNotice("Qrup yeniləndi.");
                     router.refresh();
@@ -412,7 +415,7 @@ function JournalView({
     startSaveTransition(() => {
       void (async () => {
         try {
-          await saveAction(formData);
+          unwrapActionResult(await saveAction(formData));
           onNotice("Jurnal saxlanıldı.");
           router.refresh();
         } catch (error) {

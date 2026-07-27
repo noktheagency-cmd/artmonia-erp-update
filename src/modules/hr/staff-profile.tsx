@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
 import type {
   HrStaffProfileData,
@@ -151,7 +152,14 @@ export function StaffProfile({
           form.set("status", "READ");
           return updateNotificationStatusAction(form);
         }),
-      ).then(() => router.refresh());
+      )
+        .then((results) => {
+          results.forEach((result) => unwrapActionResult(result));
+          router.refresh();
+        })
+        .catch((error) =>
+          setNotice(notifyCaughtError(error, "Bildiriş statusu yenilənmədi")),
+        );
     });
   }, [
     data.notifications,
@@ -170,7 +178,8 @@ export function StaffProfile({
     startTransition(
       () =>
         void updateNotificationStatusAction(form)
-          .then(() => {
+          .then((result) => {
+            unwrapActionResult(result);
             setNotice(
               status === "RESOLVED"
                 ? "Bildiriş bağlandı."
@@ -437,7 +446,8 @@ export function StaffProfile({
             startTransition(
               () =>
                 void createNotificationAction(form)
-                  .then(() => {
+                  .then((result) => {
+                    unwrapActionResult(result);
                     setComposerOpen(false);
                     setNotice(
                       "Bildiriş uğurla göndərildi və status izləməsi başladıldı.",
@@ -462,7 +472,8 @@ export function StaffProfile({
             startTransition(
               () =>
                 void updateCredentialsAction(form)
-                  .then(() => {
+                  .then((result) => {
+                    unwrapActionResult(result);
                     setCredentialsOpen(false);
                     setNotice(
                       employee.hasLogin

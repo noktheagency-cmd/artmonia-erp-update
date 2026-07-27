@@ -1,8 +1,5 @@
 "use server";
 
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { revalidatePath, updateTag } from "next/cache";
 import type { Route } from "next";
 import { z } from "zod";
@@ -22,6 +19,8 @@ import { optionalFormString } from "@/modules/shared/form-values";
 import { startOfMonth, toNumber } from "@/modules/shared/format";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
+import { safeServerAction } from "@/server/actions/safe-action";
+import { uploadReceipt } from "@/server/storage/erp-files";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -94,7 +93,7 @@ const deleteExpenseSchema = z.object({
   returnTo: optionalText(320),
 });
 
-export async function recordFinancePaymentAction(formData: FormData) {
+async function recordFinancePaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = recordFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -136,7 +135,7 @@ export async function recordFinancePaymentAction(formData: FormData) {
   };
 }
 
-export async function createFinanceExpenseAction(formData: FormData) {
+async function createFinanceExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.expense.create");
   const input = createExpenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -233,7 +232,7 @@ export async function createFinanceExpenseAction(formData: FormData) {
   };
 }
 
-export async function updateFinancePaymentAction(formData: FormData) {
+async function updateFinancePaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = updateFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -331,7 +330,7 @@ export async function updateFinancePaymentAction(formData: FormData) {
   };
 }
 
-export async function deleteFinancePaymentAction(formData: FormData) {
+async function deleteFinancePaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = deleteFinancePaymentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -386,7 +385,7 @@ export async function deleteFinancePaymentAction(formData: FormData) {
   };
 }
 
-export async function updateFinanceExpenseAction(formData: FormData) {
+async function updateFinanceExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.expense.create");
   const input = updateExpenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -498,7 +497,7 @@ export async function updateFinanceExpenseAction(formData: FormData) {
   };
 }
 
-export async function deleteFinanceExpenseAction(formData: FormData) {
+async function deleteFinanceExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.expense.create");
   const input = deleteExpenseSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -996,35 +995,11 @@ async function persistReceiptFile(value: FormDataEntryValue | null) {
   if (!isUploadedFile(value)) {
     return null;
   }
-
-  if (value.size > 8 * 1024 * 1024) {
-    throw new Error("Qəbz faylı 8 MB-dan böyük ola bilməz");
-  }
-
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "finance-receipts");
-  await mkdir(uploadDir, { recursive: true });
-
-  const originalName = value.name || "receipt";
-  const extension = sanitizeExtension(path.extname(originalName));
-  const fileName = `${Date.now()}-${randomUUID()}${extension}`;
-  const absolutePath = path.join(uploadDir, fileName);
-  const buffer = Buffer.from(await value.arrayBuffer());
-
-  await writeFile(absolutePath, buffer);
-
-  return {
-    fileName: originalName.slice(0, 180),
-    filePath: `/uploads/finance-receipts/${fileName}`,
-  };
+  return uploadReceipt(value);
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {
   return typeof File !== "undefined" && value instanceof File && value.size > 0;
-}
-
-function sanitizeExtension(value: string) {
-  const safe = value.toLowerCase().replace(/[^a-z0-9.]/g, "").slice(0, 12);
-  return safe || ".bin";
 }
 
 function toPaymentAuditJson(
@@ -1147,3 +1122,28 @@ function invalidateFinanceCaches() {
   updateTag(erpCacheTags.students);
   updateTag(erpCacheTags.dashboard);
 }
+
+export const recordFinancePaymentAction = safeServerAction(
+  recordFinancePaymentActionImpl,
+  "Ödəniş qeydə alınmadı.",
+);
+export const createFinanceExpenseAction = safeServerAction(
+  createFinanceExpenseActionImpl,
+  "Xərc yaradılmadı.",
+);
+export const updateFinancePaymentAction = safeServerAction(
+  updateFinancePaymentActionImpl,
+  "Ödəniş yenilənmədi.",
+);
+export const deleteFinancePaymentAction = safeServerAction(
+  deleteFinancePaymentActionImpl,
+  "Ödəniş silinmədi.",
+);
+export const updateFinanceExpenseAction = safeServerAction(
+  updateFinanceExpenseActionImpl,
+  "Xərc yenilənmədi.",
+);
+export const deleteFinanceExpenseAction = safeServerAction(
+  deleteFinanceExpenseActionImpl,
+  "Xərc silinmədi.",
+);

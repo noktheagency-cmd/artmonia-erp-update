@@ -31,6 +31,10 @@ import { leadStageOptions } from "@/modules/crm/stage";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { isBillingPausedStatus } from "@/modules/students/lifecycle-service";
+import {
+  safeServerAction,
+  toActionFailure,
+} from "@/server/actions/safe-action";
 
 const optionalText = (max: number) =>
   z.preprocess(
@@ -98,7 +102,7 @@ const duplicatePhoneSchema = z.object({
   phone: z.string().max(40),
 });
 
-export async function findDuplicatePhoneAction(phone: string) {
+async function findDuplicatePhoneActionImpl(phone: string) {
   await requireMutationActor("crm.lead.read");
 
   const input = duplicatePhoneSchema.parse({ phone });
@@ -111,7 +115,7 @@ export type CreateLeadFormState = {
   leadId?: string;
 };
 
-export async function createLeadAction(formData: FormData) {
+async function createLeadActionImpl(formData: FormData) {
   await createLead(formData);
 
   revalidatePath("/crm");
@@ -147,7 +151,7 @@ export async function createLeadClientAction(
   } catch (error) {
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "Müraciət yaradılmadı.",
+      message: toActionFailure(error, "Müraciət yaradılmadı.").message,
     };
   }
 }
@@ -232,7 +236,7 @@ async function createLead(formData: FormData) {
   return createdLeadId;
 }
 
-export async function updateLeadAction(formData: FormData) {
+async function updateLeadActionImpl(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.update");
   const input = updateLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -400,7 +404,7 @@ export async function updateLeadAction(formData: FormData) {
   redirectToCrm(input.returnTo);
 }
 
-export async function deleteLeadAction(formData: FormData) {
+async function deleteLeadActionImpl(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.update");
   const input = deleteLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -467,7 +471,7 @@ export async function deleteLeadAction(formData: FormData) {
   redirectToCrm(input.returnTo);
 }
 
-export async function convertLeadToStudentAction(formData: FormData) {
+async function convertLeadToStudentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.convert");
   const input = convertLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -635,7 +639,7 @@ export async function convertLeadToStudentAction(formData: FormData) {
   redirectToCrm(input.returnTo);
 }
 
-export async function updateLeadStageAction(formData: FormData) {
+async function updateLeadStageActionImpl(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.update");
   const input = updateLeadStageSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -770,3 +774,28 @@ function normalizeDateValue(value: string | undefined) {
 
   throw new Error("İzləmə tarixi GG.AA.İİİİ formatında olmalıdır");
 }
+
+export const findDuplicatePhoneAction = safeServerAction(
+  findDuplicatePhoneActionImpl,
+  "Telefon yoxlanılmadı.",
+);
+export const createLeadAction = safeServerAction(
+  createLeadActionImpl,
+  "Müraciət yaradılmadı.",
+);
+export const updateLeadAction = safeServerAction(
+  updateLeadActionImpl,
+  "Müraciət yenilənmədi.",
+);
+export const deleteLeadAction = safeServerAction(
+  deleteLeadActionImpl,
+  "Müraciət silinmədi.",
+);
+export const convertLeadToStudentAction = safeServerAction(
+  convertLeadToStudentActionImpl,
+  "Müraciət tələbəyə çevrilmədi.",
+);
+export const updateLeadStageAction = safeServerAction(
+  updateLeadStageActionImpl,
+  "Mərhələ yenilənmədi.",
+);

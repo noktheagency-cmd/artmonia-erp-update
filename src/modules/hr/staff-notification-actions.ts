@@ -7,6 +7,10 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  PublicActionError,
+  safeServerAction,
+} from "@/server/actions/safe-action";
 
 const createNotificationSchema = z.object({
   employeeId: z.string().uuid(),
@@ -16,11 +20,11 @@ const createNotificationSchema = z.object({
   message: z.string().trim().min(12).max(3000),
 });
 
-export async function createHrStaffNotificationAction(formData: FormData) {
+async function createHrStaffNotificationActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.employee.manage");
   const input = createNotificationSchema.parse(Object.fromEntries(formData));
   const employee = await getPrisma().hrEmployee.findUnique({ where: { id: input.employeeId }, select: { id: true, fullName: true } });
-  if (!employee) throw new Error("Əməkdaş profili tapılmadı");
+  if (!employee) throw new PublicActionError("Əməkdaş profili tapılmadı", "NOT_FOUND");
 
   const notification = await getPrisma().$transaction(async (tx) => {
     const created = await tx.hrStaffNotification.create({ data: { ...input, creatorUserId: actor.id } });
@@ -45,20 +49,20 @@ const statusSchema = z.object({
   status: z.enum(["READ", "ACKNOWLEDGED", "RESOLVED"]),
 });
 
-export async function updateHrStaffNotificationStatusAction(formData: FormData) {
+async function updateHrStaffNotificationStatusActionImpl(formData: FormData) {
   const actor = await requireMutationActor();
   const input = statusSchema.parse(Object.fromEntries(formData));
   const current = await getPrisma().hrStaffNotification.findUnique({
     where: { id: input.notificationId },
     include: { employee: { select: { id: true, userId: true } } },
   });
-  if (!current) throw new Error("Bildiriş tapılmadı");
+  if (!current) throw new PublicActionError("Bildiriş tapılmadı", "NOT_FOUND");
 
   const isOwner = current.employee.userId === actor.id;
   const canManage = actor.permissions.has("hr.employee.manage");
-  if (!isOwner && !canManage) throw new Error("Bu bildirişi yeniləmək icazəniz yoxdur");
-  if (input.status === "ACKNOWLEDGED" && !isOwner) throw new Error("Bildirişi yalnız qəbul edən təsdiqləyə bilər");
-  if (input.status === "RESOLVED" && !canManage) throw new Error("Bildirişi yalnız HR bağlaya bilər");
+  if (!isOwner && !canManage) throw new PublicActionError("Bu bildirişi yeniləmək icazəniz yoxdur", "FORBIDDEN");
+  if (input.status === "ACKNOWLEDGED" && !isOwner) throw new PublicActionError("Bildirişi yalnız qəbul edən təsdiqləyə bilər", "FORBIDDEN");
+  if (input.status === "RESOLVED" && !canManage) throw new PublicActionError("Bildirişi yalnız HR bağlaya bilər", "FORBIDDEN");
 
   const now = new Date();
   await getPrisma().$transaction(async (tx) => {
@@ -85,6 +89,16 @@ export async function updateHrStaffNotificationStatusAction(formData: FormData) 
   revalidateProfile(current.employee.id);
   await broadcastNotificationChange(current.employee.id);
 }
+
+export const createHrStaffNotificationAction = safeServerAction(
+  createHrStaffNotificationActionImpl,
+  "Bildiriş göndərilə bilmədi.",
+);
+
+export const updateHrStaffNotificationStatusAction = safeServerAction(
+  updateHrStaffNotificationStatusActionImpl,
+  "Bildiriş statusu yenilənə bilmədi.",
+);
 
 function revalidateProfile(employeeId: string) {
   revalidatePath(`/hr/${employeeId}`);

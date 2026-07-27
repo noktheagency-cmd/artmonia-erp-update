@@ -27,6 +27,8 @@ import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
+import { unwrapActionResult } from "@/lib/action-result";
+import { notifyCaughtError } from "@/lib/app-notifications";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -39,8 +41,16 @@ export function StudentDetailDialogClient({
   student: StudentRow;
   canRecordPayment: boolean;
   returnTo: string;
-  recordPaymentAction: (formData: FormData) => void | Promise<void>;
+  recordPaymentAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  async function recordPayment(formData: FormData) {
+    try {
+      unwrapActionResult(await recordPaymentAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Ödəniş qeydə alınmadı.");
+    }
+  }
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -111,7 +121,7 @@ export function StudentDetailDialogClient({
               <CreditCard />
               <span>Ödəniş qeyd et</span>
             </div>
-            <form action={recordPaymentAction} className="student-payment-form">
+            <form action={recordPayment} className="student-payment-form">
               <input name="studentId" type="hidden" value={student.id} />
               <input name="returnTo" type="hidden" value={returnTo} />
 

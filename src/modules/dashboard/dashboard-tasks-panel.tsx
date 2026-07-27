@@ -24,8 +24,9 @@ import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import type { TaskData, TaskRow } from "@/modules/tasks/queries";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 
-type TaskAction = (formData: FormData) => void | Promise<void>;
+type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 
 type DeadlineTone = "calm" | "near" | "overdue";
 
@@ -148,7 +149,7 @@ function CreateDashboardTaskDialog({ employees, action }: { employees: TaskData[
 
     startTransition(async () => {
       try {
-        await action(formData);
+        unwrapActionResult(await action(formData));
         form.reset();
         setOpen(false);
         router.refresh();

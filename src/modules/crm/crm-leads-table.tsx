@@ -14,6 +14,8 @@ import {
 import { convertLeadToStudentAction } from "@/modules/crm/actions";
 import { LeadDetailDialog } from "@/modules/crm/lead-detail-dialog";
 import type { CrmData } from "@/modules/crm/queries";
+import { unwrapActionResult } from "@/lib/action-result";
+import { notifyCaughtError } from "@/lib/app-notifications";
 
 export function CrmLeadsTable({
   data,
@@ -27,6 +29,14 @@ export function CrmLeadsTable({
   onClearFilters: () => void;
 }) {
   const rows = preview ? data.leads.slice(0, 5) : data.leads;
+
+  async function convertLead(formData: FormData) {
+    try {
+      unwrapActionResult(await convertLeadToStudentAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Müraciət tələbəyə çevrilmədi.");
+    }
+  }
 
   return (
     <article className="crm-panel crm-table-panel crm-enter" style={{ animationDelay: "320ms" }}>
@@ -106,7 +116,7 @@ export function CrmLeadsTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <form action={convertLeadToStudentAction} className="crm-convert-form">
+                  <form action={convertLead} className="crm-convert-form">
                     <input type="hidden" name="leadId" value={lead.id} />
                     <input type="hidden" name="returnTo" value={data.returnTo} />
                     <Button

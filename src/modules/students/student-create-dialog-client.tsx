@@ -19,6 +19,8 @@ import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
+import { unwrapActionResult } from "@/lib/action-result";
+import { notifyCaughtError } from "@/lib/app-notifications";
 
 type CreateOptions = StudentListData["createOptions"];
 const ADD_SOURCE_VALUE = "__add_source__";
@@ -51,7 +53,7 @@ export function StudentCreateDialogClient({
   canConvertLead: boolean;
   canRecordPayment: boolean;
   returnTo: string;
-  createStudentAction: (formData: FormData) => void | Promise<void>;
+  createStudentAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [isAddingSource, setIsAddingSource] = useState(false);
@@ -156,6 +158,14 @@ export function StudentCreateDialogClient({
     }));
   }
 
+  async function createStudent(formData: FormData) {
+    try {
+      unwrapActionResult(await createStudentAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Tələbə yaradılmadı.");
+    }
+  }
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -182,7 +192,7 @@ export function StudentCreateDialogClient({
           />
         </DialogHeader>
 
-        <form action={createStudentAction} className="student-create-form" id="student-create-form">
+        <form action={createStudent} className="student-create-form" id="student-create-form">
           <input name="returnTo" type="hidden" value={returnTo} />
           <input name="acceptPayment" type="hidden" value={acceptPayment ? "true" : "false"} />
           <input name="paymentAmount" type="hidden" value={values.paymentAmount} />

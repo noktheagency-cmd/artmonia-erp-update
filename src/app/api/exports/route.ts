@@ -3,6 +3,7 @@ import { exportRequestSchema } from "@/modules/exports/export-config";
 import { auditExport, prepareExport } from "@/modules/exports/export-service";
 import { createCsvFile, createPdfFile } from "@/modules/exports/export-files";
 import { requireErpActor } from "@/server/auth/actor";
+import { toActionFailure } from "@/server/actions/safe-action";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,9 +39,19 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "İxrac hazırlanmadı.";
-    const status = message.includes("Missing permission") ? 403 : 422;
-    return NextResponse.json({ error: message }, { status });
+    const failure = toActionFailure(error, "İxrac hazırlana bilmədi.");
+    const status =
+      failure.code === "UNAUTHORIZED"
+        ? 401
+        : failure.code === "FORBIDDEN"
+          ? 403
+          : failure.code === "VALIDATION"
+            ? 422
+            : 500;
+    return NextResponse.json(
+      { error: failure.message, code: failure.code, errorId: failure.errorId },
+      { status, headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 }
 

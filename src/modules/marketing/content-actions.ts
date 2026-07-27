@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const optionalText = (max: number) =>
   z.preprocess(
@@ -65,7 +66,7 @@ const scheduleSchema = z.object({
   scheduledTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default("11:00"),
 });
 
-export async function saveMarketingContentAction(formData: FormData) {
+async function saveMarketingContentActionImpl(formData: FormData) {
   try {
     return await saveMarketingContent(formData);
   } catch (error) {
@@ -176,7 +177,7 @@ async function saveMarketingContent(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function approveMarketingContentAction(formData: FormData) {
+async function approveMarketingContentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.content.approve");
   const { id } = idSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -214,7 +215,7 @@ export async function approveMarketingContentAction(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function requestMarketingContentRevisionAction(formData: FormData) {
+async function requestMarketingContentRevisionActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.content.approve");
   const input = revisionSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -257,7 +258,7 @@ export async function requestMarketingContentRevisionAction(formData: FormData) 
   invalidateMarketing();
 }
 
-export async function scheduleMarketingSlideAction(formData: FormData) {
+async function scheduleMarketingSlideActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = scheduleSchema.parse(Object.fromEntries(formData));
   const scheduledAt = parseBakuDateTime(input.scheduledDate, input.scheduledTime);
@@ -296,7 +297,7 @@ export async function scheduleMarketingSlideAction(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function unscheduleMarketingSlideAction(formData: FormData) {
+async function unscheduleMarketingSlideActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const { id } = idSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -358,3 +359,24 @@ function invalidateMarketing() {
   revalidatePath("/marketing");
   updateTag(erpCacheTags.marketing);
 }
+
+export const saveMarketingContentAction = safeServerAction(
+  saveMarketingContentActionImpl,
+  "Kontent saxlanmadı.",
+);
+export const approveMarketingContentAction = safeServerAction(
+  approveMarketingContentActionImpl,
+  "Kontent təsdiqlənmədi.",
+);
+export const requestMarketingContentRevisionAction = safeServerAction(
+  requestMarketingContentRevisionActionImpl,
+  "Kontent düzəlişə qaytarılmadı.",
+);
+export const scheduleMarketingSlideAction = safeServerAction(
+  scheduleMarketingSlideActionImpl,
+  "Slide plana əlavə edilmədi.",
+);
+export const unscheduleMarketingSlideAction = safeServerAction(
+  unscheduleMarketingSlideActionImpl,
+  "Slide plandan çıxarılmadı.",
+);

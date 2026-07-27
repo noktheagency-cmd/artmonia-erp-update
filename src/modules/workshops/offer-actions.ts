@@ -5,6 +5,7 @@ import { generateText, Output } from "ai";
 import { Prisma } from "@/generated/prisma/client";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import { safeServerAction } from "@/server/actions/safe-action";
 import { z } from "zod";
 
 export type WorkshopOfferAudience = {
@@ -83,13 +84,13 @@ const offerOutputSchema = z.object({
   })).min(1).max(12),
 });
 
-export async function getWorkshopOfferAudienceAction(): Promise<WorkshopOfferAudience> {
+async function getWorkshopOfferAudienceActionImpl(): Promise<WorkshopOfferAudience> {
   await requireMutationActor("workshop.manage");
   const rows = await loadAudienceRows();
   return toPublicAudience(buildPeople(rows));
 }
 
-export async function generateWorkshopOfferAction(rawInput: WorkshopOfferInput): Promise<WorkshopOfferResult> {
+async function generateWorkshopOfferActionImpl(rawInput: WorkshopOfferInput): Promise<WorkshopOfferResult> {
   await requireMutationActor("workshop.manage");
   const input = offerInputSchema.parse(rawInput);
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
@@ -253,3 +254,12 @@ function identityKey(row: AudienceRow) {
 function unique(values: string[]) {
   return [...new Set(values)];
 }
+
+export const getWorkshopOfferAudienceAction = safeServerAction(
+  getWorkshopOfferAudienceActionImpl,
+  "Auditoriya yüklənmədi.",
+);
+export const generateWorkshopOfferAction = safeServerAction(
+  generateWorkshopOfferActionImpl,
+  "Təklif hazırlana bilmədi.",
+);

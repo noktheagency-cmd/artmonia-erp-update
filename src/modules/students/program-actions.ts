@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { optionalFormString } from "@/modules/shared/form-values";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -19,7 +20,7 @@ const programSchema = z.object({
   isActive: z.preprocess((value) => value === "true" || value === "on", z.boolean()),
 });
 
-export async function saveProgramAction(formData: FormData) {
+async function saveProgramActionImpl(formData: FormData) {
   await requireMutationActor("settings.manage");
   const input = programSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -38,7 +39,7 @@ export async function saveProgramAction(formData: FormData) {
   revalidatePath("/students");
 }
 
-export async function deleteProgramAction(formData: FormData) {
+async function deleteProgramActionImpl(formData: FormData) {
   await requireMutationActor("settings.manage");
   const id = z.string().uuid().parse(formData.get("id"));
   const prisma = getPrisma();
@@ -47,3 +48,12 @@ export async function deleteProgramAction(formData: FormData) {
   else await prisma.program.delete({ where: { id } });
   revalidatePath("/students");
 }
+
+export const saveProgramAction = safeServerAction(
+  saveProgramActionImpl,
+  "Proqram saxlanmadı.",
+);
+export const deleteProgramAction = safeServerAction(
+  deleteProgramActionImpl,
+  "Proqram silinmədi.",
+);

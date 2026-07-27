@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import {
   approveMarketingContentAction,
   requestMarketingContentRevisionAction,
@@ -101,7 +102,7 @@ export function MarketingContentPlanner({ data }: { data: MarketingContentData }
     formData.set("id", selected.id);
     startTransition(async () => {
       try {
-        await approveMarketingContentAction(formData);
+        unwrapActionResult(await approveMarketingContentAction(formData));
         router.refresh();
       } catch (error) {
         notifyCaughtError(error, "Content təsdiqlənmədi", "Təsdiq uğursuz oldu");
@@ -391,7 +392,7 @@ function ContentEditor({
           formData.set("mediaPath", "");
         }
 
-        await saveMarketingContentAction(formData);
+        unwrapActionResult(await saveMarketingContentAction(formData));
         if (item?.mediaPath && item.mediaPath !== uploadedPath && (uploadedPath || removeExistingMedia)) {
           await deleteContentMedia(item.mediaPath);
         }
@@ -505,7 +506,7 @@ function RevisionDialog({ open, item, onOpenChange }: { open: boolean; item: Mar
     setError("");
     startTransition(async () => {
       try {
-        await requestMarketingContentRevisionAction(formData);
+        unwrapActionResult(await requestMarketingContentRevisionAction(formData));
         onOpenChange(false);
         router.refresh();
       } catch (caught) {

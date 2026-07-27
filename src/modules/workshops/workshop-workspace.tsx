@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult, type ActionResult } from "@/lib/action-result";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -67,8 +68,10 @@ export function WorkshopWorkspace({
 }: {
   data: WorkshopData;
   createWorkshopEventAction: WorkshopAction;
-  loadOfferAudienceAction: () => Promise<WorkshopOfferAudience>;
-  generateOfferAction: (input: WorkshopOfferInput) => Promise<WorkshopOfferResult>;
+  loadOfferAudienceAction: () => Promise<ActionResult<WorkshopOfferAudience>>;
+  generateOfferAction: (
+    input: WorkshopOfferInput,
+  ) => Promise<ActionResult<WorkshopOfferResult>>;
 }) {
   const [mobilePreviewId, setMobilePreviewId] = useState<string | null>(null);
   const mobilePreviewEvent = data.events.find((event) => event.id === mobilePreviewId) ?? null;
@@ -407,7 +410,8 @@ function CreateEventDialog({ defaultDate, action, disabled }: {
     const form = event.currentTarget;
     const formData = new FormData(form);
     startTransition(() => {
-      void Promise.resolve(action(formData)).then(() => {
+      void Promise.resolve(action(formData)).then((result) => {
+        unwrapActionResult(result);
         setOpen(false);
         form.reset();
         router.refresh();

@@ -1,8 +1,6 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import {
@@ -23,6 +21,8 @@ import {
 } from "@/modules/workshops/finance-rules";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import { safeServerAction } from "@/server/actions/safe-action";
+import { uploadReceipt } from "@/server/storage/erp-files";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().trim().max(max).optional());
@@ -162,7 +162,7 @@ const voidExpenseSchema = z.object({
   reason: optionalText(700),
 });
 
-export async function createWorkshopEventAction(formData: FormData) {
+async function createWorkshopEventActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = createEventSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -196,7 +196,7 @@ export async function createWorkshopEventAction(formData: FormData) {
   return { ok: true as const, id: event.id };
 }
 
-export async function updateWorkshopEventAction(formData: FormData) {
+async function updateWorkshopEventActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = updateEventSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -244,7 +244,7 @@ export async function updateWorkshopEventAction(formData: FormData) {
   return { ok: true as const };
 }
 
-export async function deleteOrCancelWorkshopEventAction(formData: FormData) {
+async function deleteOrCancelWorkshopEventActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = z.object({ eventId: z.string().uuid() })
     .parse(Object.fromEntries(formData));
@@ -285,7 +285,7 @@ export async function deleteOrCancelWorkshopEventAction(formData: FormData) {
   return { ok: true as const };
 }
 
-export async function assignWorkshopParticipantAction(formData: FormData) {
+async function assignWorkshopParticipantActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = participantSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -393,7 +393,7 @@ export async function assignWorkshopParticipantAction(formData: FormData) {
   return { ok: true as const, id: participantId };
 }
 
-export async function updateWorkshopParticipantAction(formData: FormData) {
+async function updateWorkshopParticipantActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = updateParticipantSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -440,7 +440,7 @@ export async function updateWorkshopParticipantAction(formData: FormData) {
   return { ok: true as const };
 }
 
-export async function cancelWorkshopParticipantAction(formData: FormData) {
+async function cancelWorkshopParticipantActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = z.object({
     participantId: z.string().uuid(),
@@ -480,7 +480,7 @@ export async function cancelWorkshopParticipantAction(formData: FormData) {
   return { ok: true as const };
 }
 
-export async function recordWorkshopPaymentAction(formData: FormData) {
+async function recordWorkshopPaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = paymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -521,7 +521,7 @@ export async function recordWorkshopPaymentAction(formData: FormData) {
   return { ok: true as const, id: payment.id };
 }
 
-export async function replaceWorkshopPaymentAction(formData: FormData) {
+async function replaceWorkshopPaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = replacePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -578,7 +578,7 @@ export async function replaceWorkshopPaymentAction(formData: FormData) {
   return { ok: true as const };
 }
 
-export async function voidWorkshopPaymentAction(formData: FormData) {
+async function voidWorkshopPaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = voidPaymentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -611,7 +611,7 @@ export async function voidWorkshopPaymentAction(formData: FormData) {
   return { ok: true as const };
 }
 
-export async function createWorkshopExpenseAction(formData: FormData) {
+async function createWorkshopExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = expenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -652,7 +652,7 @@ export async function createWorkshopExpenseAction(formData: FormData) {
   return { ok: true as const, id: expense.id };
 }
 
-export async function replaceWorkshopExpenseAction(formData: FormData) {
+async function replaceWorkshopExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = replaceExpenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
@@ -700,7 +700,7 @@ export async function replaceWorkshopExpenseAction(formData: FormData) {
   return { ok: true as const };
 }
 
-export async function voidWorkshopExpenseAction(formData: FormData) {
+async function voidWorkshopExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = voidExpenseSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -878,14 +878,7 @@ function expenseAuditJson(expense: {
 
 async function persistReceiptFile(value: FormDataEntryValue | null) {
   if (!isUploadedFile(value)) return null;
-  if (value.size > 8 * 1024 * 1024) throw new Error("Qəbz faylı 8 MB-dan böyük ola bilməz");
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "finance-receipts");
-  await mkdir(uploadDir, { recursive: true });
-  const originalName = value.name || "receipt";
-  const extension = path.extname(originalName).toLowerCase().replace(/[^a-z0-9.]/g, "").slice(0, 12) || ".bin";
-  const fileName = `${Date.now()}-${randomUUID()}${extension}`;
-  await writeFile(path.join(uploadDir, fileName), Buffer.from(await value.arrayBuffer()));
-  return { fileName: originalName.slice(0, 180), filePath: `/uploads/finance-receipts/${fileName}` };
+  return uploadReceipt(value);
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {
@@ -930,3 +923,52 @@ function invalidateWorkshopCaches(eventId?: string) {
   updateTag(erpCacheTags.finance);
   updateTag(erpCacheTags.dashboard);
 }
+
+export const createWorkshopEventAction = safeServerAction(
+  createWorkshopEventActionImpl,
+  "Tədbir yaradılmadı.",
+);
+export const updateWorkshopEventAction = safeServerAction(
+  updateWorkshopEventActionImpl,
+  "Tədbir yenilənmədi.",
+);
+export const deleteOrCancelWorkshopEventAction = safeServerAction(
+  deleteOrCancelWorkshopEventActionImpl,
+  "Tədbir silinmədi.",
+);
+export const assignWorkshopParticipantAction = safeServerAction(
+  assignWorkshopParticipantActionImpl,
+  "İştirakçı əlavə edilmədi.",
+);
+export const updateWorkshopParticipantAction = safeServerAction(
+  updateWorkshopParticipantActionImpl,
+  "İştirakçı yenilənmədi.",
+);
+export const cancelWorkshopParticipantAction = safeServerAction(
+  cancelWorkshopParticipantActionImpl,
+  "İştirakçı ləğv edilmədi.",
+);
+export const recordWorkshopPaymentAction = safeServerAction(
+  recordWorkshopPaymentActionImpl,
+  "Ödəniş qeydə alınmadı.",
+);
+export const replaceWorkshopPaymentAction = safeServerAction(
+  replaceWorkshopPaymentActionImpl,
+  "Ödəniş yenilənmədi.",
+);
+export const voidWorkshopPaymentAction = safeServerAction(
+  voidWorkshopPaymentActionImpl,
+  "Ödəniş ləğv edilmədi.",
+);
+export const createWorkshopExpenseAction = safeServerAction(
+  createWorkshopExpenseActionImpl,
+  "Xərc yaradılmadı.",
+);
+export const replaceWorkshopExpenseAction = safeServerAction(
+  replaceWorkshopExpenseActionImpl,
+  "Xərc yenilənmədi.",
+);
+export const voidWorkshopExpenseAction = safeServerAction(
+  voidWorkshopExpenseActionImpl,
+  "Xərc ləğv edilmədi.",
+);

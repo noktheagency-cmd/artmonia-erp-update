@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import type { HrBonusCampaignDto, HrBonusData, HrBonusStageDto } from "@/modules/hr/bonus-data";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import "./bonus.css";
 
 const VanGoghBonusIllustration = dynamic(
@@ -92,7 +93,8 @@ export function BonusWorkspace({
   function run(action: () => Promise<unknown>, success: string, close?: () => void) {
     startTransition(() => {
       void action()
-        .then(() => {
+        .then((result) => {
+          unwrapActionResult(result);
           setNotice(success);
           close?.();
           router.refresh();

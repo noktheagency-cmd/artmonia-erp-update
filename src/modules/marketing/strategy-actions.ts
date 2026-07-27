@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const optionalUuid = z.preprocess(
   (value) => (typeof value === "string" && value.trim() ? value.trim() : undefined),
@@ -52,7 +53,7 @@ const expenseSchema = z.object({
   ),
 });
 
-export async function saveMarketingStrategyAction(formData: FormData) {
+async function saveMarketingStrategyActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = strategySchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -124,7 +125,7 @@ export async function saveMarketingStrategyAction(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function addMarketingStrategyExpenseAction(formData: FormData) {
+async function addMarketingStrategyExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = expenseSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -174,3 +175,12 @@ function invalidateMarketing() {
   revalidatePath("/marketing");
   updateTag(erpCacheTags.marketing);
 }
+
+export const saveMarketingStrategyAction = safeServerAction(
+  saveMarketingStrategyActionImpl,
+  "Strategiya saxlanmadı.",
+);
+export const addMarketingStrategyExpenseAction = safeServerAction(
+  addMarketingStrategyExpenseActionImpl,
+  "Strategiya xərci əlavə edilmədi.",
+);

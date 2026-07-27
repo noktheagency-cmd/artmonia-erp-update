@@ -22,6 +22,8 @@ import {
   HrPanelHeader,
   HrToolbar,
 } from "@/modules/hr/hr-ui";
+import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import type {
   TeacherDirectoryData,
   TeacherDirectoryTeacher,
@@ -32,7 +34,7 @@ export function TeacherDirectoryPanel({
   teacherAccountAction,
 }: {
   data: TeacherDirectoryData;
-  teacherAccountAction: (formData: FormData) => Promise<void>;
+  teacherAccountAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const [query, setQuery] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState(data.teachers[0]?.id ?? "");
@@ -121,8 +123,16 @@ function TeacherDetail({
 }: {
   teacher: TeacherDirectoryTeacher;
   data: TeacherDirectoryData;
-  teacherAccountAction: (formData: FormData) => Promise<void>;
+  teacherAccountAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  async function linkTeacherAccount(formData: FormData) {
+    try {
+      unwrapActionResult(await teacherAccountAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Müəllim hesabı bağlanmadı.");
+    }
+  }
+
   return (
     <div className="teacher-detail-stack">
       <div className="teacher-detail-metrics">
@@ -159,7 +169,7 @@ function TeacherDetail({
         />
 
         {data.permissions.canManageTeacherAccounts ? (
-          <form action={teacherAccountAction} className="teacher-account-link-form">
+          <form action={linkTeacherAccount} className="teacher-account-link-form">
             <input type="hidden" name="teacherId" value={teacher.id} />
             <label>
               <span>ERP hesabı</span>

@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -20,7 +21,7 @@ const updateStatusSchema = z.object({
   status: z.nativeEnum(TaskStatus),
 });
 
-export async function createTaskAction(formData: FormData) {
+async function createTaskActionImpl(formData: FormData) {
   const actor = await requireMutationActor("task.manage");
   const input = createTaskSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -71,7 +72,7 @@ export async function createTaskAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function updateTaskStatusAction(formData: FormData) {
+async function updateTaskStatusActionImpl(formData: FormData) {
   const actor = await requireMutationActor("task.read");
   const input = updateStatusSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -114,3 +115,13 @@ export async function updateTaskStatusAction(formData: FormData) {
   revalidatePath("/tasks");
   revalidatePath("/dashboard");
 }
+
+export const createTaskAction = safeServerAction(
+  createTaskActionImpl,
+  "Task yaradılmadı.",
+);
+
+export const updateTaskStatusAction = safeServerAction(
+  updateTaskStatusActionImpl,
+  "Task statusu yenilənmədi.",
+);

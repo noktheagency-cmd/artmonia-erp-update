@@ -7,6 +7,10 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  PublicActionError,
+  safeServerAction,
+} from "@/server/actions/safe-action";
 
 const credentialSchema = z.object({
   employeeId: z.string().uuid(),
@@ -15,7 +19,7 @@ const credentialSchema = z.object({
   roleId: z.union([z.string().uuid(), z.literal("")]).default(""),
 });
 
-export async function upsertHrStaffCredentialsAction(formData: FormData) {
+async function upsertHrStaffCredentialsActionImpl(formData: FormData) {
   const actor = await requireMutationActor("auth.user.manage");
   const input = credentialSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -23,7 +27,7 @@ export async function upsertHrStaffCredentialsAction(formData: FormData) {
     where: { id: input.employeeId },
     include: { user: { include: { roles: true } }, teacher: true },
   });
-  if (!employee) throw new Error("Əməkdaş profili tapılmadı");
+  if (!employee) throw new PublicActionError("Əməkdaş profili tapılmadı", "NOT_FOUND");
 
   const emailOwner = await prisma.user.findFirst({
     where: {
@@ -33,7 +37,7 @@ export async function upsertHrStaffCredentialsAction(formData: FormData) {
     select: { id: true },
   });
   if (emailOwner)
-    throw new Error("Bu login e-poçtu başqa istifadəçiyə məxsusdur");
+    throw new PublicActionError("Bu login e-poçtu başqa istifadəçiyə məxsusdur", "DUPLICATE");
 
   if (employee.user?.authUserId) {
     return updateExistingCredentials({
@@ -45,16 +49,16 @@ export async function upsertHrStaffCredentialsAction(formData: FormData) {
   }
 
   if (input.password.length < 8)
-    throw new Error("Yeni hesab üçün parol ən az 8 simvol olmalıdır");
+    throw new PublicActionError("Yeni hesab üçün parol ən az 8 simvol olmalıdır");
   if (!input.roleId)
-    throw new Error("Yeni hesab üçün sistem rolu seçilməlidir");
+    throw new PublicActionError("Yeni hesab üçün sistem rolu seçilməlidir");
   const role = await prisma.role.findFirst({
     where: {
       id: input.roleId,
       OR: [{ code: null }, { code: { not: AppRole.SUPER_ADMIN } }],
     },
   });
-  if (!role) throw new Error("Seçilmiş rol tapılmadı və ya təyin edilə bilməz");
+  if (!role) throw new PublicActionError("Seçilmiş rol tapılmadı və ya təyin edilə bilməz", "NOT_FOUND");
 
   const { data, error } = await getSupabaseAdminClient().auth.admin.createUser({
     email: input.loginEmail,
@@ -66,7 +70,12 @@ export async function upsertHrStaffCredentialsAction(formData: FormData) {
     },
   });
   if (error || !data.user)
-    throw new Error(error?.message ?? "Login hesabı yaradıla bilmədi");
+    throw new PublicActionError(
+      error?.message ?? "Login hesabı yaradıla bilmədi",
+      error?.message && /already|exists|registered/i.test(error.message)
+        ? "DUPLICATE"
+        : "VALIDATION",
+    );
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -127,6 +136,11 @@ export async function upsertHrStaffCredentialsAction(formData: FormData) {
   return { created: true };
 }
 
+export const upsertHrStaffCredentialsAction = safeServerAction(
+  upsertHrStaffCredentialsActionImpl,
+  "Login məlumatları yenilənə bilmədi.",
+);
+
 async function updateExistingCredentials({
   employee,
   actorId,
@@ -142,14 +156,14 @@ async function updateExistingCredentials({
   loginEmail: string;
   password: string;
 }) {
-  if (!employee.user?.authUserId) throw new Error("Login hesabı tapılmadı");
+  if (!employee.user?.authUserId) throw new PublicActionError("Login hesabı tapılmadı", "NOT_FOUND");
   const emailChanged =
     employee.user.email.toLocaleLowerCase() !== loginEmail.toLocaleLowerCase();
   const passwordChanged = password.length > 0;
   if (!emailChanged && !passwordChanged)
-    throw new Error("Dəyişiklik üçün yeni e-poçt və ya parol daxil edin");
+    throw new PublicActionError("Dəyişiklik üçün yeni e-poçt və ya parol daxil edin");
   if (passwordChanged && password.length < 8)
-    throw new Error("Yeni parol ən az 8 simvol olmalıdır");
+    throw new PublicActionError("Yeni parol ən az 8 simvol olmalıdır");
 
   const attributes: {
     email?: string;
@@ -165,7 +179,12 @@ async function updateExistingCredentials({
     employee.user.authUserId,
     attributes,
   );
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new PublicActionError(
+      error.message,
+      /already|exists|registered/i.test(error.message) ? "DUPLICATE" : "VALIDATION",
+    );
+  }
 
   try {
     await getPrisma().$transaction(async (tx) => {

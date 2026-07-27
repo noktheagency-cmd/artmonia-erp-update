@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import { MarketingViewTabs } from "@/modules/marketing/marketing-view-tabs";
 import {
   addMarketingStrategyExpenseAction,
@@ -333,7 +334,7 @@ function StrategyEditorDialog({ open, strategy, month, people, onOpenChange }: {
     setError("");
     startTransition(async () => {
       try {
-        await saveMarketingStrategyAction(formData);
+        unwrapActionResult(await saveMarketingStrategyAction(formData));
         onOpenChange(false);
         router.refresh();
       } catch (caught) {
@@ -377,7 +378,7 @@ function ExpenseDialog({ open, strategy, onOpenChange }: { open: boolean; strate
     setError("");
     startTransition(async () => {
       try {
-        await addMarketingStrategyExpenseAction(formData);
+        unwrapActionResult(await addMarketingStrategyExpenseAction(formData));
         onOpenChange(false);
         router.refresh();
       } catch (caught) {

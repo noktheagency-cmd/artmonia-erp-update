@@ -8,6 +8,7 @@ import { syncMetaMarketing, type MetaSyncResult } from "@/modules/marketing/meta
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const nullableText = (max: number) =>
   z.preprocess(
@@ -45,7 +46,7 @@ const createReportSchema = z.object({
   decision: z.enum(["continue", "pause"]),
 });
 
-export async function createMarketingCampaignAction(formData: FormData) {
+async function createMarketingCampaignActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = createCampaignSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -78,7 +79,7 @@ export async function createMarketingCampaignAction(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function updateMarketingCampaignAction(formData: FormData) {
+async function updateMarketingCampaignActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = updateCampaignSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -112,7 +113,7 @@ export async function updateMarketingCampaignAction(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function deleteMarketingCampaignAction(formData: FormData) {
+async function deleteMarketingCampaignActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = deleteCampaignSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -132,7 +133,7 @@ export async function deleteMarketingCampaignAction(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function saveMarketingStatAction(formData: FormData) {
+async function saveMarketingStatActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = saveStatSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -157,7 +158,7 @@ export async function saveMarketingStatAction(formData: FormData) {
   invalidateMarketing();
 }
 
-export async function syncMetaMarketingAction(): Promise<MetaSyncResult> {
+async function syncMetaMarketingActionImpl(): Promise<MetaSyncResult> {
   const actor = await requireMutationActor("marketing.manage");
   const result = await syncMetaMarketing();
   await writeAuditLog(getPrisma(), {
@@ -183,7 +184,7 @@ export async function syncMetaMarketingAction(): Promise<MetaSyncResult> {
   return result;
 }
 
-export async function createMarketingReportAction(formData: FormData) {
+async function createMarketingReportActionImpl(formData: FormData) {
   const actor = await requireMutationActor("marketing.manage");
   const input = createReportSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -204,3 +205,28 @@ function campaignAuditJson(campaign: { id: string; name: string; channel: string
 
 function parseDate(value: string) { return new Date(`${value}T00:00:00.000Z`); }
 function invalidateMarketing() { revalidatePath("/marketing"); updateTag(erpCacheTags.marketing); }
+
+export const createMarketingCampaignAction = safeServerAction(
+  createMarketingCampaignActionImpl,
+  "Kampaniya yaradılmadı.",
+);
+export const updateMarketingCampaignAction = safeServerAction(
+  updateMarketingCampaignActionImpl,
+  "Kampaniya yenilənmədi.",
+);
+export const deleteMarketingCampaignAction = safeServerAction(
+  deleteMarketingCampaignActionImpl,
+  "Kampaniya silinmədi.",
+);
+export const saveMarketingStatAction = safeServerAction(
+  saveMarketingStatActionImpl,
+  "Statistika saxlanmadı.",
+);
+export const syncMetaMarketingAction = safeServerAction(
+  syncMetaMarketingActionImpl,
+  "Meta məlumatları sinxronlaşdırılmadı.",
+);
+export const createMarketingReportAction = safeServerAction(
+  createMarketingReportActionImpl,
+  "Hesabat yaradılmadı.",
+);

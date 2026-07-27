@@ -1,8 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppRole, FinanceSalaryMode, HrStaffType, Prisma } from "@/generated/prisma/client";
@@ -11,6 +8,14 @@ import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll"
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  PublicActionError,
+  safeServerAction,
+} from "@/server/actions/safe-action";
+import {
+  deleteProfilePhoto,
+  uploadProfilePhoto,
+} from "@/server/storage/erp-files";
 
 const staffSchema = z.object({
   id: z.string().uuid().optional(),
@@ -18,8 +23,8 @@ const staffSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   email: z.union([z.string().trim().email(), z.literal("")]),
   phone: z.string().trim().max(40),
-  department: z.string().trim().min(2).max(80),
-  position: z.string().trim().min(2).max(100),
+  department: z.string().trim().min(2).max(80).refine((value) => value !== "__new", "Departament seçilməlidir"),
+  position: z.string().trim().min(2).max(100).refine((value) => value !== "__new", "Vəzifə seçilməlidir"),
   hireDate: z.coerce.date(),
   status: z.enum(["ACTIVE", "PROBATION", "ON_LEAVE", "INACTIVE"]),
   contractType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACTOR"]),
@@ -41,17 +46,27 @@ const staffSchema = z.object({
   if (value.createAccount && !value.roleId) context.addIssue({ code: "custom", path: ["roleId"], message: "ERP rolu seçilməlidir" });
 });
 
-export async function createStaffAction(formData: FormData) {
+async function createStaffActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.employee.manage");
   const parsed = staffSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Əməkdaş məlumatları düzgün deyil");
+  if (!parsed.success) throw new PublicActionError(parsed.error.issues[0]?.message ?? "Əməkdaş məlumatları düzgün deyil");
   const input = parsed.data;
-  if (input.createAccount && !actor.permissions.has("auth.user.manage")) throw new Error("ERP giriş hesabı yaratmaq üçün istifadəçi idarəetmə icazəsi tələb olunur");
+  if (input.createAccount && !actor.permissions.has("auth.user.manage")) throw new PublicActionError("ERP giriş hesabı yaratmaq üçün istifadəçi idarəetmə icazəsi tələb olunur", "FORBIDDEN");
 
-  const role = input.createAccount
-    ? await getPrisma().role.findFirst({ where: { id: input.roleId, OR: [{ code: null }, { code: { not: AppRole.SUPER_ADMIN } }] } })
-    : null;
-  if (input.createAccount && !role) throw new Error("Seçilmiş rol tapılmadı və ya təyin edilə bilməz");
+  const prisma = getPrisma();
+  const [role, emailOwner] = await Promise.all([
+    input.createAccount
+      ? prisma.role.findFirst({ where: { id: input.roleId, OR: [{ code: null }, { code: { not: AppRole.SUPER_ADMIN } }] } })
+      : null,
+    input.createAccount
+      ? prisma.user.findFirst({
+          where: { email: { equals: input.loginEmail, mode: "insensitive" } },
+          select: { id: true },
+        })
+      : null,
+  ]);
+  if (input.createAccount && !role) throw new PublicActionError("Seçilmiş rol tapılmadı və ya təyin edilə bilməz", "NOT_FOUND");
+  if (emailOwner) throw new PublicActionError("Bu e-poçt ünvanı ilə giriş hesabı artıq mövcuddur", "DUPLICATE");
 
   let authUserId: string | null = null;
   let profilePhotoUrl: string | null = null;
@@ -59,10 +74,13 @@ export async function createStaffAction(formData: FormData) {
     profilePhotoUrl = await persistProfilePhoto(formData.get("profilePhoto"));
     if (input.createAccount) {
       const { data, error } = await getSupabaseAdminClient().auth.admin.createUser({ email: input.loginEmail, password: input.password, email_confirm: true, user_metadata: { full_name: input.fullName, avatar_url: profilePhotoUrl } });
-      if (error || !data.user) throw new Error(error?.message ?? "Supabase giriş hesabı yaradıla bilmədi");
+      if (error || !data.user) throw new PublicActionError(
+        error?.message ?? "Supabase giriş hesabı yaradıla bilmədi",
+        error?.message && /already|exists|registered/i.test(error.message) ? "DUPLICATE" : "VALIDATION",
+      );
       authUserId = data.user.id;
     }
-    const result = await getPrisma().$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const erpUser = authUserId ? await tx.user.create({ data: { authUserId, fullName: input.fullName, email: input.loginEmail, phone: input.phone || null, isActive: true } }) : null;
       if (erpUser && role) await tx.userRole.create({ data: { userId: erpUser.id, roleId: role.id } });
 
@@ -100,17 +118,19 @@ export async function createStaffAction(formData: FormData) {
     revalidateHr();
     return result;
   } catch (error) {
-    if (authUserId) await getSupabaseAdminClient().auth.admin.deleteUser(authUserId);
+    if (authUserId) {
+      await getSupabaseAdminClient().auth.admin.deleteUser(authUserId).catch(() => undefined);
+    }
     if (profilePhotoUrl) await deleteLocalProfilePhoto(profilePhotoUrl);
     throw error;
   }
 }
 
-export async function updateStaffAction(formData: FormData) {
+async function updateStaffActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.employee.manage");
   const input = staffSchema.required({ id: true }).parse(Object.fromEntries(formData));
   const before = await getPrisma().hrEmployee.findUnique({ where: { id: input.id } });
-  if (!before) throw new Error("Əməkdaş tapılmadı");
+  if (!before) throw new PublicActionError("Əməkdaş tapılmadı", "NOT_FOUND");
 
   const uploadedProfilePhotoUrl = await persistProfilePhoto(formData.get("profilePhoto"));
 
@@ -152,6 +172,16 @@ export async function updateStaffAction(formData: FormData) {
   revalidateHr();
 }
 
+export const createStaffAction = safeServerAction(
+  createStaffActionImpl,
+  "Əməkdaş yaradıla bilmədi.",
+);
+
+export const updateStaffAction = safeServerAction(
+  updateStaffActionImpl,
+  "Əməkdaş məlumatları yenilənə bilmədi.",
+);
+
 async function syncTeacherSalaryRule(
   tx: Prisma.TransactionClient,
   teacherId: string,
@@ -187,27 +217,13 @@ async function syncTeacherSalaryRule(
   });
 }
 
-const profilePhotoExtensions: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-};
-
 async function persistProfilePhoto(value: FormDataEntryValue | null) {
   if (!isUploadedFile(value)) return null;
-  if (value.size > 5 * 1024 * 1024) throw new Error("Profil şəkli 5 MB-dan böyük ola bilməz");
-  const extension = profilePhotoExtensions[value.type];
-  if (!extension) throw new Error("Profil şəkli JPEG, PNG və ya WebP formatında olmalıdır");
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "hr-profile-photos");
-  await mkdir(uploadDir, { recursive: true });
-  const fileName = `${Date.now()}-${randomUUID()}${extension}`;
-  await writeFile(path.join(uploadDir, fileName), Buffer.from(await value.arrayBuffer()));
-  return `/uploads/hr-profile-photos/${fileName}`;
+  return uploadProfilePhoto(value);
 }
 
 async function deleteLocalProfilePhoto(fileUrl: string) {
-  if (!fileUrl.startsWith("/uploads/hr-profile-photos/")) return;
-  await unlink(path.join(process.cwd(), "public", "uploads", "hr-profile-photos", path.basename(fileUrl))).catch(() => undefined);
+  await deleteProfilePhoto(fileUrl).catch(() => undefined);
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {

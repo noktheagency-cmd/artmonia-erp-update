@@ -8,7 +8,7 @@ import { RolePerformanceChart } from "@/modules/dashboard/role-performance-chart
 import type { TaskData } from "@/modules/tasks/queries";
 import "./role-dashboard.css";
 
-type TaskAction = (formData: FormData) => void | Promise<void>;
+type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 
 const icons = { sales: Target, teacher: BookOpen, marketing: Megaphone } as const;
 const kpiIcons = [UsersRound, CircleDot, CheckCircle2, Sparkles] as const;

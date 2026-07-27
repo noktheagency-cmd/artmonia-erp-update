@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Banknote, Edit, RefreshCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -17,7 +18,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
-import { notifySuccess } from "@/lib/app-notifications";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 
 const studentStatusOptions = [
   { value: "GROUP_WAITING", label: "Qrup gözləyir" },
@@ -46,6 +48,7 @@ interface StudentDetail {
 
 interface Permissions {
   canCreateStudent: boolean;
+  canUpdateStudent: boolean;
   canConvertLead: boolean;
   canRecordPayment: boolean;
   canChangeStatus: boolean;
@@ -56,15 +59,18 @@ export function StudentDetailActions({
   student,
   permissions,
   recordPaymentAction,
+  updateStudentProfileAction,
   updateStudentStatusAction,
   deleteStudentAction,
 }: {
   student: StudentDetail;
   permissions: Permissions;
-  recordPaymentAction: (formData: FormData) => void | Promise<void>;
-  updateStudentStatusAction: (formData: FormData) => void | Promise<void>;
-  deleteStudentAction: (formData: FormData) => void | Promise<void>;
+  recordPaymentAction: (formData: FormData) => unknown | Promise<unknown>;
+  updateStudentProfileAction: (formData: FormData) => unknown | Promise<unknown>;
+  updateStudentStatusAction: (formData: FormData) => unknown | Promise<unknown>;
+  deleteStudentAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -72,6 +78,22 @@ export function StudentDetailActions({
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
   const [nextPaymentDate, setNextPaymentDate] = useState(() => addOneMonth(student.detail.paymentDefaultDate));
+
+  async function updateStatus(formData: FormData) {
+    try {
+      unwrapActionResult(await updateStudentStatusAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Tələbə statusu yenilənmədi.");
+    }
+  }
+
+  async function deleteStudent(formData: FormData) {
+    try {
+      unwrapActionResult(await deleteStudentAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Tələbə silinmədi.");
+    }
+  }
 
   return (
     <div className="student-actions-row">
@@ -90,7 +112,7 @@ export function StudentDetailActions({
             </DialogDescription>
           </DialogHeader>
 
-          <form action={updateStudentStatusAction} className="student-payment-form">
+          <form action={updateStatus} className="student-payment-form">
             <input name="studentId" type="hidden" value={student.id} />
             <input name="returnTo" type="hidden" value={`/students/${student.id}`} />
 
@@ -160,8 +182,12 @@ export function StudentDetailActions({
             onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
-              await recordPaymentAction(formData);
-              setPaymentOpen(false);
+              try {
+                unwrapActionResult(await recordPaymentAction(formData));
+                setPaymentOpen(false);
+              } catch (error) {
+                notifyCaughtError(error, "Ödəniş qeydə alınmadı.");
+              }
             }}
             className="student-payment-form"
           >
@@ -257,7 +283,7 @@ export function StudentDetailActions({
       {/* Edit Student Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogTrigger asChild>
-          <Button className="student-action-edit" type="button" disabled={!permissions.canCreateStudent}>
+          <Button className="student-action-edit" type="button" disabled={!permissions.canUpdateStudent}>
             <Edit data-icon="inline-start" />
             Redaktə et
           </Button>
@@ -271,10 +297,18 @@ export function StudentDetailActions({
           </DialogHeader>
 
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              notifySuccess("Məlumatlar yadda saxlanıldı", "Tələbə profili uğurla yeniləndi.");
-              setEditOpen(false);
+              const formData = new FormData(e.currentTarget);
+              formData.set("studentId", student.id);
+              try {
+                unwrapActionResult(await updateStudentProfileAction(formData));
+                notifySuccess("Məlumatlar yadda saxlanıldı", "Tələbə profili uğurla yeniləndi.");
+                setEditOpen(false);
+                router.refresh();
+              } catch (error) {
+                notifyCaughtError(error, "Tələbə profili yenilənmədi.");
+              }
             }}
             className="student-create-form"
           >
@@ -346,7 +380,7 @@ export function StudentDetailActions({
             </DialogDescription>
           </DialogHeader>
 
-          <form action={deleteStudentAction}>
+          <form action={deleteStudent}>
             <input name="studentId" type="hidden" value={student.id} />
             <DialogFooter>
               <DialogClose asChild>

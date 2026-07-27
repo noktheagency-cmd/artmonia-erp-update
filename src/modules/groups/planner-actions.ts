@@ -8,6 +8,7 @@ import { isPrivilegedActor, requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { dateFromInput, todayInBaku } from "@/modules/groups/shared";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const slotSchema = z.object({
@@ -42,7 +43,7 @@ const updateSlotSchema = slotSchema.and(z.object({
   slotId: z.string().uuid(),
 }));
 
-export async function createClassSlotAction(formData: FormData) {
+async function createClassSlotActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = slotSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -75,7 +76,7 @@ export async function createClassSlotAction(formData: FormData) {
   return { id: slot.id };
 }
 
-export async function updateClassSlotAction(formData: FormData) {
+async function updateClassSlotActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = updateSlotSchema.parse(Object.fromEntries(formData));
   const today = todayInBaku();
@@ -248,7 +249,7 @@ export async function updateClassSlotAction(formData: FormData) {
   return { id: updatedSlot.id };
 }
 
-export async function replaceStudentScheduleAction(formData: FormData) {
+async function replaceStudentScheduleActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = assignmentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -368,3 +369,16 @@ function maxConcurrentAssignments(
   }
   return maximum;
 }
+
+export const createClassSlotAction = safeServerAction(
+  createClassSlotActionImpl,
+  "Dərs slotu yaradılmadı.",
+);
+export const updateClassSlotAction = safeServerAction(
+  updateClassSlotActionImpl,
+  "Dərs slotu yenilənmədi.",
+);
+export const replaceStudentScheduleAction = safeServerAction(
+  replaceStudentScheduleActionImpl,
+  "Tələbə cədvəli yenilənmədi.",
+);

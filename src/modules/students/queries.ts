@@ -38,6 +38,7 @@ export type StudentListData = {
   total: number;
   permissions: {
     canCreateStudent: boolean;
+    canUpdateStudent: boolean;
     canConvertLead: boolean;
     canRecordPayment: boolean;
     canChangeStatus: boolean;
@@ -359,10 +360,11 @@ export async function getStudentListData(
     total: rows[0]?.totalCount ?? 0,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
+      canUpdateStudent: actor.permissions.has("student.update"),
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
       canChangeStatus: actor.permissions.has("student.status.change"),
-      canDeleteStudent: actor.permissions.has("student.update"),
+      canDeleteStudent: actor.permissions.has("student.delete"),
       canManagePrograms: actor.permissions.has("settings.manage"),
       canExport: actor.permissions.has("report.export"),
     },
@@ -1621,10 +1623,11 @@ export async function getStudentDetailData(studentId: string) {
     returnTo: `/students/${student.id}`,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
+      canUpdateStudent: actor.permissions.has("student.update"),
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
       canChangeStatus: actor.permissions.has("student.status.change"),
-      canDeleteStudent: actor.permissions.has("student.update"),
+      canDeleteStudent: actor.permissions.has("student.delete"),
     },
     createOptions: {
       leads: options.leads,

@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import {
   createMarketingCampaignAction,
   createMarketingReportAction,
@@ -82,7 +83,7 @@ export function MarketingWorkspace({ data }: { data: MarketingData }) {
     setSyncMessage("");
     startSyncTransition(async () => {
       try {
-        const result = await syncMetaMarketingAction();
+        const result = unwrapActionResult(await syncMetaMarketingAction());
         setSyncMessage(`${result.campaigns} kampaniya · ${result.ads} reklam · ${result.adInsightRows} günlük reklam nəticəsi yeniləndi`);
         router.refresh();
       } catch (error) {
@@ -328,7 +329,7 @@ function Metric({ icon: Icon, label, value, helper, tone }: { icon: typeof Activ
   return <article className={cx("marketing-metric-card", `is-${tone}`)}><span className="marketing-metric-icon"><Icon size={18} /></span><div><small>{label}</small><strong>{value}</strong><p>{helper}</p></div></article>;
 }
 
-function CampaignDialog({ title, campaign, action, trigger }: { title: string; campaign?: MarketingCampaignRow; action: (formData: FormData) => Promise<void>; trigger?: ReactNode }) {
+function CampaignDialog({ title, campaign, action, trigger }: { title: string; campaign?: MarketingCampaignRow; action: (formData: FormData) => Promise<unknown>; trigger?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -338,7 +339,7 @@ function CampaignDialog({ title, campaign, action, trigger }: { title: string; c
     const form = event.currentTarget;
     setError("");
     startTransition(async () => {
-      try { await action(new FormData(form)); setOpen(false); }
+      try { unwrapActionResult(await action(new FormData(form))); setOpen(false); }
       catch (caught) { setError(notifyCaughtError(caught, "Kampaniya yadda saxlanmadı", "Kampaniya saxlanmadı")); }
     });
   }
@@ -374,7 +375,7 @@ function SpendDialog({ campaign }: { campaign: MarketingCampaignRow }) {
     const form = event.currentTarget;
     setError("");
     startTransition(async () => {
-      try { await saveMarketingStatAction(new FormData(form)); setOpen(false); }
+      try { unwrapActionResult(await saveMarketingStatAction(new FormData(form))); setOpen(false); }
       catch (caught) { setError(notifyCaughtError(caught, "Xərc yadda saxlanmadı", "Xərc saxlanmadı")); }
     });
   }
@@ -395,7 +396,7 @@ function ReportDialog({ campaign }: { campaign: MarketingCampaignRow }) {
     const form = event.currentTarget;
     setError("");
     startTransition(async () => {
-      try { await createMarketingReportAction(new FormData(form)); setOpen(false); }
+      try { unwrapActionResult(await createMarketingReportAction(new FormData(form))); setOpen(false); }
       catch (caught) { setError(notifyCaughtError(caught, "Hesabat yaradılmadı", "Hesabat yaradılmadı")); }
     });
   }
@@ -414,7 +415,7 @@ function DeleteButton({ campaign }: { campaign: MarketingCampaignRow }) {
     const formData = new FormData();
     formData.set("id", campaign.id);
     startTransition(async () => {
-      try { await deleteMarketingCampaignAction(formData); }
+      try { unwrapActionResult(await deleteMarketingCampaignAction(formData)); }
       catch (error) { notifyCaughtError(error, "Kampaniya silinmədi", "Kampaniya silinmədi"); }
     });
   }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { findDuplicatePhoneMatches } from "@/modules/crm/duplicate-phone";
 import { requireErpActor } from "@/server/auth/actor";
+import { toActionFailure } from "@/server/actions/safe-action";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ matches: [] }, { status: 400 });
     }
 
-    return NextResponse.json({ matches: [] }, { status: 401 });
+    const failure = toActionFailure(error, "Telefon yoxlaması tamamlana bilmədi.");
+    const status =
+      failure.code === "UNAUTHORIZED"
+        ? 401
+        : failure.code === "FORBIDDEN"
+          ? 403
+          : 500;
+    return NextResponse.json(
+      { matches: [], error: failure.message, code: failure.code },
+      { status, headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 }

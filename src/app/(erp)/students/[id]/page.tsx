@@ -5,6 +5,7 @@ import { getStudentDetailData } from "@/modules/students/queries";
 import {
   recordStudentPaymentAction,
   deleteStudentAction,
+  updateStudentProfileAction,
   updateStudentStatusAction,
 } from "@/modules/students/actions";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -48,6 +49,7 @@ export default async function StudentDetailPage({
           student={student}
           permissions={permissions}
           recordPaymentAction={recordStudentPaymentAction}
+          updateStudentProfileAction={updateStudentProfileAction}
           updateStudentStatusAction={updateStudentStatusAction}
           deleteStudentAction={deleteStudentAction}
         />

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
@@ -424,7 +425,7 @@ function PaymentDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
           <Field><FieldLabel>Ödəniş üsulu</FieldLabel><FormSelect name="paymentMethod" defaultValue="CASH" options={paymentMethodOptions} /></Field>
           <Field><FieldLabel htmlFor="payer-name">Ödəyən</FieldLabel><Input id="payer-name" name="payerName" /></Field>
           <Field><FieldLabel htmlFor="payment-receipt">Qəbz №</FieldLabel><Input id="payment-receipt" name="receiptReference" /></Field>
-          <Field><FieldLabel htmlFor="payment-file">Qəbz faylı</FieldLabel><Input id="payment-file" name="receiptFile" type="file" /></Field>
+          <Field><FieldLabel htmlFor="payment-file">Qəbz faylı</FieldLabel><Input id="payment-file" name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" /></Field>
         </div>
         <Field><FieldLabel htmlFor="payment-note">Qeyd</FieldLabel><textarea id="payment-note" name="note" rows={3} /></Field>
       </FieldGroup>
@@ -444,7 +445,7 @@ function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
           <Field><FieldLabel>Ödəniş üsulu</FieldLabel><FormSelect name="method" defaultValue="CASH" options={paymentMethodOptions} /></Field>
           <Field><FieldLabel htmlFor="expense-vendor">Vendor</FieldLabel><Input id="expense-vendor" name="vendor" /></Field>
           <Field><FieldLabel htmlFor="expense-receipt">Qəbz №</FieldLabel><Input id="expense-receipt" name="receiptReference" /></Field>
-          <Field><FieldLabel htmlFor="expense-file">Qəbz faylı</FieldLabel><Input id="expense-file" name="receiptFile" type="file" /></Field>
+          <Field><FieldLabel htmlFor="expense-file">Qəbz faylı</FieldLabel><Input id="expense-file" name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" /></Field>
         </div>
         <Field><FieldLabel htmlFor="expense-description">Təsvir</FieldLabel><textarea id="expense-description" name="description" rows={3} /></Field>
       </FieldGroup>
@@ -543,7 +544,8 @@ function ActionDialog({ title, description, trigger, action, children, defaultOp
     const form = event.currentTarget;
     setError("");
     startTransition(() => {
-      void Promise.resolve(action(new FormData(form))).then(() => {
+      void Promise.resolve(action(new FormData(form))).then((result) => {
+        unwrapActionResult(result);
         setOpen(false);
         if (onSuccess) onSuccess();
         else router.refresh();

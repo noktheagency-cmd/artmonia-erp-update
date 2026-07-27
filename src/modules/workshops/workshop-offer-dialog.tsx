@@ -24,14 +24,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult, type ActionResult } from "@/lib/action-result";
 import type {
   WorkshopOfferAudience,
   WorkshopOfferInput,
   WorkshopOfferResult,
 } from "@/modules/workshops/offer-actions";
 
-type AudienceAction = () => Promise<WorkshopOfferAudience>;
-type GenerateAction = (input: WorkshopOfferInput) => Promise<WorkshopOfferResult>;
+type AudienceAction = () => Promise<ActionResult<WorkshopOfferAudience>>;
+type GenerateAction = (
+  input: WorkshopOfferInput,
+) => Promise<ActionResult<WorkshopOfferResult>>;
 type AudienceMode = WorkshopOfferInput["audienceMode"];
 
 export function WorkshopOfferDialog({
@@ -78,7 +81,7 @@ export function WorkshopOfferDialog({
     setError("");
     startAudienceTransition(() => {
       void loadAudienceAction()
-        .then(setAudience)
+        .then((value) => setAudience(unwrapActionResult(value)))
         .catch((caught) => setError(notifyCaughtError(caught, "Auditoriya yüklənmədi")));
     });
   }
@@ -89,7 +92,7 @@ export function WorkshopOfferDialog({
     setResult(null);
     startGenerationTransition(() => {
       void generateOfferAction({ purpose, audienceMode: mode, workshopIds, participantKeys })
-        .then(setResult)
+        .then((value) => setResult(unwrapActionResult(value)))
         .catch((caught) => setError(notifyCaughtError(caught, "Təklif hazırlana bilmədi")));
     });
   }

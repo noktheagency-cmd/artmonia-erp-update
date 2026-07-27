@@ -23,6 +23,7 @@ import {
   todayInBaku,
   weekdayFromDate,
 } from "@/modules/groups/shared";
+import { safeServerAction } from "@/server/actions/safe-action";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const scheduleSchema = z
@@ -91,7 +92,7 @@ const attendanceSchema = z.object({
   }),
 });
 
-export async function createGroupAction(formData: FormData) {
+async function createGroupActionImpl(formData: FormData) {
   const actor = await requireGroupManager();
   const input = groupSchema.parse(Object.fromEntries(formData));
   const code = normalizeGroupCode(input.code);
@@ -126,7 +127,7 @@ export async function createGroupAction(formData: FormData) {
   return { id: group.id };
 }
 
-export async function updateGroupAction(formData: FormData) {
+async function updateGroupActionImpl(formData: FormData) {
   const actor = await requireGroupManager();
   const input = groupSchema.extend({ groupId: z.string().uuid() }).parse(Object.fromEntries(formData));
   const code = normalizeGroupCode(input.code);
@@ -171,7 +172,7 @@ export async function updateGroupAction(formData: FormData) {
   revalidateGroupSurfaces();
 }
 
-export async function archiveGroupAction(formData: FormData) {
+async function archiveGroupActionImpl(formData: FormData) {
   const actor = await requireGroupManager();
   const { groupId } = z.object({ groupId: z.string().uuid() }).parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -192,7 +193,7 @@ export async function archiveGroupAction(formData: FormData) {
   revalidateGroupSurfaces();
 }
 
-export async function addGroupMemberAction(formData: FormData) {
+async function addGroupMemberActionImpl(formData: FormData) {
   const actor = await requireGroupManager();
   const input = membershipSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -268,7 +269,7 @@ export async function addGroupMemberAction(formData: FormData) {
   revalidateGroupSurfaces(result.studentId);
 }
 
-export async function changeGroupMemberTeacherAction(formData: FormData) {
+async function changeGroupMemberTeacherActionImpl(formData: FormData) {
   const actor = await requireGroupManager();
   const input = changeTeacherSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -306,7 +307,7 @@ export async function changeGroupMemberTeacherAction(formData: FormData) {
   revalidateGroupSurfaces();
 }
 
-export async function endGroupMembershipAction(formData: FormData) {
+async function endGroupMembershipActionImpl(formData: FormData) {
   const actor = await requireGroupManager();
   const input = membershipIdSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
@@ -329,7 +330,7 @@ export async function endGroupMembershipAction(formData: FormData) {
   revalidateGroupSurfaces(undefined, membership.groupId);
 }
 
-export async function saveAttendanceAction(formData: FormData) {
+async function saveAttendanceActionImpl(formData: FormData) {
   const actor = await requireMutationActor("attendance.manage");
   const input = attendanceSchema.parse(Object.fromEntries(formData));
   const today = todayInBaku();
@@ -491,3 +492,32 @@ function revalidateGroupSurfaces(studentId?: string, groupId?: string) {
   updateTag(erpCacheTags.dashboard);
   updateTag(erpCacheTags.finance);
 }
+
+export const createGroupAction = safeServerAction(
+  createGroupActionImpl,
+  "Qrup yaradılmadı.",
+);
+export const updateGroupAction = safeServerAction(
+  updateGroupActionImpl,
+  "Qrup yenilənmədi.",
+);
+export const archiveGroupAction = safeServerAction(
+  archiveGroupActionImpl,
+  "Qrup arxivlənmədi.",
+);
+export const addGroupMemberAction = safeServerAction(
+  addGroupMemberActionImpl,
+  "Tələbə qrupa əlavə edilmədi.",
+);
+export const changeGroupMemberTeacherAction = safeServerAction(
+  changeGroupMemberTeacherActionImpl,
+  "Müəllim təyinatı yenilənmədi.",
+);
+export const endGroupMembershipAction = safeServerAction(
+  endGroupMembershipActionImpl,
+  "Qrup üzvlüyü bitirilmədi.",
+);
+export const saveAttendanceAction = safeServerAction(
+  saveAttendanceActionImpl,
+  "Davamiyyət saxlanmadı.",
+);

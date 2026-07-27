@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
+import { unwrapActionResult } from "@/lib/action-result";
+import { notifyCaughtError } from "@/lib/app-notifications";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -30,7 +32,7 @@ export function StudentPaymentDialogClient({
   students: StudentRow[];
   canRecordPayment: boolean;
   returnTo: string;
-  recordPaymentAction: (formData: FormData) => void | Promise<void>;
+  recordPaymentAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const [studentId, setStudentId] = useState(students[0]?.id ?? "");
   const selectedStudent = useMemo(
@@ -46,6 +48,14 @@ export function StudentPaymentDialogClient({
       })),
     [students]
   );
+
+  async function recordPayment(formData: FormData) {
+    try {
+      unwrapActionResult(await recordPaymentAction(formData));
+    } catch (error) {
+      notifyCaughtError(error, "Ödəniş qeydə alınmadı.");
+    }
+  }
 
   return (
     <Dialog>
@@ -69,7 +79,7 @@ export function StudentPaymentDialogClient({
         </DialogHeader>
 
         {selectedStudent ? (
-          <form action={recordPaymentAction} className="student-payment-form" key={selectedStudent.id}>
+          <form action={recordPayment} className="student-payment-form" key={selectedStudent.id}>
             <input name="studentId" type="hidden" value={selectedStudent.id} />
             <input name="returnTo" type="hidden" value={returnTo} />
 

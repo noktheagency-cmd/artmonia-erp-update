@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { cx } from "@/components/ui/cx";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { unwrapActionResult } from "@/lib/action-result";
 import {
   groupWeekdays,
   orderedWeekdays,
@@ -39,9 +40,9 @@ import type { PlannerSlot, PlannerWorkspaceData } from "@/modules/groups/planner
 import styles from "./planner.module.css";
 
 type PlannerActions = {
-  createSlot: (formData: FormData) => Promise<{ id: string }>;
-  updateSlot: (formData: FormData) => Promise<{ id: string }>;
-  replaceSchedule: (formData: FormData) => Promise<void>;
+  createSlot: (formData: FormData) => Promise<unknown>;
+  updateSlot: (formData: FormData) => Promise<unknown>;
+  replaceSchedule: (formData: FormData) => Promise<unknown>;
 };
 
 const shiftMeta = {
@@ -95,7 +96,7 @@ export function PlannerWorkspace({
     startTransition(() => {
       void (async () => {
         try {
-          await action();
+          unwrapActionResult(await action());
           close();
           setNotice(success);
           router.refresh();
@@ -228,9 +229,11 @@ export function PlannerWorkspace({
           onClose={() => setSlotDialogMode(null)}
           onSubmit={(formData) => runAction(
             async () => {
-              const result = slotDialogMode === "edit"
-                ? await actions.updateSlot(formData)
-                : await actions.createSlot(formData);
+              const result = unwrapActionResult(
+                slotDialogMode === "edit"
+                  ? await actions.updateSlot(formData)
+                  : await actions.createSlot(formData),
+              ) as { id: string };
               setSelectedSlotId(result.id);
             },
             slotDialogMode === "edit" ? "Slot uğurla yeniləndi." : "Yeni dərs slotu yaradıldı.",
