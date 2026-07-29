@@ -1,14 +1,24 @@
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import Image from "next/image";
 import { getCurrentErpUser } from "@/server/auth/session";
 import { LoginForm } from "./login-form";
 import { LoginSceneLazy } from "./login-scene-lazy";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{ next?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { next: requestedNext } = await searchParams;
+  const next =
+    requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
+      ? requestedNext
+      : undefined;
   const currentUser = await getCurrentErpUser();
 
   if (currentUser) {
-    redirect("/dashboard");
+    redirect((next ?? "/dashboard") as Route);
   }
 
   return (
@@ -34,7 +44,7 @@ export default async function LoginPage() {
           <p>Artmonia ERP hesabınıza daxil olun.</p>
         </div>
 
-        <LoginForm />
+        <LoginForm next={next} />
 
         <p className="kinetic-footer">Artmonia ERP <i /> Daxili idarəetmə sistemi</p>
       </section>

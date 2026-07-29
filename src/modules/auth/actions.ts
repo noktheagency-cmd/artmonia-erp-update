@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { z } from "zod";
 import { getPrisma } from "@/server/db/prisma";
 import { createSupabaseServerClient } from "@/server/supabase/server";
@@ -8,6 +9,7 @@ import { createSupabaseServerClient } from "@/server/supabase/server";
 const signInSchema = z.object({
   email: z.string().trim().email().max(180),
   password: z.string().min(6).max(160),
+  next: z.string().max(2_000).optional(),
 });
 
 export type SignInState = {
@@ -47,7 +49,12 @@ export async function signInAction(
     return { error: "Bu hesab aktiv Artmonia ERP istifadəçisinə bağlı deyil." };
   }
 
-  redirect("/dashboard");
+  const next =
+    input.data.next?.startsWith("/") && !input.data.next.startsWith("//")
+      ? input.data.next
+      : "/dashboard";
+
+  redirect(next as Route);
 }
 
 export async function signOutAction() {

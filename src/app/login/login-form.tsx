@@ -14,12 +14,13 @@ import { signInAction, type SignInState } from "@/modules/auth/actions";
 
 const initialState: SignInState = {};
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(signInAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <form action={formAction} className="kinetic-form" aria-busy={pending}>
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       <label className="kinetic-field">
         <span>E-poçt</span>
         <span className="kinetic-input-shell">
