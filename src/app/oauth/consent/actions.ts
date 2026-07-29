@@ -9,7 +9,7 @@ import { requireEnv } from "@/server/env";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 const decisionSchema = z.object({
-  authorizationId: z.string().uuid(),
+  authorizationId: z.string().trim().min(1).max(2048),
   decision: z.enum(["approve", "deny"]),
 });
 
