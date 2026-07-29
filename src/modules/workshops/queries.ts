@@ -11,7 +11,7 @@ import { getPrisma } from "@/server/db/prisma";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info";
 export type WorkshopKind = "WORKSHOP" | "MASTERCLASS";
-export type WorkshopStatus = "DRAFT" | "SCHEDULED" | "COMPLETED" | "CANCELLED";
+export type WorkshopStatus = "DRAFT" | "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 export type ParticipantPaymentState = WorkshopPaymentState;
 
 export type WorkshopFilters = {
@@ -43,7 +43,8 @@ export type WorkshopDetailFilters = {
 export type WorkshopEventRow = {
   id: string;
   title: string;
-  eventType: WorkshopKind;
+  eventType: string;
+  eventTypeKind: WorkshopKind;
   eventTypeLabel: string;
   status: WorkshopStatus;
   statusLabel: string;
@@ -150,6 +151,7 @@ export type WorkshopData = {
   permissions: WorkshopPermissions;
   filters: NormalizedWorkshopFilters & { activeCount: number };
   filterOptions: {
+    types: Array<{ value: string; label: string }>;
     instructors: Array<{ value: string; label: string }>;
     rooms: Array<{ value: string; label: string }>;
   };
@@ -182,6 +184,7 @@ export type WorkshopDetailData = {
   expenses: WorkshopExpenseRow[];
   students: WorkshopStudentOption[];
   categories: Array<{ id: string; name: string; description: string }>;
+  eventTypes: Array<{ value: string; label: string }>;
   participantFilters: {
     query: string;
     paymentState: string;
@@ -219,7 +222,7 @@ type Pagination = {
 
 type NormalizedWorkshopFilters = {
   query: string;
-  type: "all" | WorkshopKind;
+  type: string;
   status: "all" | WorkshopStatus;
   dateRange: "month" | "all";
   from: string;
@@ -237,7 +240,8 @@ type NormalizedWorkshopFilters = {
 type EventDbRow = {
   id: string;
   title: string;
-  eventType: WorkshopKind;
+  eventType: string;
+  eventTypeKind: WorkshopKind;
   status: WorkshopStatus;
   eventDate: Date | string;
   dateValue: string;
@@ -265,6 +269,8 @@ type SummaryDbRow = {
   potentialRevenue: unknown;
   participantCount: unknown;
   eventCount: unknown;
+  activeEventCount: unknown;
+  completedEventCount: unknown;
 };
 
 type ParticipantDbRow = {
@@ -404,7 +410,9 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     prisma.$queryRaw<EventDbRow[]>(Prisma.sql`
       ${eventAggregateCte}
       select
-        er.id::text as "id", er.title, er.event_type::text as "eventType",
+        er.id::text as "id", er.title,
+        coalesce(er.category, er.event_type::text) as "eventType",
+        er.event_type::text as "eventTypeKind",
         er.status::text as "status", er.event_date as "eventDate",
         to_char(er.event_date, 'YYYY-MM-DD') as "dateValue", er.start_time as "startTime",
         er.duration_minutes as "durationMinutes", er.room, er.instructor, er.capacity,
@@ -424,13 +432,15 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
         coalesce(sum(er.expense), 0) as expense,
         coalesce(sum(er.potential_revenue), 0) as "potentialRevenue",
         coalesce(sum(er.participant_count), 0)::int as "participantCount",
-        count(*)::int as "eventCount"
+        count(*)::int as "eventCount",
+        count(*) filter (where er.status = 'ACTIVE'::"erp"."WorkshopEventStatus")::int as "activeEventCount",
+        count(*) filter (where er.status = 'COMPLETED'::"erp"."WorkshopEventStatus")::int as "completedEventCount"
       from event_rows er ${whereSql}
     `),
-    prisma.$queryRaw<Array<{ instructor: string | null; room: string | null }>>(Prisma.sql`
-      select distinct instructor, room from erp.workshop_events
-      where instructor is not null or room is not null
-      order by instructor nulls last, room nulls last
+    prisma.$queryRaw<Array<{ eventType: string; instructor: string | null; room: string | null }>>(Prisma.sql`
+      select distinct coalesce(category, event_type::text) as "eventType", instructor, room
+      from erp.workshop_events
+      order by "eventType", instructor nulls last, room nulls last
     `),
   ]);
 
@@ -441,6 +451,8 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     potentialRevenue: 0,
     participantCount: 0,
     eventCount: 0,
+    activeEventCount: 0,
+    completedEventCount: 0,
   };
   const revenue = permissions.canViewFinance ? toNumber(summaryRow.revenue) : 0;
   const expense = permissions.canViewFinance ? toNumber(summaryRow.expense) : 0;
@@ -463,6 +475,7 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     permissions,
     filters: { ...filters, activeCount },
     filterOptions: {
+      types: uniqueEventTypeOptions(optionRows.map((row) => row.eventType)),
       instructors: uniqueOptions(optionRows.map((row) => row.instructor)),
       rooms: uniqueOptions(optionRows.map((row) => row.room)),
     },
@@ -474,6 +487,8 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
       participantCount: formatCount(participants),
     },
     kpis: [
+      { label: "Aktiv tədbirlər", value: formatCount(toNumber(summaryRow.activeEventCount)), helper: "Cari görünüşdə aktiv olanlar", tone: "success" },
+      { label: "Tamamlanmış tədbirlər", value: formatCount(toNumber(summaryRow.completedEventCount)), helper: "Cari görünüşdə tamamlananlar", tone: "info" },
       { label: "Dövriyyə", value: financeAmount(revenue, permissions.canViewFinance), helper: "Qəbul edilmiş aktiv ödənişlər", tone: "success" },
       { label: "Xərclər", value: financeAmount(expense, permissions.canViewFinance), helper: "Tədbirlərə bağlanan xərclər", tone: expense > revenue ? "danger" : "neutral" },
       { label: "Xalis mənfəət", value: financeAmount(revenue - expense, permissions.canViewFinance), helper: permissions.canViewFinance ? `${formatAmount(Math.max(potential - revenue, 0))} gözlənilir` : "Maliyyə icazəsi tələb olunur", tone: revenue - expense >= 0 ? "success" : "danger" },
@@ -509,10 +524,12 @@ export async function getWorkshopDetailData(
   const participantWhere = Prisma.sql`where ${Prisma.join(participantConditions, " and ")}`;
   const participantOffset = (filters.page - 1) * filters.pageSize;
 
-  const [eventRows, participantRows, paymentRows, expenseRows, students, categories] = await Promise.all([
+  const [eventRows, participantRows, paymentRows, expenseRows, students, categories, eventTypeRows] = await Promise.all([
     prisma.$queryRaw<EventDbRow[]>(Prisma.sql`
       ${eventAggregateCte}
-      select er.id::text as "id", er.title, er.event_type::text as "eventType",
+      select er.id::text as "id", er.title,
+        coalesce(er.category, er.event_type::text) as "eventType",
+        er.event_type::text as "eventTypeKind",
         er.status::text as "status", er.event_date as "eventDate",
         to_char(er.event_date, 'YYYY-MM-DD') as "dateValue", er.start_time as "startTime",
         er.duration_minutes as "durationMinutes", er.room, er.instructor, er.capacity,
@@ -587,6 +604,11 @@ export async function getWorkshopDetailData(
     permissions.canManageFinance
       ? prisma.financeExpenseCategory.findMany({ orderBy: [{ isSystem: "desc" }, { name: "asc" }] })
       : Promise.resolve([]),
+    prisma.$queryRaw<Array<{ eventType: string }>>(Prisma.sql`
+      select distinct coalesce(category, event_type::text) as "eventType"
+      from erp.workshop_events
+      order by "eventType"
+    `),
   ]);
 
   const eventRow = eventRows[0];
@@ -622,6 +644,7 @@ export async function getWorkshopDetailData(
       name: category.name,
       description: category.description ?? "",
     })),
+    eventTypes: uniqueEventTypeOptions(eventTypeRows.map((row) => row.eventType)),
     participantFilters: {
       query: filters.query,
       paymentState: filters.paymentState,
@@ -652,7 +675,12 @@ function buildEventConditions(filters: NormalizedWorkshopFilters) {
       )
     )`);
   }
-  if (filters.type !== "all") conditions.push(Prisma.sql`er.event_type::text = ${filters.type}`);
+  if (filters.type !== "all") {
+    conditions.push(Prisma.sql`(
+      er.category = ${filters.type}
+      or (er.category is null and er.event_type::text = ${filters.type})
+    )`);
+  }
   if (filters.status !== "all") conditions.push(Prisma.sql`er.status::text = ${filters.status}`);
   if (filters.instructor) conditions.push(Prisma.sql`er.instructor = ${filters.instructor}`);
   if (filters.room) conditions.push(Prisma.sql`er.room = ${filters.room}`);
@@ -674,7 +702,7 @@ function getEventSortSql(sort: NormalizedWorkshopFilters["sort"]) {
     case "profit": return Prisma.sql`(er.revenue - er.expense) desc, er.event_date desc`;
     case "participants": return Prisma.sql`er.participant_count desc, er.event_date desc`;
     default:
-      return Prisma.sql`case when er.status in ('DRAFT'::"erp"."WorkshopEventStatus", 'SCHEDULED'::"erp"."WorkshopEventStatus") then 0 else 1 end, er.event_date asc, er.start_time asc`;
+      return Prisma.sql`case when er.status in ('DRAFT'::"erp"."WorkshopEventStatus", 'SCHEDULED'::"erp"."WorkshopEventStatus", 'ACTIVE'::"erp"."WorkshopEventStatus") then 0 else 1 end, er.event_date asc, er.start_time asc`;
   }
 }
 
@@ -688,6 +716,7 @@ function mapEventRow(row: EventDbRow, canViewFinance: boolean): WorkshopEventRow
     id: row.id,
     title: row.title,
     eventType: row.eventType,
+    eventTypeKind: row.eventTypeKind,
     eventTypeLabel: formatEventType(row.eventType),
     status: row.status,
     statusLabel: formatEventStatus(row.status),
@@ -813,10 +842,10 @@ function normalizeWorkshopFilters(input: WorkshopFilters): NormalizedWorkshopFil
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return {
     query: formFilterString(input.q),
-    type: input.type === "WORKSHOP" || input.type === "MASTERCLASS" ? input.type : "all",
-    status: ["DRAFT", "SCHEDULED", "COMPLETED", "CANCELLED"].includes(input.status ?? "")
+    type: normalizeEventTypeFilter(input.type),
+    status: ["DRAFT", "SCHEDULED", "ACTIVE", "COMPLETED", "CANCELLED"].includes(input.status ?? "")
       ? input.status as WorkshopStatus : "all",
-    dateRange: input.dateRange === "all" ? "all" : "month",
+    dateRange: input.dateRange === "month" ? "month" : "all",
     from: normalizeDateInput(input.from) ?? toDateInput(monthStart),
     to: normalizeDateInput(input.to) ?? toDateInput(monthEnd),
     instructor: formFilterString(input.instructor),
@@ -864,6 +893,17 @@ function uniqueOptions(values: Array<string | null>) {
     .map((value) => ({ value, label: value }));
 }
 
+function uniqueEventTypeOptions(values: string[]) {
+  return [...new Set(["WORKSHOP", "MASTERCLASS", ...values].filter(Boolean))]
+    .sort((a, b) => formatEventType(a).localeCompare(formatEventType(b), "az"))
+    .map((value) => ({ value, label: formatEventType(value) }));
+}
+
+function normalizeEventTypeFilter(value: string | undefined) {
+  const normalized = formFilterString(value);
+  return normalized && normalized !== "all" ? normalized.slice(0, 80) : "all";
+}
+
 function makePagination(page: number, pageSize: number, total: number): Pagination {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return { page, pageSize, total, totalPages, hasPrevious: page > 1, hasNext: page < totalPages };
@@ -889,12 +929,15 @@ function paymentStatePresentation(state: ParticipantPaymentState) {
 }
 
 export function formatEventType(value: WorkshopKind | string) {
-  return value === "MASTERCLASS" ? "Masterclass" : "Workshop";
+  if (value === "MASTERCLASS") return "Masterclass";
+  if (value === "WORKSHOP") return "Workshop";
+  return value;
 }
 
 function formatEventStatus(value: WorkshopStatus) {
   switch (value) {
     case "DRAFT": return "Qaralama";
+    case "ACTIVE": return "Aktiv";
     case "COMPLETED": return "Tamamlandı";
     case "CANCELLED": return "Ləğv edildi";
     default: return "Planlı";
@@ -902,7 +945,8 @@ function formatEventStatus(value: WorkshopStatus) {
 }
 
 function getEventStatusTone(value: WorkshopStatus): StatusTone {
-  if (value === "COMPLETED") return "success";
+  if (value === "ACTIVE") return "success";
+  if (value === "COMPLETED") return "info";
   if (value === "CANCELLED") return "danger";
   if (value === "DRAFT") return "warning";
   return "info";

@@ -7,8 +7,10 @@ import { useState, useTransition, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Activity,
   Banknote,
   CalendarDays,
+  CircleCheckBig,
   CircleDollarSign,
   Info,
   MapPin,
@@ -44,13 +46,10 @@ import type { WorkshopData, WorkshopEventRow } from "@/modules/workshops/queries
 
 type WorkshopAction = (formData: FormData) => unknown | Promise<unknown>;
 
-const metricIcons: LucideIcon[] = [TrendingUp, WalletCards, Banknote, UsersRound];
-const eventTypeOptions = [
-  { value: "WORKSHOP", label: "Workshop" },
-  { value: "MASTERCLASS", label: "Masterclass" },
-] as const;
+const metricIcons: LucideIcon[] = [Activity, CircleCheckBig, TrendingUp, WalletCards, Banknote, UsersRound];
 const eventStatusOptions = [
   { value: "SCHEDULED", label: "Planlı" },
+  { value: "ACTIVE", label: "Aktiv" },
   { value: "DRAFT", label: "Qaralama" },
   { value: "COMPLETED", label: "Tamamlandı" },
   { value: "CANCELLED", label: "Ləğv edildi" },
@@ -100,6 +99,7 @@ export function WorkshopWorkspace({
           ) : null}
           <CreateEventDialog
             defaultDate={data.defaultDate}
+            eventTypes={data.filterOptions.types}
             action={createWorkshopEventAction}
             disabled={!data.permissions.canManage}
           />
@@ -220,6 +220,12 @@ function CompactFilterPanel({ data }: { data: WorkshopData }) {
             Ümumi
           </Link>
           <FilterSelect
+            name="type"
+            label="Tədbir tipi"
+            value={data.filters.type}
+            options={[{ value: "all", label: "Hamısı" }, ...data.filterOptions.types]}
+          />
+          <FilterSelect
             name="status"
             label="Status"
             value={data.filters.status}
@@ -282,7 +288,7 @@ function EventRow({ event, selected, href, showFinance, onPreview }: {
           <span><strong>{event.title}</strong><small>{event.instructor}</small></span>
         </button>
       </td>
-      <td><span className={`workshop-type-tag is-${event.eventType.toLowerCase()}`}>{event.eventTypeLabel}</span></td>
+      <td><span className={`workshop-type-tag ${getEventTypeClassName(event.eventTypeKind, event.eventType)}`}>{event.eventTypeLabel}</span></td>
       <td><strong>{event.date}</strong><small>{event.time}</small></td>
       <td><span className="workshop-inline-meta"><MapPin />{event.room}</span></td>
       <td>{event.participantCount}{event.capacity ? `/${event.capacity}` : ""}</td>
@@ -395,8 +401,9 @@ function Pagination({ data }: { data: WorkshopData }) {
   );
 }
 
-function CreateEventDialog({ defaultDate, action, disabled }: {
+function CreateEventDialog({ defaultDate, eventTypes, action, disabled }: {
   defaultDate: string;
+  eventTypes: Array<{ value: string; label: string }>;
   action: WorkshopAction;
   disabled: boolean;
 }) {
@@ -439,7 +446,18 @@ function CreateEventDialog({ defaultDate, action, disabled }: {
           <FieldGroup>
             <div className="workshop-form-grid">
               <Field className="workshop-field-span-2"><FieldLabel htmlFor="event-title">Tədbir adı</FieldLabel><Input id="event-title" name="title" placeholder="Məsələn: Rəqəmsal marketinq masterclass" required /></Field>
-              <Field><FieldLabel>Növ</FieldLabel><FormSelect name="eventType" defaultValue="WORKSHOP" options={eventTypeOptions} /></Field>
+              <Field>
+                <FieldLabel>Növ / kateqoriya</FieldLabel>
+                <FormSelect
+                  name="eventType"
+                  defaultValue="WORKSHOP"
+                  options={eventTypes}
+                  searchable
+                  creatable
+                  searchPlaceholder="Tip seçin və ya yenisini yazın"
+                  createLabel="Yeni tip əlavə et"
+                />
+              </Field>
               <Field><FieldLabel>Tarix</FieldLabel><DatePicker name="eventDate" defaultValue={defaultDate} required allowClear={false} popoverPlacement="floating" /></Field>
               <Field><FieldLabel htmlFor="event-time">Saat</FieldLabel><Input id="event-time" name="startTime" defaultValue="19:00" required /></Field>
               <Field><FieldLabel>Müddət</FieldLabel><FormSelect name="durationMinutes" defaultValue="120" options={durationOptions} /></Field>
@@ -493,4 +511,11 @@ function buildWorkshopUrl(data: WorkshopData, overrides: Record<string, string>)
 
 function sortLabel(value: WorkshopData["filters"]["sort"]) {
   return ({ upcoming: "Yaxın tarix", newest: "Ən yeni", revenue: "Dövriyyə", expense: "Xərc", profit: "Mənfəət", participants: "İştirakçı" } as const)[value];
+}
+
+function getEventTypeClassName(kind: WorkshopEventRow["eventTypeKind"], value: string) {
+  if (value !== "WORKSHOP" && value !== "MASTERCLASS") return "is-custom";
+  if (kind === "MASTERCLASS") return "is-masterclass";
+  if (kind === "WORKSHOP") return "is-workshop";
+  return "is-custom";
 }

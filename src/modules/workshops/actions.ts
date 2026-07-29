@@ -71,10 +71,11 @@ const checkbox = z.preprocess(
 
 const eventSchema = z.object({
   title: z.string().trim().min(2).max(140),
-  eventType: z.enum([WorkshopEventType.WORKSHOP, WorkshopEventType.MASTERCLASS]),
+  eventType: z.string().trim().min(2).max(80).transform(normalizeEventType),
   status: z.enum([
     WorkshopEventStatus.DRAFT,
     WorkshopEventStatus.SCHEDULED,
+    WorkshopEventStatus.ACTIVE,
     WorkshopEventStatus.COMPLETED,
     WorkshopEventStatus.CANCELLED,
   ]),
@@ -166,10 +167,12 @@ async function createWorkshopEventActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = createEventSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
+  const eventType = resolveEventType(input.eventType);
   const event = await prisma.workshopEvent.create({
     data: {
       title: input.title,
-      eventType: input.eventType,
+      eventType: eventType.kind,
+      category: eventType.category,
       status: input.status,
       eventDate: parseDateInput(input.eventDate, "Tədbir tarixi"),
       startTime: input.startTime,
@@ -200,6 +203,7 @@ async function updateWorkshopEventActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = updateEventSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
+  const eventType = resolveEventType(input.eventType);
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.workshopEvent.findUnique({ where: { id: input.eventId } });
@@ -216,7 +220,8 @@ async function updateWorkshopEventActionImpl(formData: FormData) {
       where: { id: input.eventId },
       data: {
         title: input.title,
-        eventType: input.eventType,
+        eventType: eventType.kind,
+        category: eventType.category,
         status: input.status,
         eventDate: parseDateInput(input.eventDate, "Tədbir tarixi"),
         startTime: input.startTime,
@@ -795,6 +800,7 @@ async function syncParticipantPaymentSnapshot(tx: Prisma.TransactionClient, part
 function eventAuditJson(event: {
   title: string;
   eventType: WorkshopEventType;
+  category: string | null;
   status: WorkshopEventStatus;
   eventDate: Date;
   startTime: string;
@@ -803,11 +809,30 @@ function eventAuditJson(event: {
   return {
     title: event.title,
     eventType: event.eventType,
+    category: event.category,
     status: event.status,
     eventDate: event.eventDate.toISOString(),
     startTime: event.startTime,
     entryPrice: toNumber(event.entryPrice),
   } satisfies Prisma.InputJsonValue;
+}
+
+function normalizeEventType(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const builtInKey = normalized.toLocaleUpperCase("az-AZ").replace(/[\s_-]+/g, "");
+  if (builtInKey === "WORKSHOP") return "WORKSHOP";
+  if (builtInKey === "MASTERCLASS") return "MASTERCLASS";
+  return normalized;
+}
+
+function resolveEventType(value: string) {
+  if (value === "MASTERCLASS") {
+    return { kind: WorkshopEventType.MASTERCLASS, category: null };
+  }
+  if (value === "WORKSHOP") {
+    return { kind: WorkshopEventType.WORKSHOP, category: null };
+  }
+  return { kind: WorkshopEventType.WORKSHOP, category: value };
 }
 
 function participantAuditJson(participant: {

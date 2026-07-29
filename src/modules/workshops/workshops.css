@@ -293,7 +293,7 @@
 /* KPI Cards Section */
 .workshop-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -321,6 +321,8 @@
 .workshop-metric:nth-child(2) { animation-delay: 50ms; }
 .workshop-metric:nth-child(3) { animation-delay: 100ms; }
 .workshop-metric:nth-child(4) { animation-delay: 150ms; }
+.workshop-metric:nth-child(5) { animation-delay: 200ms; }
+.workshop-metric:nth-child(6) { animation-delay: 250ms; }
 
 .workshop-metric-icon {
   display: grid;
@@ -357,7 +359,7 @@
 
 .workshop-filter-form { padding: 0; }
 .workshop-filter-primary { display: grid; grid-template-columns: minmax(280px, 1fr) auto auto; gap: 12px; }
-.workshop-filter-primary-compact { grid-template-columns: repeat(2, minmax(150px, 1fr)) auto minmax(150px, 1fr) auto auto; align-items: end; }
+.workshop-filter-primary-compact { grid-template-columns: repeat(2, minmax(140px, 1fr)) auto repeat(2, minmax(140px, 1fr)) auto auto; align-items: end; }
 .workshop-filter-primary-compact .workshop-filter-field { min-width: 150px; }
 
 .workshop-all-dates-link {
@@ -917,6 +919,11 @@
 .workshop-type-tag.is-masterclass {
   color: var(--ws-violet);
   background: var(--ws-violet-soft);
+}
+
+.workshop-type-tag.is-custom {
+  color: #0f766e;
+  background: #ccfbf1;
 }
 
 .workshop-inline-meta {
@@ -1588,7 +1595,7 @@
 /* Responsive styles */
 @media (max-width: 1280px) {
   .workshop-filter-primary-compact {
-    grid-template-columns: repeat(2, minmax(120px, 1fr)) auto minmax(120px, 1fr) auto auto;
+    grid-template-columns: repeat(2, minmax(110px, 1fr)) auto repeat(2, minmax(110px, 1fr)) auto auto;
     gap: 8px;
   }
   .workshop-filter-primary-compact .workshop-filter-field { min-width: 120px; }

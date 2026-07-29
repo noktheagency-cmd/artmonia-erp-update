@@ -128,7 +128,9 @@ export function FormSelect({
   disabled,
   required,
   searchable = false,
+  creatable = false,
   searchPlaceholder = "Axtar...",
+  createLabel = "Yeni seçim əlavə et",
   "aria-label": ariaLabel,
   icon: Icon,
 }: {
@@ -145,19 +147,25 @@ export function FormSelect({
   disabled?: boolean;
   required?: boolean;
   searchable?: boolean;
+  creatable?: boolean;
   searchPlaceholder?: string;
+  createLabel?: string;
   "aria-label"?: string;
   icon?: React.ComponentType<{ className?: string; size?: number }>;
 }) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [createdOptions, setCreatedOptions] = React.useState<SelectOption[]>([]);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const items = React.useMemo(
-    () =>
-      emptyLabel
+    () => {
+      const baseItems = emptyLabel
         ? [{ value: emptyValue, label: emptyLabel }, ...options]
-        : options,
-    [emptyLabel, emptyValue, options]
+        : [...options];
+      const knownValues = new Set(baseItems.map((item) => item.value));
+      return [...baseItems, ...createdOptions.filter((item) => !knownValues.has(item.value))];
+    },
+    [createdOptions, emptyLabel, emptyValue, options]
   );
   const normalizedDefaultValue = normalizeSelectValue(defaultValue, emptyValue);
   const controlledValue =
@@ -166,6 +174,7 @@ export function FormSelect({
   const currentValue = controlledValue ?? internalValue;
   const displayLabel =
     items.find((item) => item.value === currentValue)?.label ??
+    (currentValue !== emptyValue ? currentValue : undefined) ??
     placeholder ??
     emptyLabel ??
     "Seçin";
@@ -180,6 +189,15 @@ export function FormSelect({
       normalizeSearchText(`${item.label} ${item.searchText ?? ""}`).includes(query)
     );
   }, [items, searchQuery]);
+  const createValue = searchQuery.replace(/\s+/g, " ").trim();
+  const normalizedCreateValue = normalizeSearchText(createValue);
+  const canCreate =
+    creatable &&
+    createValue.length >= 2 &&
+    !items.some((item) =>
+      normalizeSearchText(item.value) === normalizedCreateValue ||
+      normalizeSearchText(item.label) === normalizedCreateValue
+    );
 
   React.useEffect(() => {
     if (!open || !searchable) {
@@ -194,6 +212,9 @@ export function FormSelect({
   }, [open, searchable]);
 
   function handleValueChange(nextValue: string) {
+    if (creatable && !items.some((item) => item.value === nextValue)) {
+      setCreatedOptions((current) => [...current, { value: nextValue, label: nextValue }]);
+    }
     if (controlledValue === undefined) {
       setInternalValue(nextValue);
     }
@@ -239,16 +260,22 @@ export function FormSelect({
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
+              maxLength={creatable ? 80 : undefined}
             />
           </div>
         ) : null}
-        {filteredItems.length > 0 ? (
+        {filteredItems.length > 0 || canCreate ? (
           <SelectGroup>
             {filteredItems.map((item) => (
               <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
                 {item.label}
               </SelectItem>
             ))}
+            {canCreate ? (
+              <SelectItem key={`create-${createValue}`} value={createValue}>
+                {createLabel}: “{createValue}”
+              </SelectItem>
+            ) : null}
           </SelectGroup>
         ) : (
           <div className="ui-select-empty-state">Nəticə tapılmadı</div>

@@ -70,15 +70,11 @@ const paymentMethodOptions = [
 ] as const;
 const eventStatusOptions = [
   { value: "SCHEDULED", label: "Planlı" },
+  { value: "ACTIVE", label: "Aktiv" },
   { value: "DRAFT", label: "Qaralama" },
   { value: "COMPLETED", label: "Tamamlandı" },
   { value: "CANCELLED", label: "Ləğv edildi" },
 ] as const;
-const eventTypeOptions = [
-  { value: "WORKSHOP", label: "Workshop" },
-  { value: "MASTERCLASS", label: "Masterclass" },
-] as const;
-
 export function WorkshopDetailWorkspace({
   data,
   actions,
@@ -100,7 +96,7 @@ export function WorkshopDetailWorkspace({
         <div>
           <div className="workshop-detail-title-row">
             <h1>{event.title}</h1>
-            <span className={`workshop-type-tag is-${event.eventType.toLowerCase()}`}>{event.eventTypeLabel}</span>
+            <span className={`workshop-type-tag ${getEventTypeClassName(event.eventTypeKind, event.eventType)}`}>{event.eventTypeLabel}</span>
             <StatusChip tone={event.statusTone}>{event.statusLabel}</StatusChip>
           </div>
           <div className="workshop-detail-meta">
@@ -460,7 +456,18 @@ function EditEventDialog({ data, action }: { data: WorkshopDetailData; action: W
       <input type="hidden" name="eventId" value={event.id} />
       <FieldGroup><div className="workshop-form-grid">
         <Field className="workshop-field-span-2"><FieldLabel>Ad</FieldLabel><Input name="title" defaultValue={event.title} required /></Field>
-        <Field><FieldLabel>Növ</FieldLabel><FormSelect name="eventType" defaultValue={event.eventType} options={eventTypeOptions} /></Field>
+        <Field>
+          <FieldLabel>Növ / kateqoriya</FieldLabel>
+          <FormSelect
+            name="eventType"
+            defaultValue={event.eventType}
+            options={data.eventTypes}
+            searchable
+            creatable
+            searchPlaceholder="Tip seçin və ya yenisini yazın"
+            createLabel="Yeni tip əlavə et"
+          />
+        </Field>
         <Field><FieldLabel>Tarix</FieldLabel><DatePicker name="eventDate" defaultValue={event.dateValue} required allowClear={false} popoverPlacement="floating" /></Field>
         <Field><FieldLabel>Saat</FieldLabel><Input name="startTime" defaultValue={event.time} required /></Field>
         <Field><FieldLabel>Müddət</FieldLabel><Input name="durationMinutes" type="number" defaultValue={event.durationMinutes} required /></Field>
@@ -487,6 +494,13 @@ function EditParticipantDialog({ row, action }: { row: WorkshopParticipantRow; a
       </div><Field className="workshop-check-field"><label><input type="checkbox" name="isGift" defaultChecked={row.isGift} /><Gift />Hədiyyə iştirakçı</label></Field><Field><FieldLabel>Qeyd</FieldLabel><textarea name="note" defaultValue={row.note} rows={3} /></Field></FieldGroup>
     </ActionDialog>
   );
+}
+
+function getEventTypeClassName(kind: "WORKSHOP" | "MASTERCLASS", value: string) {
+  if (value !== "WORKSHOP" && value !== "MASTERCLASS") return "is-custom";
+  if (kind === "MASTERCLASS") return "is-masterclass";
+  if (kind === "WORKSHOP") return "is-workshop";
+  return "is-custom";
 }
 
 function EventDangerDialog({ eventId, action }: { eventId: string; action: WorkshopAction }) {
