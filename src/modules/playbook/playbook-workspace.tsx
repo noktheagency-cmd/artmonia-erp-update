@@ -34,12 +34,14 @@ import {
   type ChangeEvent,
   type DragEvent,
   type FormEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { cx } from "@/components/ui/cx";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
 import { notifyCaughtError } from "@/lib/app-notifications";
@@ -50,6 +52,7 @@ import {
   type PlaybookDepartment,
   type PlaybookDocument,
   type PlaybookIconName,
+  type PlaybookSection,
 } from "@/modules/playbook/playbook-types";
 
 const STORAGE_BUCKET = "playbook-documents";
@@ -99,6 +102,26 @@ const supportedMimeTypes: Record<string, string> = {
   PPTX: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
+const sectionOptions: Record<PlaybookSection, {
+  label: string;
+  description: string;
+  mapDescription: string;
+  icon: LucideIcon;
+}> = {
+  GUIDELINE: {
+    label: "Guideline",
+    description: "Hazırkı şirkət məlumatları, qaydalar və proseslər",
+    mapDescription: "Şirkətin aktiv bilik sahələri",
+    icon: BookOpen,
+  },
+  ARCHIVE: {
+    label: "Arxiv",
+    description: "Əməkdaşlıqlar, hazırlanmış müqavilələr və tamamlanan sənədlər",
+    mapDescription: "Tamamlanan işlərin sənəd xəritəsi",
+    icon: Archive,
+  },
+};
+
 type DeleteTarget =
   | { type: "department"; department: PlaybookDepartment }
   | { type: "document"; document: PlaybookDocument };
@@ -107,6 +130,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [departments, setDepartments] = useState(initialData.departments);
   const [documents, setDocuments] = useState(initialData.documents);
+  const [activeSection, setActiveSection] = useState<PlaybookSection>("GUIDELINE");
   const [activeDepartment, setActiveDepartment] = useState("all");
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -133,10 +157,20 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
     [departments]
   );
 
+  const visibleDepartments = useMemo(
+    () => departments.filter((department) => department.section === activeSection),
+    [activeSection, departments],
+  );
+
+  const sectionDocuments = useMemo(() => {
+    const visibleDepartmentIds = new Set(visibleDepartments.map((department) => department.id));
+    return documents.filter((document) => visibleDepartmentIds.has(document.departmentId));
+  }, [documents, visibleDepartments]);
+
   const filteredDocuments = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("az");
 
-    return documents.filter((document) => {
+    return sectionDocuments.filter((document) => {
       const matchesDepartment = activeDepartment === "all" || document.departmentId === activeDepartment;
       const departmentName = departmentById.get(document.departmentId)?.name ?? "";
       const matchesQuery =
@@ -147,13 +181,14 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
 
       return matchesDepartment && matchesQuery;
     });
-  }, [activeDepartment, departmentById, documents, query]);
+  }, [activeDepartment, departmentById, query, sectionDocuments]);
 
   const refreshFromSupabase = useCallback(async () => {
     const [departmentResult, documentResult] = await Promise.all([
       supabase
         .from("playbook_departments")
         .select("*")
+        .order("section", { ascending: true })
         .order("position", { ascending: true })
         .order("created_at", { ascending: true }),
       supabase
@@ -199,7 +234,15 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
   }
 
   function openFilePicker() {
-    if (!isUploading && departments.length) fileInputRef.current?.click();
+    if (!isUploading && visibleDepartments.length) fileInputRef.current?.click();
+  }
+
+  function selectSection(section: PlaybookSection) {
+    setActiveSection(section);
+    setActiveDepartment("all");
+    setDrawerOpen(false);
+    setEditingDocument(null);
+    setQuery("");
   }
 
   function openCreateDepartment() {
@@ -242,9 +285,9 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
   }
 
   async function addFiles(files: File[]) {
-    if (isUploading || !departments.length) return;
+    if (isUploading || !visibleDepartments.length) return;
 
-    const departmentId = activeDepartment === "all" ? departments[0].id : activeDepartment;
+    const departmentId = activeDepartment === "all" ? visibleDepartments[0].id : activeDepartment;
     const validFiles = files.flatMap((file) => {
       const extension = getFileExtension(file.name);
       if (!extension || !supportedMimeTypes[extension]) return [];
@@ -344,10 +387,11 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
           .insert({
             name,
             slug: createUniqueSlug(name, departments),
+            section: activeSection,
             color: selectedColor.color,
             soft_color: selectedColor.softColor,
             icon: newIcon,
-            position: Math.max(0, ...departments.map((department) => department.position)) + 10,
+            position: Math.max(0, ...visibleDepartments.map((department) => department.position)) + 10,
           })
           .select("*")
           .single();
@@ -523,7 +567,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
       <header className="playbook-header">
         <div>
           <h1 id="playbook-title">Şirkət Playbook-u</h1>
-          <p>Komandanın bildiyi hər şey, bir yerdə.</p>
+          <p>Şirkətin aktual bilikləri və tamamlanmış işləri, bir yerdə.</p>
         </div>
         {canManage ? <div className="playbook-header-actions">
           <button className="playbook-button playbook-button-primary" type="button" onClick={openCreateDepartment}>
@@ -537,9 +581,29 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
         </div> : null}
       </header>
 
+      <nav className="playbook-section-switcher" aria-label="Playbook bölməsi">
+        {(Object.entries(sectionOptions) as [PlaybookSection, (typeof sectionOptions)[PlaybookSection]][]).map(([section, option]) => {
+          const SectionIcon = option.icon;
+          const departmentCount = departments.filter((department) => department.section === section).length;
+          return (
+            <button
+              className={cx("playbook-section-button", activeSection === section && "is-active")}
+              type="button"
+              key={section}
+              onClick={() => selectSection(section)}
+              aria-current={activeSection === section ? "page" : undefined}
+            >
+              <span><SectionIcon size={19} /></span>
+              <span><strong>{option.label}</strong><small>{option.description}</small></span>
+              <em>{departmentCount} departament</em>
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="playbook-department-bar" aria-label="Departament filtri">
         <DepartmentTab active={activeDepartment === "all"} color="#146cff" icon={Grid2X2} label="Hamısı" onClick={() => setActiveDepartment("all")} />
-        {departments.map((department) => (
+        {visibleDepartments.map((department) => (
           <DepartmentTab
             key={department.id}
             active={activeDepartment === department.id}
@@ -562,7 +626,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
         <article className="playbook-library-panel">
           <div className="playbook-library-head">
             <div>
-              <h2>Son sənədlər</h2>
+              <h2>{sectionOptions[activeSection].label} sənədləri</h2>
               <span>{filteredDocuments.length} sənəd göstərilir</span>
             </div>
             <label className="playbook-search">
@@ -571,7 +635,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
             </label>
           </div>
 
-          <div className="playbook-table" role="table" aria-label="Playbook sənədləri">
+          <div className="playbook-table" role="table" aria-label={`${sectionOptions[activeSection].label} sənədləri`}>
             <div className="playbook-table-header" role="row">
               <span>Sənəd adı</span><span>Departament</span><span>Növ</span><span>Yeniləndi</span><span />
             </div>
@@ -590,13 +654,13 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
             ) : (
               <div className="playbook-empty-state">
                 <Archive size={26} />
-                <strong>{documents.length ? "Sənəd tapılmadı" : "İlk sənədi əlavə edin"}</strong>
-                <span>{documents.length ? "Axtarışı və ya departament filtrini dəyişin." : "PDF və digər şirkət sənədləri burada görünəcək."}</span>
+                <strong>{sectionDocuments.length ? "Sənəd tapılmadı" : `İlk ${sectionOptions[activeSection].label} sənədini əlavə edin`}</strong>
+                <span>{sectionDocuments.length ? "Axtarışı və ya departament filtrini dəyişin." : activeSection === "ARCHIVE" ? "Əməkdaşlıqlar, müqavilələr və tamamlanmış işlər burada görünəcək." : "Aktual şirkət məlumatları və qaydalar burada görünəcək."}</span>
               </div>
             )}
           </div>
 
-          {canManage ? <button className="playbook-dropzone" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !departments.length}>
+          {canManage ? <button className="playbook-dropzone" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !visibleDepartments.length}>
             <span>{isUploading ? <LoaderCircle className="playbook-spin" size={22} /> : <UploadCloud size={22} />}</span>
             <strong>{isUploading ? "Fayllar Supabase-ə yüklənir..." : "Sənədləri bura sürükləyin və ya yükləmək üçün klikləyin"}</strong>
             <small>PDF, DOCX, XLSX və PPTX · maksimum 6 MB</small>
@@ -606,13 +670,13 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
         <aside className="playbook-side-stack">
           <article className="playbook-map-panel">
             <div className="playbook-panel-title">
-              <div><h2>Playbook xəritəsi</h2><p>Şirkətin bilik sahələri</p></div>
+              <div><h2>{sectionOptions[activeSection].label} xəritəsi</h2><p>{sectionOptions[activeSection].mapDescription}</p></div>
               <Sparkles size={18} />
             </div>
             <div className="playbook-map-list">
-              {departments.map((department) => {
+              {visibleDepartments.map((department) => {
                 const Icon = iconMap[department.icon];
-                const count = documents.filter((document) => document.departmentId === department.id).length;
+                const count = sectionDocuments.filter((document) => document.departmentId === department.id).length;
                 return (
                   <div className="playbook-map-item" key={department.id}>
                     <button type="button" onClick={() => setActiveDepartment(department.id)}>
@@ -625,10 +689,10 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
                 );
               })}
             </div>
-            <div className="playbook-map-total"><span>Cəmi</span><strong>{documents.length} sənəd</strong></div>
+            <div className="playbook-map-total"><span>Cəmi</span><strong>{sectionDocuments.length} sənəd</strong></div>
           </article>
 
-          {canManage ? <button className="playbook-quick-upload" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !departments.length}>
+          {canManage ? <button className="playbook-quick-upload" type="button" onClick={openFilePicker} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} disabled={isUploading || !visibleDepartments.length}>
             <span>{isUploading ? <LoaderCircle className="playbook-spin" size={25} /> : <UploadCloud size={25} />}</span>
             <strong>{isUploading ? "Yüklənir..." : "Sənəd əlavə et"}</strong>
             <small>Faylı seçin və ya bura buraxın</small>
@@ -638,10 +702,10 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
       </div>
 
       {drawerOpen ? (
-        <div className="playbook-drawer-backdrop" role="presentation">
+        <BodyPortal><div className="playbook-drawer-backdrop" role="presentation">
           <aside className="playbook-drawer" role="dialog" aria-modal="true" aria-labelledby="department-drawer-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="playbook-drawer-head">
-              <div><span><FolderKanban size={17} /></span><h2 id="department-drawer-title">{drawerMode === "edit" ? "Departamenti redaktə et" : "Yeni departament"}</h2></div>
+              <div><span><FolderKanban size={17} /></span><h2 id="department-drawer-title">{drawerMode === "edit" ? "Departamenti redaktə et" : `Yeni ${sectionOptions[activeSection].label} departamenti`}</h2></div>
               <button type="button" onClick={() => setDrawerOpen(false)} aria-label="Pəncərəni bağla" disabled={isMutating}><X size={19} /></button>
             </div>
             <form onSubmit={saveDepartment}>
@@ -670,7 +734,7 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
 
               <div className="playbook-drawer-preview">
                 <span style={{ color: colorOptions[newColorIndex].color, background: colorOptions[newColorIndex].softColor }}>{(() => { const PreviewIcon = iconMap[newIcon]; return <PreviewIcon size={20} />; })()}</span>
-                <div><small>Ön baxış</small><strong>{newName || "Yeni departament"}</strong></div>
+                <div><small>{sectionOptions[activeSection].label} · Ön baxış</small><strong>{newName || "Yeni departament"}</strong></div>
               </div>
 
               <div className="playbook-drawer-actions">
@@ -685,11 +749,11 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
               </div>
             </form>
           </aside>
-        </div>
+        </div></BodyPortal>
       ) : null}
 
       {editingDocument ? (
-        <div className="playbook-modal-backdrop" role="presentation">
+        <BodyPortal><div className="playbook-modal-backdrop" role="presentation">
           <section className="playbook-document-modal" role="dialog" aria-modal="true" aria-labelledby="document-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="playbook-modal-head">
               <div><span><FileText size={18} /></span><div><h2 id="document-editor-title">Sənədi redaktə et</h2><p>{editingDocument.originalName}</p></div></div>
@@ -697,8 +761,8 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
             </div>
             <form onSubmit={saveDocument}>
               <label className="playbook-field"><span>Sənəd adı</span><input value={documentName} onChange={(event) => setDocumentName(event.target.value)} maxLength={240} /></label>
-              <label className="playbook-field"><span>Departament</span><select value={documentDepartmentId} onChange={(event) => setDocumentDepartmentId(event.target.value)}>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
-              <div className="playbook-document-meta"><span>{editingDocument.extension}</span><span>{formatFileSize(editingDocument.sizeBytes)}</span><span>{formatRelativeDate(editingDocument.updatedAt)}</span></div>
+              <label className="playbook-field"><span>Departament</span><select value={documentDepartmentId} onChange={(event) => setDocumentDepartmentId(event.target.value)}>{visibleDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
+              <div className="playbook-document-meta"><span>{editingDocument.extension}</span><span>{formatFileSize(editingDocument.sizeBytes)}</span><span suppressHydrationWarning>{formatRelativeDate(editingDocument.updatedAt)}</span></div>
               <div className="playbook-modal-actions">
                 <button className="playbook-danger-button" type="button" onClick={() => setDeleteTarget({ type: "document", document: editingDocument })}><Trash2 size={14} /> Sil</button>
                 <span />
@@ -707,11 +771,11 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
               </div>
             </form>
           </section>
-        </div>
+        </div></BodyPortal>
       ) : null}
 
       {previewDocument ? (
-        <div className="playbook-modal-backdrop playbook-preview-backdrop" role="presentation">
+        <BodyPortal><div className="playbook-modal-backdrop playbook-preview-backdrop" role="presentation">
           <section className="playbook-preview-modal" role="dialog" aria-modal="true" aria-labelledby="playbook-preview-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="playbook-modal-head">
               <div><span><FileText size={18} /></span><div><h2 id="playbook-preview-title">Sənədə baxış</h2><p>{previewDocument.name}</p></div></div>
@@ -745,23 +809,36 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
               )}
             </div>
           </section>
-        </div>
+        </div></BodyPortal>
       ) : null}
 
       {deleteTarget ? (
-        <div className="playbook-confirm-backdrop" role="presentation">
+        <BodyPortal><div className="playbook-confirm-backdrop" role="presentation">
           <section className="playbook-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="playbook-confirm-title" onMouseDown={(event) => event.stopPropagation()}>
             <span className="playbook-confirm-icon"><AlertTriangle size={22} /></span>
             <h2 id="playbook-confirm-title">Silməni təsdiqləyin</h2>
             <p>{deleteTarget.type === "department" ? `${deleteTarget.department.name} və ona aid bütün sənədlər silinəcək.` : `${deleteTarget.document.name} həm siyahıdan, həm də Storage-dan silinəcək.`}</p>
             <div><button type="button" onClick={() => setDeleteTarget(null)} disabled={isMutating}>Ləğv et</button><button type="button" onClick={() => void confirmDelete()} disabled={isMutating}>{isMutating ? <LoaderCircle className="playbook-spin" size={15} /> : <Trash2 size={15} />} Sil</button></div>
           </section>
-        </div>
+        </div></BodyPortal>
       ) : null}
 
       <div className={cx("playbook-toast", toast && "is-visible")} role="status" aria-live="polite"><Check size={16} />{toast}</div>
     </section>
   );
+}
+
+function BodyPortal({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  return createPortal(children, document.body);
 }
 
 function DepartmentTab({ active, color, icon: Icon, label, onClick }: { active: boolean; color: string; icon: LucideIcon; label: string; onClick: () => void }) {
@@ -781,7 +858,7 @@ function DocumentRow({ document, department, onPreview, onDownload, onMenu, canM
       </div>
       <div role="cell">{department ? <span className="playbook-department-tag" style={{ color: department.color, background: department.softColor }}>{department.name}</span> : "—"}</div>
       <div className="playbook-document-kind" role="cell">{document.extension}{document.pageCount ? ` · ${document.pageCount} səhifə` : ""}</div>
-      <div className="playbook-document-date" role="cell">{formatRelativeDate(document.updatedAt)}</div>
+      <div className="playbook-document-date" role="cell" suppressHydrationWarning>{formatRelativeDate(document.updatedAt)}</div>
       <div className="playbook-row-actions">
         <button type="button" className="playbook-row-menu" aria-label={`${document.name} sənədini endir`} onClick={onDownload}><Download size={16} /></button>
         {canManage ? <button type="button" className="playbook-row-menu" aria-label={`${document.name} sənədini redaktə et`} onClick={onMenu}><MoreHorizontal size={18} /></button> : null}

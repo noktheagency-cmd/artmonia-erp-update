@@ -6,6 +6,7 @@ export type Database = {
           id: string;
           name: string;
           slug: string;
+          section: string;
           color: string;
           soft_color: string;
           icon: string;
@@ -19,6 +20,7 @@ export type Database = {
           id?: string;
           name: string;
           slug: string;
+          section?: string;
           color: string;
           soft_color: string;
           icon: string;
@@ -32,6 +34,7 @@ export type Database = {
           id?: string;
           name?: string;
           slug?: string;
+          section?: string;
           color?: string;
           soft_color?: string;
           icon?: string;

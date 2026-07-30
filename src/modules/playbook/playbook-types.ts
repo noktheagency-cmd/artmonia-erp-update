@@ -13,10 +13,13 @@ export type PlaybookIconName =
   | "shield"
   | "support";
 
+export type PlaybookSection = "GUIDELINE" | "ARCHIVE";
+
 export type PlaybookDepartment = {
   id: string;
   name: string;
   slug: string;
+  section: PlaybookSection;
   color: string;
   softColor: string;
   icon: PlaybookIconName;
@@ -46,7 +49,7 @@ export type PlaybookData = {
 
 type DepartmentProjection = Pick<
   PlaybookDepartmentRow,
-  "id" | "name" | "slug" | "color" | "soft_color" | "icon" | "position" | "created_at" | "updated_at"
+  "id" | "name" | "slug" | "section" | "color" | "soft_color" | "icon" | "position" | "created_at" | "updated_at"
 >;
 
 type DocumentProjection = Pick<
@@ -59,6 +62,7 @@ export function mapDepartmentRow(row: DepartmentProjection): PlaybookDepartment 
     id: row.id,
     name: row.name,
     slug: row.slug,
+    section: row.section as PlaybookSection,
     color: row.color,
     softColor: row.soft_color,
     icon: row.icon as PlaybookIconName,

@@ -63,6 +63,13 @@ const secondaryNavItems: NavItem[] = [
   { href: "/settings/roles" as Route, label: "Rol və icazələr", icon: Settings2, requiredPermissions: ["auth.role.read"] },
 ];
 
+const dashboardNavItem: NavItem = {
+  href: "/dashboard",
+  label: "Panel",
+  icon: Gauge,
+  requiredPermissions: [],
+};
+
 export function AppShell({
   children,
   currentUser,
@@ -95,6 +102,23 @@ export function AppShell({
   const isVisible = (item: NavItem) => item.requiredPermissions.some((permission) => permissionSet.has(permission));
   const visiblePrimaryNavItems = primaryNavItems.filter(isVisible);
   const visibleSecondaryNavItems = secondaryNavItems.filter(isVisible);
+  const mobileNavCandidates = [
+    dashboardNavItem,
+    ...visiblePrimaryNavItems,
+    ...visibleSecondaryNavItems,
+  ];
+  const defaultMobileQuickNavItems = mobileNavCandidates.slice(0, 4);
+  const activeMobileNavItem = mobileNavCandidates.find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+  );
+  const mobileQuickNavItems =
+    activeMobileNavItem &&
+    !defaultMobileQuickNavItems.some((item) => item.href === activeMobileNavItem.href)
+      ? [...defaultMobileQuickNavItems.slice(0, 3), activeMobileNavItem]
+      : defaultMobileQuickNavItems;
+  const isMobileMoreActive = !mobileQuickNavItems.some(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+  );
   const isMobileSidebarOpen = mobileSidebarPathname === pathname;
 
   useEffect(() => {
@@ -252,6 +276,26 @@ export function AppShell({
           <Image src="/logo.png" alt="" width={30} height={30} priority />
           <span>Artmonia ERP</span>
         </Link>
+        <button
+          type="button"
+          className="mobile-shell-account"
+          aria-label={`${currentUser.fullName} hesab menyusunu aç`}
+          aria-controls="primary-sidebar"
+          aria-expanded={isMobileSidebarOpen}
+          onClick={() => setMobileSidebarPathname(pathname)}
+        >
+          {currentUser.profilePhotoUrl ? (
+            <Image
+              src={currentUser.profilePhotoUrl}
+              alt=""
+              width={34}
+              height={34}
+              unoptimized
+            />
+          ) : (
+            <span>{initials || "A"}</span>
+          )}
+        </button>
       </header>
 
       <button
@@ -383,6 +427,38 @@ export function AppShell({
           </form>
         </div>
       </aside>
+
+      <nav className="mobile-bottom-nav" aria-label="Sürətli naviqasiya">
+        {mobileQuickNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cx("mobile-bottom-nav-item", active && "is-active")}
+              aria-current={active ? "page" : undefined}
+              onClick={(event) => handleNavClick(item.href, event)}
+              onPointerDown={(event) => handleNavPointerDown(item.href, event)}
+              prefetch={false}
+            >
+              <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+        <button
+          className={cx("mobile-bottom-nav-item", isMobileMoreActive && "is-active")}
+          type="button"
+          aria-label="Bütün bölmələri aç"
+          aria-expanded={isMobileSidebarOpen}
+          onClick={() => setMobileSidebarPathname(pathname)}
+        >
+          <Menu size={20} strokeWidth={isMobileMoreActive ? 2.2 : 1.8} />
+          <span>Daha çox</span>
+        </button>
+      </nav>
 
       <main
         className="erp-frame"

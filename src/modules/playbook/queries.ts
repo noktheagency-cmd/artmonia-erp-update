@@ -14,7 +14,8 @@ export async function getPlaybookData(): Promise<PlaybookData> {
   const [departmentResult, documentResult] = await Promise.all([
     supabase
       .from("playbook_departments")
-      .select("id, name, slug, color, soft_color, icon, position, created_at, updated_at")
+      .select("id, name, slug, section, color, soft_color, icon, position, created_at, updated_at")
+      .order("section", { ascending: true })
       .order("position", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase

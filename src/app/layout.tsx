@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./mobile-responsive.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { AppNotifications } from "@/components/ui/app-notifications";
@@ -17,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html lang="az" className={cn("font-sans", geist.variable)}>
       <body>
         {children}
         <AppNotifications />

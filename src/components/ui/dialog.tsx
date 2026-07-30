@@ -38,10 +38,10 @@ export const DialogContent = React.forwardRef<
       }}
       {...props}
     >
-      {children}
-      <DialogPrimitive.Close className="ui-dialog-close" aria-label="Close">
+      <DialogPrimitive.Close className="ui-dialog-close" aria-label="Bağla">
         <X />
       </DialogPrimitive.Close>
+      {children}
     </DialogPrimitive.Content>
   </DialogPortal>
 ));

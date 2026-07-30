@@ -3,7 +3,12 @@ import { cx } from "@/components/ui/cx";
 
 export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="ui-table-container">
+    <div
+      className="ui-table-container"
+      role="region"
+      aria-label={props["aria-label"] ? `${props["aria-label"]} — üfüqi sürüşdürülə bilər` : "Məlumat cədvəli — üfüqi sürüşdürülə bilər"}
+      tabIndex={0}
+    >
       <table className={cx("ui-table", className)} {...props} />
     </div>
   );

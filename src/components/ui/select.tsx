@@ -4,6 +4,13 @@ import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { cx } from "@/components/ui/cx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 
 export type SelectOption = {
@@ -157,6 +164,7 @@ export function FormSelect({
   const [searchQuery, setSearchQuery] = React.useState("");
   const [createdOptions, setCreatedOptions] = React.useState<SelectOption[]>([]);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const isMobileSheet = useMobileSelectSheet();
   const items = React.useMemo(
     () => {
       const baseItems = emptyLabel
@@ -198,9 +206,11 @@ export function FormSelect({
       normalizeSearchText(item.value) === normalizedCreateValue ||
       normalizeSearchText(item.label) === normalizedCreateValue
     );
+  const shouldAutoFocusSearch =
+    searchable || (isMobileSheet && (items.length >= 8 || creatable));
 
   React.useEffect(() => {
-    if (!open || !searchable) {
+    if (!open || !shouldAutoFocusSearch) {
       return;
     }
 
@@ -209,7 +219,7 @@ export function FormSelect({
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
-  }, [open, searchable]);
+  }, [open, shouldAutoFocusSearch]);
 
   function handleValueChange(nextValue: string) {
     if (creatable && !items.some((item) => item.value === nextValue)) {
@@ -228,6 +238,110 @@ export function FormSelect({
     if (!nextOpen) {
       setSearchQuery("");
     }
+  }
+
+  if (isMobileSheet) {
+    const showMobileSearch = searchable || items.length >= 8 || creatable;
+    const sheetTitle =
+      ariaLabel ??
+      (placeholder && placeholder !== "Seçin" ? placeholder : undefined) ??
+      "Seçim edin";
+
+    return (
+      <>
+        <input
+          type="hidden"
+          name={name}
+          value={currentValue === emptyValue ? "" : currentValue}
+        />
+        <button
+          className={cx("ui-select-trigger", className)}
+          type="button"
+          data-state={open ? "open" : "closed"}
+          aria-label={ariaLabel}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          data-required={required || undefined}
+          disabled={disabled}
+          onClick={() => handleOpenChange(true)}
+        >
+          <span className="ui-select-trigger-content">
+            {Icon && <Icon className="ui-select-trigger-inline-icon" size={14} />}
+            <span className="ui-select-display-value">{displayLabel}</span>
+          </span>
+          <ChevronDown className="ui-select-icon" />
+        </button>
+
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          <DialogContent className={cx("ui-mobile-select-sheet", contentClassName)}>
+            <div className="ui-mobile-sheet-handle" aria-hidden="true" />
+            <DialogHeader className="ui-mobile-select-header">
+              <DialogTitle>{sheetTitle}</DialogTitle>
+              <DialogDescription className="sr-only">
+                Siyahıda axtarın və bir seçim edin.
+              </DialogDescription>
+            </DialogHeader>
+
+            {showMobileSearch ? (
+              <label className="ui-mobile-select-search">
+                <Search aria-hidden="true" size={18} />
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder={searchPlaceholder}
+                  aria-label={searchPlaceholder}
+                  maxLength={creatable ? 80 : undefined}
+                />
+              </label>
+            ) : null}
+
+            <div className="ui-mobile-select-options" role="listbox" aria-label={sheetTitle}>
+              {filteredItems.map((item) => {
+                const checked = item.value === currentValue;
+
+                return (
+                  <button
+                    className="ui-mobile-select-option"
+                    type="button"
+                    role="option"
+                    aria-selected={checked}
+                    key={item.value}
+                    disabled={item.disabled}
+                    onClick={() => {
+                      handleValueChange(item.value);
+                      handleOpenChange(false);
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    {checked ? <Check aria-hidden="true" size={19} /> : null}
+                  </button>
+                );
+              })}
+
+              {canCreate ? (
+                <button
+                  className="ui-mobile-select-option is-create"
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  onClick={() => {
+                    handleValueChange(createValue);
+                    handleOpenChange(false);
+                  }}
+                >
+                  <span>{createLabel}: “{createValue}”</span>
+                </button>
+              ) : null}
+
+              {filteredItems.length === 0 && !canCreate ? (
+                <div className="ui-mobile-select-empty">Nəticə tapılmadı</div>
+              ) : null}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
   }
 
   return (
@@ -302,4 +416,20 @@ function normalizeSearchText(value: string) {
     .replace(/[ö]/g, "o")
     .replace(/[ü]/g, "u")
     .trim();
+}
+
+function useMobileSelectSheet() {
+  const [matches, setMatches] = React.useState(false);
+
+  React.useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const sync = () => setMatches(query.matches);
+
+    sync();
+    query.addEventListener("change", sync);
+
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  return matches;
 }
