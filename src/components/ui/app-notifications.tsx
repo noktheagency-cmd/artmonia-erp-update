@@ -45,41 +45,10 @@ export function AppNotifications() {
       setItems((current) => [...current.slice(-2), item]);
     }
 
-    function handleWindowError(event: ErrorEvent) {
-      if (!event.error && !event.message) return;
-      addNotification(
-        new CustomEvent(APP_NOTIFICATION_EVENT, {
-          detail: {
-            title: "Gözlənilməz xəta",
-            message: "Səhifədə gözlənilməz problem yarandı. Məlumatlarınız qorunur.",
-            tone: "error",
-            duration: 7000,
-          },
-        })
-      );
-    }
-
-    function handleUnhandledRejection() {
-      addNotification(
-        new CustomEvent(APP_NOTIFICATION_EVENT, {
-          detail: {
-            title: "Əməliyyat yarımçıq qaldı",
-            message: "Sorğu tamamlanmadı. Yenidən cəhd edə bilərsiniz.",
-            tone: "error",
-            duration: 7000,
-          },
-        })
-      );
-    }
-
     window.addEventListener(APP_NOTIFICATION_EVENT, addNotification);
-    window.addEventListener("error", handleWindowError);
-    window.addEventListener("unhandledrejection", handleUnhandledRejection);
 
     return () => {
       window.removeEventListener(APP_NOTIFICATION_EVENT, addNotification);
-      window.removeEventListener("error", handleWindowError);
-      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
   }, []);
 
