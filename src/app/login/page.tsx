@@ -42,8 +42,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <section className={styles.panel} aria-label="Daxil ol">
         <div className={styles.panelContent}>
           <div className={styles.heading}>
-            <h1>Xoş gəlmisiniz</h1>
-            <p>Artmonia ERP hesabınıza daxil olun.</p>
+            <h1>
+              <span className={styles.headingTitle}>Xoş gəlmisiniz</span>
+            </h1>
+            <p className={styles.motto}>Xəyal etdiyin hər şey gerçəkdir</p>
           </div>
 
           <LoginForm next={next} />

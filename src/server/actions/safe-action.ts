@@ -8,6 +8,10 @@ import type {
   ActionFailure,
   ActionResult,
 } from "@/lib/action-result";
+import {
+  getPublicValidationMessage,
+  isUuidDatabaseError,
+} from "@/server/actions/validation-errors";
 
 export class PublicActionError extends Error {
   constructor(
@@ -45,12 +49,20 @@ export function toActionFailure(
     return {
       ok: false,
       code: "VALIDATION",
-      message: error.issues[0]?.message ?? "Daxil edilən məlumatlar düzgün deyil.",
+      message: getPublicValidationMessage(error),
     };
   }
 
   const code = getErrorCode(error);
   const message = error instanceof Error ? error.message : "";
+
+  if (isUuidDatabaseError(message)) {
+    return {
+      ok: false,
+      code: "VALIDATION",
+      message: "Seçilmiş məlumat düzgün deyil. Səhifəni yeniləyib yenidən cəhd edin.",
+    };
+  }
 
   if (code === "P2002" || code === "23505") {
     return {

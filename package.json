@@ -81,5 +81,21 @@
     "@emnapi/core": "1.11.3",
     "@emnapi/runtime": "1.11.3",
     "@emnapi/wasi-threads": "1.2.3"
-  }
+  },
+  "description": "Artmonia ERP is planned as a fast, role-based education ERP for CRM, student operations, billing, debt control, teacher payroll, dashboards, automation, audit, and Excel migration.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/noktheagency-cmd/artmonia-erp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/noktheagency-cmd/artmonia-erp/issues"
+  },
+  "homepage": "https://github.com/noktheagency-cmd/artmonia-erp#readme"
 }

@@ -32,10 +32,19 @@ import { safeServerAction } from "@/server/actions/safe-action";
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
 
-const optionalUuid = z.preprocess(
-  optionalFormString,
-  z.string().uuid().optional()
-);
+const optionalUuid = (label: string) =>
+  z.preprocess(
+    optionalFormString,
+    z.string().uuid(`${label} düzgün seçilməyib.`).optional(),
+  );
+
+const requiredUuid = (label: string) =>
+  z.preprocess(
+    optionalFormString,
+    z
+      .string({ error: `${label} seçilməlidir.` })
+      .uuid(`${label} düzgün seçilməyib.`),
+  );
 
 const optionalInteger = z.preprocess((value) => {
   const normalized = optionalFormString(value);
@@ -60,15 +69,15 @@ const studentLifecycleStatusValues = [
 const createStudentSchema = z.object({
   idempotencyKey: z.string().uuid(),
   mode: z.literal("lead").default("lead"),
-  leadId: optionalUuid,
+  leadId: optionalUuid("Müraciət"),
   fullName: z.string().trim().min(2).max(120),
   phone: z.string().trim().min(5).max(40),
   source: optionalText(60),
   educationLevel: optionalText(80),
-  programId: z.string().uuid(),
-  teacherId: optionalUuid,
-  managerId: optionalUuid,
-  campaignId: optionalUuid,
+  programId: requiredUuid("Proqram"),
+  teacherId: optionalUuid("Müəllim"),
+  managerId: optionalUuid("Menecer"),
+  campaignId: optionalUuid("Kampaniya"),
   lifecycleStatus: z.enum(studentLifecycleStatusValues).default(StudentLifecycleStatus.GROUP_WAITING),
   registeredDate: z.string().trim().min(1).max(20),
   firstLessonDate: optionalText(20),

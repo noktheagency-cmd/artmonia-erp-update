@@ -2,15 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
-import { FontLoader, type Font } from "three/addons/loaders/FontLoader.js";
+import { SVGLoader, type SVGResult } from "three/addons/loaders/SVGLoader.js";
 import { MeshSurfaceSampler } from "three/addons/math/MeshSurfaceSampler.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import styles from "./login.module.css";
 
 const PARTICLE_COUNT = 5200;
-const FONT_URL = "/fonts/helvetiker_bold.typeface.json";
+const LOGO_BLUE_URL = "/artmonia-logo-blue.svg";
+const LOGO_ORANGE_URL = "/artmonia-logo-orange.svg";
 const MORPH_DURATION_MS = 900;
+const LOGO_BLUE = new THREE.Color("#080953");
+const LOGO_ORANGE = new THREE.Color("#d66700");
 
 type SurfaceSample = {
   colors: Float32Array;
@@ -70,54 +72,71 @@ function applyArtmoniaColors(geometry: THREE.BufferGeometry) {
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 }
 
-function centerTextLine(
-  font: Font,
-  text: string,
-  targetWidth: number,
-  y: number,
-) {
-  const geometry = new TextGeometry(text, {
-    font,
-    size: 1,
-    depth: 0.28,
-    curveSegments: 12,
-    bevelEnabled: true,
-    bevelThickness: 0.055,
-    bevelSize: 0.04,
-    bevelSegments: 5,
-  });
+function applySolidColor(geometry: THREE.BufferGeometry, color: THREE.Color) {
+  const positions = geometry.getAttribute("position");
+  const colors = new Float32Array(positions.count * 3);
 
-  geometry.computeBoundingBox();
-  const bounds = geometry.boundingBox;
-  if (!bounds) {
-    return geometry;
+  for (let index = 0; index < positions.count; index += 1) {
+    colors[index * 3] = color.r;
+    colors[index * 3 + 1] = color.g;
+    colors[index * 3 + 2] = color.b;
   }
 
-  const size = bounds.getSize(new THREE.Vector3());
-  const scale = targetWidth / size.x;
-  geometry.scale(scale, scale, 1);
-  geometry.computeBoundingBox();
-  geometry.boundingBox?.getCenter(size);
-  geometry.translate(-size.x, y - size.y, -size.z);
-
-  return geometry;
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 }
 
-function createWordGeometry(font: Font) {
-  const art = centerTextLine(font, "art", 3.5, 0.88);
-  const monia = centerTextLine(font, "monia", 6.4, -0.78);
-  const geometry = mergeGeometries([art, monia], false);
+function extrudeSvgLayer(result: SVGResult, depth: number) {
+  const shapes = result.paths.flatMap((path) => path.toShapes());
 
-  art.dispose();
-  monia.dispose();
+  return new THREE.ExtrudeGeometry(shapes, {
+    depth,
+    curveSegments: 10,
+    bevelEnabled: true,
+    bevelThickness: 4.2,
+    bevelSize: 3.4,
+    bevelSegments: 4,
+  });
+}
 
-  if (!geometry) {
-    throw new Error("Artmonia text geometry could not be merged.");
+function createLogoGeometries(blueSvg: SVGResult, orangeSvg: SVGResult) {
+  const blue = extrudeSvgLayer(blueSvg, 28);
+  const orange = extrudeSvgLayer(orangeSvg, 22);
+
+  blue.computeBoundingBox();
+  orange.computeBoundingBox();
+
+  const bounds = new THREE.Box3();
+  if (blue.boundingBox) {
+    bounds.union(blue.boundingBox);
+  }
+  if (orange.boundingBox) {
+    bounds.union(orange.boundingBox);
   }
 
-  applyArtmoniaColors(geometry);
-  geometry.computeVertexNormals();
-  return geometry;
+  const center = bounds.getCenter(new THREE.Vector3());
+  const size = bounds.getSize(new THREE.Vector3());
+  const scale = 6.55 / size.x;
+
+  for (const geometry of [blue, orange]) {
+    geometry.translate(-center.x, -center.y, 0);
+    geometry.scale(scale, -scale, scale);
+  }
+
+  blue.translate(0, 0, 0.04);
+  orange.translate(0, 0, -0.18);
+  applySolidColor(blue, LOGO_BLUE);
+  applySolidColor(orange, LOGO_ORANGE);
+  blue.computeVertexNormals();
+  orange.computeVertexNormals();
+
+  const sampled = mergeGeometries([blue, orange], false);
+  if (!sampled) {
+    blue.dispose();
+    orange.dispose();
+    throw new Error("Artmonia logo geometry could not be merged.");
+  }
+
+  return { blue, orange, sampled };
 }
 
 function sampleSurface(
@@ -273,10 +292,13 @@ export function LoginScene() {
     let transitionStartedAt = performance.now();
     let disposed = false;
     let knotGeometry: THREE.TorusKnotGeometry | null = null;
-    let wordGeometry: THREE.BufferGeometry | null = null;
+    let logoBlueGeometry: THREE.BufferGeometry | null = null;
+    let logoOrangeGeometry: THREE.BufferGeometry | null = null;
+    let logoSampleGeometry: THREE.BufferGeometry | null = null;
     let pointGeometry: THREE.BufferGeometry | null = null;
     let knotMaterial: THREE.MeshPhysicalMaterial | null = null;
-    let wordMaterial: THREE.MeshPhysicalMaterial | null = null;
+    let logoBlueMaterial: THREE.MeshPhysicalMaterial | null = null;
+    let logoOrangeMaterial: THREE.MeshPhysicalMaterial | null = null;
     let pointMaterial: THREE.ShaderMaterial | null = null;
     let shadowGeometry: THREE.CircleGeometry | null = null;
     let shadowMaterial: THREE.MeshBasicMaterial | null = null;
@@ -402,11 +424,14 @@ export function LoginScene() {
       root.rotation.z = Math.sin(elapsed * 0.31) * 0.018;
       root.position.y = reducedMotion ? 0 : Math.sin(elapsed * 0.72) * 0.08;
 
-      if (knotMaterial && wordMaterial && pointMaterial) {
+      if (knotMaterial && logoBlueMaterial && logoOrangeMaterial && pointMaterial) {
         knotMaterial.opacity = 1 - rangeProgress(progress, 0.07, 0.38);
         knotMaterial.depthWrite = progress < 0.2;
-        wordMaterial.opacity = rangeProgress(progress, 0.64, 0.96);
-        wordMaterial.depthWrite = progress > 0.82;
+        const logoOpacity = rangeProgress(progress, 0.64, 0.96);
+        logoBlueMaterial.opacity = logoOpacity;
+        logoOrangeMaterial.opacity = logoOpacity;
+        logoBlueMaterial.depthWrite = progress > 0.82;
+        logoOrangeMaterial.depthWrite = progress > 0.82;
         pointMaterial.uniforms.uProgress.value = progress;
         pointMaterial.uniforms.uTime.value = elapsed;
         pointMaterial.uniforms.uOpacity.value =
@@ -420,8 +445,12 @@ export function LoginScene() {
       animationFrame = window.requestAnimationFrame(render);
     };
 
-    void new FontLoader().loadAsync(FONT_URL).then(
-      (font) => {
+    const svgLoader = new SVGLoader();
+    void Promise.all([
+      svgLoader.loadAsync(LOGO_BLUE_URL),
+      svgLoader.loadAsync(LOGO_ORANGE_URL),
+    ])
+      .then(([blueSvg, orangeSvg]) => {
         if (disposed) {
           return;
         }
@@ -431,9 +460,12 @@ export function LoginScene() {
         knotGeometry.rotateZ(-0.18);
         applyArtmoniaColors(knotGeometry);
 
-        wordGeometry = createWordGeometry(font);
+        const logoGeometries = createLogoGeometries(blueSvg, orangeSvg);
+        logoBlueGeometry = logoGeometries.blue;
+        logoOrangeGeometry = logoGeometries.orange;
+        logoSampleGeometry = logoGeometries.sampled;
         const knotSamples = sampleSurface(knotGeometry, PARTICLE_COUNT, 117);
-        const wordSamples = sampleSurface(wordGeometry, PARTICLE_COUNT, 839);
+        const logoSamples = sampleSurface(logoSampleGeometry, PARTICLE_COUNT, 839);
         const seeds = new Float32Array(PARTICLE_COUNT);
         const random = createSeededRandom(421);
 
@@ -443,13 +475,14 @@ export function LoginScene() {
 
         pointGeometry = new THREE.BufferGeometry();
         pointGeometry.setAttribute("position", new THREE.BufferAttribute(knotSamples.positions, 3));
-        pointGeometry.setAttribute("aTarget", new THREE.BufferAttribute(wordSamples.positions, 3));
+        pointGeometry.setAttribute("aTarget", new THREE.BufferAttribute(logoSamples.positions, 3));
         pointGeometry.setAttribute("aSourceColor", new THREE.BufferAttribute(knotSamples.colors, 3));
-        pointGeometry.setAttribute("aTargetColor", new THREE.BufferAttribute(wordSamples.colors, 3));
+        pointGeometry.setAttribute("aTargetColor", new THREE.BufferAttribute(logoSamples.colors, 3));
         pointGeometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
 
         knotMaterial = createPhysicalMaterial();
-        wordMaterial = createPhysicalMaterial();
+        logoBlueMaterial = createPhysicalMaterial();
+        logoOrangeMaterial = createPhysicalMaterial();
         pointMaterial = new THREE.ShaderMaterial({
           uniforms: {
             uOpacity: { value: 0 },
@@ -465,9 +498,10 @@ export function LoginScene() {
         });
 
         const knotMesh = new THREE.Mesh(knotGeometry, knotMaterial);
-        const wordMesh = new THREE.Mesh(wordGeometry, wordMaterial);
+        const logoOrangeMesh = new THREE.Mesh(logoOrangeGeometry, logoOrangeMaterial);
+        const logoBlueMesh = new THREE.Mesh(logoBlueGeometry, logoBlueMaterial);
         const morphPoints = new THREE.Points(pointGeometry, pointMaterial);
-        root.add(knotMesh, wordMesh, morphPoints);
+        root.add(knotMesh, logoOrangeMesh, logoBlueMesh, morphPoints);
 
         shadowGeometry = new THREE.CircleGeometry(1, 64);
         shadowMaterial = new THREE.MeshBasicMaterial({
@@ -486,11 +520,12 @@ export function LoginScene() {
         stage.dataset.loaded = "true";
         timer.reset();
         animationFrame = window.requestAnimationFrame(render);
-      },
-      () => {
-        stage.dataset.renderer = "fallback";
-      },
-    );
+      })
+      .catch(() => {
+        if (!disposed) {
+          stage.dataset.renderer = "fallback";
+        }
+      });
 
     return () => {
       disposed = true;
@@ -503,10 +538,13 @@ export function LoginScene() {
       stage.removeEventListener("blur", deactivate);
       window.removeEventListener("pointermove", resetWhenPointerLeavesStage);
       knotGeometry?.dispose();
-      wordGeometry?.dispose();
+      logoBlueGeometry?.dispose();
+      logoOrangeGeometry?.dispose();
+      logoSampleGeometry?.dispose();
       pointGeometry?.dispose();
       knotMaterial?.dispose();
-      wordMaterial?.dispose();
+      logoBlueMaterial?.dispose();
+      logoOrangeMaterial?.dispose();
       pointMaterial?.dispose();
       shadowGeometry?.dispose();
       shadowMaterial?.dispose();

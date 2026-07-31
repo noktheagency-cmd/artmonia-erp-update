@@ -1238,13 +1238,28 @@
 
   .side-rail .brand-symbol,
   .app-stage.is-sidebar-compact .side-rail .brand-symbol {
-    width: 42px;
-    height: 42px;
-    flex-basis: 42px;
+    width: 126px;
+    height: 70px;
+    flex-basis: 126px;
+    overflow: hidden;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .side-rail .brand-copy,
-  .app-stage.is-sidebar-compact .side-rail .brand-copy,
+  .app-stage.is-sidebar-compact .side-rail .brand-copy {
+    display: none;
+  }
+
+  .side-rail .brand-logo,
+  .app-stage.is-sidebar-compact .side-rail .brand-logo {
+    width: 118px;
+    height: 118px;
+    opacity: 1;
+  }
+
   .side-rail .rail-user-copy,
   .app-stage.is-sidebar-compact .side-rail .rail-user-copy {
     display: grid;
