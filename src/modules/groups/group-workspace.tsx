@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormSelect } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -516,8 +517,89 @@ function MemberDialog({ group, data, pending, onClose, onSubmit }: { group: Grou
   const [enrollmentId, setEnrollmentId] = useState(data.enrollmentOptions[0]?.id ?? "");
   const enrollment = data.enrollmentOptions.find((item) => item.id === enrollmentId);
   const [teacherId, setTeacherId] = useState(enrollment?.currentTeacherId || data.teachers[0]?.id || "");
+  const capacityRatio = group.capacity > 0 ? Math.min(100, Math.round((group.memberCount / group.capacity) * 100)) : 0;
+  const enrollmentOptions = data.enrollmentOptions.map((item) => ({
+    value: item.id,
+    label: `${item.studentName} · ${item.studentCode} · ${item.program}`,
+    searchText: `${item.studentName} ${item.studentCode} ${item.program} ${item.lifecycleStatus}`,
+  }));
+  const teacherOptions = data.teachers.map((teacher) => ({ value: teacher.id, label: teacher.name }));
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const formData = new FormData(); formData.set("groupId", group.id); formData.set("enrollmentId", enrollmentId); formData.set("teacherId", teacherId); onSubmit(formData); }
-  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className={styles.smallDialog}><DialogHeader><DialogTitle>{group.code} qrupuna tələbə əlavə et</DialogTitle><DialogDescription>{group.memberCount} / {group.capacity} yer istifadə olunur. Tələbənin enrollment-i və müəllimi seçilməlidir.</DialogDescription></DialogHeader><form className={styles.formStack} onSubmit={submit}><label><span>Tələbə / enrollment</span><select value={enrollmentId} onChange={(event) => { const id = event.target.value; const next = data.enrollmentOptions.find((item) => item.id === id); setEnrollmentId(id); setTeacherId(next?.currentTeacherId || data.teachers[0]?.id || ""); }}>{data.enrollmentOptions.map((item) => <option value={item.id} key={item.id}>{item.studentName} · {item.studentCode} · {item.program}</option>)}</select></label>{enrollment ? <div className={styles.selectionSummary}><GraduationCap size={18} /><div><strong>{enrollment.studentName}</strong><span>{enrollment.program} · {enrollment.lifecycleStatus}</span></div></div> : null}<label><span>Müəllim</span><select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} required>{data.teachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.name}</option>)}</select></label><DialogFooter><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending || !enrollmentId || !teacherId}>Tələbə əlavə et</Button></DialogFooter></form></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <DialogContent className={cx(styles.smallDialog, styles.memberDialog)}>
+      <div className={styles.memberHero}>
+        <div className={styles.memberHeroIcon}><GraduationCap size={24} /></div>
+        <DialogHeader className={styles.memberDialogHeader}>
+          <DialogTitle>{group.code} qrupuna tələbə əlavə et</DialogTitle>
+          <DialogDescription>Tələbəni və dərsi aparacaq müəllimi seçin.</DialogDescription>
+        </DialogHeader>
+        <div className={styles.memberCapacity}>
+          <div><span>Qrup doluluğu</span><strong>{group.memberCount} / {group.capacity}</strong></div>
+          <i aria-hidden="true"><b style={{ width: `${capacityRatio}%` }} /></i>
+        </div>
+      </div>
+
+      <form className={styles.memberForm} onSubmit={submit}>
+        <div className={styles.memberField}>
+          <div className={styles.memberFieldHeading}>
+            <span><Search size={15} /></span>
+            <div><strong>Tələbə / enrollment</strong><small>Ad, kod və ya proqram üzrə axtarın</small></div>
+          </div>
+          <FormSelect
+            name="enrollmentId"
+            options={enrollmentOptions}
+            value={enrollmentId}
+            onValueChange={(id) => {
+              const next = data.enrollmentOptions.find((item) => item.id === id);
+              setEnrollmentId(id);
+              setTeacherId(next?.currentTeacherId || data.teachers[0]?.id || "");
+            }}
+            placeholder="Tələbə seçin"
+            searchPlaceholder="Tələbə, kod və ya proqram axtar..."
+            aria-label="Tələbə və enrollment seçimi"
+            searchable
+            className={styles.memberSelect}
+            contentClassName={styles.memberSelectMenu}
+            disabled={enrollmentOptions.length === 0}
+            required
+          />
+        </div>
+
+        {enrollment ? <div className={styles.memberSelectionSummary}>
+          <div className={styles.memberAvatar}>{enrollment.studentName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div>
+          <div className={styles.memberSelectionMain}><strong>{enrollment.studentName}</strong><span>{enrollment.studentCode}</span></div>
+          <div className={styles.memberSelectionMeta}><span>{enrollment.program}</span><small>{enrollment.lifecycleStatus}</small></div>
+          <Check size={18} />
+        </div> : <div className={styles.memberEmptyState}>Qrupa əlavə edilə bilən tələbə tapılmadı.</div>}
+
+        <div className={styles.memberField}>
+          <div className={styles.memberFieldHeading}>
+            <span><UserRound size={15} /></span>
+            <div><strong>Müəllim</strong><small>Bu qrup üzvlüyü üçün məsul müəllimi təyin edin</small></div>
+          </div>
+          <FormSelect
+            name="teacherId"
+            options={teacherOptions}
+            value={teacherId}
+            onValueChange={setTeacherId}
+            placeholder="Müəllim seçin"
+            searchPlaceholder="Müəllim axtar..."
+            aria-label="Müəllim seçimi"
+            searchable={teacherOptions.length > 6}
+            className={styles.memberSelect}
+            contentClassName={styles.memberSelectMenu}
+            disabled={teacherOptions.length === 0}
+            required
+          />
+        </div>
+
+        <DialogFooter className={styles.memberDialogFooter}>
+          <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
+          <Button type="submit" disabled={pending || !enrollmentId || !teacherId}><Plus data-icon="inline-start" /> Tələbə əlavə et</Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>;
 }
 
 function TeacherDialog({ member, teachers, pending, onClose, onSubmit }: { member: GroupMemberView; teachers: GroupWorkspaceData["teachers"]; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) {

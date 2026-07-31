@@ -20,6 +20,7 @@ import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError } from "@/lib/app-notifications";
+import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -139,11 +140,14 @@ export function StudentPaymentDialogClient({
 function PaymentScheduleFields({ student }: { student: StudentRow }) {
   const [amount, setAmount] = useState(student.detail.paymentDefaultAmount);
   const [paidDate, setPaidDate] = useState(student.detail.paymentDefaultDate);
-  const [nextPaymentDate, setNextPaymentDate] = useState(() => addOneMonth(paidDate));
+  const [nextPaymentDate, setNextPaymentDate] = useState(student.detail.paymentDefaultNextDate);
 
   function updateAutomaticDate(nextAmount: string, nextPaidDate: string) {
     if (toAmount(nextAmount) >= toAmount(student.detail.monthlyFee)) {
-      setNextPaymentDate(addOneMonth(nextPaidDate));
+      setNextPaymentDate(resolveNextPaymentDateInput({
+        groupJoinedAt: student.detail.paymentGroupJoinedAt,
+        paidAt: nextPaidDate,
+      }));
     }
   }
 
@@ -194,12 +198,4 @@ function PaymentScheduleFields({ student }: { student: StudentRow }) {
 
 function toAmount(value: string) {
   return Number(value.replace(",", ".")) || 0;
-}
-
-function addOneMonth(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return value;
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  date.setUTCMonth(date.getUTCMonth() + 1);
-  return date.toISOString().slice(0, 10);
 }

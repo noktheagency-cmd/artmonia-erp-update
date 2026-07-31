@@ -1,9 +1,10 @@
-import { redirect } from "next/navigation";
 import type { Route } from "next";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import { getCurrentErpUser } from "@/server/auth/session";
 import { LoginForm } from "./login-form";
 import { LoginSceneLazy } from "./login-scene-lazy";
+import styles from "./login.module.css";
 
 type LoginPageProps = {
   searchParams: Promise<{ next?: string }>;
@@ -22,31 +23,37 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   return (
-    <main className="kinetic-login">
-      <section className="kinetic-art" aria-label="Artmonia">
-        <LoginSceneLazy />
-
-        <header className="kinetic-wordmark">
+    <main className={styles.login}>
+      <section className={styles.art} aria-label="Artmonia 3D animasiyası">
+        <header className={styles.wordmark}>
           <Image
             src="/logo-login.png"
             alt="Artmonia"
             width={1254}
             height={1254}
             priority
-            sizes="(max-width: 760px) 132px, 164px"
+            sizes="(max-width: 760px) 126px, 170px"
           />
         </header>
+
+        <LoginSceneLazy />
       </section>
 
-      <section className="kinetic-panel" aria-label="Sign in">
-        <div className="kinetic-heading">
-          <h1>Xoş gəldiniz</h1>
-          <p>Artmonia ERP hesabınıza daxil olun.</p>
+      <section className={styles.panel} aria-label="Daxil ol">
+        <div className={styles.panelContent}>
+          <div className={styles.heading}>
+            <h1>Xoş gəlmisiniz</h1>
+            <p>Artmonia ERP hesabınıza daxil olun.</p>
+          </div>
+
+          <LoginForm next={next} />
+
+          <p className={styles.footer}>
+            <span>Artmonia ERP</span>
+            <i aria-hidden="true" />
+            <span>Daxili idarəetmə sistemi</span>
+          </p>
         </div>
-
-        <LoginForm next={next} />
-
-        <p className="kinetic-footer">Artmonia ERP <i /> Daxili idarəetmə sistemi</p>
       </section>
     </main>
   );

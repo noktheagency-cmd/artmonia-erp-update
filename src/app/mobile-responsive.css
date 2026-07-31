@@ -1205,3 +1205,101 @@
     transition: none !important;
   }
 }
+
+/* Refreshed sidebar drawer: retain the desktop hierarchy on touch devices. */
+@media (max-width: 960px) {
+  .side-rail,
+  .app-stage.is-sidebar-compact .side-rail {
+    padding: calc(18px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+    background: #ffffff !important;
+  }
+
+  .side-rail .sidebar-brand-row,
+  .app-stage.is-sidebar-compact .side-rail .sidebar-brand-row {
+    display: flex;
+    width: 100%;
+    margin-bottom: 18px;
+  }
+
+  .side-rail .brand-mark,
+  .app-stage.is-sidebar-compact .side-rail .brand-mark {
+    display: flex;
+    width: calc(100% - 50px);
+    height: auto;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 11px;
+    margin: 0;
+    padding: 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 12px;
+  }
+
+  .side-rail .brand-symbol,
+  .app-stage.is-sidebar-compact .side-rail .brand-symbol {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+
+  .side-rail .brand-copy,
+  .app-stage.is-sidebar-compact .side-rail .brand-copy,
+  .side-rail .rail-user-copy,
+  .app-stage.is-sidebar-compact .side-rail .rail-user-copy {
+    display: grid;
+    width: auto;
+    opacity: 1;
+    transform: none;
+  }
+
+  .side-rail .nav-stack,
+  .app-stage.is-sidebar-compact .side-rail .nav-stack {
+    gap: 2px;
+    padding: 0 2px 6px;
+  }
+
+  .side-rail .nav-icon,
+  .app-stage.is-sidebar-compact .side-rail .nav-icon {
+    min-height: 46px;
+    height: 46px;
+    gap: 10px;
+    padding: 0 9px;
+    border-radius: 10px;
+  }
+
+  .side-rail .nav-icon > .nav-item-label,
+  .app-stage.is-sidebar-compact .side-rail .nav-icon > .nav-item-label {
+    display: block;
+    width: auto;
+    min-width: 0;
+    opacity: 1;
+    transform: none;
+  }
+
+  .side-rail .rail-bottom-stack,
+  .app-stage.is-sidebar-compact .side-rail .rail-bottom-stack {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 12px;
+  }
+
+  .side-rail .rail-user-card,
+  .app-stage.is-sidebar-compact .side-rail .rail-user-card {
+    display: flex;
+    width: auto;
+    min-width: 0;
+    justify-content: flex-start;
+    padding: 5px 7px;
+  }
+
+  .side-rail .rail-utility-actions,
+  .app-stage.is-sidebar-compact .side-rail .rail-utility-actions {
+    display: flex;
+    flex-direction: row;
+  }
+}

@@ -25,6 +25,7 @@ import {
   weekdayFromDate,
 } from "@/modules/groups/shared";
 import { safeServerAction } from "@/server/actions/safe-action";
+import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const scheduleSchema = z
@@ -239,6 +240,25 @@ async function addGroupMemberActionImpl(formData: FormData) {
         assignedById: actor.id,
       },
     });
+
+    const latestPayment = await tx.payment.findFirst({
+      where: { studentId: enrollment.student.id },
+      orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+      select: { id: true, paidAt: true, paymentMonth: true },
+    });
+
+    if (latestPayment) {
+      await tx.payment.update({
+        where: { id: latestPayment.id },
+        data: {
+          nextPaymentAt: resolveNextPaymentAt({
+            groupJoinedAt: membership.joinedAt,
+            paymentMonth: latestPayment.paymentMonth,
+            paidAt: latestPayment.paidAt,
+          }),
+        },
+      });
+    }
 
     if (enrollment.student.lifecycleStatus === StudentLifecycleStatus.GROUP_WAITING) {
       await activateStudent(tx, {

@@ -20,6 +20,7 @@ import {
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
+import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 
 const studentStatusOptions = [
   { value: "GROUP_WAITING", label: "Qrup gözləyir" },
@@ -42,6 +43,8 @@ interface StudentDetail {
     paymentDefaultAmount: string;
     paymentDefaultDate: string;
     paymentDefaultMonth: string;
+    paymentDefaultNextDate: string;
+    paymentGroupJoinedAt: string;
     monthlyFee: string;
   };
 }
@@ -77,7 +80,7 @@ export function StudentDetailActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
-  const [nextPaymentDate, setNextPaymentDate] = useState(() => addOneMonth(student.detail.paymentDefaultDate));
+  const [nextPaymentDate, setNextPaymentDate] = useState(student.detail.paymentDefaultNextDate);
 
   async function updateStatus(formData: FormData) {
     try {
@@ -206,7 +209,10 @@ export function StudentDetailActions({
                     const amount = event.target.value;
                     setPaymentAmount(amount);
                     if (toAmount(amount) >= toAmount(student.detail.monthlyFee)) {
-                      setNextPaymentDate(addOneMonth(paymentDate));
+                      setNextPaymentDate(resolveNextPaymentDateInput({
+                        groupJoinedAt: student.detail.paymentGroupJoinedAt,
+                        paidAt: paymentDate,
+                      }));
                     }
                   }}
                   required
@@ -231,7 +237,10 @@ export function StudentDetailActions({
                   onValueChange={(value) => {
                     setPaymentDate(value);
                     if (toAmount(paymentAmount) >= toAmount(student.detail.monthlyFee)) {
-                      setNextPaymentDate(addOneMonth(value));
+                      setNextPaymentDate(resolveNextPaymentDateInput({
+                        groupJoinedAt: student.detail.paymentGroupJoinedAt,
+                        paidAt: value,
+                      }));
                     }
                   }}
                   allowClear={false}
@@ -402,12 +411,4 @@ export function StudentDetailActions({
 
 function toAmount(value: string) {
   return Number(value.replace(",", ".")) || 0;
-}
-
-function addOneMonth(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return value;
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  date.setUTCMonth(date.getUTCMonth() + 1);
-  return date.toISOString().slice(0, 10);
 }

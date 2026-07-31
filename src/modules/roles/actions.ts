@@ -1,14 +1,96 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import type { CreateRoleResult, DeleteRoleResult, RoleSummaryDto, UpdateRolePermissionsResult, UpdateUserRolesResult } from "@/modules/roles/types";
+import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { isPermissionCode, permissionDefinitions, type PermissionCode, type PermissionScope } from "@/server/rbac/permissions";
+import { getSupabaseAdminClient } from "@/server/supabase/admin";
 
 type SubmittedGrant = { code?: unknown; scope?: unknown };
+
+const standaloneUserSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Düzgün e-poçt ünvanı daxil edin"),
+  password: z.string().min(8, "Parol ən az 8 simvol olmalıdır").max(72, "Parol maksimum 72 simvol ola bilər"),
+  roleId: z.string().uuid("Etibarlı rol seçin"),
+});
+
+async function createStandaloneUserActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("auth.user.manage");
+  const input = standaloneUserSchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+  const [role, existingUser] = await Promise.all([
+    prisma.role.findUnique({
+      where: { id: input.roleId },
+      select: { id: true, name: true, code: true },
+    }),
+    prisma.user.findUnique({ where: { email: input.email }, select: { id: true } }),
+  ]);
+
+  if (!role || role.code === AppRole.SUPER_ADMIN) {
+    throw new PublicActionError("Seçilmiş rol tapılmadı və ya bu ekrandan təyin edilə bilməz", "NOT_FOUND");
+  }
+  if (existingUser) {
+    throw new PublicActionError("Bu e-poçt ünvanı ilə giriş hesabı artıq mövcuddur", "DUPLICATE");
+  }
+
+  const { data, error } = await getSupabaseAdminClient().auth.admin.createUser({
+    email: input.email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { full_name: input.email },
+  });
+  if (error || !data.user) {
+    throw new PublicActionError(
+      error?.message ?? "Giriş hesabı yaradıla bilmədi",
+      error?.message && /already|exists|registered/i.test(error.message) ? "DUPLICATE" : "VALIDATION",
+    );
+  }
+
+  try {
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          authUserId: data.user.id,
+          fullName: input.email,
+          email: input.email,
+          isActive: true,
+        },
+      });
+      await tx.userRole.create({ data: { userId: created.id, roleId: role.id } });
+      await writeAuditLog(tx, {
+        actorUserId: actor.id,
+        action: "auth.user.create",
+        entityType: "user",
+        entityId: created.id,
+        after: {
+          email: input.email,
+          role: { id: role.id, name: role.name },
+          loginCreated: true,
+          hrEmployeeCreated: false,
+        } as Prisma.InputJsonValue,
+        reason: "HR profilindən kənar ERP giriş hesabı yaradıldı",
+      });
+      return created;
+    });
+
+    revalidatePath("/settings/roles");
+    revalidatePath("/", "layout");
+    return { userId: user.id, email: user.email, roleId: role.id, roleName: role.name };
+  } catch (dbError) {
+    await getSupabaseAdminClient().auth.admin.deleteUser(data.user.id).catch(() => undefined);
+    throw dbError;
+  }
+}
+
+export const createStandaloneUserAction = safeServerAction(
+  createStandaloneUserActionImpl,
+  "Giriş profili yaradıla bilmədi.",
+);
 
 export async function updateRolePermissionsAction(formData: FormData): Promise<UpdateRolePermissionsResult> {
   try {

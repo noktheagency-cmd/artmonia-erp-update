@@ -24,16 +24,7 @@ export default async function DashboardPage({
     const [roleData, taskData] = await Promise.all([getRoleDashboardData(), getTaskData()]);
     return <RoleDashboard data={roleData} taskData={taskData} createTaskAction={createTaskAction} />;
   }
-  const [data, taskData] = await Promise.all([
-    getOwnerDashboardData(filters),
-    getTaskData(),
-  ]);
+  const data = await getOwnerDashboardData(filters);
 
-  return (
-    <OwnerDashboard
-      data={data}
-      taskData={taskData}
-      createTaskAction={createTaskAction}
-    />
-  );
+  return <OwnerDashboard data={data} />;
 }

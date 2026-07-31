@@ -65,6 +65,7 @@ import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { FinanceData } from "@/modules/finance/queries";
 
@@ -597,7 +598,7 @@ function PaymentDialog({
   const [values, setValues] = useState({
     amount: "",
     paidDate: data.students[0]?.defaultPaymentDate ?? "",
-    paymentMonth: getNextPaymentDate(data.students[0]?.defaultPaymentDate ?? ""),
+    paymentMonth: data.students[0]?.defaultPaymentMonth ?? "",
     payerName: "",
   });
 
@@ -611,7 +612,7 @@ function PaymentDialog({
         ...current,
         amount: student.defaultAmount,
         paidDate: student.defaultPaymentDate,
-        paymentMonth: getNextPaymentDate(student.defaultPaymentDate),
+        paymentMonth: student.defaultPaymentMonth,
         payerName: student.name,
       }));
     }
@@ -621,7 +622,10 @@ function PaymentDialog({
     setValues((current) => ({
       ...current,
       paidDate: value,
-      paymentMonth: getNextPaymentDate(value),
+      paymentMonth: resolveNextPaymentDateInput({
+        groupJoinedAt: selectedStudent?.groupJoinedAt,
+        paidAt: value,
+      }),
     }));
   }
 
@@ -2521,38 +2525,12 @@ function addLocalDays(value: Date, days: number) {
   return next;
 }
 
-function addLocalMonths(value: Date, months: number) {
-  const next = new Date(value);
-  const originalDay = next.getDate();
-
-  next.setDate(1);
-  next.setMonth(next.getMonth() + months);
-  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-  next.setDate(Math.min(originalDay, lastDay));
-
-  return next;
-}
-
 function toDateInput(value: Date) {
   return [
     value.getFullYear().toString(),
     (value.getMonth() + 1).toString().padStart(2, "0"),
     value.getDate().toString().padStart(2, "0"),
   ].join("-");
-}
-
-function getNextPaymentDate(value: string) {
-  if (!value) {
-    return "";
-  }
-
-  const [year, month, day] = value.split("-").map(Number);
-
-  if (!year || !month || !day) {
-    return "";
-  }
-
-  return toDateInput(addLocalMonths(new Date(year, month - 1, day), 1));
 }
 
 function buildFinanceTabHref(data: FinanceData, tab: FinanceTab) {

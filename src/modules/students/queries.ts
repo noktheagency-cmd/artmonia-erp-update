@@ -15,6 +15,7 @@ import {
 } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
+import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 
 type SummaryTone = "blue" | "coral" | "yellow" | "mint";
@@ -141,6 +142,8 @@ export type StudentListData = {
       paymentDefaultAmount: string;
       paymentDefaultDate: string;
       paymentDefaultMonth: string;
+      paymentDefaultNextDate: string;
+      paymentGroupJoinedAt: string;
       monthlyFee: string;
       invoices: Array<{
         id: string;
@@ -497,6 +500,11 @@ export async function getStudentListData(
           paymentDefaultAmount: defaultPaymentAmount,
           paymentDefaultDate: formatDateInput(new Date()),
           paymentDefaultMonth: formatMonthInput(new Date()),
+          paymentDefaultNextDate: resolveNextPaymentDateInput({
+            groupJoinedAt: student.groupJoinedAt ? formatDateInput(new Date(student.groupJoinedAt)) : null,
+            paidAt: formatDateInput(new Date()),
+          }),
+          paymentGroupJoinedAt: student.groupJoinedAt ? formatDateInput(new Date(student.groupJoinedAt)) : "",
           monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
           invoices: student.invoices.slice(0, 6).map((invoice) => {
             const status = invoiceStatusMeta[invoice.status];
@@ -549,6 +557,7 @@ type StudentListQueryRow = {
   programName: string | null;
   teacherName: string | null;
   groupCode: string | null;
+  groupJoinedAt: Date | string | null;
   balanceDue: unknown;
   currentMonthPaid: unknown;
   nextDueDate: Date | string | null;
@@ -664,6 +673,7 @@ async function getStudentRows(
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
       (select g.code from erp.group_memberships gm join erp.groups g on g.id = gm.group_id join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null order by gm.joined_at desc, gm.created_at desc limit 1) as "groupCode",
+      (select gm.joined_at from erp.group_memberships gm join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null order by gm.joined_at desc, gm.created_at desc limit 1) as "groupJoinedAt",
       inv.balance_due as "balanceDue",
       coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', current_date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
@@ -1453,6 +1463,7 @@ export async function getStudentDetailData(studentId: string) {
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
       (select g.code from erp.group_memberships gm join erp.groups g on g.id = gm.group_id join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null order by gm.joined_at desc, gm.created_at desc limit 1) as "groupCode",
+      (select gm.joined_at from erp.group_memberships gm join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null order by gm.joined_at desc, gm.created_at desc limit 1) as "groupJoinedAt",
       inv.balance_due as "balanceDue",
       coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', current_date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
@@ -1674,6 +1685,11 @@ export async function getStudentDetailData(studentId: string) {
         paymentDefaultAmount: defaultPaymentAmount,
         paymentDefaultDate: formatDateInput(new Date()),
         paymentDefaultMonth: formatMonthInput(new Date()),
+        paymentDefaultNextDate: resolveNextPaymentDateInput({
+          groupJoinedAt: student.groupJoinedAt ? formatDateInput(new Date(student.groupJoinedAt)) : null,
+          paidAt: formatDateInput(new Date()),
+        }),
+        paymentGroupJoinedAt: student.groupJoinedAt ? formatDateInput(new Date(student.groupJoinedAt)) : "",
         monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
         invoices: asJsonArray<StudentInvoiceRecord>(student.invoices).slice(0, 6).map((invoice) => {
           const status = invoiceStatusMeta[invoice.status];

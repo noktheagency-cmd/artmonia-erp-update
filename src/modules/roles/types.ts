@@ -67,6 +67,7 @@ export type RolePermissionMatrix = {
   definitions: PermissionDefinitionDto[];
   auditLogs: AuditLogDto[];
   canManage: boolean;
+  canManageUsers: boolean;
   canViewAudit: boolean;
 };
 

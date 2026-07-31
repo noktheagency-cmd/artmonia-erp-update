@@ -31,6 +31,7 @@ import {
   X,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 type ShellUser = {
   fullName: string;
@@ -276,6 +277,7 @@ export function AppShell({
           <Image src="/logo.png" alt="" width={30} height={30} priority />
           <span>Artmonia ERP</span>
         </Link>
+        <ThemeToggle className="theme-toggle-mobile" />
         <button
           type="button"
           className="mobile-shell-account"
@@ -307,18 +309,26 @@ export function AppShell({
       />
 
       <aside id="primary-sidebar" className="side-rail" aria-label="Əsas naviqasiya">
-        <Link
-          href="/dashboard"
-          className="brand-mark"
-          aria-label="Artmonia ERP"
-          onClick={(event) => handleNavClick("/dashboard", event)}
-          onPointerDown={(event) => handleNavPointerDown("/dashboard", event)}
-          onMouseEnter={() => handleNavHover("/dashboard")}
-          onFocus={() => handleNavHover("/dashboard")}
-          prefetch={false}
-        >
-          <Image className="brand-logo" src="/logo.png" alt="" width={34} height={34} priority />
-        </Link>
+        <div className="sidebar-brand-row">
+          <Link
+            href="/dashboard"
+            className="brand-mark"
+            aria-label="Artmonia ERP"
+            onClick={(event) => handleNavClick("/dashboard", event)}
+            onPointerDown={(event) => handleNavPointerDown("/dashboard", event)}
+            onMouseEnter={() => handleNavHover("/dashboard")}
+            onFocus={() => handleNavHover("/dashboard")}
+            prefetch={false}
+          >
+            <span className="brand-symbol" aria-hidden="true">
+              <Image className="brand-logo" src="/logo.png" alt="" width={38} height={38} priority />
+            </span>
+            <span className="brand-copy">
+              <strong>Artmonia ERP</strong>
+              <small>Studio operations</small>
+            </span>
+          </Link>
+        </div>
         <button
           className="mobile-sidebar-close"
           type="button"
@@ -339,6 +349,33 @@ export function AppShell({
 
         <nav className="nav-stack">
           <p className="nav-section-label">İş axını</p>
+          {(() => {
+            const Icon = dashboardNavItem.icon;
+            const active = pathname === dashboardNavItem.href;
+
+            return (
+              <Link
+                href={dashboardNavItem.href}
+                className={cx(
+                  "nav-icon",
+                  active && "is-active",
+                  activePendingHref === dashboardNavItem.href && "is-pending"
+                )}
+                aria-label={dashboardNavItem.label}
+                aria-current={active ? "page" : undefined}
+                onClick={(event) => handleNavClick(dashboardNavItem.href, event)}
+                onPointerDown={(event) => handleNavPointerDown(dashboardNavItem.href, event)}
+                onMouseEnter={() => handleNavHover(dashboardNavItem.href)}
+                onFocus={() => handleNavHover(dashboardNavItem.href)}
+                prefetch={false}
+              >
+                <span className="nav-icon-box" aria-hidden="true">
+                  <Icon size={18} strokeWidth={1.9} />
+                </span>
+                <span className="nav-item-label">{dashboardNavItem.label}</span>
+              </Link>
+            );
+          })()}
           {visiblePrimaryNavItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -360,14 +397,16 @@ export function AppShell({
                 onFocus={() => handleNavHover(item.href)}
                 prefetch={false}
               >
-                <Icon size={18} strokeWidth={1.9} />
-                <span>{item.label}</span>
+                <span className="nav-icon-box" aria-hidden="true">
+                  <Icon size={18} strokeWidth={1.9} />
+                </span>
+                <span className="nav-item-label">{item.label}</span>
               </Link>
             );
           })}
 
           <div className="nav-divider" aria-hidden="true" />
-          <p className="nav-section-label">Digər</p>
+          <p className="nav-section-label">Resurslar</p>
           {visibleSecondaryNavItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -389,8 +428,10 @@ export function AppShell({
                 onFocus={() => handleNavHover(item.href)}
                 prefetch={false}
               >
-                <Icon size={18} strokeWidth={1.9} />
-                <span>{item.label}</span>
+                <span className="nav-icon-box" aria-hidden="true">
+                  <Icon size={18} strokeWidth={1.9} />
+                </span>
+                <span className="nav-item-label">{item.label}</span>
               </Link>
             );
           })}
@@ -399,7 +440,10 @@ export function AppShell({
         <div className="rail-bottom-stack">
           <Link
             href={"/profile" as Route}
-            className="nav-icon"
+            className={cx(
+              "rail-user-card",
+              (pathname === "/profile" || pathname.startsWith("/profile/")) && "is-active"
+            )}
             aria-label={`${currentUser.fullName} (${currentUser.roles.join(", ")})`}
             onClick={(event) => handleNavClick("/profile" as Route, event)}
             onPointerDown={(event) => handleNavPointerDown("/profile" as Route, event)}
@@ -419,12 +463,19 @@ export function AppShell({
             ) : (
               <div className="sidebar-avatar">{initials || "A"}</div>
             )}
+            <span className="rail-user-copy">
+              <strong>{currentUser.fullName}</strong>
+              <small>{currentUser.roles[0] || "İstifadəçi"}</small>
+            </span>
           </Link>
-          <form action={signOutAction}>
-            <button className="nav-icon" type="submit" aria-label="Çıxış">
-              <LogOut size={18} strokeWidth={1.9} />
-            </button>
-          </form>
+          <div className="rail-utility-actions">
+            <ThemeToggle className="rail-utility-button theme-toggle-rail" />
+            <form action={signOutAction}>
+              <button className="rail-utility-button" type="submit" aria-label="Çıxış" title="Çıxış">
+                <LogOut size={18} strokeWidth={1.9} />
+              </button>
+            </form>
+          </div>
         </div>
       </aside>
 

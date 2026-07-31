@@ -18,12 +18,6 @@ export default function DashboardLoading() {
       <div className="owner-dashboard-primary-grid">
         <span className="owner-dashboard-skeleton owner-dashboard-skeleton-revenue" />
       </div>
-
-      <div className="owner-dashboard-lower-grid">
-        {Array.from({ length: 1 }, (_, index) => (
-          <span className="owner-dashboard-skeleton owner-dashboard-skeleton-lower" key={index} />
-        ))}
-      </div>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { Banknote, BookOpen, Check, Plus, Trash2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -162,6 +163,7 @@ export function StudentCreateDialogClient({
     try {
       unwrapActionResult(await createStudentAction(formData));
     } catch (error) {
+      unstable_rethrow(error);
       notifyCaughtError(error, "Tələbə yaradılmadı.");
     }
   }

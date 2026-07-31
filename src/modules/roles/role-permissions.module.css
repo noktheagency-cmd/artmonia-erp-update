@@ -32,6 +32,12 @@
   font-size: 13px;
 }
 
+.pageActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
 .primaryAction {
   border-color: var(--role-accent) !important;
   color: #fff !important;
@@ -704,6 +710,7 @@
 .success svg, .error svg { width: 15px; height: 15px; }
 
 .confirmDialog,
+.accountDialog,
 .createDrawer,
 .auditDialog,
 .memberRoleDialog {
@@ -717,7 +724,34 @@
 }
 
 .confirmDialog { width: min(calc(100vw - 32px), 600px); }
+.accountDialog { width: min(calc(100vw - 32px), 520px); }
 .memberRoleDialog { width: min(calc(100vw - 28px), 610px); }
+
+.accountForm {
+  gap: 17px;
+  padding: 6px 0 4px;
+}
+
+.accountForm :global(.ui-field) { gap: 7px; }
+.accountForm :global(.ui-field-label) { color: #4d535e; font-size: 10px; }
+.accountForm input { height: 42px; font-size: 11px; }
+
+.accountForm select {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d8dbe1;
+  border-radius: 9px;
+  color: #3f4550;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+}
+
+.accountForm select:focus {
+  border-color: var(--role-accent);
+  outline: 3px solid rgb(123 18 53 / 11%);
+}
 .roleChoices {
   display: grid;
   gap: 7px;
@@ -1176,6 +1210,7 @@
 @media (max-width: 620px) {
   .pageHeader { flex-direction: column; }
   .pageHeader button { width: 100%; }
+  .pageActions { width: 100%; flex-direction: column; }
   .editorHeader { align-items: flex-start; flex-direction: column; }
   .editorActions { width: 100%; justify-content: space-between; }
   .roleMembers { padding: 12px; }

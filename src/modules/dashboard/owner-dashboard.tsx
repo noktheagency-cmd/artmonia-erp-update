@@ -13,13 +13,9 @@ import {
   WalletCards,
 } from "lucide-react";
 import type { DashboardData } from "@/modules/dashboard/queries";
-import { DashboardTasksPanel } from "@/modules/dashboard/dashboard-tasks-panel";
 import { DashboardDateFilter } from "@/modules/dashboard/dashboard-date-filter";
 import { DashboardInsights } from "@/modules/dashboard/dashboard-insights";
 import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashboard-visuals";
-import type { TaskData } from "@/modules/tasks/queries";
-
-type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 
 type KpiPresentation = {
   href: Route;
@@ -34,15 +30,7 @@ const kpiPresentation: readonly KpiPresentation[] = [
   { href: "/crm", icon: TrendingUp, tone: "violet" },
 ];
 
-export function OwnerDashboard({
-  data,
-  taskData,
-  createTaskAction,
-}: {
-  data: DashboardData;
-  taskData: TaskData;
-  createTaskAction: TaskAction;
-}) {
+export function OwnerDashboard({ data }: { data: DashboardData }) {
   return (
     <section className="owner-dashboard" aria-labelledby="owner-dashboard-title">
       <header className="owner-dashboard-header">
@@ -87,12 +75,6 @@ export function OwnerDashboard({
         />
       </div>
 
-      <div className="owner-dashboard-lower-grid">
-        <DashboardTasksPanel
-          data={taskData}
-          createTaskAction={createTaskAction}
-        />
-      </div>
     </section>
   );
 }

@@ -119,6 +119,7 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
           : null,
     })),
     canManage: actor.permissions.has("auth.role.manage"),
+    canManageUsers: actor.permissions.has("auth.user.manage"),
     canViewAudit: actor.permissions.has("audit.read"),
   };
 }

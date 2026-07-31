@@ -347,6 +347,8 @@ button.students-kpi { cursor: pointer; }
 .students-payment-action:hover:not(:disabled) { color: #fff; background: linear-gradient(135deg, #0f9d74, #16b985); border-color: transparent; box-shadow: 0 12px 24px rgb(16 185 129 / 24%); }
 
 .student-create-dialog {
+  display: flex;
+  flex-direction: column;
   width: min(calc(100vw - 30px), 760px);
   max-height: min(92vh, 940px);
   padding: 22px 22px 0;
@@ -357,6 +359,7 @@ button.students-kpi { cursor: pointer; }
   backdrop-filter: none;
 }
 
+.student-create-header { flex: 0 0 auto; }
 .student-create-dialog .ui-dialog-title { color: #252d3d; font-size: 21px; font-weight: 650 !important; letter-spacing: -.025em; }
 .student-create-dialog .ui-dialog-description { color: #687386; font-size: 11px; }
 .student-create-dialog .ui-dialog-close { top: 17px; right: 17px; width: 32px; height: 32px; background: #eef3f8; border-radius: 10px; box-shadow: none; }
@@ -374,7 +377,7 @@ button.students-kpi { cursor: pointer; }
 .student-create-steps > div[data-active="true"] span { color: #fff; background: #4667e8; border-color: #4667e8; }
 .student-create-steps > div[data-active="true"] strong { color: #4667e8; }
 
-.student-create-form { gap: 11px; margin-top: 12px; padding-bottom: 0; }
+.student-create-form { flex: 1 1 auto; min-height: 0; max-height: none; gap: 11px; margin-top: 12px; padding-bottom: 0; overflow-y: auto; }
 .student-create-section { gap: 10px; padding: 11px 0 3px; background: transparent; border: 0; border-top: 1px solid #d7e0ea; border-radius: 0; box-shadow: none; backdrop-filter: none; }
 .student-create-section .student-detail-section-title { color: #252d3d; font-size: 11px; font-weight: 620; }
 .student-create-section .student-detail-section-title svg { color: #4667e8; }

@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditLogPanel } from "@/modules/roles/audit-log-panel";
 import {
+  createStandaloneUserAction,
   createRoleAction,
   deleteRoleAction,
   updateRolePermissionsAction,
@@ -69,6 +70,7 @@ export function RolePermissionsWorkspace({
   const [activeModule, setActiveModule] = useState("ALL");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingRoleIds, setEditingRoleIds] = useState<string[]>([]);
@@ -79,6 +81,9 @@ export function RolePermissionsWorkspace({
   const [copyFromRoleId, setCopyFromRoleId] = useState("");
   const [newRoleDraft, setNewRoleDraft] = useState<PermissionDraft>({});
   const [createQuery, setCreateQuery] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountRoleId, setAccountRoleId] = useState("");
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("az"));
@@ -173,6 +178,45 @@ export function RolePermissionsWorkspace({
     setCopyFromRoleId("");
     setNewRoleDraft({});
     setCreateQuery("");
+  }
+
+  function openAccountDialog() {
+    setAccountEmail("");
+    setAccountPassword("");
+    setAccountRoleId(selectedRole.code === "SUPER_ADMIN"
+      ? roles.find((role) => role.code !== "SUPER_ADMIN")?.id ?? ""
+      : selectedRole.id);
+    setFeedback(null);
+    setAccountOpen(true);
+  }
+
+  function resetAccountForm() {
+    setAccountEmail("");
+    setAccountPassword("");
+    setAccountRoleId("");
+  }
+
+  function createAccount() {
+    const data = new FormData();
+    data.set("email", accountEmail);
+    data.set("password", accountPassword);
+    data.set("roleId", accountRoleId);
+    startTransition(async () => {
+      const result = await createStandaloneUserAction(data);
+      if (!result.ok) {
+        setFeedback({ tone: "error", text: result.message });
+        return;
+      }
+      setRoles((current) => current.map((role) => role.id === result.data.roleId
+        ? { ...role, userCount: role.userCount + 1 }
+        : role));
+      setAccountOpen(false);
+      resetAccountForm();
+      setFeedback({
+        tone: "success",
+        text: `${result.data.email} üçün ${result.data.roleName} rolu ilə giriş profili yaradıldı.`,
+      });
+    });
   }
 
   function save() {
@@ -290,10 +334,19 @@ export function RolePermissionsWorkspace({
           <h1>Rol və icazələr</h1>
           <p>Komandanızın nəyə çıxışı olduğunu sadə şəkildə idarə edin.</p>
         </div>
-        {initialData.canManage ? (
-          <Button className={styles.primaryAction} onClick={() => setCreateOpen(true)}>
-            <Plus /> Yeni rol yarat
-          </Button>
+        {initialData.canManage || initialData.canManageUsers ? (
+          <div className={styles.pageActions}>
+            {initialData.canManageUsers ? (
+              <Button variant="outline" onClick={openAccountDialog}>
+                <UserRoundPlus /> Yeni profil yarat
+              </Button>
+            ) : null}
+            {initialData.canManage ? (
+              <Button className={styles.primaryAction} onClick={() => setCreateOpen(true)}>
+                <Plus /> Yeni rol yarat
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <span className={styles.readOnlyState}>
             <LockKeyhole /> Yalnız baxış rejimi
@@ -558,6 +611,76 @@ export function RolePermissionsWorkspace({
           </TabsContent>
         ) : null}
       </Tabs>
+
+      <Dialog
+        open={accountOpen}
+        onOpenChange={(open) => {
+          setAccountOpen(open);
+          if (!open) resetAccountForm();
+        }}
+      >
+        <DialogContent className={styles.accountDialog}>
+          <DialogHeader>
+            <DialogTitle>Yeni giriş profili yarat</DialogTitle>
+            <DialogDescription>
+              İnvestor və ya digər profil üçün giriş məlumatlarını və rolunu təyin edin. Bu profil HR işçilərinə əlavə olunmayacaq.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup className={styles.accountForm}>
+            <Field>
+              <FieldLabel htmlFor="account-email">E-poçt</FieldLabel>
+              <Input
+                id="account-email"
+                type="email"
+                value={accountEmail}
+                onChange={(event) => setAccountEmail(event.target.value)}
+                placeholder="investor@example.com"
+                autoComplete="off"
+                autoFocus
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="account-password">Parol</FieldLabel>
+              <Input
+                id="account-password"
+                type="password"
+                value={accountPassword}
+                onChange={(event) => setAccountPassword(event.target.value)}
+                placeholder="Ən az 8 simvol"
+                minLength={8}
+                maxLength={72}
+                autoComplete="new-password"
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="account-role">Rol</FieldLabel>
+              <select
+                id="account-role"
+                value={accountRoleId}
+                onChange={(event) => setAccountRoleId(event.target.value)}
+                required
+              >
+                <option value="">Rol seçin</option>
+                {roles.filter((role) => role.code !== "SUPER_ADMIN").map((role) => (
+                  <option value={role.id} key={role.id}>{role.name}</option>
+                ))}
+              </select>
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAccountOpen(false)}>Ləğv et</Button>
+            <Button
+              className={styles.primaryAction}
+              disabled={!accountEmail.trim() || accountPassword.length < 8 || !accountRoleId || isPending}
+              onClick={createAccount}
+            >
+              <UserRoundPlus /> {isPending ? "Yaradılır..." : "Profili yarat"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(editingUser)}

@@ -20,6 +20,7 @@ import { optionalFormString } from "@/modules/shared/form-values";
 import { toNumber } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
+import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 import {
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
   getStatusChangeReason as getSharedStatusChangeReason,
@@ -157,9 +158,6 @@ async function createStudentActionImpl(formData: FormData) {
     ? parseDateInput(input.paymentDate ?? "", "Ödəniş tarixi")
     : null;
   const paymentMonth = paymentDate ? startOfMonth(paymentDate) : null;
-  const nextPaymentAt = input.acceptPayment && input.nextPaymentDate
-    ? parseDateInput(input.nextPaymentDate, "Növbəti ödəniş tarixi")
-    : null;
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
@@ -265,7 +263,6 @@ async function createStudentActionImpl(formData: FormData) {
         amount: input.paymentAmount,
         paidAt: paymentDate,
         paymentMonth,
-        nextPaymentAt,
         method: input.paymentMethod,
         note: input.paymentNote ?? input.notes ?? null,
         actorId: actor.id,
@@ -338,9 +335,6 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
   const input = recordPaymentSchema.parse(Object.fromEntries(formData));
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
   const paymentMonth = startOfMonth(paidAt);
-  const nextPaymentAt = input.nextPaymentDate
-    ? parseDateInput(input.nextPaymentDate, "Növbəti ödəniş tarixi")
-    : null;
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
@@ -349,7 +343,6 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
       amount: input.amount,
       paidAt,
       paymentMonth,
-      nextPaymentAt,
       method: input.method,
       note: input.note ?? null,
       actorId: actor.id,
@@ -783,7 +776,6 @@ async function createPaymentAndAllocate(
     amount: number;
     paidAt: Date;
     paymentMonth: Date;
-    nextPaymentAt: Date | null;
     method: (typeof studentPaymentMethodValues)[number];
     note: string | null;
     actorId: string;
@@ -822,9 +814,20 @@ async function createPaymentAndAllocate(
     throw new Error("Tələbə tapılmadı");
   }
 
+  const groupMembership = await tx.groupMembership.findFirst({
+    where: {
+      endedAt: null,
+      enrollment: { studentId: student.id },
+    },
+    orderBy: [{ joinedAt: "desc" }, { createdAt: "desc" }],
+    select: { joinedAt: true },
+  });
   const monthlyFee = toNumber(student.enrollments[0]?.monthlyFee);
-  const nextPaymentAt = input.nextPaymentAt ??
-    (monthlyFee > 0 && input.amount >= monthlyFee ? addUtcMonths(input.paidAt, 1) : null);
+  const nextPaymentAt = resolveNextPaymentAt({
+    groupJoinedAt: groupMembership?.joinedAt ?? null,
+    paymentMonth: input.paymentMonth,
+    paidAt: input.paidAt,
+  });
   let invoices = student.invoices;
   const periodMonth = startOfMonth(input.paidAt);
 
@@ -1044,12 +1047,6 @@ function resolveInvoiceStatus({
 
 function startOfMonth(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1));
-}
-
-function addUtcMonths(value: Date, months: number) {
-  const result = new Date(value);
-  result.setUTCMonth(result.getUTCMonth() + months);
-  return result;
 }
 
 function roundMoney(value: number) {

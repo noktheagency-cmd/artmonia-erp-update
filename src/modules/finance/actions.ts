@@ -18,6 +18,7 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { startOfMonth, toNumber } from "@/modules/shared/format";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
+import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
@@ -100,7 +101,7 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
   const input = recordFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
-  const paymentMonth = parseMonthInput(input.paymentMonth);
+  const paymentMonth = startOfMonth(paidAt);
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
@@ -241,7 +242,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
   const input = updateFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
-  const paymentMonth = parseMonthInput(input.paymentMonth);
+  const paymentMonth = startOfMonth(paidAt);
   const prisma = getPrisma();
 
   const previousPaymentMonth = await prisma.$transaction(async (tx) => {
@@ -253,6 +254,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: true,
         paidAt: true,
         paymentMonth: true,
+        nextPaymentAt: true,
         method: true,
         payerName: true,
         receiptFileName: true,
@@ -274,6 +276,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: input.amount,
         paidAt,
         paymentMonth,
+        nextPaymentAt: await resolveStudentNextPaymentAt(tx, existing.studentId, paidAt, paymentMonth),
         method: input.method as PaymentMethod,
         payerName: input.payerName ?? null,
         receiptFileName: receipt?.fileName ?? existing.receiptFileName,
@@ -287,6 +290,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: true,
         paidAt: true,
         paymentMonth: true,
+        nextPaymentAt: true,
         method: true,
       },
     });
@@ -307,6 +311,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: toNumber(existing.amount),
         paidAt: existing.paidAt.toISOString(),
         paymentMonth: existing.paymentMonth.toISOString(),
+        nextPaymentAt: existing.nextPaymentAt?.toISOString() ?? null,
         method: existing.method,
         payerName: existing.payerName,
         receiptReference: existing.receiptReference,
@@ -316,6 +321,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: toNumber(payment.amount),
         paidAt: payment.paidAt.toISOString(),
         paymentMonth: payment.paymentMonth.toISOString(),
+        nextPaymentAt: payment.nextPaymentAt?.toISOString() ?? null,
         method: payment.method,
         allocations,
       } satisfies Prisma.InputJsonValue,
@@ -720,12 +726,20 @@ async function createPaymentAndAllocate(
     throw new Error("Telebe tapilmadi");
   }
 
+  const nextPaymentAt = await resolveStudentNextPaymentAt(
+    tx,
+    student.id,
+    input.paidAt,
+    input.paymentMonth,
+  );
+
   const payment = await tx.payment.create({
     data: {
       studentId: student.id,
       amount: input.amount,
       paidAt: input.paidAt,
       paymentMonth: input.paymentMonth,
+      nextPaymentAt,
       method: input.method as PaymentMethod,
       payerName: input.payerName,
       receiptFileName: input.receiptFileName,
@@ -740,6 +754,7 @@ async function createPaymentAndAllocate(
       amount: true,
       paidAt: true,
       paymentMonth: true,
+      nextPaymentAt: true,
       method: true,
       payerName: true,
       receiptFileName: true,
@@ -1020,6 +1035,7 @@ function toPaymentAuditJson(
       amount: toNumber(result.payment.amount),
       paidAt: result.payment.paidAt.toISOString(),
       paymentMonth: result.payment.paymentMonth.toISOString(),
+      nextPaymentAt: result.payment.nextPaymentAt?.toISOString() ?? null,
     },
     allocations: result.allocations,
     unallocatedAmount: result.remainingAmount,
@@ -1046,15 +1062,26 @@ function parseDateInput(value: string, fieldName: string) {
   return date;
 }
 
-function parseMonthInput(value: string) {
-  const trimmed = value.trim();
-  const monthMatch = trimmed.match(/^(\d{4})-(\d{2})$/);
+async function resolveStudentNextPaymentAt(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  paidAt: Date,
+  paymentMonth: Date,
+) {
+  const membership = await tx.groupMembership.findFirst({
+    where: {
+      endedAt: null,
+      enrollment: { studentId },
+    },
+    orderBy: [{ joinedAt: "desc" }, { createdAt: "desc" }],
+    select: { joinedAt: true },
+  });
 
-  if (monthMatch) {
-    return new Date(`${monthMatch[1]}-${monthMatch[2]}-01T00:00:00.000Z`);
-  }
-
-  return parseDateInput(trimmed, "Növbəti ödəniş tarixi");
+  return resolveNextPaymentAt({
+    groupJoinedAt: membership?.joinedAt ?? null,
+    paymentMonth,
+    paidAt,
+  });
 }
 
 function normalizeDateValue(value: string) {

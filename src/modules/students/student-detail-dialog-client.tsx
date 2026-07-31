@@ -161,7 +161,7 @@ export function StudentDetailDialogClient({
                   <span>Növbəti ödəniş tarixi</span>
                   <DatePicker
                     name="nextPaymentDate"
-                    defaultValue={addOneMonth(student.detail.paymentDefaultDate)}
+                    defaultValue={student.detail.paymentDefaultNextDate}
                     allowClear={false}
                     popoverPlacement="floating"
                     required
@@ -250,12 +250,4 @@ export function StudentDetailDialogClient({
       </DialogContent>
     </Dialog>
   );
-}
-
-function addOneMonth(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return value;
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  date.setUTCMonth(date.getUTCMonth() + 1);
-  return date.toISOString().slice(0, 10);
 }
