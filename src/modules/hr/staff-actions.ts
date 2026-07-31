@@ -17,6 +17,16 @@ import {
   uploadProfilePhoto,
 } from "@/server/storage/erp-files";
 
+const roleIdsSchema = z.preprocess((value) => {
+  if (value == null || value === "") return [];
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(z.string().uuid()).max(20));
+
 const staffSchema = z.object({
   id: z.string().uuid().optional(),
   staffType: z.enum(["EMPLOYEE", "TEACHER"]).default("EMPLOYEE"),
@@ -36,14 +46,14 @@ const staffSchema = z.object({
   createAccount: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   loginEmail: z.union([z.string().trim().email(), z.literal("")]).default(""),
   password: z.string().max(72).default(""),
-  roleId: z.union([z.string().uuid(), z.literal("")]).default(""),
+  roleIds: roleIdsSchema,
 }).superRefine((value, context) => {
   if (value.salaryMode === "STATIC" && value.salaryAmount <= 0) context.addIssue({ code: "custom", path: ["salaryAmount"], message: "Statik maaş sıfırdan böyük olmalıdır" });
   if (value.salaryMode === "PERCENT" && value.salaryPercent <= 0) context.addIssue({ code: "custom", path: ["salaryPercent"], message: "Faiz sıfırdan böyük olmalıdır" });
   if (value.staffType === "TEACHER" && value.teacherCapacity <= 0) context.addIssue({ code: "custom", path: ["teacherCapacity"], message: "Müəllim üçün tələbə tutumu tələb olunur" });
   if (value.createAccount && !value.loginEmail) context.addIssue({ code: "custom", path: ["loginEmail"], message: "Giriş e-poçtu tələb olunur" });
   if (value.createAccount && value.password.length < 8) context.addIssue({ code: "custom", path: ["password"], message: "Parol ən az 8 simvol olmalıdır" });
-  if (value.createAccount && !value.roleId) context.addIssue({ code: "custom", path: ["roleId"], message: "ERP rolu seçilməlidir" });
+  if (value.createAccount && value.roleIds.length === 0) context.addIssue({ code: "custom", path: ["roleIds"], message: "Ən az bir ERP rolu seçilməlidir" });
 });
 
 async function createStaffActionImpl(formData: FormData) {
@@ -54,10 +64,10 @@ async function createStaffActionImpl(formData: FormData) {
   if (input.createAccount && !actor.permissions.has("auth.user.manage")) throw new PublicActionError("ERP giriş hesabı yaratmaq üçün istifadəçi idarəetmə icazəsi tələb olunur", "FORBIDDEN");
 
   const prisma = getPrisma();
-  const [role, emailOwner] = await Promise.all([
+  const [roles, emailOwner] = await Promise.all([
     input.createAccount
-      ? prisma.role.findFirst({ where: { id: input.roleId, OR: [{ code: null }, { code: { not: AppRole.SUPER_ADMIN } }] } })
-      : null,
+      ? prisma.role.findMany({ where: { id: { in: input.roleIds } } })
+      : [],
     input.createAccount
       ? prisma.user.findFirst({
           where: { email: { equals: input.loginEmail, mode: "insensitive" } },
@@ -65,7 +75,9 @@ async function createStaffActionImpl(formData: FormData) {
         })
       : null,
   ]);
-  if (input.createAccount && !role) throw new PublicActionError("Seçilmiş rol tapılmadı və ya təyin edilə bilməz", "NOT_FOUND");
+  if (input.createAccount && (roles.length !== input.roleIds.length || roles.some((role) => role.code === AppRole.SUPER_ADMIN))) {
+    throw new PublicActionError("Seçilmiş rollardan biri tapılmadı və ya təyin edilə bilməz", "NOT_FOUND");
+  }
   if (emailOwner) throw new PublicActionError("Bu e-poçt ünvanı ilə giriş hesabı artıq mövcuddur", "DUPLICATE");
 
   let authUserId: string | null = null;
@@ -82,7 +94,11 @@ async function createStaffActionImpl(formData: FormData) {
     }
     const result = await prisma.$transaction(async (tx) => {
       const erpUser = authUserId ? await tx.user.create({ data: { authUserId, fullName: input.fullName, email: input.loginEmail, phone: input.phone || null, isActive: true } }) : null;
-      if (erpUser && role) await tx.userRole.create({ data: { userId: erpUser.id, roleId: role.id } });
+      if (erpUser && roles.length) {
+        await tx.userRole.createMany({
+          data: roles.map((role) => ({ userId: erpUser.id, roleId: role.id })),
+        });
+      }
 
       let teacherId: string | null = null;
       if (input.staffType === "TEACHER") {
@@ -112,7 +128,7 @@ async function createStaffActionImpl(formData: FormData) {
         note: input.note || null,
         createdById: actor.id,
       } });
-      await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.staff.create", entityType: "hr_employee", entityId: employee.id, after: { fullName: employee.fullName, staffType: employee.staffType, email: employee.email, profilePhotoUrl, loginCreated: Boolean(authUserId), role: role?.name ?? null, teacherId } as Prisma.InputJsonValue, reason: input.staffType === "TEACHER" ? "Müəllim əməkdaş profili yaradıldı" : "Əməkdaş profili yaradıldı" });
+      await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.staff.create", entityType: "hr_employee", entityId: employee.id, after: { fullName: employee.fullName, staffType: employee.staffType, email: employee.email, profilePhotoUrl, loginCreated: Boolean(authUserId), roles: roles.map((role) => role.name), teacherId } as Prisma.InputJsonValue, reason: input.staffType === "TEACHER" ? "Müəllim əməkdaş profili yaradıldı" : "Əməkdaş profili yaradıldı" });
       return { employeeId: employee.id, teacherId };
     });
     revalidateHr();
@@ -129,8 +145,24 @@ async function createStaffActionImpl(formData: FormData) {
 async function updateStaffActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.employee.manage");
   const input = staffSchema.required({ id: true }).parse(Object.fromEntries(formData));
-  const before = await getPrisma().hrEmployee.findUnique({ where: { id: input.id } });
+  const before = await getPrisma().hrEmployee.findUnique({
+    where: { id: input.id },
+    include: { user: { include: { roles: { include: { role: true } } } } },
+  });
   if (!before) throw new PublicActionError("Əməkdaş tapılmadı", "NOT_FOUND");
+  const shouldUpdateRoles = formData.has("roleIds") && Boolean(before.userId);
+  if (shouldUpdateRoles && !actor.permissions.has("auth.user.manage")) {
+    throw new PublicActionError("Əməkdaş rollarını dəyişmək üçün istifadəçi idarəetmə icazəsi tələb olunur", "FORBIDDEN");
+  }
+  if (shouldUpdateRoles && input.roleIds.length === 0) {
+    throw new PublicActionError("Əməkdaş üçün ən az bir rol seçilməlidir");
+  }
+  const roles = shouldUpdateRoles
+    ? await getPrisma().role.findMany({ where: { id: { in: input.roleIds } } })
+    : [];
+  if (shouldUpdateRoles && (roles.length !== input.roleIds.length || roles.some((role) => role.code === AppRole.SUPER_ADMIN))) {
+    throw new PublicActionError("Seçilmiş rollardan biri tapılmadı və ya təyin edilə bilməz", "NOT_FOUND");
+  }
 
   const uploadedProfilePhotoUrl = await persistProfilePhoto(formData.get("profilePhoto"));
 
@@ -153,11 +185,17 @@ async function updateStaffActionImpl(formData: FormData) {
   try {
     await getPrisma().$transaction(async (tx) => {
       await tx.hrEmployee.update({ where: { id: input.id }, data: employeeData });
+      if (shouldUpdateRoles && before.userId) {
+        await tx.userRole.deleteMany({ where: { userId: before.userId } });
+        await tx.userRole.createMany({
+          data: roles.map((role) => ({ userId: before.userId!, roleId: role.id })),
+        });
+      }
       if (before.teacherId) await tx.teacher.update({ where: { id: before.teacherId }, data: { fullName: input.fullName, phone: input.phone || null, capacity: input.teacherCapacity || undefined, isActive: input.status !== "INACTIVE" } });
       if (before.teacherId && input.salaryMode === "PERCENT") {
         await syncTeacherSalaryRule(tx, before.teacherId, input.salaryPercent, actor.id);
       }
-      await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.employee.update", entityType: "hr_employee", entityId: input.id, before, after: employeeData as Prisma.InputJsonValue, reason: "Əməkdaş profili yeniləndi" });
+      await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.employee.update", entityType: "hr_employee", entityId: input.id, before: { ...before, roles: before.user?.roles.map(({ role }) => role.name) } as Prisma.InputJsonValue, after: { ...employeeData, roles: shouldUpdateRoles ? roles.map((role) => role.name) : before.user?.roles.map(({ role }) => role.name) } as Prisma.InputJsonValue, reason: "Əməkdaş profili yeniləndi" });
     });
   } catch (error) {
     if (uploadedProfilePhotoUrl) await deleteLocalProfilePhoto(uploadedProfilePhotoUrl);

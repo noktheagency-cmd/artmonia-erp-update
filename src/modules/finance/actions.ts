@@ -41,6 +41,7 @@ const requiredAmount = z.preprocess(
 );
 
 const recordFinancePaymentSchema = z.object({
+  idempotencyKey: z.string().uuid(),
   studentId: z.string().uuid(),
   amount: requiredAmount,
   paidDate: z.string().trim().min(1).max(20),
@@ -62,6 +63,7 @@ const deleteFinancePaymentSchema = z.object({
 });
 
 const createExpenseSchema = z.object({
+  idempotencyKey: z.string().uuid(),
   categoryId: optionalUuid,
   newCategoryName: optionalText(80),
   amount: requiredAmount,
@@ -96,7 +98,7 @@ const deleteExpenseSchema = z.object({
 async function recordFinancePaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = recordFinancePaymentSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
   const paymentMonth = parseMonthInput(input.paymentMonth);
   const prisma = getPrisma();
@@ -114,6 +116,7 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
       receiptReference: input.receiptReference ?? null,
       note: input.note ?? null,
       actorId: actor.id,
+      idempotencyKey: input.idempotencyKey,
     });
 
     await writeAuditLog(tx, {
@@ -138,7 +141,7 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
 async function createFinanceExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.expense.create");
   const input = createExpenseSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const expenseDate = parseDateInput(input.expenseDate, "Xərc tarixi");
   const staff = parseStaffTarget(input.staffTarget);
 
@@ -194,6 +197,7 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
         receiptFileName: receipt?.fileName ?? null,
         receiptFilePath: receipt?.filePath ?? null,
         receiptReference: input.receiptReference ?? null,
+        idempotencyKey: input.idempotencyKey,
         createdById: actor.id,
       },
       select: {
@@ -687,6 +691,7 @@ async function createPaymentAndAllocate(
     receiptReference: string | null;
     note: string | null;
     actorId: string;
+    idempotencyKey: string;
   }
 ) {
   const student = await tx.student.findUnique({
@@ -727,6 +732,7 @@ async function createPaymentAndAllocate(
       receiptFilePath: input.receiptFilePath,
       receiptReference: input.receiptReference,
       note: input.note,
+      idempotencyKey: input.idempotencyKey,
       createdById: input.actorId,
     },
     select: {
@@ -991,11 +997,14 @@ function normalizeKeyword(value: string) {
     .replace(/[ü]/g, "u");
 }
 
-async function persistReceiptFile(value: FormDataEntryValue | null) {
+async function persistReceiptFile(
+  value: FormDataEntryValue | null,
+  idempotencyKey?: string,
+) {
   if (!isUploadedFile(value)) {
     return null;
   }
-  return uploadReceipt(value);
+  return uploadReceipt(value, idempotencyKey);
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {

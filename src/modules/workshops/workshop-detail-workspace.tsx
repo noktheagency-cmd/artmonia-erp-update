@@ -75,6 +75,7 @@ const eventStatusOptions = [
   { value: "COMPLETED", label: "Tamamlandı" },
   { value: "CANCELLED", label: "Ləğv edildi" },
 ] as const;
+const addExpenseCategoryValue = "__add_category__";
 export function WorkshopDetailWorkspace({
   data,
   actions,
@@ -275,15 +276,15 @@ function ExpensesTab({ data, actions, autoOpen }: { data: WorkshopDetailData; ac
         </div>
         <div className="workshop-table-scroll">
           <table className="workshop-data-table is-detail-table">
-            <thead><tr><th>Kateqoriya</th><th>Tarix</th><th>Vendor</th><th>Metod</th><th>Məbləğ</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Kateqoriya</th><th>Tarix</th><th>Metod</th><th>Məbləğ</th><th>Status</th><th /></tr></thead>
             <tbody>{data.expenses.length ? data.expenses.map((expense) => (
               <tr key={expense.id} className={expense.statusLabel === "Ləğv edilib" ? "is-voided" : undefined}>
                 <td><strong>{expense.category}</strong><small>{expense.description}</small></td>
-                <td>{expense.expenseDate}</td><td>{expense.vendor}</td><td>{expense.method}</td><td><strong>{expense.amount}</strong></td>
+                <td>{expense.expenseDate}</td><td>{expense.method}</td><td><strong>{expense.amount}</strong></td>
                 <td><StatusChip tone={expense.statusTone}>{expense.statusLabel}</StatusChip></td>
                 <td>{expense.statusLabel === "Aktiv" && data.permissions.canManageFinance ? <VoidExpenseDialog row={expense} action={actions.voidExpense} /> : null}</td>
               </tr>
-            )) : <EmptyTable colSpan={7} text="Xərc əməliyyatı yoxdur" />}</tbody>
+            )) : <EmptyTable colSpan={6} text="Xərc əməliyyatı yoxdur" />}</tbody>
           </table>
         </div>
       </section>
@@ -430,16 +431,33 @@ function PaymentDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
 }
 
 function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetailData; action: WorkshopAction; autoOpen?: boolean }) {
+  const [categoryValue, setCategoryValue] = useState("");
+  const isAddingCategory = categoryValue === addExpenseCategoryValue;
   return (
     <ActionDialog title="Xərc əlavə et" description="Tədbirə bağlanan xərc ümumi Maliyyədə də görünəcək." trigger={<Button variant="outline"><CircleDollarSign data-icon="inline-start" />Xərc əlavə et</Button>} action={action} defaultOpen={autoOpen} headerIcon={<CircleDollarSign />}>
       <input type="hidden" name="eventId" value={data.event.id} />
+      <input type="hidden" name="categoryId" value={isAddingCategory ? "" : categoryValue} />
       <FieldGroup>
-        <Field><FieldLabel>Kateqoriya</FieldLabel><FormSelect name="categoryId" required options={data.categories.map((category) => ({ value: category.id, label: category.name }))} /></Field>
+        <Field>
+          <FieldLabel>Kateqoriya</FieldLabel>
+          <FormSelect
+            name="categorySelector"
+            value={categoryValue}
+            onValueChange={setCategoryValue}
+            required
+            emptyLabel="Kateqoriya seç"
+            searchable
+            options={[
+              ...data.categories.map((category) => ({ value: category.id, label: category.name })),
+              { value: addExpenseCategoryValue, label: "+ Yeni kateqoriya" },
+            ]}
+          />
+          {isAddingCategory ? <Input name="newCategoryName" maxLength={80} placeholder="Yeni kateqoriyanın adı" required /> : null}
+        </Field>
         <div className="workshop-form-grid">
           <Field><FieldLabel htmlFor="expense-amount">Məbləğ</FieldLabel><Input id="expense-amount" name="amount" inputMode="decimal" required /></Field>
           <Field><FieldLabel>Xərc tarixi</FieldLabel><DatePicker name="expenseDate" defaultValue={data.defaultDate} required allowClear={false} popoverPlacement="floating" /></Field>
           <Field><FieldLabel>Ödəniş üsulu</FieldLabel><FormSelect name="method" defaultValue="CASH" options={paymentMethodOptions} /></Field>
-          <Field><FieldLabel htmlFor="expense-vendor">Vendor</FieldLabel><Input id="expense-vendor" name="vendor" /></Field>
           <Field><FieldLabel htmlFor="expense-receipt">Qəbz №</FieldLabel><Input id="expense-receipt" name="receiptReference" /></Field>
           <Field><FieldLabel htmlFor="expense-file">Qəbz faylı</FieldLabel><Input id="expense-file" name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" /></Field>
         </div>
@@ -476,6 +494,7 @@ function EditEventDialog({ data, action }: { data: WorkshopDetailData; action: W
         <Field><FieldLabel>Tutum</FieldLabel><Input name="capacity" type="number" defaultValue={event.capacity ?? ""} /></Field>
         <Field className="workshop-field-span-2"><FieldLabel>Məkan</FieldLabel><Input name="room" defaultValue={event.room === "Məkan seçilməyib" ? "" : event.room} /></Field>
         <Field><FieldLabel>Təlimçi</FieldLabel><Input name="instructor" defaultValue={event.instructor === "Təlimçi seçilməyib" ? "" : event.instructor} /></Field>
+        <Field className="workshop-field-span-2"><FieldLabel>Yeni poster</FieldLabel><Input name="poster" type="file" accept="image/jpeg,image/png,image/webp" /></Field>
       </div><Field><FieldLabel>Qeyd</FieldLabel><textarea name="note" defaultValue={event.note} rows={3} /></Field></FieldGroup>
     </ActionDialog>
   );

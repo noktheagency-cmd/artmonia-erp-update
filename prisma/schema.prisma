@@ -1071,22 +1071,23 @@ model Teacher {
 }
 
 model Student {
-  id              String                 @id @default(uuid()) @db.Uuid
-  code            String                 @unique
-  contactId       String                 @map("contact_id") @db.Uuid
-  managerId       String?                @map("manager_id") @db.Uuid
-  campaignId      String?                @map("campaign_id") @db.Uuid
-  sourceLead      Lead?                  @relation("LeadConvertedStudent")
-  lifecycleStatus StudentLifecycleStatus @default(GROUP_WAITING) @map("lifecycle_status")
-  educationLevel  String?                @map("education_level")
-  registeredAt    DateTime               @map("registered_at") @db.Date
-  stoppedAt       DateTime?              @map("stopped_at") @db.Date
-  completedAt     DateTime?              @map("completed_at") @db.Date
-  freezeReturnAt  DateTime?              @map("freeze_return_at") @db.Date
-  billingPaused   Boolean                @default(false) @map("billing_paused")
-  notes           String?
-  createdAt       DateTime               @default(now()) @map("created_at")
-  updatedAt       DateTime               @updatedAt @map("updated_at")
+  id                     String                 @id @default(uuid()) @db.Uuid
+  code                   String                 @unique
+  creationIdempotencyKey String?                @unique @map("creation_idempotency_key") @db.Uuid
+  contactId              String                 @map("contact_id") @db.Uuid
+  managerId              String?                @map("manager_id") @db.Uuid
+  campaignId             String?                @map("campaign_id") @db.Uuid
+  sourceLead             Lead?                  @relation("LeadConvertedStudent")
+  lifecycleStatus        StudentLifecycleStatus @default(GROUP_WAITING) @map("lifecycle_status")
+  educationLevel         String?                @map("education_level")
+  registeredAt           DateTime               @map("registered_at") @db.Date
+  stoppedAt              DateTime?              @map("stopped_at") @db.Date
+  completedAt            DateTime?              @map("completed_at") @db.Date
+  freezeReturnAt         DateTime?              @map("freeze_return_at") @db.Date
+  billingPaused          Boolean                @default(false) @map("billing_paused")
+  notes                  String?
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
 
   contact              Contact                @relation(fields: [contactId], references: [id])
   manager              User?                  @relation("StudentManager", fields: [managerId], references: [id])
@@ -1411,6 +1412,7 @@ model WorkshopEvent {
   instructor      String?
   capacity        Int?
   entryPrice      Decimal             @default(0) @map("entry_price") @db.Decimal(12, 2)
+  posterUrl       String?             @map("poster_url")
   note            String?
   createdById     String?             @map("created_by_id") @db.Uuid
   createdAt       DateTime            @default(now()) @map("created_at")
@@ -1612,6 +1614,7 @@ model FinanceExpense {
   receiptFileName        String?           @map("receipt_file_name")
   receiptFilePath        String?           @map("receipt_file_path")
   receiptReference       String?           @map("receipt_reference")
+  idempotencyKey         String?           @unique @map("idempotency_key") @db.Uuid
   workshopEventId        String?           @map("workshop_event_id") @db.Uuid
   createdById            String?           @map("created_by_id") @db.Uuid
   voidedAt               DateTime?         @map("voided_at")

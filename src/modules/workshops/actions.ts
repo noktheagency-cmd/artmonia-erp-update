@@ -22,7 +22,11 @@ import {
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { safeServerAction } from "@/server/actions/safe-action";
-import { uploadReceipt } from "@/server/storage/erp-files";
+import {
+  deleteWorkshopPoster,
+  uploadReceipt,
+  uploadWorkshopPoster,
+} from "@/server/storage/erp-files";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().trim().max(max).optional());
@@ -143,12 +147,13 @@ const voidPaymentSchema = z.object({
 });
 
 const expenseSchema = z.object({
+  idempotencyKey: z.string().uuid().optional(),
   eventId: z.string().uuid(),
-  categoryId: z.string().uuid(),
+  categoryId: optionalUuid,
+  newCategoryName: optionalText(80),
   amount: requiredPositiveAmount,
   expenseDate: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default(PaymentMethod.CASH),
-  vendor: optionalText(180),
   description: optionalText(700),
   receiptReference: optionalText(180),
 });
@@ -168,35 +173,46 @@ async function createWorkshopEventActionImpl(formData: FormData) {
   const input = createEventSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const eventType = resolveEventType(input.eventType);
-  const event = await prisma.workshopEvent.create({
-    data: {
-      title: input.title,
-      eventType: eventType.kind,
-      category: eventType.category,
-      status: input.status,
-      eventDate: parseDateInput(input.eventDate, "Tədbir tarixi"),
-      startTime: input.startTime,
-      durationMinutes: input.durationMinutes,
-      room: input.room ?? null,
-      instructor: input.instructor ?? null,
-      capacity: input.capacity ?? null,
-      entryPrice: input.entryPrice,
-      note: input.note ?? null,
-      createdById: actor.id,
-    },
-  });
+  const posterUrl = await persistWorkshopPoster(formData.get("poster"));
+  let eventId = "";
+  try {
+    eventId = await prisma.$transaction(async (tx) => {
+      const event = await tx.workshopEvent.create({
+        data: {
+          title: input.title,
+          eventType: eventType.kind,
+          category: eventType.category,
+          status: input.status,
+          eventDate: parseDateInput(input.eventDate, "Tədbir tarixi"),
+          startTime: input.startTime,
+          durationMinutes: input.durationMinutes,
+          room: input.room ?? null,
+          instructor: input.instructor ?? null,
+          capacity: input.capacity ?? null,
+          entryPrice: input.entryPrice,
+          posterUrl,
+          note: input.note ?? null,
+          createdById: actor.id,
+        },
+      });
 
-  await writeAuditLog(prisma, {
-    actorUserId: actor.id,
-    action: "workshop.event.create",
-    entityType: "workshop_event",
-    entityId: event.id,
-    after: eventAuditJson(event),
-    reason: input.note ?? "Workshop/masterclass yaradıldı",
-  });
+      await writeAuditLog(tx, {
+        actorUserId: actor.id,
+        action: "workshop.event.create",
+        entityType: "workshop_event",
+        entityId: event.id,
+        after: eventAuditJson(event),
+        reason: input.note ?? "Workshop/masterclass yaradıldı",
+      });
+      return event.id;
+    });
+  } catch (error) {
+    if (posterUrl) await deleteWorkshopPoster(posterUrl).catch(() => undefined);
+    throw error;
+  }
 
-  invalidateWorkshopCaches(event.id);
-  return { ok: true as const, id: event.id };
+  invalidateWorkshopCaches(eventId);
+  return { ok: true as const, id: eventId };
 }
 
 async function updateWorkshopEventActionImpl(formData: FormData) {
@@ -204,46 +220,59 @@ async function updateWorkshopEventActionImpl(formData: FormData) {
   const input = updateEventSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const eventType = resolveEventType(input.eventType);
+  const uploadedPosterUrl = await persistWorkshopPoster(formData.get("poster"));
+  let previousPosterUrl: string | null = null;
 
-  await prisma.$transaction(async (tx) => {
-    const existing = await tx.workshopEvent.findUnique({ where: { id: input.eventId } });
-    if (!existing) throw new Error("Tədbir tapılmadı");
+  try {
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.workshopEvent.findUnique({ where: { id: input.eventId } });
+      if (!existing) throw new Error("Tədbir tapılmadı");
+      previousPosterUrl = existing.posterUrl;
 
-    const activeParticipants = await tx.workshopParticipant.count({
-      where: { eventId: input.eventId, cancelledAt: null },
+      const activeParticipants = await tx.workshopParticipant.count({
+        where: { eventId: input.eventId, cancelledAt: null },
+      });
+      if (input.capacity && input.capacity < activeParticipants) {
+        throw new Error("Tutum aktiv iştirakçı sayından az ola bilməz");
+      }
+
+      const updated = await tx.workshopEvent.update({
+        where: { id: input.eventId },
+        data: {
+          title: input.title,
+          eventType: eventType.kind,
+          category: eventType.category,
+          status: input.status,
+          eventDate: parseDateInput(input.eventDate, "Tədbir tarixi"),
+          startTime: input.startTime,
+          durationMinutes: input.durationMinutes,
+          room: input.room ?? null,
+          instructor: input.instructor ?? null,
+          capacity: input.capacity ?? null,
+          entryPrice: input.entryPrice,
+          posterUrl: uploadedPosterUrl ?? existing.posterUrl,
+          note: input.note ?? null,
+        },
+      });
+
+      await writeAuditLog(tx, {
+        actorUserId: actor.id,
+        action: "workshop.event.update",
+        entityType: "workshop_event",
+        entityId: updated.id,
+        before: eventAuditJson(existing),
+        after: eventAuditJson(updated),
+        reason: input.note ?? "Tədbir məlumatları yeniləndi",
+      });
     });
-    if (input.capacity && input.capacity < activeParticipants) {
-      throw new Error("Tutum aktiv iştirakçı sayından az ola bilməz");
-    }
+  } catch (error) {
+    if (uploadedPosterUrl) await deleteWorkshopPoster(uploadedPosterUrl).catch(() => undefined);
+    throw error;
+  }
 
-    const updated = await tx.workshopEvent.update({
-      where: { id: input.eventId },
-      data: {
-        title: input.title,
-        eventType: eventType.kind,
-        category: eventType.category,
-        status: input.status,
-        eventDate: parseDateInput(input.eventDate, "Tədbir tarixi"),
-        startTime: input.startTime,
-        durationMinutes: input.durationMinutes,
-        room: input.room ?? null,
-        instructor: input.instructor ?? null,
-        capacity: input.capacity ?? null,
-        entryPrice: input.entryPrice,
-        note: input.note ?? null,
-      },
-    });
-
-    await writeAuditLog(tx, {
-      actorUserId: actor.id,
-      action: "workshop.event.update",
-      entityType: "workshop_event",
-      entityId: updated.id,
-      before: eventAuditJson(existing),
-      after: eventAuditJson(updated),
-      reason: input.note ?? "Tədbir məlumatları yeniləndi",
-    });
-  });
+  if (uploadedPosterUrl && previousPosterUrl) {
+    await deleteWorkshopPoster(previousPosterUrl).catch(() => undefined);
+  }
 
   invalidateWorkshopCaches(input.eventId);
   return { ok: true as const };
@@ -254,12 +283,14 @@ async function deleteOrCancelWorkshopEventActionImpl(formData: FormData) {
   const input = z.object({ eventId: z.string().uuid() })
     .parse(Object.fromEntries(formData));
   const prisma = getPrisma();
+  let posterUrl: string | null = null;
 
   await prisma.$transaction(async (tx) => {
     const event = await tx.workshopEvent.findUnique({
       where: { id: input.eventId },
     });
     if (!event) throw new Error("Tədbir tapılmadı");
+    posterUrl = event.posterUrl;
 
     // Replacement records reference another record in the same table, so clear
     // those links before deleting the event's financial history.
@@ -286,6 +317,8 @@ async function deleteOrCancelWorkshopEventActionImpl(formData: FormData) {
     });
   });
 
+  if (posterUrl) await deleteWorkshopPoster(posterUrl).catch(() => undefined);
+
   invalidateWorkshopCaches(input.eventId);
   return { ok: true as const };
 }
@@ -293,7 +326,7 @@ async function deleteOrCancelWorkshopEventActionImpl(formData: FormData) {
 async function assignWorkshopParticipantActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = participantSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
 
   const participantId = await prisma.$transaction(async (tx) => {
@@ -488,7 +521,7 @@ async function cancelWorkshopParticipantActionImpl(formData: FormData) {
 async function recordWorkshopPaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = paymentSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
 
   const payment = await prisma.$transaction(async (tx) => {
@@ -529,7 +562,7 @@ async function recordWorkshopPaymentActionImpl(formData: FormData) {
 async function replaceWorkshopPaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = replacePaymentSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
@@ -619,12 +652,25 @@ async function voidWorkshopPaymentActionImpl(formData: FormData) {
 async function createWorkshopExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = expenseSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
+  if (!input.categoryId && !input.newCategoryName) {
+    throw new Error("Xərc kateqoriyası seçilməlidir");
+  }
   const expense = await prisma.$transaction(async (tx) => {
     const event = await tx.workshopEvent.findUnique({ where: { id: input.eventId }, select: { id: true, title: true } });
     if (!event) throw new Error("Tədbir tapılmadı");
-    const category = await tx.financeExpenseCategory.findUnique({ where: { id: input.categoryId } });
+    const category = input.newCategoryName
+      ? await tx.financeExpenseCategory.upsert({
+          where: { name: input.newCategoryName },
+          create: {
+            name: input.newCategoryName,
+            description: "Workshop modulundan əlavə edildi",
+            isSystem: false,
+          },
+          update: {},
+        })
+      : await tx.financeExpenseCategory.findUnique({ where: { id: input.categoryId } });
     if (!category) throw new Error("Xərc kateqoriyası tapılmadı");
     const created = await tx.financeExpense.create({
       data: {
@@ -633,12 +679,13 @@ async function createWorkshopExpenseActionImpl(formData: FormData) {
         amount: input.amount,
         expenseDate: parseDateInput(input.expenseDate, "Xərc tarixi"),
         method: input.method as PaymentMethod,
-        vendor: input.vendor ?? null,
+        vendor: null,
         description: input.description ?? null,
         salaryMode: FinanceSalaryMode.NONE,
         receiptFileName: receipt?.fileName ?? null,
         receiptFilePath: receipt?.filePath ?? null,
         receiptReference: input.receiptReference ?? null,
+        idempotencyKey: input.idempotencyKey ?? null,
         createdById: actor.id,
       },
     });
@@ -660,14 +707,27 @@ async function createWorkshopExpenseActionImpl(formData: FormData) {
 async function replaceWorkshopExpenseActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.finance.manage");
   const input = replaceExpenseSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
+  if (!input.categoryId && !input.newCategoryName) {
+    throw new Error("Xərc kateqoriyası seçilməlidir");
+  }
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.financeExpense.findUnique({ where: { id: input.expenseId } });
     if (!existing?.workshopEventId || existing.voidedAt) throw new Error("Aktiv workshop xərci tapılmadı");
     if (existing.workshopEventId !== input.eventId) throw new Error("Xərc başqa tədbirə aiddir");
-    const category = await tx.financeExpenseCategory.findUnique({ where: { id: input.categoryId } });
+    const category = input.newCategoryName
+      ? await tx.financeExpenseCategory.upsert({
+          where: { name: input.newCategoryName },
+          create: {
+            name: input.newCategoryName,
+            description: "Workshop modulundan əlavə edildi",
+            isSystem: false,
+          },
+          update: {},
+        })
+      : await tx.financeExpenseCategory.findUnique({ where: { id: input.categoryId } });
     if (!category) throw new Error("Xərc kateqoriyası tapılmadı");
     await tx.financeExpense.update({
       where: { id: existing.id },
@@ -680,12 +740,13 @@ async function replaceWorkshopExpenseActionImpl(formData: FormData) {
         amount: input.amount,
         expenseDate: parseDateInput(input.expenseDate, "Xərc tarixi"),
         method: input.method as PaymentMethod,
-        vendor: input.vendor ?? null,
+        vendor: null,
         description: input.description ?? null,
         salaryMode: FinanceSalaryMode.NONE,
         receiptFileName: receipt?.fileName ?? existing.receiptFileName,
         receiptFilePath: receipt?.filePath ?? existing.receiptFilePath,
         receiptReference: input.receiptReference ?? existing.receiptReference,
+        idempotencyKey: input.idempotencyKey ?? null,
         createdById: actor.id,
         replacesExpenseId: existing.id,
       },
@@ -805,6 +866,7 @@ function eventAuditJson(event: {
   eventDate: Date;
   startTime: string;
   entryPrice: Prisma.Decimal;
+  posterUrl?: string | null;
 }) {
   return {
     title: event.title,
@@ -814,6 +876,7 @@ function eventAuditJson(event: {
     eventDate: event.eventDate.toISOString(),
     startTime: event.startTime,
     entryPrice: toNumber(event.entryPrice),
+    posterUrl: event.posterUrl ?? null,
   } satisfies Prisma.InputJsonValue;
 }
 
@@ -901,9 +964,17 @@ function expenseAuditJson(expense: {
   } satisfies Prisma.InputJsonValue;
 }
 
-async function persistReceiptFile(value: FormDataEntryValue | null) {
+async function persistReceiptFile(
+  value: FormDataEntryValue | null,
+  idempotencyKey?: string,
+) {
   if (!isUploadedFile(value)) return null;
-  return uploadReceipt(value);
+  return uploadReceipt(value, idempotencyKey);
+}
+
+async function persistWorkshopPoster(value: FormDataEntryValue | null) {
+  if (!isUploadedFile(value)) return null;
+  return uploadWorkshopPoster(value);
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {

@@ -418,7 +418,10 @@ export function StaffProfile({
             />
             <Fact
               label="Sistem rolu"
-              value={employee.roles.join(", ") || "Rol verilməyib"}
+              value={
+                employee.roles.map((role) => role.name).join(", ") ||
+                "Rol verilməyib"
+              }
             />
             <Fact
               label="Son yenilənmə"
@@ -521,6 +524,17 @@ function CredentialDialog({
     )?.id ??
     roleOptions[0]?.id ??
     "";
+  const [roleIds, setRoleIds] = useState<string[]>(() => {
+    const availableRoleIds = new Set(roleOptions.map((role) => role.id));
+    const assignedRoleIds = employee.roles
+      .map((role) => role.id)
+      .filter((roleId) => availableRoleIds.has(roleId));
+    return assignedRoleIds.length
+      ? assignedRoleIds
+      : defaultRoleId
+        ? [defaultRoleId]
+        : [];
+  });
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -528,6 +542,10 @@ function CredentialDialog({
     const form = new FormData(event.currentTarget);
     const password = String(form.get("password") ?? "");
     const confirmation = String(form.get("passwordConfirmation") ?? "");
+    if (!roleIds.length) {
+      setError("Ən azı bir sistem rolu seçilməlidir.");
+      return;
+    }
     if (!employee.hasLogin && password.length < 8) {
       setError("Parol ən az 8 simvoldan ibarət olmalıdır.");
       return;
@@ -537,6 +555,7 @@ function CredentialDialog({
       return;
     }
     form.delete("passwordConfirmation");
+    form.set("roleIds", JSON.stringify(roleIds));
     onSubmit(form);
   }
 
@@ -576,27 +595,11 @@ function CredentialDialog({
             />
             <small>Əməkdaş sistemə bu e-poçt ünvanı ilə daxil olacaq.</small>
           </label>
-          {!employee.hasLogin ? (
-            <label>
-              <span>Sistem rolu</span>
-              <select name="roleId" defaultValue={defaultRoleId} required>
-                <option value="" disabled>
-                  Rol seçin
-                </option>
-                {roleOptions.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
-              <small>
-                Rol əməkdaşın ERP daxilində görə və idarə edə biləcəyi bölmələri
-                müəyyən edir.
-              </small>
-            </label>
-          ) : (
-            <input type="hidden" name="roleId" value="" />
-          )}
+          <CredentialRoleMultiSelect
+            roleOptions={roleOptions}
+            roleIds={roleIds}
+            onChange={setRoleIds}
+          />
           <div className="staff-credential-grid">
             <label>
               <span>{employee.hasLogin ? "Yeni parol" : "Parol"}</span>
@@ -656,7 +659,7 @@ function CredentialDialog({
             </Button>
             <Button
               type="submit"
-              disabled={pending || (!employee.hasLogin && !roleOptions.length)}
+              disabled={pending || !roleOptions.length || !roleIds.length}
             >
               <KeyRound data-icon="inline-start" />{" "}
               {employee.hasLogin ? "Yenilə" : "Hesab yarat"}
@@ -665,6 +668,47 @@ function CredentialDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CredentialRoleMultiSelect({
+  roleOptions,
+  roleIds,
+  onChange,
+}: {
+  roleOptions: HrStaffProfileData["roleOptions"];
+  roleIds: string[];
+  onChange: (roleIds: string[]) => void;
+}) {
+  return (
+    <fieldset className="staff-credential-role-field">
+      <legend>Sistem rolları</legend>
+      <div className="staff-credential-role-options">
+        {roleOptions.map((role) => {
+          const checked = roleIds.includes(role.id);
+          return (
+            <label key={role.id}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() =>
+                  onChange(
+                    checked
+                      ? roleIds.filter((roleId) => roleId !== role.id)
+                      : [...roleIds, role.id],
+                  )
+                }
+              />
+              <span>{role.name}</span>
+            </label>
+          );
+        })}
+      </div>
+      <small>
+        Əməkdaş üçün bir və ya bir neçə rol seçə bilərsiniz. Dəyişikliklər mövcud
+        giriş hesabına da tətbiq olunur.
+      </small>
+    </fieldset>
   );
 }
 

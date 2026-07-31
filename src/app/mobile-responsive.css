@@ -45,6 +45,9 @@
     --mobile-page-gutter: clamp(10px, 3.4vw, 18px);
     --mobile-topbar-height: 64px;
     --mobile-bottom-nav-height: 70px;
+    --mobile-dialog-overlay-z: 5000;
+    --mobile-dialog-content-z: 5001;
+    --mobile-dialog-popover-z: 5020;
   }
 
   html {
@@ -58,6 +61,36 @@
     min-width: 320px;
     min-height: 100dvh;
     overscroll-behavior-y: none;
+  }
+
+  /*
+   * Module styles historically used their own modal z-index values. Keep every
+   * portalled dialog above the fixed mobile shell, regardless of import order.
+   */
+  html body .ui-dialog-overlay.ui-dialog-overlay {
+    z-index: var(--mobile-dialog-overlay-z) !important;
+  }
+
+  html body .ui-dialog-content.ui-dialog-content {
+    z-index: var(--mobile-dialog-content-z) !important;
+    isolation: isolate;
+  }
+
+  html body .ui-select-content.ui-select-content,
+  html body .date-picker-popover.date-picker-popover {
+    z-index: var(--mobile-dialog-popover-z) !important;
+  }
+
+  html body .ui-dialog-content.ui-mobile-select-sheet {
+    z-index: calc(var(--mobile-dialog-popover-z) + 1) !important;
+  }
+
+  body:has(.ui-dialog-content[data-state="open"]) :is(
+    .mobile-shell-bar,
+    .mobile-bottom-nav
+  ) {
+    visibility: hidden;
+    pointer-events: none;
   }
 
   button,
@@ -628,6 +661,7 @@
   }
 
   html body .ui-dialog-content.ui-dialog-content {
+    position: fixed !important;
     inset: auto 0 0 !important;
     display: flex !important;
     width: 100% !important;
@@ -639,6 +673,7 @@
     overflow-x: hidden !important;
     overflow-y: auto !important;
     overscroll-behavior: contain;
+    scroll-padding-top: 72px;
     background: #ffffff !important;
     border: 1px solid #dce3ed !important;
     border-bottom: 0 !important;
@@ -743,7 +778,7 @@
     position: sticky !important;
     top: 12px !important;
     right: auto !important;
-    z-index: 30;
+    z-index: 50 !important;
     width: 44px !important;
     height: 44px !important;
     flex: 0 0 44px;
@@ -754,6 +789,9 @@
     border: 1px solid #dce3ed !important;
     border-radius: 13px !important;
     box-shadow: none !important;
+    pointer-events: auto !important;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .ui-dialog-close:hover {
@@ -1042,6 +1080,44 @@
   }
 }
 
+/* Prevent accidental long-press selection while preserving editable fields. */
+@media (max-width: 960px) {
+  :is(
+    .app-stage,
+    .ui-dialog-content,
+    .ui-select-content,
+    .date-picker-popover,
+    .playbook-drawer,
+    .playbook-document-modal,
+    .playbook-preview-modal,
+    .playbook-confirm-dialog
+  ) {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none;
+  }
+
+  :is(
+    .app-stage,
+    .ui-dialog-content,
+    .ui-select-content,
+    .date-picker-popover,
+    .playbook-drawer,
+    .playbook-document-modal,
+    .playbook-preview-modal,
+    .playbook-confirm-dialog
+  ) :is(
+    input,
+    textarea,
+    [contenteditable="true"],
+    [data-allow-text-selection]
+  ) {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default;
+  }
+}
+
 @media (max-width: 480px) {
   .mobile-shell-brand span {
     max-width: 132px;
@@ -1077,6 +1153,37 @@
     grid-template-columns: 1fr;
   }
 
+}
+
+/* Keep the Tasks sprite square; generic mobile action sizing must not stretch it. */
+@media (max-width: 760px) {
+  .erp-frame .tasks-header-actions {
+    position: static !important;
+    display: grid !important;
+    width: 100% !important;
+    grid-template-columns: 48px minmax(0, 1fr) !important;
+    align-items: center;
+    justify-content: stretch;
+    gap: 10px;
+  }
+
+  .erp-frame .tasks-header-actions > .tasks-header-mascot {
+    width: 48px !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    flex: 0 0 48px !important;
+    aspect-ratio: 1;
+    overflow: hidden;
+    background-position: center top;
+    background-size: 100% 300%;
+    border-radius: 14px;
+  }
+
+  .erp-frame .tasks-header-actions > .ui-button {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
 }
 
 @keyframes mobile-sheet-in {

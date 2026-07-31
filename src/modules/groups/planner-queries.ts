@@ -1,6 +1,6 @@
 import { AppRole, ClassShift } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
-import { isPrivilegedActor, requireErpActor } from "@/server/auth/actor";
+import { requireErpActor } from "@/server/auth/actor";
 import { todayInBaku, toDateInput, type GroupWeekdayCode } from "@/modules/groups/shared";
 
 export type PlannerMember = {
@@ -51,8 +51,8 @@ export async function getPlannerWorkspaceData(): Promise<PlannerWorkspaceData> {
   const prisma = getPrisma();
   const today = todayInBaku();
   const date = new Date(`${today}T00:00:00.000Z`);
-  const privileged = isPrivilegedActor(actor);
-  const teacherProfile = actor.roles.includes(AppRole.TEACHER) && !privileged
+  const canManage = actor.permissions.has("group.manage");
+  const teacherProfile = actor.roles.includes(AppRole.TEACHER) && !canManage
     ? await prisma.teacher.findUnique({ where: { userId: actor.id }, select: { id: true } })
     : null;
   const teacherId = teacherProfile?.id;
@@ -117,7 +117,7 @@ export async function getPlannerWorkspaceData(): Promise<PlannerWorkspaceData> {
         },
       },
     }),
-    privileged
+    canManage
       ? prisma.studentGroup.findMany({
           where: { isActive: true },
           take: 100,
@@ -125,7 +125,7 @@ export async function getPlannerWorkspaceData(): Promise<PlannerWorkspaceData> {
           select: { id: true, code: true, capacity: true },
         })
       : Promise.resolve([]),
-    privileged
+    canManage
       ? prisma.teacher.findMany({
           where: { isActive: true },
           take: 200,
@@ -133,7 +133,7 @@ export async function getPlannerWorkspaceData(): Promise<PlannerWorkspaceData> {
           select: { id: true, fullName: true },
         })
       : Promise.resolve([]),
-    privileged
+    canManage
       ? prisma.groupMembership.findMany({
           where: { endedAt: null },
           take: 500,
@@ -161,7 +161,7 @@ export async function getPlannerWorkspaceData(): Promise<PlannerWorkspaceData> {
 
   return {
     actorName: actor.fullName,
-    canManage: actor.permissions.has("group.manage") && privileged,
+    canManage,
     today: toDateInput(date),
     slots: slots.map((slot) => ({
       id: slot.id,

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
@@ -11,14 +12,12 @@ import {
   Banknote,
   CalendarDays,
   CircleCheckBig,
-  CircleDollarSign,
   Info,
   MapPin,
   Plus,
   SlidersHorizontal,
   Sparkles,
   TrendingUp,
-  UserPlus,
   UsersRound,
   WalletCards,
   type LucideIcon,
@@ -39,7 +38,6 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
-import { StatusChip } from "@/components/ui/status-chip";
 import type { WorkshopOfferAudience, WorkshopOfferInput, WorkshopOfferResult } from "@/modules/workshops/offer-actions";
 import { WorkshopOfferDialog } from "@/modules/workshops/workshop-offer-dialog";
 import type { WorkshopData, WorkshopEventRow } from "@/modules/workshops/queries";
@@ -72,8 +70,6 @@ export function WorkshopWorkspace({
     input: WorkshopOfferInput,
   ) => Promise<ActionResult<WorkshopOfferResult>>;
 }) {
-  const [mobilePreviewId, setMobilePreviewId] = useState<string | null>(null);
-  const mobilePreviewEvent = data.events.find((event) => event.id === mobilePreviewId) ?? null;
   return (
     <section className="workshop-shell" aria-label="Workshop və Masterclass idarəetməsi">
       <header className="workshop-topbar">
@@ -87,15 +83,6 @@ export function WorkshopWorkspace({
               loadAudienceAction={loadOfferAudienceAction}
               generateOfferAction={generateOfferAction}
             />
-          ) : null}
-          {data.selectedEvent && data.permissions.canManage ? (
-            <Link
-              className="ui-button ui-button-outline ui-button-default"
-              href={`/workshops/${data.selectedEvent.id}?tab=participants&add=1` as Route}
-            >
-              <UserPlus data-icon="inline-start" />
-              İştirakçı əlavə et
-            </Link>
           ) : null}
           <CreateEventDialog
             defaultDate={data.defaultDate}
@@ -146,14 +133,12 @@ export function WorkshopWorkspace({
                   <EventRow
                     key={event.id}
                     event={event}
-                    selected={data.selectedEvent?.id === event.id}
-                    href={buildWorkshopUrl(data, { selected: event.id })}
+                    href={`/workshops/${event.id}` as Route}
                     showFinance={data.permissions.canViewFinance}
-                    onPreview={() => setMobilePreviewId(event.id)}
                   />
                 )) : (
                   <tr>
-                    <td colSpan={8}>
+                    <td colSpan={data.permissions.canViewFinance ? 8 : 5}>
                       <EmptyState title="Uyğun tədbir tapılmadı" description="Filtrləri sıfırlayın və ya yeni tədbir yaradın." />
                     </td>
                   </tr>
@@ -164,25 +149,7 @@ export function WorkshopWorkspace({
 
           <Pagination data={data} />
         </section>
-
-        <aside className="workshop-preview-panel">
-          {data.selectedEvent ? (
-            <EventPreview event={data.selectedEvent} data={data} />
-          ) : (
-            <EmptyState title="Tədbir seçilməyib" description="Siyahıdan bir tədbir seçərək detalları görün." />
-          )}
-        </aside>
       </div>
-
-      <Dialog open={Boolean(mobilePreviewEvent)} onOpenChange={(open) => !open && setMobilePreviewId(null)}>
-        <DialogContent className="workshop-mobile-preview-sheet">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Tədbir önizləməsi</DialogTitle>
-            <DialogDescription>Seçilmiş workshop və ya masterclass detalları</DialogDescription>
-          </DialogHeader>
-          {mobilePreviewEvent ? <EventPreview event={mobilePreviewEvent} data={data} /> : null}
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }
@@ -269,24 +236,24 @@ function FilterDate({ name, label, value }: { name: string; label: string; value
   );
 }
 
-function EventRow({ event, selected, href, showFinance, onPreview }: {
+function EventRow({ event, href, showFinance }: {
   event: WorkshopEventRow;
-  selected: boolean;
   href: Route;
   showFinance: boolean;
-  onPreview: () => void;
 }) {
   return (
-    <tr className={selected ? "is-selected" : undefined}>
+    <tr>
       <td>
-        <Link href={href} className="workshop-event-link workshop-event-link-desktop" aria-current={selected ? "true" : undefined}>
-          <span className="workshop-selected-dot" />
+        <Link href={href} className="workshop-event-link">
+          <span className="workshop-event-poster">
+            {event.posterUrl ? (
+              <Image src={event.posterUrl} alt="" width={48} height={60} unoptimized />
+            ) : (
+              <CalendarDays aria-hidden="true" />
+            )}
+          </span>
           <span><strong>{event.title}</strong><small>{event.instructor}</small></span>
         </Link>
-        <button type="button" className="workshop-event-link workshop-event-link-mobile" onClick={onPreview}>
-          <span className="workshop-selected-dot" />
-          <span><strong>{event.title}</strong><small>{event.instructor}</small></span>
-        </button>
       </td>
       <td><span className={`workshop-type-tag ${getEventTypeClassName(event.eventTypeKind, event.eventType)}`}>{event.eventTypeLabel}</span></td>
       <td><strong>{event.date}</strong><small>{event.time}</small></td>
@@ -297,73 +264,6 @@ function EventRow({ event, selected, href, showFinance, onPreview }: {
       {showFinance ? <td><strong className={event.netProfitValue < 0 ? "is-negative" : "is-positive"}>{event.netProfit}</strong></td> : null}
     </tr>
   );
-}
-
-function EventPreview({ event, data }: { event: WorkshopEventRow; data: WorkshopData }) {
-  return (
-    <>
-      <div className="workshop-preview-head">
-        <div>
-          <div className="workshop-preview-labels">
-            <span>{event.eventTypeLabel}</span>
-            <StatusChip tone={event.statusTone}>{event.statusLabel}</StatusChip>
-          </div>
-          <h2>{event.title}</h2>
-          <p>{event.date}, {event.time} · {event.room}</p>
-        </div>
-        <Link href={`/workshops/${event.id}` as Route} className="workshop-close-preview" aria-label="Ətraflı bax">
-          <ArrowRight />
-        </Link>
-      </div>
-
-      {data.permissions.canViewFinance ? (
-        <div className="workshop-preview-finance">
-          <PreviewMetric label="Dövriyyə" value={event.revenue} />
-          <PreviewMetric label="Xərclər" value={event.expense} />
-          <PreviewMetric label="Xalis mənfəət" value={event.netProfit} positive={event.netProfitValue >= 0} />
-        </div>
-      ) : null}
-
-      <div className="workshop-capacity-block">
-        <div><span>Tutum</span><strong>{event.participantCount}{event.capacity ? ` / ${event.capacity}` : ""}</strong></div>
-        <div className="workshop-progress"><span style={{ width: `${event.fillRate}%` }} /></div>
-        <div className="workshop-capacity-legend">
-          <span><i className="is-paid" />Ödənilib {event.paidCount}</span>
-          <span><i className="is-advance" />Avans {event.advanceCount}</span>
-          <span><i className="is-unpaid" />Gözləyir {event.unpaidCount}</span>
-          <span><i className="is-gift" />Hədiyyə {event.giftCount}</span>
-        </div>
-      </div>
-
-      <div className="workshop-preview-actions">
-        {data.permissions.canManageFinance ? (
-          <Link className="ui-button ui-button-default ui-button-default" href={`/workshops/${event.id}?tab=payments&add=1` as Route}>
-            <WalletCards data-icon="inline-start" /> Ödəniş qəbul et
-          </Link>
-        ) : null}
-        {data.permissions.canManageFinance ? (
-          <Link className="ui-button ui-button-outline ui-button-default" href={`/workshops/${event.id}?tab=expenses&add=1` as Route}>
-            <CircleDollarSign data-icon="inline-start" /> Xərc əlavə et
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="workshop-preview-grid">
-        <div><span>Giriş qiyməti</span><strong>{event.entryPrice}</strong></div>
-        <div><span>Gözlənilən ödəniş</span><strong>{event.expected}</strong></div>
-        <div><span>Təlimçi</span><strong>{event.instructor}</strong></div>
-        <div><span>Müddət</span><strong>{event.duration}</strong></div>
-      </div>
-
-      <Link className="workshop-detail-link" href={`/workshops/${event.id}` as Route}>
-        Ətraflı bax <ArrowRight />
-      </Link>
-    </>
-  );
-}
-
-function PreviewMetric({ label, value, positive = false }: { label: string; value: string; positive?: boolean }) {
-  return <div><span>{label}</span><strong className={positive ? "is-positive" : undefined}>{value}</strong></div>;
 }
 
 function Metric({ icon: Icon, label, value, helper, tone }: {
@@ -466,6 +366,10 @@ function CreateEventDialog({ defaultDate, eventTypes, action, disabled }: {
               <Field><FieldLabel htmlFor="event-capacity">Tutum</FieldLabel><Input id="event-capacity" name="capacity" type="number" min={1} /></Field>
               <Field className="workshop-field-span-2"><FieldLabel htmlFor="event-room">Məkan</FieldLabel><Input id="event-room" name="room" placeholder="Məsələn: Artmonia Ofis, Bakı" /></Field>
               <Field><FieldLabel htmlFor="event-instructor">Təlimçi</FieldLabel><Input id="event-instructor" name="instructor" placeholder="Təlimçinin adı" /></Field>
+              <Field className="workshop-field-span-2">
+                <FieldLabel htmlFor="event-poster">Tədbir posteri</FieldLabel>
+                <Input id="event-poster" name="poster" type="file" accept="image/jpeg,image/png,image/webp" />
+              </Field>
             </div>
             <Field><FieldLabel htmlFor="event-note">Qeyd</FieldLabel><textarea id="event-note" name="note" rows={3} placeholder="Əlavə qeydlər və ya xüsusi məlumatlar..." /></Field>
           </FieldGroup>

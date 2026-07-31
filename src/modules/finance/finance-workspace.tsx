@@ -2060,6 +2060,7 @@ function ExpenseLedger({
         </div>
         <ReceiptText size={18} />
       </div>
+      <ExpenseCategoryChart expenses={expenses} />
       <div className="finance-table-wrap">
         <table className="finance-table">
           <thead>
@@ -2067,7 +2068,6 @@ function ExpenseLedger({
               <th>Kateqoriya</th>
               <th>Məbləğ</th>
               <th>Tarix</th>
-              <th>Təchizatçı</th>
               <th>Ödəniş üsulu</th>
               <th>Qəbz</th>
               <th>Açıqlama</th>
@@ -2086,12 +2086,6 @@ function ExpenseLedger({
                   </td>
                   <td className="finance-money negative">{expense.amount}</td>
                   <td>{expense.expenseDate}</td>
-                  <td>
-                    <div className="finance-entity-cell">
-                      <strong>{expense.vendor}</strong>
-                      <span>{expense.staffName}</span>
-                    </div>
-                  </td>
                   <td><span className="payment-method-chip">{expense.method}</span></td>
                   <td>{expense.receipt}</td>
                   <td>{expense.description}</td>
@@ -2115,7 +2109,7 @@ function ExpenseLedger({
               ))
             ) : (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={7}>
                   <div className="finance-empty">Seçilmiş filtrlərlə xərc tapılmadı</div>
                 </td>
               </tr>
@@ -2124,6 +2118,41 @@ function ExpenseLedger({
         </table>
       </div>
     </article>
+  );
+}
+
+function ExpenseCategoryChart({ expenses }: { expenses: FinanceData["expenses"] }) {
+  const slices = useMemo<ChartSlice[]>(() => {
+    const totals = new Map<string, number>();
+    expenses.forEach((expense) => {
+      totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.amountValue);
+    });
+    return Array.from(totals, ([label, value]) => ({ label, value }))
+      .sort((left, right) => right.value - left.value)
+      .slice(0, 6)
+      .map((slice, index) => ({
+        ...slice,
+        color: chartPalette[index % chartPalette.length],
+      }));
+  }, [expenses]);
+
+  return (
+    <section className="finance-expense-category-chart" aria-label="Xərclərin kateqoriya diaqramı">
+      <div>
+        <span>Kateqoriya bölgüsü</span>
+        <strong>Aktiv filtr üzrə xərc strukturu</strong>
+      </div>
+      {slices.length > 0 ? (
+        <DonutChart
+          slices={slices}
+          centerLabel="Ümumi xərc"
+          centerValue={formatChartAmount(sumChartValues(slices))}
+          compact
+        />
+      ) : (
+        <div className="finance-overview-empty">Diaqram üçün xərc məlumatı yoxdur</div>
+      )}
+    </section>
   );
 }
 
@@ -2298,10 +2327,6 @@ function ExpenseCrudActions({
               <label className="form-field">
                 <span>Ödəniş üsulu</span>
                 <FormSelect name="method" defaultValue={expense.methodValue} options={studentPaymentMethodOptions} />
-              </label>
-              <label className="form-field">
-                <span>Təchizatçı / mənbə</span>
-                <Input name="vendor" defaultValue={expense.vendor === "-" ? "" : expense.vendor} maxLength={120} />
               </label>
             </div>
             <div className="field-grid">

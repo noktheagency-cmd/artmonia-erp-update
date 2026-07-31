@@ -1,6 +1,6 @@
 import { AppRole, Prisma, StudentLifecycleStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
-import { isPrivilegedActor, requireErpActor } from "@/server/auth/actor";
+import { requireErpActor } from "@/server/auth/actor";
 import {
   formatDateAz,
   formatSchedule,
@@ -134,8 +134,8 @@ export async function getGroupWorkspaceData(input?: {
 }): Promise<GroupWorkspaceData> {
   const actor = await requireErpActor("group.read");
   const prisma = getPrisma();
-  const privileged = isPrivilegedActor(actor);
-  const isTeacher = actor.roles.includes(AppRole.TEACHER) && !privileged;
+  const canManageGroups = actor.permissions.has("group.manage");
+  const isTeacher = actor.roles.includes(AppRole.TEACHER) && !canManageGroups;
   const teacherProfile = isTeacher
     ? await prisma.teacher.findUnique({ where: { userId: actor.id }, select: { id: true, fullName: true } })
     : null;
@@ -236,7 +236,6 @@ export async function getGroupWorkspaceData(input?: {
       )
     : todayInBaku();
   const selectedDateValue = new Date(`${selectedDate}T00:00:00.000Z`);
-  const canManageGroups = actor.permissions.has("group.manage") && privileged;
   const managementOptionsPromise = canManageGroups
     ? Promise.all([
         prisma.teacher.findMany({

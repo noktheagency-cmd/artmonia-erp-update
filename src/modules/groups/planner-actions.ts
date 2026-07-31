@@ -4,7 +4,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { ClassShift, GroupWeekday, Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
-import { isPrivilegedActor, requireMutationActor } from "@/server/auth/actor";
+import { requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { dateFromInput, todayInBaku } from "@/modules/groups/shared";
@@ -336,9 +336,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
 }
 
 async function requirePlannerManager() {
-  const actor = await requireMutationActor("group.manage");
-  if (!isPrivilegedActor(actor)) throw new Error("Planlayıcı üçün Owner/Admin icazəsi tələb olunur");
-  return actor;
+  return requireMutationActor("group.manage");
 }
 
 function revalidatePlanner() {

@@ -44,7 +44,7 @@ export type HrStaffProfileData = {
     note: string;
     hasLogin: boolean;
     loginEmail: string;
-    roles: string[];
+    roles: Array<{ id: string; name: string }>;
     updatedAt: string;
   };
   teacher: TeacherDirectoryTeacher | null;
@@ -136,7 +136,11 @@ export async function getHrStaffProfileData(
       note: employee.note ?? "",
       hasLogin: Boolean(employee.user?.authUserId),
       loginEmail: employee.user?.email ?? employee.email ?? "",
-      roles: employee.user?.roles.map(({ role }) => role.name) ?? [],
+      roles:
+        employee.user?.roles.map(({ role }) => ({
+          id: role.id,
+          name: role.name,
+        })) ?? [],
       updatedAt: employee.updatedAt.toISOString(),
     },
     teacher:

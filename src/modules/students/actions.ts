@@ -57,6 +57,7 @@ const studentLifecycleStatusValues = [
 ] as const;
 
 const createStudentSchema = z.object({
+  idempotencyKey: z.string().uuid(),
   mode: z.literal("lead").default("lead"),
   leadId: optionalUuid,
   fullName: z.string().trim().min(2).max(120),
@@ -87,6 +88,7 @@ const createStudentSchema = z.object({
 });
 
 const recordPaymentSchema = z.object({
+  idempotencyKey: z.string().uuid(),
   studentId: z.string().uuid(),
   amount: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
   paidDate: z.string().trim().min(1).max(20),
@@ -196,6 +198,7 @@ async function createStudentActionImpl(formData: FormData) {
     const student = await tx.student.create({
       data: {
         code: studentCode,
+        creationIdempotencyKey: input.idempotencyKey,
         contactId,
         managerId,
         campaignId,
@@ -266,6 +269,7 @@ async function createStudentActionImpl(formData: FormData) {
         method: input.paymentMethod,
         note: input.paymentNote ?? input.notes ?? null,
         actorId: actor.id,
+        idempotencyKey: input.idempotencyKey,
       });
     }
 
@@ -349,6 +353,7 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
       method: input.method,
       note: input.note ?? null,
       actorId: actor.id,
+      idempotencyKey: input.idempotencyKey,
     });
 
     await writeAuditLog(tx, {
@@ -782,6 +787,7 @@ async function createPaymentAndAllocate(
     method: (typeof studentPaymentMethodValues)[number];
     note: string | null;
     actorId: string;
+    idempotencyKey: string;
   }
 ) {
   const student = await tx.student.findUnique({
@@ -853,6 +859,7 @@ async function createPaymentAndAllocate(
       nextPaymentAt,
       method: input.method as PaymentMethod,
       note: input.note,
+      idempotencyKey: input.idempotencyKey,
       createdById: input.actorId,
     },
     select: {

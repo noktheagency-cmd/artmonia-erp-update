@@ -149,6 +149,9 @@ export function GroupWorkspace({
       </header>
 
       <nav className={styles.tabs} aria-label="Qruplar bölməsi">
+        <button type="button" onClick={() => router.push("/groups?tab=planner" as Route)}>
+          Planlayıcı
+        </button>
         <button className={activeTab === "groups" ? styles.activeTab : ""} type="button" onClick={() => navigate("groups")}>
           Qruplar
         </button>

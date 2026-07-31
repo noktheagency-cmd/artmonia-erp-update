@@ -946,7 +946,7 @@ function EmployeeDialog({
   const [photoPreview, setPhotoPreview] = useState(employee?.profilePhotoUrl ?? "");
   const [photoError, setPhotoError] = useState("");
   const teacherRole = roleOptions.find((role) => role.code === "TEACHER");
-  const [roleId, setRoleId] = useState(employee?.roles[0]?.id ?? "");
+  const [roleIds, setRoleIds] = useState<string[]>(employee?.roles.map((role) => role.id) ?? []);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSubmit(new FormData(event.currentTarget));
@@ -955,7 +955,9 @@ function EmployeeDialog({
     setStaffType(value);
     if (value === "TEACHER") {
       setSalaryMode("PERCENT");
-      if (teacherRole) setRoleId(teacherRole.id);
+      if (teacherRole) {
+        setRoleIds((current) => current.includes(teacherRole.id) ? current : [...current, teacherRole.id]);
+      }
     }
   }
   function changeProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -1202,33 +1204,17 @@ function EmployeeDialog({
                       </button>
                     </div>
                   </label>
-                  <label className="is-wide">
-                    <span>Rol ver</span>
-                    <select
-                      name="roleId"
-                      value={roleId}
-                      onChange={(event) => setRoleId(event.target.value)}
-                      required
-                    >
-                      <option value="">Mövcud rol seçin</option>
-                      {roleOptions.map((role) => (
-                        <option value={role.id} key={role.id}>
-                          {role.name}
-                          {role.isSystem ? " · Sistem" : " · Custom"}
-                        </option>
-                      ))}
-                    </select>
-                    <small className="hr-field-help">
-                      Bu rolun bütün icazələri ilk girişdən etibarən tətbiq
-                      olunacaq.
-                    </small>
-                  </label>
+                  <RoleMultiSelect
+                    roleOptions={roleOptions}
+                    value={roleIds}
+                    onValueChange={setRoleIds}
+                  />
+                  <input type="hidden" name="roleIds" value={JSON.stringify(roleIds)} />
                 </div>
               ) : (
                 <>
                   <input type="hidden" name="loginEmail" value="" />
                   <input type="hidden" name="password" value="" />
-                  <input type="hidden" name="roleId" value="" />
                 </>
               )}
             </section>
@@ -1237,9 +1223,22 @@ function EmployeeDialog({
               <input type="hidden" name="createAccount" value="false" />
               <input type="hidden" name="loginEmail" value="" />
               <input type="hidden" name="password" value="" />
-              <input type="hidden" name="roleId" value="" />
             </>
           )}
+          {employee?.userId && canCreateAccount ? (
+            <section className="hr-account-section is-wide">
+              <div className="hr-account-heading">
+                <strong>ERP rolları</strong>
+                <small>Əməkdaşa bir və ya bir neçə rol verə bilərsiniz.</small>
+              </div>
+              <RoleMultiSelect
+                roleOptions={roleOptions}
+                value={roleIds}
+                onValueChange={setRoleIds}
+              />
+              <input type="hidden" name="roleIds" value={JSON.stringify(roleIds)} />
+            </section>
+          ) : null}
           <label className="is-wide">
             <span>Qeyd</span>
             <textarea name="note" defaultValue={employee?.note} rows={3} />
@@ -1248,13 +1247,51 @@ function EmployeeDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Ləğv et
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || ((createAccount || Boolean(employee?.userId && canCreateAccount)) && roleIds.length === 0)}>
               {employee ? "Yadda saxla" : "Əməkdaşı yarat"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RoleMultiSelect({
+  roleOptions,
+  value,
+  onValueChange,
+}: {
+  roleOptions: HrEmployeeData["roleOptions"];
+  value: string[];
+  onValueChange: (value: string[]) => void;
+}) {
+  function toggle(roleId: string, checked: boolean) {
+    onValueChange(checked
+      ? [...new Set([...value, roleId])]
+      : value.filter((id) => id !== roleId));
+  }
+
+  return (
+    <div className="hr-role-multi is-wide">
+      <span>Rol ver</span>
+      <div className="hr-role-options">
+        {roleOptions.map((role) => (
+          <label key={role.id}>
+            <input
+              type="checkbox"
+              checked={value.includes(role.id)}
+              onChange={(event) => toggle(role.id, event.target.checked)}
+            />
+            <span>
+              <strong>{role.name}</strong>
+              <small>{role.isSystem ? "Sistem rolu" : "Custom rol"}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+      <small className="hr-field-help">{value.length} rol seçilib.</small>
+    </div>
   );
 }
 

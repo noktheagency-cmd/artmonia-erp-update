@@ -43,6 +43,7 @@ export type WorkshopDetailFilters = {
 export type WorkshopEventRow = {
   id: string;
   title: string;
+  posterUrl: string;
   eventType: string;
   eventTypeKind: WorkshopKind;
   eventTypeLabel: string;
@@ -240,6 +241,7 @@ type NormalizedWorkshopFilters = {
 type EventDbRow = {
   id: string;
   title: string;
+  posterUrl: string | null;
   eventType: string;
   eventTypeKind: WorkshopKind;
   status: WorkshopStatus;
@@ -410,7 +412,7 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     prisma.$queryRaw<EventDbRow[]>(Prisma.sql`
       ${eventAggregateCte}
       select
-        er.id::text as "id", er.title,
+        er.id::text as "id", er.title, er.poster_url as "posterUrl",
         coalesce(er.category, er.event_type::text) as "eventType",
         er.event_type::text as "eventTypeKind",
         er.status::text as "status", er.event_date as "eventDate",
@@ -527,7 +529,7 @@ export async function getWorkshopDetailData(
   const [eventRows, participantRows, paymentRows, expenseRows, students, categories, eventTypeRows] = await Promise.all([
     prisma.$queryRaw<EventDbRow[]>(Prisma.sql`
       ${eventAggregateCte}
-      select er.id::text as "id", er.title,
+      select er.id::text as "id", er.title, er.poster_url as "posterUrl",
         coalesce(er.category, er.event_type::text) as "eventType",
         er.event_type::text as "eventTypeKind",
         er.status::text as "status", er.event_date as "eventDate",
@@ -715,6 +717,7 @@ function mapEventRow(row: EventDbRow, canViewFinance: boolean): WorkshopEventRow
   return {
     id: row.id,
     title: row.title,
+    posterUrl: row.posterUrl ?? "",
     eventType: row.eventType,
     eventTypeKind: row.eventTypeKind,
     eventTypeLabel: formatEventType(row.eventType),

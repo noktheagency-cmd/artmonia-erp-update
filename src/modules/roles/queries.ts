@@ -20,11 +20,30 @@ const roleOrder: AppRole[] = [
 
 export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
   const actor = await requireErpActor("auth.role.read");
-  const [roles, auditLogs] = await Promise.all([
+  const [roles, users, auditLogs] = await Promise.all([
     getPrisma().role.findMany({
       include: {
         _count: { select: { users: true } },
         permissions: { include: { permission: true } },
+      },
+    }),
+    getPrisma().user.findMany({
+      where: { hrEmployeeProfile: { isNot: null } },
+      orderBy: { fullName: "asc" },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        isActive: true,
+        roles: { select: { roleId: true } },
+        hrEmployeeProfile: {
+          select: {
+            id: true,
+            department: true,
+            position: true,
+            status: true,
+          },
+        },
       },
     }),
     actor.permissions.has("audit.read") ? getPrisma().auditLog.findMany({
@@ -60,6 +79,16 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
                   : []
               ),
       })),
+    users: users.flatMap((user) => user.hrEmployeeProfile ? [{
+      id: user.id,
+      employeeId: user.hrEmployeeProfile.id,
+      fullName: user.fullName,
+      email: user.email,
+      department: user.hrEmployeeProfile.department,
+      position: user.hrEmployeeProfile.position,
+      isActive: user.isActive && user.hrEmployeeProfile.status !== "INACTIVE",
+      roleIds: user.roles.map((role) => role.roleId),
+    }] : []),
     auditLogs: auditLogs.map((log) => ({
       id: log.id,
       actorName: log.actor?.fullName ?? "Sistem",

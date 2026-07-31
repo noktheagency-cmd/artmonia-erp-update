@@ -13,6 +13,12 @@ const profilePhotoExtensions = new Map([
   ["image/webp", "webp"],
 ]);
 
+const workshopPosterExtensions = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
+
 const receiptExtensions = new Map([
   ["application/pdf", "pdf"],
   ["image/jpeg", "jpg"],
@@ -60,7 +66,47 @@ export async function deleteProfilePhoto(fileUrl: string) {
     .remove([objectPath]);
 }
 
-export async function uploadReceipt(file: File) {
+export async function uploadWorkshopPoster(file: File) {
+  if (file.size > 6 * 1024 * 1024) {
+    throw new Error("Tədbir posteri 6 MB-dan böyük ola bilməz");
+  }
+  const extension = workshopPosterExtensions.get(file.type);
+  if (!extension) {
+    throw new Error("Tədbir posteri JPEG, PNG və ya WebP formatında olmalıdır");
+  }
+
+  const objectPath = `workshop-posters/${randomUUID()}.${extension}`;
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase.storage
+    .from(PUBLIC_BUCKET)
+    .upload(objectPath, Buffer.from(await file.arrayBuffer()), {
+      cacheControl: "31536000",
+      contentType: file.type,
+      upsert: false,
+    });
+  if (result.error) {
+    throw new Error("Tədbir posteri storage-a yüklənmədi");
+  }
+  return supabase.storage.from(PUBLIC_BUCKET).getPublicUrl(objectPath).data
+    .publicUrl;
+}
+
+export async function deleteWorkshopPoster(fileUrl: string) {
+  const marker = `/storage/v1/object/public/${PUBLIC_BUCKET}/`;
+  const markerIndex = fileUrl.indexOf(marker);
+  if (markerIndex < 0) return;
+  const objectPath = decodeURIComponent(
+    fileUrl.slice(markerIndex + marker.length),
+  );
+  if (!/^workshop-posters\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i.test(objectPath)) {
+    return;
+  }
+  await getSupabaseAdminClient()
+    .storage.from(PUBLIC_BUCKET)
+    .remove([objectPath]);
+}
+
+export async function uploadReceipt(file: File, idempotencyKey?: string) {
   if (file.size > 8 * 1024 * 1024) {
     throw new Error("Qəbz faylı 8 MB-dan böyük ola bilməz");
   }
@@ -69,14 +115,15 @@ export async function uploadReceipt(file: File) {
     throw new Error("Qəbz PDF, JPEG, PNG və ya WebP formatında olmalıdır");
   }
 
-  const fileName = `${randomUUID()}.${extension}`;
+  const stableKey = idempotencyKey?.match(/^[0-9a-f-]{36}$/i)?.[0];
+  const fileName = `${stableKey ?? randomUUID()}.${extension}`;
   const objectPath = `receipts/${fileName}`;
   const result = await getSupabaseAdminClient()
     .storage.from(PRIVATE_BUCKET)
     .upload(objectPath, Buffer.from(await file.arrayBuffer()), {
       cacheControl: "3600",
       contentType: file.type,
-      upsert: false,
+      upsert: Boolean(stableKey),
     });
   if (result.error) {
     throw new Error("Qəbz faylı storage-a yüklənmədi");

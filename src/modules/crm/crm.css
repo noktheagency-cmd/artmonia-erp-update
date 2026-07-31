@@ -556,8 +556,21 @@
 @media (max-width: 560px) {
   .crm-command-header { flex-direction: column; }
   .crm-new-lead-trigger { width: 100%; }
-  .crm-filter-primary { grid-template-columns: 1fr; }
-  .crm-search-field { grid-column: auto; }
+  .crm-filter-primary { grid-template-columns: minmax(0, 1fr) 34px 34px; gap: 7px; }
+  .crm-search-field,
+  .crm-filter-primary > .date-picker { grid-column: 1 / -1; }
+  .crm-filter-primary > .crm-filter-icon-action {
+    grid-row: auto;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    justify-self: end;
+  }
+  .crm-filter-primary > .crm-filter-icon-action.is-apply { grid-column: 2; }
+  .crm-filter-primary > .crm-filter-icon-action.is-clear { grid-column: 3; }
+  .crm-filter-icon-action svg { width: 14px; height: 14px; }
   .crm-filter-selects { grid-template-columns: 1fr; }
   .crm-quick-periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .crm-quick-periods .ui-button { padding-inline: 4px; font-size: 8px; }

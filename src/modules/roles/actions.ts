@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
-import type { CreateRoleResult, DeleteRoleResult, RoleSummaryDto, UpdateRolePermissionsResult } from "@/modules/roles/types";
+import type { CreateRoleResult, DeleteRoleResult, RoleSummaryDto, UpdateRolePermissionsResult, UpdateUserRolesResult } from "@/modules/roles/types";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { isPermissionCode, permissionDefinitions, type PermissionCode, type PermissionScope } from "@/server/rbac/permissions";
@@ -121,6 +121,70 @@ export async function deleteRoleAction(formData: FormData): Promise<DeleteRoleRe
     revalidatePath("/settings/roles");
     return { ok: true, roleId };
   } catch { return failure("UNKNOWN", "Rol silinərkən xəta baş verdi."); }
+}
+
+export async function updateUserRolesAction(formData: FormData): Promise<UpdateUserRolesResult> {
+  try {
+    const actor = await requireMutationActor("auth.role.manage");
+    const userId = String(formData.get("userId") ?? "");
+    let roleIds: string[];
+    try {
+      const parsed = JSON.parse(String(formData.get("roleIds") ?? "[]"));
+      if (!Array.isArray(parsed)) throw new Error();
+      roleIds = [...new Set(parsed.map(String))];
+    } catch {
+      return failure("VALIDATION", "Rol siyahısı etibarlı deyil.");
+    }
+    if (!isUuid(userId) || roleIds.length < 1 || roleIds.length > 20 || roleIds.some((id) => !isUuid(id))) {
+      return failure("VALIDATION", "Əməkdaş üçün ən az bir etibarlı rol seçilməlidir.");
+    }
+
+    const result = await getPrisma().$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        include: {
+          hrEmployeeProfile: { select: { id: true } },
+          roles: { include: { role: true } },
+        },
+      });
+      if (!user?.hrEmployeeProfile) return { kind: "NOT_FOUND" as const };
+      if (user.roles.some(({ role }) => role.code === AppRole.SUPER_ADMIN)) {
+        return { kind: "FORBIDDEN" as const };
+      }
+      const nextRoles = await tx.role.findMany({
+        where: { id: { in: roleIds } },
+        select: { id: true, name: true, code: true },
+      });
+      if (nextRoles.length !== roleIds.length || nextRoles.some((role) => role.code === AppRole.SUPER_ADMIN)) {
+        return { kind: "VALIDATION" as const };
+      }
+
+      await tx.userRole.deleteMany({ where: { userId } });
+      await tx.userRole.createMany({
+        data: nextRoles.map((role) => ({ userId, roleId: role.id })),
+      });
+      await writeAuditLog(tx, {
+        actorUserId: actor.id,
+        action: "user.roles.update",
+        entityType: "user",
+        entityId: userId,
+        before: user.roles.map(({ role }) => ({ id: role.id, name: role.name })) as Prisma.InputJsonValue,
+        after: nextRoles.map((role) => ({ id: role.id, name: role.name })) as Prisma.InputJsonValue,
+        reason: "Əməkdaş rolları yeniləndi",
+      });
+      return { kind: "OK" as const };
+    });
+
+    if (result.kind === "NOT_FOUND") return failure("NOT_FOUND", "Əməkdaş hesabı tapılmadı.");
+    if (result.kind === "FORBIDDEN") return failure("FORBIDDEN", "Super Admin rolları bu ekrandan dəyişdirilə bilməz.");
+    if (result.kind === "VALIDATION") return failure("VALIDATION", "Seçilmiş rollardan biri etibarlı deyil.");
+    revalidatePath("/settings/roles");
+    revalidatePath("/hr");
+    revalidatePath("/", "layout");
+    return { ok: true, userId, roleIds };
+  } catch (error) {
+    return failure(error instanceof Error && error.message.startsWith("Missing permission") ? "FORBIDDEN" : "UNKNOWN", "Əməkdaş rolları saxlanarkən xəta baş verdi.");
+  }
 }
 
 function failure<T extends string>(code: T, message: string) { return { ok: false as const, code, message }; }

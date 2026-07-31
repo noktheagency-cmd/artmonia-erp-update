@@ -37,11 +37,13 @@ import {
   createRoleAction,
   deleteRoleAction,
   updateRolePermissionsAction,
+  updateUserRolesAction,
 } from "@/modules/roles/actions";
 import type {
   PermissionDefinitionDto,
   RoleGrantDto,
   RolePermissionMatrix,
+  RoleUserDto,
 } from "@/modules/roles/types";
 import type {
   PermissionCode,
@@ -58,6 +60,7 @@ export function RolePermissionsWorkspace({
   initialData: RolePermissionMatrix;
 }) {
   const [roles, setRoles] = useState(initialData.roles);
+  const [users, setUsers] = useState(initialData.users);
   const [selectedRoleId, setSelectedRoleId] = useState(initialData.roles[0]?.id ?? "");
   const [drafts, setDrafts] = useState<Record<string, PermissionDraft>>(() =>
     Object.fromEntries(initialData.roles.map((role) => [role.id, grantsToRecord(role.grants)])),
@@ -67,6 +70,8 @@ export function RolePermissionsWorkspace({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingRoleIds, setEditingRoleIds] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [createStep, setCreateStep] = useState<CreateStep>(1);
   const [newName, setNewName] = useState("");
@@ -80,6 +85,11 @@ export function RolePermissionsWorkspace({
   const deferredCreateQuery = useDeferredValue(createQuery.trim().toLocaleLowerCase("az"));
 
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? roles[0];
+  const selectedRoleUsers = useMemo(
+    () => selectedRole ? users.filter((user) => user.roleIds.includes(selectedRole.id)) : [],
+    [selectedRole, users],
+  );
+  const editingUser = users.find((user) => user.id === editingUserId) ?? null;
   const currentDraft = useMemo(
     () => (selectedRole ? drafts[selectedRole.id] ?? {} : {}),
     [drafts, selectedRole],
@@ -236,6 +246,43 @@ export function RolePermissionsWorkspace({
     });
   }
 
+  function openUserRoles(user: RoleUserDto) {
+    setEditingUserId(user.id);
+    setEditingRoleIds(user.roleIds);
+    setFeedback(null);
+  }
+
+  function toggleUserRole(roleId: string, checked: boolean) {
+    setEditingRoleIds((current) => checked
+      ? [...new Set([...current, roleId])]
+      : current.filter((id) => id !== roleId));
+  }
+
+  function saveUserRoles() {
+    if (!editingUser) return;
+    const data = new FormData();
+    data.set("userId", editingUser.id);
+    data.set("roleIds", JSON.stringify(editingRoleIds));
+    startTransition(async () => {
+      const result = await updateUserRolesAction(data);
+      if (!result.ok) {
+        setFeedback({ tone: "error", text: result.message });
+        return;
+      }
+      const nextUsers = users.map((user) =>
+        user.id === result.userId ? { ...user, roleIds: result.roleIds } : user,
+      );
+      setUsers(nextUsers);
+      setRoles((current) => current.map((role) => ({
+        ...role,
+        userCount: nextUsers.filter((user) => user.roleIds.includes(role.id)).length,
+      })));
+      setEditingUserId(null);
+      setEditingRoleIds([]);
+      setFeedback({ tone: "success", text: "Əməkdaşın rolları yeniləndi." });
+    });
+  }
+
   return (
     <section className={styles.workspace} aria-busy={isPending}>
       <header className={styles.pageHeader}>
@@ -360,6 +407,39 @@ export function RolePermissionsWorkspace({
                 </div>
               </div>
 
+              <section className={styles.roleMembers}>
+                <div className={styles.roleMembersHeader}>
+                  <div>
+                    <Users />
+                    <span>
+                      <strong>Bu roldakı əməkdaşlar</strong>
+                      <small>{selectedRoleUsers.length} əməkdaş</small>
+                    </span>
+                  </div>
+                </div>
+                {selectedRoleUsers.length > 0 ? (
+                  <div className={styles.roleMemberList}>
+                    {selectedRoleUsers.map((user) => (
+                      <article className={styles.roleMember} key={user.id}>
+                        <span className={styles.roleMemberAvatar}>{initials(user.fullName)}</span>
+                        <div>
+                          <strong>{user.fullName}</strong>
+                          <small>{user.position} · {user.department}</small>
+                        </div>
+                        <span className={styles.roleCount}>{user.roleIds.length} rol</span>
+                        {initialData.canManage && selectedRole.code !== "SUPER_ADMIN" ? (
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label="Əməkdaşın rollarını dəyiş" onClick={() => openUserRoles(user)}>
+                            <Pencil />
+                          </Button>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.roleMembersEmpty}>Bu rola təyin edilmiş əməkdaş yoxdur.</p>
+                )}
+              </section>
+
               <div className={styles.permissionTools}>
                 <label className={styles.searchBox}>
                   <Search />
@@ -478,6 +558,47 @@ export function RolePermissionsWorkspace({
           </TabsContent>
         ) : null}
       </Tabs>
+
+      <Dialog
+        open={Boolean(editingUser)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingUserId(null);
+            setEditingRoleIds([]);
+          }
+        }}
+      >
+        <DialogContent className={styles.memberRoleDialog}>
+          <DialogHeader>
+            <DialogTitle>Əməkdaş rollarını redaktə et</DialogTitle>
+            <DialogDescription>
+              {editingUser?.fullName} üçün bir və ya bir neçə rol seçin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className={styles.roleChoices}>
+            {roles.filter((role) => role.code !== "SUPER_ADMIN").map((role) => (
+              <label className={styles.roleChoice} key={role.id}>
+                <input
+                  type="checkbox"
+                  checked={editingRoleIds.includes(role.id)}
+                  onChange={(event) => toggleUserRole(role.id, event.target.checked)}
+                />
+                <span className={styles.roleAvatar}>{initials(role.name)}</span>
+                <span>
+                  <strong>{role.name}</strong>
+                  <small>{role.description || "Əlavə açıqlama yoxdur"}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingUserId(null)}>Ləğv et</Button>
+            <Button className={styles.primaryAction} disabled={editingRoleIds.length === 0 || isPending} onClick={saveUserRoles}>
+              {isPending ? "Saxlanılır..." : "Rolları saxla"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className={styles.confirmDialog}>

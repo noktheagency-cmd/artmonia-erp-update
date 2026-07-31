@@ -9,7 +9,8 @@ import {
   type Prisma,
 } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
-import { isPrivilegedActor, requireMutationActor } from "@/server/auth/actor";
+import { requireMutationActor } from "@/server/auth/actor";
+import { scopeFor } from "@/server/rbac/permissions";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
@@ -336,11 +337,11 @@ async function saveAttendanceActionImpl(formData: FormData) {
   const today = todayInBaku();
   if (input.date > today) throw new Error("Gələcək tarix üçün davamiyyət yazmaq olmaz");
   const prisma = getPrisma();
-  const privileged = isPrivilegedActor(actor);
-  const teacherProfile = privileged
+  const canManageAllAttendance = scopeFor(actor.permissions, "attendance.manage") === "ALL";
+  const teacherProfile = canManageAllAttendance
     ? null
     : await prisma.teacher.findUnique({ where: { userId: actor.id }, select: { id: true } });
-  if (!privileged && !teacherProfile) throw new Error("Müəllim profili ERP hesabına bağlanmayıb");
+  if (!canManageAllAttendance && !teacherProfile) throw new Error("Müəllim profili ERP hesabına bağlanmayıb");
 
   const affectedTeacherIds = await prisma.$transaction(async (tx) => {
     const group = await tx.studentGroup.findUnique({
@@ -428,9 +429,7 @@ async function saveAttendanceActionImpl(formData: FormData) {
 }
 
 async function requireGroupManager() {
-  const actor = await requireMutationActor("group.manage");
-  if (!isPrivilegedActor(actor)) throw new Error("Qrup idarəetməsi üçün Owner/Admin icazəsi tələb olunur");
-  return actor;
+  return requireMutationActor("group.manage");
 }
 
 async function lockGroup(tx: Prisma.TransactionClient, groupId: string) {

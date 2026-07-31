@@ -22,6 +22,17 @@ export type RoleSummaryDto = {
   grants: RoleGrantDto[];
 };
 
+export type RoleUserDto = {
+  id: string;
+  employeeId: string;
+  fullName: string;
+  email: string;
+  department: string;
+  position: string;
+  isActive: boolean;
+  roleIds: string[];
+};
+
 export type AuditLogDto = {
   id: string;
   actorName: string;
@@ -52,6 +63,7 @@ export type PermissionDefinitionDto = {
 
 export type RolePermissionMatrix = {
   roles: RoleSummaryDto[];
+  users: RoleUserDto[];
   definitions: PermissionDefinitionDto[];
   auditLogs: AuditLogDto[];
   canManage: boolean;
@@ -69,3 +81,7 @@ export type CreateRoleResult =
 export type DeleteRoleResult =
   | { ok: true; roleId: string }
   | { ok: false; code: "VALIDATION" | "FORBIDDEN" | "NOT_FOUND" | "IN_USE" | "UNKNOWN"; message: string };
+
+export type UpdateUserRolesResult =
+  | { ok: true; userId: string; roleIds: string[] }
+  | { ok: false; code: "VALIDATION" | "FORBIDDEN" | "NOT_FOUND" | "UNKNOWN"; message: string };
