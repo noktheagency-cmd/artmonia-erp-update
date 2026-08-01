@@ -2,7 +2,18 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { cx } from "@/components/ui/cx";
 import {
   Dialog,
@@ -12,12 +23,56 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
+import { unwrapActionResult } from "@/lib/action-result";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
+import {
+  deleteDropdownCatalogOptionAction,
+  getDropdownCatalogOptionsAction,
+  saveDropdownCatalogOptionAction,
+} from "@/modules/settings/dropdown-option-actions";
+import type {
+  DropdownCatalogKey,
+  DropdownCatalogRecord,
+} from "@/modules/settings/dropdown-option-types";
 
 export type SelectOption = {
+  id?: string;
   value: string;
   label: string;
   disabled?: boolean;
+  locked?: boolean;
   searchText?: string;
+};
+
+export type SelectOptionCrudConfig = {
+  canManage?: boolean;
+  createLabel?: string;
+  onCreate: (label: string) => Promise<SelectOption>;
+  onUpdate: (option: SelectOption, label: string) => Promise<SelectOption>;
+  onDelete: (option: SelectOption) => Promise<void>;
+};
+
+type FormSelectProps = {
+  name: string;
+  options: readonly SelectOption[];
+  defaultValue?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
+  placeholder?: string;
+  emptyLabel?: string;
+  emptyValue?: string;
+  className?: string;
+  contentClassName?: string;
+  disabled?: boolean;
+  required?: boolean;
+  searchable?: boolean;
+  creatable?: boolean;
+  catalogKey?: DropdownCatalogKey;
+  optionCrud?: SelectOptionCrudConfig;
+  searchPlaceholder?: string;
+  createLabel?: string;
+  "aria-label"?: string;
+  icon?: React.ComponentType<{ className?: string; size?: number }>;
 };
 
 export const Select = SelectPrimitive.Root;
@@ -121,7 +176,11 @@ export const SelectItem = React.forwardRef<
 
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
-export function FormSelect({
+export function FormSelect(props: FormSelectProps) {
+  return <FormSelectState key={props.catalogKey ?? "static"} {...props} />;
+}
+
+function FormSelectState({
   name,
   options,
   defaultValue,
@@ -136,44 +195,51 @@ export function FormSelect({
   required,
   searchable = false,
   creatable = false,
+  catalogKey,
+  optionCrud,
   searchPlaceholder = "Axtar...",
   createLabel = "Yeni seçim əlavə et",
   "aria-label": ariaLabel,
   icon: Icon,
-}: {
-  name: string;
-  options: readonly SelectOption[];
-  defaultValue?: string;
-  value?: string;
-  onValueChange?: (value: string) => void;
-  placeholder?: string;
-  emptyLabel?: string;
-  emptyValue?: string;
-  className?: string;
-  contentClassName?: string;
-  disabled?: boolean;
-  required?: boolean;
-  searchable?: boolean;
-  creatable?: boolean;
-  searchPlaceholder?: string;
-  createLabel?: string;
-  "aria-label"?: string;
-  icon?: React.ComponentType<{ className?: string; size?: number }>;
-}) {
+}: FormSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [createdOptions, setCreatedOptions] = React.useState<SelectOption[]>([]);
+  const [optionOverrides, setOptionOverrides] = React.useState<SelectOption[]>([]);
+  const [hiddenOptionValues, setHiddenOptionValues] = React.useState<string[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = React.useState(false);
+  const [catalogLoading, setCatalogLoading] = React.useState(false);
+  const [catalogCanManage, setCatalogCanManage] = React.useState(false);
+  const [editor, setEditor] = React.useState<
+    { mode: "create"; option?: undefined } | { mode: "edit"; option: SelectOption } | null
+  >(null);
+  const [editorValue, setEditorValue] = React.useState("");
+  const [deleteCandidate, setDeleteCandidate] = React.useState<SelectOption | null>(null);
+  const [crudPending, startCrudTransition] = React.useTransition();
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const editorInputRef = React.useRef<HTMLInputElement>(null);
   const isMobileSheet = useMobileSelectSheet();
   const items = React.useMemo(
     () => {
       const baseItems = emptyLabel
         ? [{ value: emptyValue, label: emptyLabel }, ...options]
         : [...options];
-      const knownValues = new Set(baseItems.map((item) => item.value));
-      return [...baseItems, ...createdOptions.filter((item) => !knownValues.has(item.value))];
+      const hiddenValues = new Set(hiddenOptionValues);
+      const optionMap = new Map(
+        baseItems
+          .filter((item) => !hiddenValues.has(item.value))
+          .map((item) => [item.value, item]),
+      );
+
+      for (const item of [...optionOverrides, ...createdOptions]) {
+        if (!hiddenValues.has(item.value)) {
+          optionMap.set(item.value, { ...optionMap.get(item.value), ...item });
+        }
+      }
+
+      return [...optionMap.values()];
     },
-    [createdOptions, emptyLabel, emptyValue, options]
+    [createdOptions, emptyLabel, emptyValue, hiddenOptionValues, optionOverrides, options]
   );
   const normalizedDefaultValue = normalizeSelectValue(defaultValue, emptyValue);
   const controlledValue =
@@ -200,7 +266,7 @@ export function FormSelect({
   const createValue = searchQuery.replace(/\s+/g, " ").trim();
   const normalizedCreateValue = normalizeSearchText(createValue);
   const canCreate =
-    creatable &&
+    creatable && !catalogKey && !optionCrud &&
     createValue.length >= 2 &&
     !items.some((item) =>
       normalizeSearchText(item.value) === normalizedCreateValue ||
@@ -208,6 +274,8 @@ export function FormSelect({
     );
   const shouldAutoFocusSearch =
     searchable || (isMobileSheet && (items.length >= 8 || creatable));
+  const canManageOptions = optionCrud?.canManage ?? catalogCanManage;
+  const optionCreateLabel = optionCrud?.createLabel ?? createLabel;
 
   React.useEffect(() => {
     if (!open || !shouldAutoFocusSearch) {
@@ -220,6 +288,34 @@ export function FormSelect({
 
     return () => window.clearTimeout(focusTimer);
   }, [open, shouldAutoFocusSearch]);
+
+  React.useEffect(() => {
+    if (!open || !editor) return;
+    const focusTimer = window.setTimeout(() => editorInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [editor, open]);
+
+  async function loadCatalogOptions() {
+    if (!catalogKey || catalogLoaded || catalogLoading) return;
+    setCatalogLoading(true);
+    try {
+      const snapshot = unwrapActionResult(
+        await getDropdownCatalogOptionsAction(catalogKey),
+      );
+      setCatalogCanManage(snapshot.canManage);
+      setOptionOverrides(
+        snapshot.records.filter((record) => record.isActive).map(catalogRecordToOption),
+      );
+      setHiddenOptionValues(
+        snapshot.records.filter((record) => !record.isActive).map((record) => record.value),
+      );
+      setCatalogLoaded(true);
+    } catch (error) {
+      notifyCaughtError(error, "Dropdown seçimləri yüklənmədi.");
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
 
   function handleValueChange(nextValue: string) {
     if (creatable && !items.some((item) => item.value === nextValue)) {
@@ -235,9 +331,217 @@ export function FormSelect({
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
 
+    if (nextOpen) void loadCatalogOptions();
+
     if (!nextOpen) {
       setSearchQuery("");
+      setEditor(null);
+      setEditorValue("");
+      setDeleteCandidate(null);
     }
+  }
+
+  function beginCreate() {
+    setDeleteCandidate(null);
+    setEditor({ mode: "create" });
+    setEditorValue("");
+  }
+
+  function beginEdit(option: SelectOption) {
+    setDeleteCandidate(null);
+    setEditor({ mode: "edit", option });
+    setEditorValue(option.label);
+  }
+
+  function cancelCrudPanel() {
+    setEditor(null);
+    setEditorValue("");
+    setDeleteCandidate(null);
+  }
+
+  function saveManagedOption() {
+    const label = editorValue.replace(/\s+/g, " ").trim();
+    if (!editor || label.length < 2 || !canManageOptions) return;
+
+    startCrudTransition(async () => {
+      try {
+        const previousOption = editor.mode === "edit" ? editor.option : null;
+        const saved = optionCrud
+          ? editor.mode === "edit"
+            ? await optionCrud.onUpdate(editor.option, label)
+            : await optionCrud.onCreate(label)
+          : catalogKey
+            ? catalogRecordToOption(
+                unwrapActionResult(
+                  await saveDropdownCatalogOptionAction({
+                    catalog: catalogKey,
+                    value: editor.mode === "edit" ? editor.option.value : undefined,
+                    label,
+                  }),
+                ),
+              )
+            : null;
+
+        if (!saved) return;
+        setHiddenOptionValues((current) =>
+          [...new Set([
+            ...current.filter((value) => value !== saved.value),
+            ...(previousOption && previousOption.value !== saved.value
+              ? [previousOption.value]
+              : []),
+          ])],
+        );
+        setOptionOverrides((current) => [
+          ...current.filter(
+            (item) => item.value !== saved.value && item.value !== previousOption?.value,
+          ),
+          saved,
+        ]);
+
+        if (previousOption && currentValue === previousOption.value) {
+          handleValueChange(saved.value);
+        } else if (!previousOption) {
+          handleValueChange(saved.value);
+        }
+
+        cancelCrudPanel();
+        notifySuccess(
+          previousOption ? "Seçim yeniləndi" : "Yeni seçim əlavə edildi",
+          saved.label,
+        );
+      } catch (error) {
+        notifyCaughtError(error, "Dropdown seçimi saxlanmadı.");
+      }
+    });
+  }
+
+  function deleteManagedOption() {
+    if (!deleteCandidate || !canManageOptions) return;
+    const candidate = deleteCandidate;
+
+    startCrudTransition(async () => {
+      try {
+        if (optionCrud) {
+          await optionCrud.onDelete(candidate);
+        } else if (catalogKey) {
+          unwrapActionResult(
+            await deleteDropdownCatalogOptionAction({
+              catalog: catalogKey,
+              value: candidate.value,
+              label: candidate.label,
+            }),
+          );
+        }
+
+        setOptionOverrides((current) =>
+          current.filter((item) => item.value !== candidate.value),
+        );
+        setCreatedOptions((current) =>
+          current.filter((item) => item.value !== candidate.value),
+        );
+        setHiddenOptionValues((current) => [...new Set([...current, candidate.value])]);
+        if (currentValue === candidate.value) {
+          handleValueChange(emptyLabel ? emptyValue : "");
+        }
+        cancelCrudPanel();
+        notifySuccess("Seçim silindi", candidate.label);
+      } catch (error) {
+        notifyCaughtError(error, "Dropdown seçimi silinmədi.");
+      }
+    });
+  }
+
+  function managedActions(option: SelectOption) {
+    if (!canManageOptions || option.value === emptyValue || option.locked) return null;
+    return (
+      <span className="ui-select-option-actions">
+        <button
+          type="button"
+          aria-label={`${option.label} seçimini redaktə et`}
+          title="Redaktə et"
+          onPointerDown={stopManagedPointerEvent}
+          onClick={(event) => {
+            event.stopPropagation();
+            beginEdit(option);
+          }}
+        >
+          <Pencil aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label={`${option.label} seçimini sil`}
+          title="Sil"
+          onPointerDown={stopManagedPointerEvent}
+          onClick={(event) => {
+            event.stopPropagation();
+            setEditor(null);
+            setDeleteCandidate(option);
+          }}
+        >
+          <Trash2 aria-hidden="true" />
+        </button>
+      </span>
+    );
+  }
+
+  function crudPanel() {
+    if (catalogLoading) {
+      return (
+        <div className="ui-select-crud-status">
+          <LoaderCircle className="is-spinning" aria-hidden="true" />
+          Seçimlər yüklənir...
+        </div>
+      );
+    }
+    if (!canManageOptions) return null;
+
+    if (deleteCandidate) {
+      return (
+        <div className="ui-select-crud-confirm">
+          <span>“{deleteCandidate.label}” silinsin?</span>
+          <span>
+            <button type="button" onPointerDown={stopManagedPointerEvent} onClick={cancelCrudPanel} aria-label="Silməni ləğv et"><X /></button>
+            <button className="is-danger" type="button" disabled={crudPending} onPointerDown={stopManagedPointerEvent} onClick={deleteManagedOption} aria-label="Seçimi sil"><Trash2 /></button>
+          </span>
+        </div>
+      );
+    }
+
+    if (editor) {
+      return (
+        <div className="ui-select-crud-editor" onKeyDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+          <input
+            ref={editorInputRef}
+            value={editorValue}
+            onChange={(event) => setEditorValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                saveManagedOption();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelCrudPanel();
+              }
+            }}
+            aria-label={editor.mode === "edit" ? "Seçimin yeni adı" : "Yeni seçimin adı"}
+            placeholder="Seçimin adını yazın"
+            maxLength={80}
+          />
+          <button type="button" onPointerDown={stopManagedPointerEvent} onClick={cancelCrudPanel} aria-label="Redaktəni ləğv et"><X /></button>
+          <button type="button" disabled={crudPending || editorValue.trim().length < 2} onPointerDown={stopManagedPointerEvent} onClick={saveManagedOption} aria-label="Seçimi yadda saxla">
+            {crudPending ? <LoaderCircle className="is-spinning" /> : <Save />}
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <button className="ui-select-crud-create" type="button" onPointerDown={stopManagedPointerEvent} onClick={beginCreate}>
+        <Plus aria-hidden="true" />
+        {optionCreateLabel}
+      </button>
+    );
   }
 
   if (isMobileSheet) {
@@ -301,21 +605,23 @@ export function FormSelect({
                 const checked = item.value === currentValue;
 
                 return (
-                  <button
-                    className="ui-mobile-select-option"
-                    type="button"
-                    role="option"
-                    aria-selected={checked}
-                    key={item.value}
-                    disabled={item.disabled}
-                    onClick={() => {
-                      handleValueChange(item.value);
-                      handleOpenChange(false);
-                    }}
-                  >
-                    <span>{item.label}</span>
-                    {checked ? <Check aria-hidden="true" size={19} /> : null}
-                  </button>
+                  <div className="ui-mobile-select-option-row" key={item.value}>
+                    <button
+                      className="ui-mobile-select-option"
+                      type="button"
+                      role="option"
+                      aria-selected={checked}
+                      disabled={item.disabled}
+                      onClick={() => {
+                        handleValueChange(item.value);
+                        handleOpenChange(false);
+                      }}
+                    >
+                      <span>{item.label}</span>
+                      {checked ? <Check aria-hidden="true" size={19} /> : null}
+                    </button>
+                    {managedActions(item)}
+                  </div>
                 );
               })}
 
@@ -338,6 +644,7 @@ export function FormSelect({
                 <div className="ui-mobile-select-empty">Nəticə tapılmadı</div>
               ) : null}
             </div>
+            <div className="ui-mobile-select-crud-panel">{crudPanel()}</div>
           </DialogContent>
         </Dialog>
       </>
@@ -381,9 +688,12 @@ export function FormSelect({
         {filteredItems.length > 0 || canCreate ? (
           <SelectGroup>
             {filteredItems.map((item) => (
-              <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
-                {item.label}
-              </SelectItem>
+              <div className="ui-select-managed-row" key={item.value}>
+                <SelectItem value={item.value} disabled={item.disabled}>
+                  {item.label}
+                </SelectItem>
+                {managedActions(item)}
+              </div>
             ))}
             {canCreate ? (
               <SelectItem key={`create-${createValue}`} value={createValue}>
@@ -394,9 +704,19 @@ export function FormSelect({
         ) : (
           <div className="ui-select-empty-state">Nəticə tapılmadı</div>
         )}
+        <div className="ui-select-crud-panel">{crudPanel()}</div>
       </SelectContent>
     </Select>
   );
+}
+
+function catalogRecordToOption(record: DropdownCatalogRecord): SelectOption {
+  return { id: record.id, value: record.value, label: record.label };
+}
+
+function stopManagedPointerEvent(event: React.PointerEvent) {
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function normalizeSelectValue(value: string | undefined, emptyValue: string) {

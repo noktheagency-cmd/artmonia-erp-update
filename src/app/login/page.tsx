@@ -1,5 +1,4 @@
 import type { Route } from "next";
-import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getCurrentErpUser } from "@/server/auth/session";
 import { LoginForm } from "./login-form";
@@ -25,17 +24,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className={styles.login}>
       <section className={styles.art} aria-label="Artmonia 3D animasiyası">
-        <header className={styles.wordmark}>
-          <Image
-            src="/logo-login.png"
-            alt="Artmonia"
-            width={1254}
-            height={1254}
-            priority
-            sizes="(max-width: 760px) 126px, 170px"
-          />
-        </header>
-
         <LoginSceneLazy />
       </section>
 
@@ -45,7 +33,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <h1>
               <span className={styles.headingTitle}>Xoş gəlmisiniz</span>
             </h1>
-            <p className={styles.motto}>Xəyal etdiyin hər şey gerçəkdir</p>
+            <p className={styles.motto}>Təsəvvür etdiyin hər şey gerçəkdir</p>
           </div>
 
           <LoginForm next={next} />

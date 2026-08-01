@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { Banknote, CalendarDays, CreditCard, ReceiptText, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +21,7 @@ import { FormSelect } from "@/components/ui/select";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
-import { notifyCaughtError } from "@/lib/app-notifications";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 
 type StudentRow = StudentListData["students"][number];
@@ -35,6 +37,8 @@ export function StudentPaymentDialogClient({
   returnTo: string;
   recordPaymentAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [studentId, setStudentId] = useState(students[0]?.id ?? "");
   const selectedStudent = useMemo(
     () => students.find((student) => student.id === studentId) ?? students[0],
@@ -52,14 +56,20 @@ export function StudentPaymentDialogClient({
 
   async function recordPayment(formData: FormData) {
     try {
-      unwrapActionResult(await recordPaymentAction(formData));
+      const result = unwrapActionResult(await recordPaymentAction(formData)) as {
+        redirectTo: string;
+      };
+      setOpen(false);
+      notifySuccess("Ödəniş qəbul edildi", "Tələbənin balansı yeniləndi.");
+      router.replace(result.redirectTo as Route, { scroll: false });
+      router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Ödəniş qeydə alınmadı.");
     }
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -80,7 +90,16 @@ export function StudentPaymentDialogClient({
         </DialogHeader>
 
         {selectedStudent ? (
-          <form action={recordPayment} className="student-payment-form" key={selectedStudent.id}>
+          <form
+            action={recordPayment}
+            className="student-payment-form"
+            key={[
+              selectedStudent.id,
+              selectedStudent.detail.paymentDefaultAmount,
+              selectedStudent.detail.paymentDefaultDate,
+              selectedStudent.detail.paymentDefaultNextDate,
+            ].join(":")}
+          >
             <input name="studentId" type="hidden" value={selectedStudent.id} />
             <input name="returnTo" type="hidden" value={returnTo} />
 

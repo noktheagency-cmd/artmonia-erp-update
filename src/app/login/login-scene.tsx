@@ -44,34 +44,6 @@ function createSeededRandom(seed: number) {
   };
 }
 
-function applyArtmoniaColors(geometry: THREE.BufferGeometry) {
-  const positions = geometry.getAttribute("position");
-  const colors = new Float32Array(positions.count * 3);
-  const blue = new THREE.Color("#172fdc");
-  const violet = new THREE.Color("#5d45f0");
-  const orange = new THREE.Color("#ff7a32");
-  const mixed = new THREE.Color();
-
-  for (let index = 0; index < positions.count; index += 1) {
-    const x = positions.getX(index);
-    const y = positions.getY(index);
-    const z = positions.getZ(index);
-    const wave = 0.5 + 0.5 * Math.sin(x * 1.32 + y * 1.75 + z * 2.2);
-
-    if (wave < 0.52) {
-      mixed.lerpColors(blue, violet, wave / 0.52);
-    } else {
-      mixed.lerpColors(violet, orange, (wave - 0.52) / 0.48);
-    }
-
-    colors[index * 3] = mixed.r;
-    colors[index * 3 + 1] = mixed.g;
-    colors[index * 3 + 2] = mixed.b;
-  }
-
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-}
-
 function applySolidColor(geometry: THREE.BufferGeometry, color: THREE.Color) {
   const positions = geometry.getAttribute("position");
   const colors = new Float32Array(positions.count * 3);
@@ -168,6 +140,28 @@ function sampleSurface(
   return { colors, positions };
 }
 
+function createFragmentTargets(sourcePositions: Float32Array, seed: number) {
+  const random = createSeededRandom(seed);
+  const targets = new Float32Array(sourcePositions.length);
+
+  for (let index = 0; index < sourcePositions.length; index += 3) {
+    const x = sourcePositions[index];
+    const y = sourcePositions[index + 1];
+    const z = sourcePositions[index + 2];
+    const angle = Math.atan2(y, x || 0.001);
+    const radialX = Math.cos(angle);
+    const radialY = Math.sin(angle);
+    const burst = 0.3 + random() * 1.15;
+    const twist = (random() - 0.5) * 0.65;
+
+    targets[index] = x + radialX * burst - radialY * twist;
+    targets[index + 1] = y + radialY * burst + radialX * twist;
+    targets[index + 2] = z + (random() - 0.5) * 1.8;
+  }
+
+  return targets;
+}
+
 function createPhysicalMaterial() {
   return new THREE.MeshPhysicalMaterial({
     vertexColors: true,
@@ -200,7 +194,8 @@ const particleVertexShader = /* glsl */ `
   }
 
   void main() {
-    float progress = easeInOut(clamp(uProgress, 0.0, 1.0));
+    float delayedProgress = clamp((uProgress - aSeed * 0.18) / 0.82, 0.0, 1.0);
+    float progress = easeInOut(delayedProgress);
     float transitionArc = sin(progress * 3.14159265);
     vec3 midpoint = mix(position, aTarget, 0.5);
     vec3 direction = normalize(midpoint + vec3(0.001));
@@ -285,18 +280,17 @@ export function LoginScene() {
     const pointerTarget = new THREE.Vector2();
     const timer = new THREE.Timer();
     const canvasHost = canvas.parentElement;
+    const interactionTarget = canvasHost ?? stage;
     let animationFrame = 0;
     let progress = 0;
     let targetProgress = 0;
     let transitionFrom = 0;
     let transitionStartedAt = performance.now();
     let disposed = false;
-    let knotGeometry: THREE.TorusKnotGeometry | null = null;
     let logoBlueGeometry: THREE.BufferGeometry | null = null;
     let logoOrangeGeometry: THREE.BufferGeometry | null = null;
     let logoSampleGeometry: THREE.BufferGeometry | null = null;
     let pointGeometry: THREE.BufferGeometry | null = null;
-    let knotMaterial: THREE.MeshPhysicalMaterial | null = null;
     let logoBlueMaterial: THREE.MeshPhysicalMaterial | null = null;
     let logoOrangeMaterial: THREE.MeshPhysicalMaterial | null = null;
     let pointMaterial: THREE.ShaderMaterial | null = null;
@@ -364,31 +358,58 @@ export function LoginScene() {
       stage.dataset.active = "false";
     };
 
+    const handlePointerEnter = () => {
+      if (!coarsePointer) {
+        activate();
+      }
+    };
+
+    const handlePointerLeave = () => {
+      if (!coarsePointer) {
+        deactivate();
+      }
+    };
+
+    const toggleFragments = () => {
+      if (!coarsePointer) {
+        return;
+      }
+
+      if (targetProgress > 0.5) {
+        deactivate();
+      } else {
+        activate();
+      }
+    };
+
     const updatePointer = (event: PointerEvent) => {
       const bounds = stage.getBoundingClientRect();
       pointerTarget.set(
         ((event.clientX - bounds.left) / bounds.width - 0.5) * 2,
         -((event.clientY - bounds.top) / bounds.height - 0.5) * 2,
       );
-      activate();
+      if (!coarsePointer) {
+        activate();
+      }
     };
 
     const resetWhenPointerLeavesStage = (event: PointerEvent) => {
-      const bounds = stage.getBoundingClientRect();
+      const bounds = interactionTarget.getBoundingClientRect();
       const isOutside =
         event.clientX < bounds.left ||
         event.clientX > bounds.right ||
         event.clientY < bounds.top ||
         event.clientY > bounds.bottom;
 
-      if (isOutside && stage.dataset.active === "true") {
+      if (!coarsePointer && isOutside && stage.dataset.active === "true") {
         deactivate();
       }
     };
 
-    stage.addEventListener("pointerenter", activate);
-    stage.addEventListener("pointermove", updatePointer, { passive: true });
-    stage.addEventListener("pointerleave", deactivate);
+    interactionTarget.addEventListener("pointerenter", handlePointerEnter);
+    interactionTarget.addEventListener("pointermove", updatePointer, { passive: true });
+    interactionTarget.addEventListener("pointerleave", handlePointerLeave);
+    interactionTarget.addEventListener("pointerdown", toggleFragments);
     stage.addEventListener("focus", activate);
     stage.addEventListener("blur", deactivate);
     window.addEventListener("pointermove", resetWhenPointerLeavesStage, { passive: true });
@@ -400,12 +421,7 @@ export function LoginScene() {
 
       timer.update(timestamp);
       const elapsed = timer.getElapsed();
-      if (coarsePointer && !reducedMotion) {
-        const cycle = (elapsed % 11.5) / 11.5;
-        progress = cycle < 0.5
-          ? smoothstep(cycle * 2)
-          : smoothstep((1 - cycle) * 2);
-      } else if (reducedMotion) {
+      if (reducedMotion) {
         progress = targetProgress;
       } else {
         const distance = Math.max(Math.abs(targetProgress - transitionFrom), 0.001);
@@ -424,22 +440,21 @@ export function LoginScene() {
       root.rotation.z = Math.sin(elapsed * 0.31) * 0.018;
       root.position.y = reducedMotion ? 0 : Math.sin(elapsed * 0.72) * 0.08;
 
-      if (knotMaterial && logoBlueMaterial && logoOrangeMaterial && pointMaterial) {
-        knotMaterial.opacity = 1 - rangeProgress(progress, 0.07, 0.38);
-        knotMaterial.depthWrite = progress < 0.2;
-        const logoOpacity = rangeProgress(progress, 0.64, 0.96);
+      if (logoBlueMaterial && logoOrangeMaterial && pointMaterial) {
+        const logoOpacity = 1 - rangeProgress(progress, 0.04, 0.42);
         logoBlueMaterial.opacity = logoOpacity;
         logoOrangeMaterial.opacity = logoOpacity;
-        logoBlueMaterial.depthWrite = progress > 0.82;
-        logoOrangeMaterial.depthWrite = progress > 0.82;
+        logoBlueMaterial.depthWrite = progress < 0.2;
+        logoOrangeMaterial.depthWrite = progress < 0.2;
         pointMaterial.uniforms.uProgress.value = progress;
         pointMaterial.uniforms.uTime.value = elapsed;
         pointMaterial.uniforms.uOpacity.value =
-          rangeProgress(progress, 0.02, 0.2) *
-          (1 - rangeProgress(progress, 0.82, 0.995));
+          rangeProgress(progress, 0.02, 0.22) *
+          (1 - rangeProgress(progress, 0.86, 1) * 0.35);
       }
 
-      stage.dataset.morph = progress > 0.94 ? "word" : progress < 0.06 ? "knot" : "transition";
+      stage.dataset.morph =
+        progress > 0.94 ? "fragments" : progress < 0.06 ? "logo" : "transition";
       stage.dataset.progress = progress.toFixed(3);
       renderer.render(scene, camera);
       animationFrame = window.requestAnimationFrame(render);
@@ -455,17 +470,12 @@ export function LoginScene() {
           return;
         }
 
-        knotGeometry = new THREE.TorusKnotGeometry(1.55, 0.36, 240, 32, 2, 3);
-        knotGeometry.rotateX(0.34);
-        knotGeometry.rotateZ(-0.18);
-        applyArtmoniaColors(knotGeometry);
-
         const logoGeometries = createLogoGeometries(blueSvg, orangeSvg);
         logoBlueGeometry = logoGeometries.blue;
         logoOrangeGeometry = logoGeometries.orange;
         logoSampleGeometry = logoGeometries.sampled;
-        const knotSamples = sampleSurface(knotGeometry, PARTICLE_COUNT, 117);
         const logoSamples = sampleSurface(logoSampleGeometry, PARTICLE_COUNT, 839);
+        const fragmentTargets = createFragmentTargets(logoSamples.positions, 117);
         const seeds = new Float32Array(PARTICLE_COUNT);
         const random = createSeededRandom(421);
 
@@ -474,20 +484,19 @@ export function LoginScene() {
         }
 
         pointGeometry = new THREE.BufferGeometry();
-        pointGeometry.setAttribute("position", new THREE.BufferAttribute(knotSamples.positions, 3));
-        pointGeometry.setAttribute("aTarget", new THREE.BufferAttribute(logoSamples.positions, 3));
-        pointGeometry.setAttribute("aSourceColor", new THREE.BufferAttribute(knotSamples.colors, 3));
+        pointGeometry.setAttribute("position", new THREE.BufferAttribute(logoSamples.positions, 3));
+        pointGeometry.setAttribute("aTarget", new THREE.BufferAttribute(fragmentTargets, 3));
+        pointGeometry.setAttribute("aSourceColor", new THREE.BufferAttribute(logoSamples.colors, 3));
         pointGeometry.setAttribute("aTargetColor", new THREE.BufferAttribute(logoSamples.colors, 3));
         pointGeometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
 
-        knotMaterial = createPhysicalMaterial();
         logoBlueMaterial = createPhysicalMaterial();
         logoOrangeMaterial = createPhysicalMaterial();
         pointMaterial = new THREE.ShaderMaterial({
           uniforms: {
             uOpacity: { value: 0 },
             uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 1.5) },
-            uPointSize: { value: 6.2 },
+            uPointSize: { value: 5.2 },
             uProgress: { value: 0 },
             uTime: { value: 0 },
           },
@@ -497,11 +506,10 @@ export function LoginScene() {
           depthWrite: false,
         });
 
-        const knotMesh = new THREE.Mesh(knotGeometry, knotMaterial);
         const logoOrangeMesh = new THREE.Mesh(logoOrangeGeometry, logoOrangeMaterial);
         const logoBlueMesh = new THREE.Mesh(logoBlueGeometry, logoBlueMaterial);
         const morphPoints = new THREE.Points(pointGeometry, pointMaterial);
-        root.add(knotMesh, logoOrangeMesh, logoBlueMesh, morphPoints);
+        root.add(logoOrangeMesh, logoBlueMesh, morphPoints);
 
         shadowGeometry = new THREE.CircleGeometry(1, 64);
         shadowMaterial = new THREE.MeshBasicMaterial({
@@ -531,18 +539,17 @@ export function LoginScene() {
       disposed = true;
       window.cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
-      stage.removeEventListener("pointerenter", activate);
-      stage.removeEventListener("pointermove", updatePointer);
-      stage.removeEventListener("pointerleave", deactivate);
+      interactionTarget.removeEventListener("pointerenter", handlePointerEnter);
+      interactionTarget.removeEventListener("pointermove", updatePointer);
+      interactionTarget.removeEventListener("pointerleave", handlePointerLeave);
+      interactionTarget.removeEventListener("pointerdown", toggleFragments);
       stage.removeEventListener("focus", activate);
       stage.removeEventListener("blur", deactivate);
       window.removeEventListener("pointermove", resetWhenPointerLeavesStage);
-      knotGeometry?.dispose();
       logoBlueGeometry?.dispose();
       logoOrangeGeometry?.dispose();
       logoSampleGeometry?.dispose();
       pointGeometry?.dispose();
-      knotMaterial?.dispose();
       logoBlueMaterial?.dispose();
       logoOrangeMaterial?.dispose();
       pointMaterial?.dispose();
@@ -560,9 +567,9 @@ export function LoginScene() {
       tabIndex={0}
       data-active="false"
       data-loaded="false"
-      data-morph="knot"
+      data-morph="logo"
       data-renderer="loading"
-      aria-label="3D Artmonia animasiyası. Yazıya çevirmək üçün üzərinə gəlin."
+      aria-label="3D Artmonia loqosu. Parçalanma effektini görmək üçün toxunun."
     >
       <span className={styles.orbitPrimary} aria-hidden="true">
         <i />

@@ -1,8 +1,6 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
-import type { Route } from "next";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   EnrollmentStatus,
@@ -56,8 +54,8 @@ const createLeadSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   phone: optionalText(40),
   source: optionalText(60),
+  educationLevel: optionalText(80),
   programId: optionalUuid,
-  managerId: optionalUuid,
   campaignId: optionalUuid,
   stage: z.enum(leadStageOptions).default(LeadStage.NEW),
   priority: z.enum(leadPriorityOptions).default("NORMAL"),
@@ -78,6 +76,7 @@ const updateLeadSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   phone: optionalText(40),
   source: optionalText(60),
+  educationLevel: optionalText(80),
   programId: optionalUuid,
   managerId: optionalUuid,
   stage: z.enum(leadStageOptions),
@@ -122,7 +121,7 @@ async function createLeadActionImpl(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/marketing");
   invalidateCrmCaches();
-  redirect("/crm?tab=list&leadCreated=1" as Route);
+  return { redirectTo: "/crm?tab=list&leadCreated=1" };
 }
 
 export async function createLeadFormAction(
@@ -160,12 +159,13 @@ async function createLead(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.create");
   const input = createLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
-  const managerId = resolveLeadManagerId(actor, input.managerId);
+  const managerId = actor.id;
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
   let createdLeadId = "";
 
   await prisma.$transaction(async (tx) => {
+    const educationLevel = await resolveEducationLevelName(tx, input.educationLevel);
     const existingContact = phoneNormalized
       ? await tx.contact.findUnique({ where: { phoneNormalized } })
       : null;
@@ -185,6 +185,7 @@ async function createLead(formData: FormData) {
         contactId: contact.id,
         stage: input.stage,
         source: input.source ?? "Manual",
+        educationLevel,
         managerId,
         campaignId: input.campaignId ?? null,
         programInterestId: input.programId ?? null,
@@ -253,6 +254,7 @@ async function updateLeadActionImpl(formData: FormData) {
         stage: true,
         source: true,
         priority: true,
+        educationLevel: true,
         nextActionType: true,
         programInterestId: true,
         nextFollowUpAt: true,
@@ -287,6 +289,11 @@ async function updateLeadActionImpl(formData: FormData) {
       }
     }
 
+    const educationLevel =
+      input.educationLevel === current.educationLevel
+        ? current.educationLevel
+        : await resolveEducationLevelName(tx, input.educationLevel);
+
     await tx.contact.update({
       where: { id: current.contactId },
       data: {
@@ -302,6 +309,7 @@ async function updateLeadActionImpl(formData: FormData) {
       data: {
         stage: input.stage,
         source: input.source ?? "Manual",
+        educationLevel,
         managerId,
         programInterestId: input.programId ?? null,
         nextFollowUpAt: followUpAt,
@@ -312,6 +320,7 @@ async function updateLeadActionImpl(formData: FormData) {
         id: true,
         stage: true,
         source: true,
+        educationLevel: true,
         managerId: true,
         programInterestId: true,
         nextFollowUpAt: true,
@@ -377,6 +386,7 @@ async function updateLeadActionImpl(formData: FormData) {
         id: current.id,
         stage: current.stage,
         source: current.source,
+        educationLevel: current.educationLevel,
         priority: current.priority,
         nextActionType: current.nextActionType,
         managerId: current.managerId,
@@ -401,7 +411,7 @@ async function updateLeadActionImpl(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/marketing");
   invalidateCrmCaches();
-  redirectToCrm(input.returnTo);
+  return { redirectTo: safeCrmRedirect(input.returnTo) };
 }
 
 async function deleteLeadActionImpl(formData: FormData) {
@@ -468,7 +478,7 @@ async function deleteLeadActionImpl(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/marketing");
   invalidateCrmCaches();
-  redirectToCrm(input.returnTo);
+  return { redirectTo: safeCrmRedirect(input.returnTo) };
 }
 
 async function convertLeadToStudentActionImpl(formData: FormData) {
@@ -488,6 +498,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         programInterestId: true,
         convertedStudentId: true,
         campaignId: true,
+        educationLevel: true,
         contact: {
           select: {
             fullName: true,
@@ -552,9 +563,10 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       data: {
         code: studentCode,
         contactId: lead.contactId,
-        managerId: lead.managerId ?? actor.id,
+        managerId: actor.id,
         campaignId: lead.campaignId,
         lifecycleStatus: StudentLifecycleStatus.GROUP_WAITING,
+        educationLevel: lead.educationLevel,
         billingPaused: isBillingPausedStatus(StudentLifecycleStatus.GROUP_WAITING),
         registeredAt: today,
         notes: `CRM müraciətindən tələbəyə çevrildi: ${lead.id}`,
@@ -636,7 +648,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
   revalidatePath("/marketing");
   invalidateCrmCaches();
   updateTag(erpCacheTags.students);
-  redirectToCrm(input.returnTo);
+  return { redirectTo: safeCrmRedirect(input.returnTo) };
 }
 
 async function updateLeadStageActionImpl(formData: FormData) {
@@ -694,7 +706,7 @@ async function updateLeadStageActionImpl(formData: FormData) {
   revalidatePath("/crm");
   revalidatePath("/dashboard");
   invalidateCrmCaches();
-  redirectToCrm(input.returnTo);
+  return { redirectTo: safeCrmRedirect(input.returnTo) };
 }
 
 async function generateStudentCode(tx: Prisma.TransactionClient) {
@@ -720,10 +732,6 @@ async function generateStudentCode(tx: Prisma.TransactionClient) {
 
 function safeCrmRedirect(value: string | undefined) {
   return value?.startsWith("/crm") ? value : "/crm";
-}
-
-function redirectToCrm(value: string | undefined): never {
-  redirect(safeCrmRedirect(value) as Route);
 }
 
 function invalidateCrmCaches() {
@@ -752,6 +760,29 @@ function parseFollowUpAt(value: string | undefined) {
   }
 
   return date;
+}
+
+async function resolveEducationLevelName(
+  tx: Prisma.TransactionClient,
+  requestedName: string | undefined,
+) {
+  if (!requestedName) return null;
+
+  const educationLevel = await tx.dropdownCatalogOption.findUnique({
+    where: {
+      catalog_value: {
+        catalog: "STUDENT_EDUCATION_LEVEL",
+        value: requestedName,
+      },
+    },
+    select: { value: true, isActive: true },
+  });
+
+  if (!educationLevel || !educationLevel.isActive) {
+    throw new Error("Təhsil səviyyəsi tapılmadı");
+  }
+
+  return educationLevel.value;
 }
 
 function normalizeDateValue(value: string | undefined) {

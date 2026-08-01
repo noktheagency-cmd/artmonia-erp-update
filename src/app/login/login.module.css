@@ -37,28 +37,6 @@
   overflow: hidden;
 }
 
-.wordmark {
-  position: absolute;
-  z-index: 5;
-  top: clamp(28px, 4vw, 58px);
-  left: clamp(30px, 4.1vw, 66px);
-  width: clamp(132px, 10.4vw, 170px);
-  height: clamp(82px, 6.7vw, 104px);
-  overflow: hidden;
-  line-height: 0;
-  animation: uiEnter 720ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.wordmark img {
-  position: absolute;
-  top: -23%;
-  left: 0;
-  display: block;
-  width: 100%;
-  height: auto;
-  mix-blend-mode: multiply;
-}
-
 .sceneStage,
 .scene,
 .scenePlaceholder {
@@ -78,7 +56,7 @@
 }
 
 .scene {
-  cursor: pointer;
+  cursor: default;
   outline: none;
   touch-action: pan-y;
 }
@@ -111,6 +89,7 @@
   width: min(93%, 900px);
   aspect-ratio: 3 / 2;
   transform: translate3d(-50%, -50%, 0);
+  cursor: pointer;
   animation: sculptureFloat 8.5s ease-in-out infinite;
 }
 
@@ -287,7 +266,8 @@
   overflow: hidden;
   white-space: nowrap;
   clip-path: inset(0 100% 0 0);
-  animation: headingWrite 1.05s steps(14, end) 240ms both;
+  will-change: clip-path, opacity, transform;
+  animation: headingWrite 920ms 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .heading p {
@@ -299,7 +279,7 @@
 }
 
 .motto {
-  animation: mottoReveal 620ms 1.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: mottoReveal 620ms 980ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .form {
@@ -598,14 +578,28 @@
   to { opacity: 1; transform: translateX(0) scale(1); }
 }
 
+@keyframes mobilePanelEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes headingWrite {
   from {
-    opacity: 0.45;
+    opacity: 0;
     clip-path: inset(0 100% 0 0);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
     clip-path: inset(0 0 0 0);
+    transform: translateY(0);
   }
 }
 
@@ -710,15 +704,6 @@
     min-height: 0;
   }
 
-  .wordmark {
-    top: 14px;
-    left: 50%;
-    width: 122px;
-    height: 74px;
-    transform: translateX(-50%);
-    animation-name: mobileWordmarkEnter;
-  }
-
   .sceneStage {
     top: 28px;
   }
@@ -757,8 +742,27 @@
     margin: 0;
     overflow: visible;
     border: 0;
-    border-radius: 30px 30px 0 0;
-    box-shadow: 0 -18px 48px rgb(59 61 130 / 7%);
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+    animation: mobilePanelEnter 820ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .panel::before {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    left: 0;
+    height: 86px;
+    pointer-events: none;
+    content: "";
+    background: linear-gradient(
+      180deg,
+      rgb(250 250 255 / 0%) 0%,
+      rgb(252 252 255 / 46%) 42%,
+      rgb(255 255 255 / 88%) 78%,
+      #fff 100%
+    );
   }
 
   .panelContent {
@@ -831,14 +835,8 @@
   }
 }
 
-@keyframes mobileWordmarkEnter {
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .panel,
-  .wordmark,
   .heading,
   .headingTitle,
   .motto,

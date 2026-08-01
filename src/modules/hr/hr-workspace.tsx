@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { FormSelect } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { HrEmployeeData, HrEmployeeRow } from "@/modules/hr/employee-data";
 import type { TeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
@@ -65,7 +66,6 @@ export function HrWorkspace({
     create: Action;
     update: Action;
     remove: Action;
-    createLookup: Action;
     updateTeacherSalary: Action;
     updateTeacher: Action;
     archiveTeacher: Action;
@@ -323,7 +323,6 @@ export function HrWorkspace({
           lookups={employeeData.lookups}
           roleOptions={employeeData.roleOptions}
           canCreateAccount={employeeData.permissions.canCreateAccount}
-          createLookup={actions.createLookup}
           pending={pending}
           onClose={() => setEditor(null)}
           onSubmit={(formData) =>
@@ -920,7 +919,6 @@ function EmployeeDialog({
   lookups,
   roleOptions,
   canCreateAccount,
-  createLookup,
   pending,
   onClose,
   onSubmit,
@@ -930,7 +928,6 @@ function EmployeeDialog({
   lookups: HrEmployeeData["lookups"];
   roleOptions: HrEmployeeData["roleOptions"];
   canCreateAccount: boolean;
-  createLookup: Action;
   pending: boolean;
   onClose: () => void;
   onSubmit: (form: FormData) => void;
@@ -1046,7 +1043,6 @@ function EmployeeDialog({
               (staffType === "TEACHER" ? "Tədris" : undefined)
             }
             options={lookups.departments}
-            action={createLookup}
           />
           {staffType === "TEACHER" ? (
             <>
@@ -1071,7 +1067,6 @@ function EmployeeDialog({
                 kind="POSITION"
                 initialValue={employee?.position}
                 options={lookups.positions}
-                action={createLookup}
               />
               <input type="hidden" name="teacherCapacity" value="0" />
             </>
@@ -1300,83 +1295,30 @@ function CreatableLookup({
   label,
   kind,
   initialValue,
-  options: initialOptions,
-  action,
+  options,
 }: {
   name: string;
   label: string;
   kind: "DEPARTMENT" | "POSITION";
   initialValue?: string;
   options: string[];
-  action: Action;
 }) {
-  const [options, setOptions] = useState(() =>
-    initialValue && !initialOptions.includes(initialValue)
-      ? [initialValue, ...initialOptions]
-      : initialOptions,
-  );
-  const [value, setValue] = useState(initialValue ?? initialOptions[0] ?? "");
-  const [creating, setCreating] = useState(false);
-  const [newValue, setNewValue] = useState("");
-  const [saving, startSaving] = useTransition();
-  function add() {
-    const next = newValue.trim();
-    if (!next) return;
-    const form = new FormData();
-    form.set("kind", kind);
-    form.set("name", next);
-    startSaving(
-      () =>
-        void action(form).then((result) => {
-          unwrapActionResult(result);
-          setOptions((current) => [...new Set([...current, next])].sort());
-          setValue(next);
-          setNewValue("");
-          setCreating(false);
-        }).catch((error) => {
-          notifyCaughtError(error, "Yeni seçim əlavə edilmədi");
-        }),
-    );
-  }
+  const normalizedOptions = initialValue && !options.includes(initialValue)
+    ? [initialValue, ...options]
+    : options;
   return (
     <label>
       <span>{label}</span>
-      <select
+      <FormSelect
         name={name}
-        value={value}
+        defaultValue={initialValue ?? normalizedOptions[0] ?? ""}
+        options={normalizedOptions.map((option) => ({ value: option, label: option }))}
+        searchable
+        searchPlaceholder={`${label} axtar...`}
+        catalogKey={kind === "DEPARTMENT" ? "HR_DEPARTMENT" : "HR_POSITION"}
+        createLabel={`Yeni ${label.toLocaleLowerCase("az")} əlavə et`}
         required
-        onChange={(event) => {
-          if (event.target.value === "__new") setCreating(true);
-          else setValue(event.target.value);
-        }}
-      >
-        {options.map((option) => (
-          <option value={option} key={option}>
-            {option}
-          </option>
-        ))}
-        <option value="__new">
-          + Yeni {label.toLocaleLowerCase("az")} əlavə et
-        </option>
-      </select>
-      {creating ? (
-        <span className="hr-inline-create">
-          <Input
-            value={newValue}
-            onChange={(event) => setNewValue(event.target.value)}
-            autoFocus
-            placeholder={`Yeni ${label.toLocaleLowerCase("az")}`}
-          />
-          <Button
-            type="button"
-            size="sm"
-            disabled={saving || !newValue.trim()}
-            onClick={add}
-          >
-            Əlavə et
-          </Button>
-        </span>
-      ) : null}
+      />
     </label>
   );
 }

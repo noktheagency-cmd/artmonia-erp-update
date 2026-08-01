@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import { MarketingViewTabs } from "@/modules/marketing/marketing-view-tabs";
@@ -394,7 +395,7 @@ function ExpenseDialog({ open, strategy, onOpenChange }: { open: boolean; strate
           <input type="hidden" name="strategyId" value={strategy?.id ?? ""} />
           <div className="strategy-form-grid">
             <Field label="Xərc adı"><Input name="title" placeholder="Məsələn: Foto çəkiliş" required maxLength={120} /></Field>
-            <Field label="Kateqoriya"><select name="category" defaultValue="PRODUCTION">{Object.entries(expenseCategories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+            <Field label="Kateqoriya"><FormSelect name="category" defaultValue="PRODUCTION" options={Object.entries(expenseCategories).map(([value, label]) => ({ value, label }))} searchable searchPlaceholder="Kateqoriya axtar..." catalogKey="MARKETING_EXPENSE_CATEGORY" createLabel="Yeni xərc kateqoriyası əlavə et" /></Field>
             <Field label="Məbləğ (₼)"><Input name="amount" type="number" min="0.01" step="0.01" required /></Field>
             <Field label="Tarix"><Input name="spentOn" type="date" min={`${strategy?.month ?? currentMonthKey()}-01`} max={monthLastDate(strategy?.month ?? currentMonthKey())} defaultValue={`${strategy?.month ?? currentMonthKey()}-01`} required /></Field>
           </div>

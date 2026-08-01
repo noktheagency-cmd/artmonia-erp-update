@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import {
   CalendarClock,
   CircleUserRound,
@@ -39,8 +41,9 @@ import {
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { leadStageSelectOptions } from "@/modules/crm/stage";
+import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { unwrapActionResult } from "@/lib/action-result";
-import { notifyCaughtError } from "@/lib/app-notifications";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
 type LeadRow = CrmData["leads"][number];
 
@@ -61,11 +64,19 @@ export function LeadDetailDialogClient({
   updateLeadAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteLeadAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   async function updateLead(formData: FormData) {
     try {
-      unwrapActionResult(await updateLeadAction(formData));
+      const result = unwrapActionResult(await updateLeadAction(formData)) as {
+        redirectTo: string;
+      };
+      setOpen(false);
+      notifySuccess("Müraciət yeniləndi", "Dəyişikliklər yadda saxlanıldı.");
+      router.replace(result.redirectTo as Route, { scroll: false });
+      router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Müraciət yenilənmədi.");
     }
@@ -73,14 +84,21 @@ export function LeadDetailDialogClient({
 
   async function deleteLead(formData: FormData) {
     try {
-      unwrapActionResult(await deleteLeadAction(formData));
+      const result = unwrapActionResult(await deleteLeadAction(formData)) as {
+        redirectTo: string;
+      };
+      setDeleteOpen(false);
+      setOpen(false);
+      notifySuccess("Müraciət silindi", "Müraciət siyahıdan çıxarıldı.");
+      router.replace(result.redirectTo as Route, { scroll: false });
+      router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Müraciət silinmədi.");
     }
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button className="crm-lead-open-button" type="button">
           <strong>{lead.name}</strong>
@@ -153,6 +171,10 @@ export function LeadDetailDialogClient({
                     defaultValue={lead.detail.source}
                     emptyLabel="Seçilməyib"
                     options={buildCrmSourceSelectOptions(sourceOptions)}
+                    searchable
+                    searchPlaceholder="Mənbə axtar..."
+                    catalogKey="CRM_SOURCE"
+                    createLabel="Yeni mənbə əlavə et"
                   />
                 </Field>
                 <Field>
@@ -163,6 +185,19 @@ export function LeadDetailDialogClient({
                     defaultValue={lead.detail.programId}
                     emptyLabel="Seçilməyib"
                     options={programs.map((program) => ({ value: program.id, label: program.name }))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Təhsil səviyyəsi</FieldLabel>
+                  <FormSelect
+                    aria-label="Təhsil səviyyəsi"
+                    name="educationLevel"
+                    defaultValue={lead.detail.educationLevel}
+                    emptyLabel="Təhsil səviyyəsi seçilməyib"
+                    searchable
+                    catalogKey="STUDENT_EDUCATION_LEVEL"
+                    createLabel="Yeni təhsil səviyyəsi əlavə et"
+                    options={educationLevelOptions}
                   />
                 </Field>
                 <Field>

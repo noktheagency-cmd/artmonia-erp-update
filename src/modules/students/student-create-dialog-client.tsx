@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { unstable_rethrow } from "next/navigation";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { Banknote, BookOpen, Check, Plus, Trash2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,20 +19,13 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
+import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
-import { notifyCaughtError } from "@/lib/app-notifications";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
 type CreateOptions = StudentListData["createOptions"];
-const ADD_SOURCE_VALUE = "__add_source__";
-const educationLevelOptions = [
-  { value: "Orta təhsil", label: "Orta təhsil" },
-  { value: "Subbakalavr", label: "Subbakalavr" },
-  { value: "Bakalavr", label: "Bakalavr" },
-  { value: "Magistr", label: "Magistr" },
-  { value: "Doktorantura", label: "Doktorantura" },
-];
 type StudentFormValues = {
   monthlyFee: string;
   paymentAmount: string;
@@ -40,6 +34,28 @@ type StudentFormValues = {
   paymentNote: string;
   nextPaymentDate: string;
 };
+
+function buildInitialStudentValues(createOptions: CreateOptions) {
+  return {
+    fullName: "",
+    phone: "",
+    source: "Manual",
+    educationLevel: "",
+    programId: "",
+    teacherId: "",
+    campaignId: "",
+    lifecycleStatus: "GROUP_WAITING",
+    registeredDate: createOptions.defaultRegisteredDate,
+    monthlyFee: "",
+    lessonsPerMonth: "",
+    notes: "",
+    paymentAmount: "",
+    paymentDate: createOptions.defaultPaymentDate,
+    paymentMethod: "CASH",
+    paymentNote: "",
+    nextPaymentDate: addOneMonth(createOptions.defaultPaymentDate),
+  };
+}
 
 export function StudentCreateDialogClient({
   createOptions,
@@ -56,29 +72,17 @@ export function StudentCreateDialogClient({
   returnTo: string;
   createStudentAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState("");
-  const [isAddingSource, setIsAddingSource] = useState(false);
   const [acceptPayment, setAcceptPayment] = useState(false);
-  const [values, setValues] = useState(() => ({
-    fullName: "",
-    phone: "",
-    source: "Manual",
-    educationLevel: "",
-    programId: "",
-    teacherId: "",
-    managerId: "",
-    campaignId: "",
-    lifecycleStatus: "GROUP_WAITING",
-    registeredDate: createOptions.defaultRegisteredDate,
-    monthlyFee: "",
-    lessonsPerMonth: "",
-    notes: "",
-    paymentAmount: "",
-    paymentDate: createOptions.defaultPaymentDate,
-    paymentMethod: "CASH",
-    paymentNote: "",
-    nextPaymentDate: addOneMonth(createOptions.defaultPaymentDate),
-  }));
+  const [values, setValues] = useState(() => buildInitialStudentValues(createOptions));
+
+  function resetCreateForm() {
+    setSelectedLeadId("");
+    setAcceptPayment(false);
+    setValues(buildInitialStudentValues(createOptions));
+  }
 
   function updateValue(name: keyof typeof values, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -90,7 +94,6 @@ export function StudentCreateDialogClient({
     const lead = createOptions.leads.find((item) => item.id === leadId);
 
     if (!lead) {
-      setIsAddingSource(false);
       setValues((current) => ({
         ...current,
         fullName: "",
@@ -99,7 +102,6 @@ export function StudentCreateDialogClient({
         educationLevel: "",
         programId: "",
         teacherId: "",
-        managerId: "",
         campaignId: "",
         monthlyFee: "",
         lessonsPerMonth: "",
@@ -110,15 +112,14 @@ export function StudentCreateDialogClient({
       return;
     }
 
-    setIsAddingSource(false);
     const program = createOptions.programs.find((item) => item.id === lead.programId);
     setValues((current) => ({
       ...current,
       fullName: lead.name,
       phone: lead.phone,
       source: lead.source,
+      educationLevel: lead.educationLevel,
       programId: lead.programId,
-      managerId: lead.managerId,
       campaignId: lead.campaignId,
       monthlyFee: program?.monthlyFee ?? "",
       lessonsPerMonth: program?.lessonsPerMonth ?? "",
@@ -140,13 +141,6 @@ export function StudentCreateDialogClient({
   }
 
   function handleSourceChange(value: string) {
-    if (value === ADD_SOURCE_VALUE) {
-      setIsAddingSource(true);
-      updateValue("source", "");
-      return;
-    }
-
-    setIsAddingSource(false);
     updateValue("source", cleanSelectValue(value));
   }
 
@@ -161,15 +155,21 @@ export function StudentCreateDialogClient({
 
   async function createStudent(formData: FormData) {
     try {
-      unwrapActionResult(await createStudentAction(formData));
+      const result = unwrapActionResult(await createStudentAction(formData)) as {
+        redirectTo: string;
+      };
+      setOpen(false);
+      resetCreateForm();
+      notifySuccess("Tələbə yaradıldı", "Yeni tələbə siyahıya əlavə olundu.");
+      router.replace(result.redirectTo as Route, { scroll: false });
+      router.refresh();
     } catch (error) {
-      unstable_rethrow(error);
       notifyCaughtError(error, "Tələbə yaradılmadı.");
     }
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button type="button" size="icon" className="students-create-action" disabled={!canCreateStudent} aria-label="Tələbə yarat" title="Tələbə yarat">
           <Plus />
@@ -256,37 +256,30 @@ export function StudentCreateDialogClient({
               <label className="form-field">
                 <span>Mənbə</span>
                 <FormSelect
-                  name="sourceSelector"
-                  value={isAddingSource ? ADD_SOURCE_VALUE : values.source}
+                  name="source"
+                  value={values.source}
                   onValueChange={handleSourceChange}
-                  options={[
-                    ...createOptions.sourceOptions.map((source) => ({
-                      value: source,
-                      label: source,
-                    })),
-                    { value: ADD_SOURCE_VALUE, label: "+ Yeni mənbə əlavə et" },
-                  ]}
+                  options={createOptions.sourceOptions.map((source) => ({
+                    value: source,
+                    label: source,
+                  }))}
+                  searchable
+                  searchPlaceholder="Mənbə axtar..."
+                  catalogKey="CRM_SOURCE"
+                  createLabel="Yeni mənbə əlavə et"
                 />
-                {isAddingSource ? (
-                  <Input
-                    name="source"
-                    value={values.source}
-                    onChange={(event) => updateValue("source", event.target.value)}
-                    placeholder="Yeni mənbəni yazın"
-                    maxLength={60}
-                    required
-                  />
-                ) : (
-                  <input name="source" type="hidden" value={values.source} />
-                )}
               </label>
               <label className="form-field">
                 <span>Təhsil səviyyəsi</span>
                 <FormSelect
+                  aria-label="Təhsil səviyyəsi"
                   name="educationLevel"
                   value={values.educationLevel}
                   onValueChange={(value) => updateValue("educationLevel", cleanSelectValue(value))}
-                  emptyLabel="Təhsil səviyyəsi"
+                  emptyLabel="Təhsil səviyyəsi seçilməyib"
+                  searchable
+                  catalogKey="STUDENT_EDUCATION_LEVEL"
+                  createLabel="Yeni təhsil səviyyəsi əlavə et"
                   options={educationLevelOptions}
                 />
               </label>
@@ -350,18 +343,11 @@ export function StudentCreateDialogClient({
                 />
               </label>
               <label className="form-field">
-                <span>Menecer</span>
-                <FormSelect
-                  name="managerId"
-                  value={values.managerId}
-                  onValueChange={(value) => updateValue("managerId", cleanSelectValue(value))}
-                  emptyLabel="Avtomatik"
-                  searchable
-                  searchPlaceholder="Menecer axtar..."
-                  options={createOptions.managers.map((manager) => ({
-                    value: manager.id,
-                    label: manager.fullName,
-                  }))}
+                <span>Menecer (avtomatik)</span>
+                <Input
+                  value={createOptions.currentManagerName}
+                  aria-label="Avtomatik təyin olunan menecer"
+                  readOnly
                 />
               </label>
               <label className="form-field">

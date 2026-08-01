@@ -1,6 +1,6 @@
 import { getTeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 import { getHrEmployeeData } from "@/modules/hr/employee-data";
-import { archiveTeacherAction, createHrLookupAction, deleteEmployeeAction, updateTeacherAction, updateTeacherSalaryRuleAction } from "@/modules/hr/actions";
+import { archiveTeacherAction, deleteEmployeeAction, updateTeacherAction, updateTeacherSalaryRuleAction } from "@/modules/hr/actions";
 import { createStaffAction, updateStaffAction } from "@/modules/hr/staff-actions";
 import {
   addBonusProgressAdjustmentAction,
@@ -20,5 +20,5 @@ export default async function HrPage() {
     getHrBonusData(),
   ]);
 
-  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, createLookup: createHrLookupAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, archiveTeacher: archiveTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction }} />;
+  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, archiveTeacher: archiveTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction }} />;
 }

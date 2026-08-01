@@ -370,6 +370,7 @@ model User {
   bonusProgressAdjustments         HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
   approvedBonusAwards              HrBonusAward[]              @relation("HrBonusAwardApprover")
   createdHrNotifications           HrStaffNotification[]       @relation("HrNotificationCreator")
+  createdDropdownCatalogOptions    DropdownCatalogOption[]      @relation("DropdownCatalogOptionCreator")
 
   @@map("users")
   @@schema("erp")
@@ -962,6 +963,7 @@ model Lead {
   lostReason         String?             @map("lost_reason")
   convertedStudentId String?             @unique @map("converted_student_id") @db.Uuid
   campaignId         String?             @map("campaign_id") @db.Uuid
+  educationLevel     String?             @map("education_level")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
 
@@ -980,6 +982,26 @@ model Lead {
   @@index([priority, nextFollowUpAt])
   @@index([campaignId, createdAt])
   @@map("leads")
+  @@schema("erp")
+}
+
+model DropdownCatalogOption {
+  id          String   @id @default(uuid()) @db.Uuid
+  catalog     String
+  value       String
+  label       String
+  isActive    Boolean  @default(true) @map("is_active")
+  isCustom    Boolean  @default(true) @map("is_custom")
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy User? @relation("DropdownCatalogOptionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([catalog, value])
+  @@index([catalog, isActive, label])
+  @@index([createdById])
+  @@map("dropdown_catalog_options")
   @@schema("erp")
 }
 

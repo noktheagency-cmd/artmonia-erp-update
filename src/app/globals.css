@@ -2189,6 +2189,165 @@ strong {
   white-space: nowrap;
 }
 
+.ui-select-managed-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.ui-select-managed-row .ui-select-item {
+  width: 100%;
+}
+
+.ui-select-option-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding-right: 5px;
+}
+
+.ui-select-option-actions button,
+.ui-select-crud-editor button,
+.ui-select-crud-confirm button {
+  display: inline-grid;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: #6f7b8e;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.ui-select-option-actions button:hover,
+.ui-select-crud-editor button:hover,
+.ui-select-crud-confirm button:hover {
+  color: var(--primary);
+  background: #eef3ff;
+}
+
+.ui-select-option-actions button:last-child:hover,
+.ui-select-crud-confirm button.is-danger {
+  color: #c53c3c;
+  background: #fff0f0;
+}
+
+.ui-select-option-actions svg,
+.ui-select-crud-editor svg,
+.ui-select-crud-confirm svg,
+.ui-select-crud-create svg,
+.ui-select-crud-status svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ui-select-crud-panel {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 5px;
+  padding: 6px;
+  background: rgb(255 255 255 / 96%);
+  border-top: 1px solid #e6eaf1;
+  backdrop-filter: blur(12px);
+}
+
+.ui-select-crud-create {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 10px;
+  color: var(--primary);
+  background: #f4f7ff;
+  border: 1px dashed rgb(49 88 255 / 30%);
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.ui-select-crud-create:hover {
+  background: #eaf0ff;
+  border-color: rgb(49 88 255 / 48%);
+}
+
+.ui-select-crud-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.ui-select-crud-editor input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #ccd6e5;
+  border-radius: 9px;
+  outline: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ui-select-crud-editor input:focus {
+  border-color: rgb(49 88 255 / 55%);
+  box-shadow: 0 0 0 3px rgb(49 88 255 / 10%);
+}
+
+.ui-select-crud-editor button:disabled,
+.ui-select-crud-confirm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ui-select-crud-confirm {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-left: 7px;
+  color: #7b3540;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ui-select-crud-confirm > span:last-child {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.ui-select-crud-status {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.is-spinning {
+  animation: ui-spin 800ms linear infinite;
+}
+
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+
 .ui-select-scroll-button {
   display: grid;
   place-items: center;
@@ -20364,14 +20523,14 @@ body .erp-frame th {
 
 /* Use the official Artmonia logo in the sidebar header. */
 .side-rail .brand-mark {
-  min-height: 70px !important;
+  min-height: 100px !important;
   padding-block: 0 !important;
 }
 
 .side-rail .brand-symbol {
-  width: 126px !important;
-  height: 70px !important;
-  flex: 0 0 126px !important;
+  width: 150px !important;
+  height: 100px !important;
+  flex: 0 0 150px !important;
   overflow: hidden !important;
   background: transparent !important;
   border: 0 !important;
@@ -20385,8 +20544,8 @@ body .erp-frame th {
 }
 
 .side-rail .brand-logo {
-  width: 118px !important;
-  height: 118px !important;
+  width: 140px !important;
+  height: 140px !important;
   opacity: 1 !important;
   transform: none !important;
 }
@@ -23081,14 +23240,14 @@ body:has(.workshop-dialog) .ui-select-content {
 
 /* Official wordmark — final sidebar brand override. */
 .side-rail .brand-mark {
-  min-height: 70px;
+  min-height: 100px;
   padding-block: 0;
 }
 
 .side-rail .brand-symbol {
-  width: 126px;
-  height: 70px;
-  flex: 0 0 126px;
+  width: 150px;
+  height: 100px;
+  flex: 0 0 150px;
   overflow: hidden;
   background: transparent;
   border: 0;
@@ -23103,8 +23262,8 @@ body:has(.workshop-dialog) .ui-select-content {
 
 .side-rail .brand-logo,
 .side-rail .brand-mark:hover .brand-logo {
-  width: 118px;
-  height: 118px;
+  width: 140px;
+  height: 140px;
   opacity: 1;
   transform: none;
 }

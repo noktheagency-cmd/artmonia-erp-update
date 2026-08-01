@@ -53,6 +53,7 @@ export type StudentListData = {
       name: string;
       phone: string;
       source: string;
+      educationLevel: string;
       programId: string;
       managerId: string;
       campaignId: string;
@@ -67,9 +68,9 @@ export type StudentListData = {
       isActive: boolean;
     }>;
     teachers: Array<{ id: string; fullName: string }>;
-    managers: Array<{ id: string; fullName: string }>;
     campaigns: Array<{ id: string; name: string }>;
     sourceOptions: string[];
+    currentManagerName: string;
     defaultRegisteredDate: string;
     defaultPaymentDate: string;
     defaultPaymentMonth: string;
@@ -306,7 +307,7 @@ export async function getStudentListData(
     dateFrom: dateFromFilter.input,
     dateTo: dateToFilter.input,
   });
-  const { programs, teachers, managers, leads: convertibleLeads, sources, campaigns } = options;
+  const { programs, teachers, leads: convertibleLeads, sources, campaigns } = options;
 
   const summaryCounts = new Map(
     Object.entries(options.summaryCounts).map(([status, count]) => [
@@ -382,9 +383,9 @@ export async function getStudentListData(
         isActive: program.isActive,
       })),
       teachers,
-      managers,
       campaigns,
       sourceOptions: buildCrmSourceOptions(sources),
+      currentManagerName: actor.fullName,
       defaultRegisteredDate: formatDateInput(new Date()),
       defaultPaymentDate: formatDateInput(new Date()),
       defaultPaymentMonth: formatMonthInput(new Date()),
@@ -822,7 +823,6 @@ type StudentCreateOptionRows = {
     isActive: boolean;
   }>;
   teachers: Array<{ id: string; fullName: string }>;
-  managers: Array<{ id: string; fullName: string }>;
   campaigns: Array<{ id: string; name: string }>;
   sources: string[];
   leads: StudentListData["createOptions"]["leads"];
@@ -833,7 +833,6 @@ type StudentCreateOptionsRawRow = {
   summaryBalances: unknown;
   programs: unknown;
   teachers: unknown;
-  managers: unknown;
   campaigns: unknown;
   sources: unknown;
   leads: unknown;
@@ -841,7 +840,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v5"],
+  ["student-list-data-v6"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -1004,17 +1003,6 @@ async function getStudentCreateOptions(
         where t.is_active = true
       ), '[]'::jsonb) as "teachers",
       coalesce((
-        select jsonb_agg(
-          jsonb_build_object(
-            'id', u.id::text,
-            'fullName', u.full_name
-          )
-          order by u.full_name asc
-        )
-        from erp.users u
-        where u.is_active = true
-      ), '[]'::jsonb) as "managers",
-      coalesce((
         select jsonb_agg(source_rows.source order by source_rows.source asc)
         from (
           select distinct trim(c.source) as source
@@ -1035,6 +1023,7 @@ async function getStudentCreateOptions(
             'name', ordered.name,
             'phone', ordered.phone,
             'source', ordered.source,
+            'educationLevel', ordered.education_level,
             'programId', ordered.program_id,
             'managerId', ordered.manager_id,
             'campaignId', ordered.campaign_id,
@@ -1048,6 +1037,7 @@ async function getStudentCreateOptions(
             c.full_name as name,
             coalesce(c.phone_display, '') as phone,
             coalesce(l.source, 'Manual') as source,
+            coalesce(l.education_level, '') as education_level,
             coalesce(l.program_interest_id::text, '') as program_id,
             coalesce(l.manager_id::text, '') as manager_id,
             coalesce(l.campaign_id::text, '') as campaign_id,
@@ -1079,9 +1069,6 @@ async function getStudentCreateOptions(
     ),
     teachers: asJsonArray<StudentCreateOptionRows["teachers"][number]>(
       row?.teachers
-    ),
-    managers: asJsonArray<StudentCreateOptionRows["managers"][number]>(
-      row?.managers
     ),
     campaigns: asJsonArray<StudentCreateOptionRows["campaigns"][number]>(row?.campaigns),
     sources: asJsonArray<string>(row?.sources),
@@ -1649,8 +1636,9 @@ export async function getStudentDetailData(studentId: string) {
         lessonsPerMonth: program.defaultLessonsPerMonth?.toString() ?? "",
       })),
       teachers: options.teachers,
-      managers: options.managers,
       campaigns: options.campaigns,
+      sourceOptions: buildCrmSourceOptions(options.sources),
+      currentManagerName: actor.fullName,
       defaultRegisteredDate: formatDateInput(new Date()),
       defaultPaymentDate: formatDateInput(new Date()),
       defaultPaymentMonth: formatMonthInput(new Date()),

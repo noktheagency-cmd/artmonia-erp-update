@@ -1,8 +1,6 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
-import type { Route } from "next";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   EnrollmentStatus,
@@ -76,7 +74,6 @@ const createStudentSchema = z.object({
   educationLevel: optionalText(80),
   programId: requiredUuid("Proqram"),
   teacherId: optionalUuid("Müəllim"),
-  managerId: optionalUuid("Menecer"),
   campaignId: optionalUuid("Kampaniya"),
   lifecycleStatus: z.enum(studentLifecycleStatusValues).default(StudentLifecycleStatus.GROUP_WAITING),
   registeredDate: z.string().trim().min(1).max(20),
@@ -179,6 +176,22 @@ async function createStudentActionImpl(formData: FormData) {
       throw new Error("Proqram tapılmadı");
     }
 
+    const educationLevel = input.educationLevel
+      ? await tx.dropdownCatalogOption.findUnique({
+          where: {
+            catalog_value: {
+              catalog: "STUDENT_EDUCATION_LEVEL",
+              value: input.educationLevel,
+            },
+          },
+          select: { value: true, isActive: true },
+        })
+      : null;
+
+    if (input.educationLevel && (!educationLevel || !educationLevel.isActive)) {
+      throw new Error("Təhsil səviyyəsi tapılmadı");
+    }
+
     const lead = await resolveLeadForStudentCreation(tx, input.leadId);
     const contactId = lead
       ? await updateLeadContact(tx, {
@@ -195,7 +208,7 @@ async function createStudentActionImpl(formData: FormData) {
           source: input.source ?? "Manual",
         });
     const studentCode = await generateStudentCode(tx);
-    const managerId = input.managerId ?? lead?.managerId ?? actor.id;
+    const managerId = actor.id;
 
     const campaignId = input.campaignId ?? lead?.campaignId ?? null;
     if (campaignId) {
@@ -210,7 +223,7 @@ async function createStudentActionImpl(formData: FormData) {
         managerId,
         campaignId,
         lifecycleStatus: input.lifecycleStatus,
-        educationLevel: input.educationLevel ?? null,
+        educationLevel: educationLevel?.value ?? null,
         registeredAt,
         billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
         notes: input.notes ?? null,
@@ -336,7 +349,7 @@ async function createStudentActionImpl(formData: FormData) {
   revalidatePath("/finance");
   revalidatePath("/marketing");
   invalidateStudentCaches();
-  redirectToStudents(input.returnTo);
+  return { redirectTo: safeStudentsRedirect(input.returnTo) };
 }
 
 async function recordStudentPaymentActionImpl(formData: FormData) {
@@ -373,7 +386,7 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
   revalidatePath("/finance");
   revalidatePath("/marketing");
   invalidatePaymentCaches();
-  redirectToStudents(input.returnTo);
+  return { redirectTo: safeStudentsRedirect(input.returnTo) };
 }
 
 async function updateStudentStatusActionImpl(formData: FormData) {
@@ -449,7 +462,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/finance");
   invalidateStudentCaches();
-  redirectToStudents(input.returnTo);
+  return { redirectTo: safeStudentsRedirect(input.returnTo) };
 }
 
 async function updateStudentProfileActionImpl(formData: FormData) {
@@ -636,7 +649,7 @@ async function deleteStudentActionImpl(formData: FormData) {
   revalidatePath("/workshops");
   invalidateStudentCaches();
   invalidatePaymentCaches();
-  redirect("/students");
+  return { redirectTo: "/students" };
 }
 
 async function resolveLeadForStudentCreation(
@@ -1069,10 +1082,6 @@ function startOfToday() {
 
 function safeStudentsRedirect(value: string | undefined) {
   return value?.startsWith("/students") ? value : "/students";
-}
-
-function redirectToStudents(value: string | undefined): never {
-  redirect(safeStudentsRedirect(value) as Route);
 }
 
 function invalidateStudentCaches() {

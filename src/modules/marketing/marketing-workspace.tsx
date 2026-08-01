@@ -351,7 +351,7 @@ function CampaignDialog({ title, campaign, action, trigger }: { title: string; c
         {campaign ? <input name="id" type="hidden" value={campaign.id} /> : null}
         <div className="marketing-form-grid">
           <Field label="Kampaniya adı"><Input name="name" defaultValue={campaign?.name} required maxLength={120} /></Field>
-          <Field label="Kanal"><FormSelect name="channel" defaultValue={campaign?.channel ?? channels[0]} options={channels.map((value) => ({ value, label: value }))} /></Field>
+          <Field label="Kanal"><FormSelect name="channel" defaultValue={campaign?.channel ?? channels[0]} options={channels.map((value) => ({ value, label: value }))} searchable searchPlaceholder="Kanal axtar..." catalogKey="MARKETING_CHANNEL" createLabel="Yeni kanal əlavə et" /></Field>
           <Field label="Status"><FormSelect name="status" defaultValue={campaign?.status ?? "DRAFT"} options={statuses} /></Field>
           <Field label="Başlanğıc tarixi"><DatePicker name="startsAt" defaultValue={campaign?.startsAt ?? today} allowClear={false} /></Field>
           <Field label="Bitmə tarixi"><DatePicker name="endsAt" defaultValue={campaign?.endsAt || undefined} /></Field>

@@ -184,7 +184,7 @@ export type WorkshopDetailData = {
   payments: WorkshopPaymentRow[];
   expenses: WorkshopExpenseRow[];
   students: WorkshopStudentOption[];
-  categories: Array<{ id: string; name: string; description: string }>;
+  categories: Array<{ id: string; name: string; description: string; isSystem: boolean }>;
   eventTypes: Array<{ value: string; label: string }>;
   participantFilters: {
     query: string;
@@ -645,6 +645,7 @@ export async function getWorkshopDetailData(
       id: category.id,
       name: category.name,
       description: category.description ?? "",
+      isSystem: category.isSystem,
     })),
     eventTypes: uniqueEventTypeOptions(eventTypeRows.map((row) => row.eventType)),
     participantFilters: {

@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { getAppErrorDetails } from "@/lib/app-errors";
 
 export type AppNotificationTone = "success" | "error" | "warning" | "info";
@@ -30,6 +31,7 @@ export function notifyError(
   fallback?: string,
   title?: string
 ) {
+  unstable_rethrow(error);
   const details = getAppErrorDetails(error, fallback);
   notify({
     title: title ?? details.title,
@@ -44,6 +46,7 @@ export function notifyCaughtError(
   fallback?: string,
   title?: string
 ) {
+  unstable_rethrow(error);
   const details = getAppErrorDetails(error, fallback);
   notify({
     title: title ?? details.title,

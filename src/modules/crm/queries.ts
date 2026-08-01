@@ -145,6 +145,7 @@ export type CrmData = {
       fullName: string;
       phone: string;
       source: string;
+      educationLevel: string;
       programId: string;
       managerId: string;
       stage: LeadStageValue;
@@ -229,6 +230,7 @@ type CrmLeadRawRow = {
   contactId: string;
   managerId: string | null;
   programId: string | null;
+  educationLevel: string | null;
   fullName: string;
   phone: string | null;
   managerName: string | null;
@@ -452,7 +454,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data"],
+  ["crm-pipeline-data-v2"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -674,6 +676,7 @@ function getCrmRawData(
             'contactId', lead_rows.contact_id::text,
             'managerId', lead_rows.manager_id::text,
             'programId', lead_rows.program_interest_id::text,
+            'educationLevel', lead_rows.education_level,
             'fullName', lead_rows.full_name,
             'phone', lead_rows.phone_display,
             'managerName', lead_rows.manager_name,
@@ -695,6 +698,7 @@ function getCrmRawData(
             l.contact_id,
             l.manager_id,
             l.program_interest_id,
+            l.education_level,
             c.full_name,
             c.phone_display,
             m.full_name as manager_name,
@@ -953,6 +957,7 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
       fullName: lead.fullName,
       phone: lead.phone ?? "",
       source: lead.source ?? "",
+      educationLevel: lead.educationLevel ?? "",
       programId,
       managerId,
       stage,

@@ -61,15 +61,13 @@ import {
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
-import { FormSelect } from "@/components/ui/select";
+import { FormSelect, type SelectOptionCrudConfig } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { FinanceData } from "@/modules/finance/queries";
-
-const addCategoryValue = "__add_category__";
 
 type FinanceTab = FinanceData["filters"]["type"];
 
@@ -181,6 +179,13 @@ type FinanceMutationAction = (
   formData: FormData,
 ) => Promise<ActionResult<FinanceMutationResult>>;
 
+type FinanceCategorySaveAction = (
+  formData: FormData,
+) => Promise<ActionResult<{ id: string; name: string; isSystem: boolean }>>;
+type FinanceCategoryDeleteAction = (
+  formData: FormData,
+) => Promise<ActionResult<{ id: string }>>;
+
 export function FinanceWorkspace({
   data,
   recordPaymentAction,
@@ -189,6 +194,8 @@ export function FinanceWorkspace({
   deletePaymentAction,
   updateExpenseAction,
   deleteExpenseAction,
+  saveExpenseCategoryAction,
+  deleteExpenseCategoryAction,
 }: {
   data: FinanceData;
   recordPaymentAction: FinanceMutationAction;
@@ -197,6 +204,8 @@ export function FinanceWorkspace({
   deletePaymentAction: FinanceMutationAction;
   updateExpenseAction: FinanceMutationAction;
   deleteExpenseAction: FinanceMutationAction;
+  saveExpenseCategoryAction: FinanceCategorySaveAction;
+  deleteExpenseCategoryAction: FinanceCategoryDeleteAction;
 }) {
   const [toast, setToast] = useState<FinanceToastMessage | null>(null);
 
@@ -229,6 +238,8 @@ export function FinanceWorkspace({
             <ExpenseDialog
               data={data}
               action={createExpenseAction}
+              saveCategoryAction={saveExpenseCategoryAction}
+              deleteCategoryAction={deleteExpenseCategoryAction}
               onNotify={showToast}
             />
             <PaymentDialog
@@ -822,23 +833,26 @@ function PaymentDialog({
 function ExpenseDialog({
   data,
   action,
+  saveCategoryAction,
+  deleteCategoryAction,
   onNotify,
 }: {
   data: FinanceData;
   action: FinanceMutationAction;
+  saveCategoryAction: FinanceCategorySaveAction;
+  deleteCategoryAction: FinanceCategoryDeleteAction;
   onNotify: (message: Omit<FinanceToastMessage, "id">) => void;
 }) {
   const router = useRouter();
   const [isSubmitting, startSubmitTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
   const [categoryValue, setCategoryValue] = useState("");
-  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categories, setCategories] = useState(data.categories);
   const [staffTarget, setStaffTarget] = useState("");
   const selectedStaff = data.staff.find((staff) => staff.id === staffTarget);
   const [amount, setAmount] = useState("");
-  const isAddingCategory = categoryValue === addCategoryValue;
-  const selectedCategory = data.categories.find((category) => category.id === categoryValue);
-  const categoryName = isAddingCategory ? newCategoryName : selectedCategory?.name ?? "";
+  const selectedCategory = categories.find((category) => category.id === categoryValue);
+  const categoryName = selectedCategory?.name ?? "";
   const usesPayrollFlow = isPayrollCategoryName(categoryName);
   const salaryMode = usesPayrollFlow && selectedStaff ? selectedStaff.salaryMode : "NONE";
   const salaryBaseAmount = usesPayrollFlow && selectedStaff ? getStaffSalaryBase(selectedStaff) : "";
@@ -848,7 +862,6 @@ function ExpenseDialog({
 
   function resetExpenseForm() {
     setCategoryValue("");
-    setNewCategoryName("");
     setStaffTarget("");
     setAmount("");
   }
@@ -863,16 +876,9 @@ function ExpenseDialog({
 
   function handleCategoryChange(value: string) {
     const nextCategory = cleanSelectValue(value);
-    const nextCategoryName =
-      nextCategory === addCategoryValue
-        ? newCategoryName
-        : data.categories.find((category) => category.id === nextCategory)?.name ?? "";
+    const nextCategoryName = categories.find((category) => category.id === nextCategory)?.name ?? "";
 
     setCategoryValue(nextCategory);
-
-    if (nextCategory !== addCategoryValue) {
-      setNewCategoryName("");
-    }
 
     if (!isPayrollCategoryName(nextCategoryName)) {
       setStaffTarget("");
@@ -883,6 +889,34 @@ function ExpenseDialog({
       setAmount(getStaffCalculatedSalary(selectedStaff));
     }
   }
+
+  const categoryCrud: SelectOptionCrudConfig = {
+    canManage: data.permissions.canCreateExpense,
+    createLabel: "Yeni xərc kateqoriyası əlavə et",
+    async onCreate(label) {
+      const formData = new FormData();
+      formData.set("name", label);
+      const saved = unwrapActionResult(await saveCategoryAction(formData));
+      setCategories((current) => [...current.filter((item) => item.id !== saved.id), { ...saved, description: "" }].toSorted((left, right) => left.name.localeCompare(right.name, "az")));
+      return { id: saved.id, value: saved.id, label: saved.name, locked: saved.isSystem };
+    },
+    async onUpdate(option, label) {
+      if (!option.id) throw new Error("Xərc kateqoriyası tapılmadı.");
+      const formData = new FormData();
+      formData.set("id", option.id);
+      formData.set("name", label);
+      const saved = unwrapActionResult(await saveCategoryAction(formData));
+      setCategories((current) => [...current.filter((item) => item.id !== saved.id), { ...saved, description: "" }].toSorted((left, right) => left.name.localeCompare(right.name, "az")));
+      return { id: saved.id, value: saved.id, label: saved.name, locked: saved.isSystem };
+    },
+    async onDelete(option) {
+      if (!option.id) throw new Error("Xərc kateqoriyası tapılmadı.");
+      const formData = new FormData();
+      formData.set("id", option.id);
+      unwrapActionResult(await deleteCategoryAction(formData));
+      setCategories((current) => current.filter((item) => item.id !== option.id));
+    },
+  };
 
   function handleStaffChange(value: string) {
     const nextTarget = cleanSelectValue(value);
@@ -936,7 +970,7 @@ function ExpenseDialog({
           <input
             type="hidden"
             name="categoryId"
-            value={isAddingCategory ? "" : categoryValue}
+            value={categoryValue}
           />
           <input type="hidden" name="staffTarget" value={staffTarget} />
           <input type="hidden" name="salaryMode" value={salaryMode} />
@@ -963,28 +997,14 @@ function ExpenseDialog({
                 emptyLabel="Kateqoriya seç"
                 searchable
                 searchPlaceholder="Kateqoriya axtar..."
-                options={[
-                  ...data.categories.map((category) => ({
+                options={categories.map((category) => ({
                     value: category.id,
                     label: category.name,
-                  })),
-                  { value: addCategoryValue, label: "+ Yeni kateqoriya" },
-                ]}
+                    id: category.id,
+                    locked: category.isSystem,
+                  }))}
+                optionCrud={categoryCrud}
               />
-              {isAddingCategory ? (
-                <div className="finance-inline-category-create">
-                  <Input
-                    autoFocus
-                    name="newCategoryName"
-                    value={newCategoryName}
-                    onChange={(event) => setNewCategoryName(event.target.value)}
-                    maxLength={80}
-                    placeholder="Yeni kateqoriyanın adı"
-                    required
-                  />
-                  <small>Kateqoriya xərci saxlayanda avtomatik yaradılacaq.</small>
-                </div>
-              ) : null}
             </label>
           </section>
 
@@ -1095,7 +1115,6 @@ function ExpenseDialog({
               isPending={isSubmitting}
               disabled={
                 !categoryValue ||
-                (isAddingCategory && !newCategoryName.trim()) ||
                 !amount ||
                 (usesPayrollFlow && !selectedStaff) ||
                 !data.permissions.canCreateExpense
@@ -2429,10 +2448,6 @@ function getActionErrorMessage(error: unknown) {
 }
 
 function normalizeActionErrorMessage(message: string) {
-  if (message.includes("NEXT_REDIRECT")) {
-    return "Əməliyyat tamamlandı, səhifə yenilənir.";
-  }
-
   if (message.includes("Invalid input") || message.includes("Required")) {
     return "Məlumatlar tam və düzgün doldurulmalıdır.";
   }

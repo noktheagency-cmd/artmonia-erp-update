@@ -1159,6 +1159,7 @@
 
 .slide-form-field input,
 .slide-form-field select,
+.slide-form-field .ui-select-trigger,
 .slide-form-field textarea {
   width: 100%;
   border: 1px solid #ded8d3;
@@ -1172,7 +1173,8 @@
 }
 
 .slide-form-field input,
-.slide-form-field select {
+.slide-form-field select,
+.slide-form-field .ui-select-trigger {
   height: 35px;
   padding: 0 10px;
 }

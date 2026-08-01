@@ -898,10 +898,31 @@
     min-height: 0;
     flex: 1 1 auto;
     margin: 0;
-    padding: 4px 12px calc(14px + env(safe-area-inset-bottom));
+    padding: 4px 12px 10px;
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .ui-mobile-select-option-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    background: #ffffff;
+    border-bottom: 1px solid #e8ecf2;
+  }
+
+  .ui-mobile-select-option-row:first-child {
+    border-radius: 13px 13px 0 0;
+  }
+
+  .ui-mobile-select-option-row:last-child {
+    border-bottom: 0;
+    border-radius: 0 0 13px 13px;
+  }
+
+  .ui-mobile-select-option-row .ui-select-option-actions {
+    padding-right: 9px;
   }
 
   .ui-mobile-select-option {
@@ -916,7 +937,7 @@
     text-align: left;
     background: #ffffff;
     border: 0;
-    border-bottom: 1px solid #e8ecf2;
+    border-bottom: 0;
     border-radius: 0;
     font-size: 15px;
     line-height: 1.35;
@@ -965,6 +986,35 @@
     color: #7a8597;
     font-size: 14px;
     text-align: center;
+  }
+
+  .ui-mobile-select-crud-panel {
+    flex: 0 0 auto;
+    padding: 8px 16px calc(12px + env(safe-area-inset-bottom));
+    background: #ffffff;
+    border-top: 1px solid #e3e8f0;
+  }
+
+  .ui-mobile-select-crud-panel .ui-select-crud-panel {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .ui-mobile-select-crud-panel .ui-select-crud-create {
+    min-height: 46px;
+    border-radius: 13px;
+    font-size: 14px;
+  }
+
+  .ui-mobile-select-crud-panel .ui-select-crud-editor input {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .ui-mobile-select-crud-panel :is(.ui-select-crud-editor, .ui-select-crud-confirm) button {
+    width: 42px;
+    height: 42px;
   }
 
   .date-picker-popover {
@@ -1238,9 +1288,9 @@
 
   .side-rail .brand-symbol,
   .app-stage.is-sidebar-compact .side-rail .brand-symbol {
-    width: 126px;
-    height: 70px;
-    flex-basis: 126px;
+    width: 150px;
+    height: 100px;
+    flex-basis: 150px;
     overflow: hidden;
     background: transparent;
     border: 0;
@@ -1255,8 +1305,8 @@
 
   .side-rail .brand-logo,
   .app-stage.is-sidebar-compact .side-rail .brand-logo {
-    width: 118px;
-    height: 118px;
+    width: 140px;
+    height: 140px;
     opacity: 1;
   }
 

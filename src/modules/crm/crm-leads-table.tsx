@@ -1,5 +1,7 @@
 "use client";
 
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, Inbox, Phone, Sparkles, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -15,7 +17,7 @@ import { convertLeadToStudentAction } from "@/modules/crm/actions";
 import { LeadDetailDialog } from "@/modules/crm/lead-detail-dialog";
 import type { CrmData } from "@/modules/crm/queries";
 import { unwrapActionResult } from "@/lib/action-result";
-import { notifyCaughtError } from "@/lib/app-notifications";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
 export function CrmLeadsTable({
   data,
@@ -28,11 +30,17 @@ export function CrmLeadsTable({
   onShowAll?: () => void;
   onClearFilters: () => void;
 }) {
+  const router = useRouter();
   const rows = preview ? data.leads.slice(0, 5) : data.leads;
 
   async function convertLead(formData: FormData) {
     try {
-      unwrapActionResult(await convertLeadToStudentAction(formData));
+      const result = unwrapActionResult(await convertLeadToStudentAction(formData)) as {
+        redirectTo: string;
+      };
+      notifySuccess("Tələbə yaradıldı", "Müraciət uğurla tələbəyə çevrildi.");
+      router.replace(result.redirectTo as Route, { scroll: false });
+      router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Müraciət tələbəyə çevrilmədi.");
     }

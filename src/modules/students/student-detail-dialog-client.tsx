@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import {
   Banknote,
   CalendarDays,
@@ -28,7 +31,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
-import { notifyCaughtError } from "@/lib/app-notifications";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -43,16 +46,25 @@ export function StudentDetailDialogClient({
   returnTo: string;
   recordPaymentAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
   async function recordPayment(formData: FormData) {
     try {
-      unwrapActionResult(await recordPaymentAction(formData));
+      const result = unwrapActionResult(await recordPaymentAction(formData)) as {
+        redirectTo: string;
+      };
+      setOpen(false);
+      notifySuccess("Ödəniş qəbul edildi", "Tələbənin balansı yeniləndi.");
+      router.replace(result.redirectTo as Route, { scroll: false });
+      router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Ödəniş qeydə alınmadı.");
     }
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button className="student-open-button" type="button">
           <strong>{student.name}</strong>

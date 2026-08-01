@@ -922,6 +922,7 @@
 
 .content-form-field input,
 .content-form-field select,
+.content-form-field .ui-select-trigger,
 .content-form-field textarea {
   width: 100%;
   border: 1px solid #e2dcd7;
@@ -935,7 +936,8 @@
 }
 
 .content-form-field input,
-.content-form-field select {
+.content-form-field select,
+.content-form-field .ui-select-trigger {
   height: 36px;
   padding: 0 10px;
 }

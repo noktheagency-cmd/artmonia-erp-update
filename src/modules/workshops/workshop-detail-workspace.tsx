@@ -38,8 +38,12 @@ import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { FormSelect } from "@/components/ui/select";
+import { FormSelect, type SelectOptionCrudConfig } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
+import {
+  deleteFinanceExpenseCategoryAction,
+  saveFinanceExpenseCategoryAction,
+} from "@/modules/finance/actions";
 import type {
   WorkshopDetailData,
   WorkshopExpenseRow,
@@ -75,7 +79,6 @@ const eventStatusOptions = [
   { value: "COMPLETED", label: "Tamamlandı" },
   { value: "CANCELLED", label: "Ləğv edildi" },
 ] as const;
-const addExpenseCategoryValue = "__add_category__";
 export function WorkshopDetailWorkspace({
   data,
   actions,
@@ -432,11 +435,44 @@ function PaymentDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
 
 function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetailData; action: WorkshopAction; autoOpen?: boolean }) {
   const [categoryValue, setCategoryValue] = useState("");
-  const isAddingCategory = categoryValue === addExpenseCategoryValue;
+  const [categories, setCategories] = useState(data.categories);
+  const categoryCrud: SelectOptionCrudConfig = {
+    canManage: data.permissions.canManageFinance,
+    createLabel: "Yeni xərc kateqoriyası əlavə et",
+    async onCreate(label) {
+      const formData = new FormData();
+      formData.set("name", label);
+      const saved = unwrapActionResult(await saveFinanceExpenseCategoryAction(formData));
+      setCategories((current) => [
+        ...current.filter((item) => item.id !== saved.id),
+        { ...saved, description: "" },
+      ].toSorted((left, right) => left.name.localeCompare(right.name, "az")));
+      return { id: saved.id, value: saved.id, label: saved.name, locked: saved.isSystem };
+    },
+    async onUpdate(option, label) {
+      if (!option.id) throw new Error("Xərc kateqoriyası tapılmadı.");
+      const formData = new FormData();
+      formData.set("id", option.id);
+      formData.set("name", label);
+      const saved = unwrapActionResult(await saveFinanceExpenseCategoryAction(formData));
+      setCategories((current) => [
+        ...current.filter((item) => item.id !== saved.id),
+        { ...saved, description: "" },
+      ].toSorted((left, right) => left.name.localeCompare(right.name, "az")));
+      return { id: saved.id, value: saved.id, label: saved.name, locked: saved.isSystem };
+    },
+    async onDelete(option) {
+      if (!option.id) throw new Error("Xərc kateqoriyası tapılmadı.");
+      const formData = new FormData();
+      formData.set("id", option.id);
+      unwrapActionResult(await deleteFinanceExpenseCategoryAction(formData));
+      setCategories((current) => current.filter((item) => item.id !== option.id));
+    },
+  };
   return (
     <ActionDialog title="Xərc əlavə et" description="Tədbirə bağlanan xərc ümumi Maliyyədə də görünəcək." trigger={<Button variant="outline"><CircleDollarSign data-icon="inline-start" />Xərc əlavə et</Button>} action={action} defaultOpen={autoOpen} headerIcon={<CircleDollarSign />}>
       <input type="hidden" name="eventId" value={data.event.id} />
-      <input type="hidden" name="categoryId" value={isAddingCategory ? "" : categoryValue} />
+      <input type="hidden" name="categoryId" value={categoryValue} />
       <FieldGroup>
         <Field>
           <FieldLabel>Kateqoriya</FieldLabel>
@@ -447,12 +483,14 @@ function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
             required
             emptyLabel="Kateqoriya seç"
             searchable
-            options={[
-              ...data.categories.map((category) => ({ value: category.id, label: category.name })),
-              { value: addExpenseCategoryValue, label: "+ Yeni kateqoriya" },
-            ]}
+            options={categories.map((category) => ({
+              id: category.id,
+              value: category.id,
+              label: category.name,
+              locked: category.isSystem,
+            }))}
+            optionCrud={categoryCrud}
           />
-          {isAddingCategory ? <Input name="newCategoryName" maxLength={80} placeholder="Yeni kateqoriyanın adı" required /> : null}
         </Field>
         <div className="workshop-form-grid">
           <Field><FieldLabel htmlFor="expense-amount">Məbləğ</FieldLabel><Input id="expense-amount" name="amount" inputMode="decimal" required /></Field>
@@ -481,8 +519,8 @@ function EditEventDialog({ data, action }: { data: WorkshopDetailData; action: W
             defaultValue={event.eventType}
             options={data.eventTypes}
             searchable
-            creatable
             searchPlaceholder="Tip seçin və ya yenisini yazın"
+            catalogKey="WORKSHOP_EVENT_TYPE"
             createLabel="Yeni tip əlavə et"
           />
         </Field>

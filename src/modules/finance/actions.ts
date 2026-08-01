@@ -20,7 +20,7 @@ import { startOfMonth, toNumber } from "@/modules/shared/format";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
 import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
-import { safeServerAction } from "@/server/actions/safe-action";
+import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
 
 const optionalText = (max: number) =>
@@ -35,6 +35,103 @@ const optionalAmount = z.preprocess((value) => {
   const normalized = optionalFormString(value);
   return normalized ? parseAmountInput(normalized) : undefined;
 }, z.number().nonnegative().max(250_000).optional());
+
+const expenseCategorySchema = z.object({
+  id: z.preprocess(optionalFormString, z.string().uuid().optional()),
+  name: z.string().trim().min(2).max(80),
+});
+
+async function saveFinanceExpenseCategoryActionImpl(formData: FormData) {
+  const actor = await requireExpenseCategoryActor();
+  const input = expenseCategorySchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+
+  const saved = await prisma.$transaction(async (tx) => {
+    if (!input.id) {
+      const created = await tx.financeExpenseCategory.create({
+        data: {
+          name: input.name,
+          description: "Dropdown daxilindən əlavə edildi",
+          isSystem: false,
+        },
+        select: { id: true, name: true, isSystem: true },
+      });
+      await writeAuditLog(tx, {
+        actorUserId: actor.id,
+        action: "finance.expense_category.create",
+        entityType: "finance_expense_category",
+        entityId: created.id,
+        after: created,
+      });
+      return created;
+    }
+
+    const current = await tx.financeExpenseCategory.findUnique({
+      where: { id: input.id },
+      select: { id: true, name: true, isSystem: true },
+    });
+    if (!current) throw new PublicActionError("Xərc kateqoriyası tapılmadı.", "NOT_FOUND");
+    if (current.isSystem) throw new PublicActionError("Sistem kateqoriyasının adı dəyişdirilə bilməz.");
+    const updated = await tx.financeExpenseCategory.update({
+      where: { id: current.id },
+      data: { name: input.name },
+      select: { id: true, name: true, isSystem: true },
+    });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "finance.expense_category.update",
+      entityType: "finance_expense_category",
+      entityId: updated.id,
+      before: current,
+      after: updated,
+    });
+    return updated;
+  });
+
+  invalidateFinanceCaches();
+  return saved;
+}
+
+async function deleteFinanceExpenseCategoryActionImpl(formData: FormData) {
+  const actor = await requireExpenseCategoryActor();
+  const id = z.string().uuid().parse(formData.get("id"));
+  const prisma = getPrisma();
+
+  const deleted = await prisma.$transaction(async (tx) => {
+    const current = await tx.financeExpenseCategory.findUnique({
+      where: { id },
+      select: { id: true, name: true, isSystem: true, _count: { select: { expenses: true } } },
+    });
+    if (!current) throw new PublicActionError("Xərc kateqoriyası tapılmadı.", "NOT_FOUND");
+    if (current.isSystem) throw new PublicActionError("Sistem kateqoriyası silinə bilməz.");
+    if (current._count.expenses > 0) {
+      throw new PublicActionError("Bu kateqoriya xərc qeydlərində istifadə olunur və silinə bilməz.", "CONFLICT");
+    }
+    await tx.financeExpenseCategory.delete({ where: { id } });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "finance.expense_category.delete",
+      entityType: "finance_expense_category",
+      entityId: current.id,
+      before: { id: current.id, name: current.name },
+    });
+    return { id: current.id };
+  });
+
+  invalidateFinanceCaches();
+  return deleted;
+}
+
+async function requireExpenseCategoryActor() {
+  const actor = await requireMutationActor();
+  if (
+    !actor.permissions.has("billing.expense.create") &&
+    !actor.permissions.has("workshop.finance.manage")
+  ) {
+    throw new PublicActionError("Xərc kateqoriyalarını idarə etmək icazəniz yoxdur.", "FORBIDDEN");
+  }
+  return actor;
+}
 
 const requiredAmount = z.preprocess(
   parseAmountInput,
@@ -1182,4 +1279,12 @@ export const updateFinanceExpenseAction = safeServerAction(
 export const deleteFinanceExpenseAction = safeServerAction(
   deleteFinanceExpenseActionImpl,
   "Xərc silinmədi.",
+);
+export const saveFinanceExpenseCategoryAction = safeServerAction(
+  saveFinanceExpenseCategoryActionImpl,
+  "Xərc kateqoriyası saxlanmadı.",
+);
+export const deleteFinanceExpenseCategoryAction = safeServerAction(
+  deleteFinanceExpenseCategoryActionImpl,
+  "Xərc kateqoriyası silinmədi.",
 );

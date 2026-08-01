@@ -39,6 +39,7 @@ import {
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { formatLeadStageLabel, leadStageSelectOptions } from "@/modules/crm/stage";
 import type { CreateLeadFormState } from "@/modules/crm/actions";
+import { educationLevelOptions } from "@/modules/students/education-level-options";
 
 type DuplicateMatch = {
   id: string;
@@ -52,15 +53,15 @@ type DuplicateResponse = { matches: DuplicateMatch[] };
 
 export function NewLeadDialogClient({
   programs,
-  managers,
   campaigns,
   sourceOptions,
+  currentManagerName,
   createLeadAction,
 }: {
   programs: Array<{ id: string; name: string }>;
-  managers: Array<{ id: string; fullName: string }>;
   campaigns: Array<{ id: string; name: string }>;
   sourceOptions: string[];
+  currentManagerName: string;
   createLeadAction: (formData: FormData) => Promise<CreateLeadFormState>;
 }) {
   const router = useRouter();
@@ -220,6 +221,23 @@ export function NewLeadDialogClient({
                     name="source"
                     defaultValue="Instagram"
                     options={buildCrmSourceSelectOptions(sourceOptions)}
+                    searchable
+                    searchPlaceholder="Mənbə axtar..."
+                    catalogKey="CRM_SOURCE"
+                    createLabel="Yeni mənbə əlavə et"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Təhsil səviyyəsi</FieldLabel>
+                  <FormSelect
+                    aria-label="Təhsil səviyyəsi"
+                    name="educationLevel"
+                    defaultValue=""
+                    emptyLabel="Təhsil səviyyəsi seçilməyib"
+                    searchable
+                    catalogKey="STUDENT_EDUCATION_LEVEL"
+                    createLabel="Yeni təhsil səviyyəsi əlavə et"
+                    options={educationLevelOptions}
                   />
                 </Field>
               </FieldGroup>
@@ -279,16 +297,15 @@ export function NewLeadDialogClient({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel>Məsul şəxs</FieldLabel>
-                  <FormSelect
-                    aria-label="Məsul şəxs"
-                    name="managerId"
-                    defaultValue=""
-                    emptyLabel="Avtomatik təyin et"
-                    searchable
-                    searchPlaceholder="Məsul şəxs axtar..."
-                    options={managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
-                  />
+                  <FieldLabel>Məsul şəxs (avtomatik)</FieldLabel>
+                  <InputGroup>
+                    <InputGroupAddon aria-hidden="true"><CircleUserRound /></InputGroupAddon>
+                    <InputGroupInput
+                      value={currentManagerName}
+                      aria-label="Avtomatik təyin olunan məsul şəxs"
+                      readOnly
+                    />
+                  </InputGroup>
                 </Field>
                 <Field>
                   <FieldLabel>Status</FieldLabel>

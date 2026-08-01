@@ -39,6 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import {
@@ -617,7 +618,8 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function FieldSelect({ name, label, defaultValue, options, emptyLabel }: { name: string; label: string; defaultValue: string; options: string[] | Array<{ value: string; label: string }>; emptyLabel?: string }) {
-  return <label className="slide-form-field"><span>{label}</span><select name={name} defaultValue={defaultValue}>{emptyLabel ? <option value="">{emptyLabel}</option> : null}{options.map((option) => typeof option === "string" ? <option key={option} value={option}>{option}</option> : <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+  const catalogKey = name === "platform" ? "MARKETING_CONTENT_PLATFORM" : name === "format" ? "MARKETING_CONTENT_FORMAT" : undefined;
+  return <label className="slide-form-field"><span>{label}</span><FormSelect name={name} defaultValue={defaultValue} emptyLabel={emptyLabel} options={options.map((option) => typeof option === "string" ? { value: option, label: option } : option)} searchable={Boolean(catalogKey)} catalogKey={catalogKey} createLabel={`Yeni ${label.toLocaleLowerCase("az")} əlavə et`} /></label>;
 }
 
 function PlatformIcon({ platform }: { platform: string }) {

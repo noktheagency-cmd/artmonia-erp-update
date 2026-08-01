@@ -188,7 +188,12 @@ export function CrmPipeline({ data }: { data: CrmData }) {
             />
           ) : null}
           {data.access.canCreateLead ? (
-            <NewLeadDialog programs={data.programs} managers={data.managers} campaigns={data.campaigns} sourceOptions={data.sourceOptions} />
+            <NewLeadDialog
+              programs={data.programs}
+              campaigns={data.campaigns}
+              sourceOptions={data.sourceOptions}
+              currentManagerName={data.access.actorName}
+            />
           ) : null}
         </div>
       </header>
@@ -381,6 +386,10 @@ function CrmFilterPanel({
             emptyLabel="Mənbə"
             options={buildCrmSourceSelectOptions(data.sourceOptions)}
             icon={Layers3}
+            searchable
+            searchPlaceholder="Mənbə axtar..."
+            catalogKey="CRM_SOURCE"
+            createLabel="Yeni mənbə əlavə et"
           />
           <FormSelect
             aria-label="Növbəti addım"

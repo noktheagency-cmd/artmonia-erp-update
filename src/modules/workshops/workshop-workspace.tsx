@@ -353,8 +353,8 @@ function CreateEventDialog({ defaultDate, eventTypes, action, disabled }: {
                   defaultValue="WORKSHOP"
                   options={eventTypes}
                   searchable
-                  creatable
                   searchPlaceholder="Tip seçin və ya yenisini yazın"
+                  catalogKey="WORKSHOP_EVENT_TYPE"
                   createLabel="Yeni tip əlavə et"
                 />
               </Field>

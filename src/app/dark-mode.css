@@ -653,6 +653,32 @@ html.dark .ui-mobile-select-option {
   border-color: transparent !important;
 }
 
+html.dark .ui-select-crud-panel,
+html.dark .ui-mobile-select-crud-panel,
+html.dark .ui-mobile-select-option-row {
+  background: rgb(18 27 40 / 96%) !important;
+  border-color: var(--dm-line) !important;
+}
+
+html.dark .ui-select-crud-editor input {
+  color: var(--dm-text) !important;
+  background: var(--dm-canvas-raised) !important;
+  border-color: var(--dm-line-strong) !important;
+}
+
+html.dark .ui-select-crud-create {
+  color: #ffd49a;
+  background: rgb(240 161 74 / 10%);
+  border-color: rgb(240 161 74 / 35%);
+}
+
+html.dark .ui-select-option-actions button,
+html.dark .ui-select-crud-editor button,
+html.dark .ui-select-crud-confirm button,
+html.dark .ui-select-crud-status {
+  color: var(--dm-muted);
+}
+
 html.dark .ui-select-item[data-highlighted],
 html.dark .ui-select-item[data-state="checked"],
 html.dark .ui-mobile-select-option:hover,

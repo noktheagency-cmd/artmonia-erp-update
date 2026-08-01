@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { Banknote, Edit, RefreshCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,13 @@ export function StudentDetailActions({
 
   async function updateStatus(formData: FormData) {
     try {
-      unwrapActionResult(await updateStudentStatusAction(formData));
+      const result = unwrapActionResult(await updateStudentStatusAction(formData)) as {
+        redirectTo: string;
+      };
+      setStatusOpen(false);
+      notifySuccess("Status yeniləndi", "Tələbənin statusu uğurla dəyişdirildi.");
+      router.replace(result.redirectTo as Route, { scroll: false });
+      router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Tələbə statusu yenilənmədi.");
     }
@@ -92,7 +99,13 @@ export function StudentDetailActions({
 
   async function deleteStudent(formData: FormData) {
     try {
-      unwrapActionResult(await deleteStudentAction(formData));
+      const result = unwrapActionResult(await deleteStudentAction(formData)) as {
+        redirectTo: string;
+      };
+      setDeleteOpen(false);
+      notifySuccess("Tələbə silindi", "Tələbə və bağlı məlumatlar sistemdən silindi.");
+      router.replace(result.redirectTo as Route);
+      router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Tələbə silinmədi.");
     }
@@ -166,7 +179,17 @@ export function StudentDetailActions({
       </Dialog>
 
       {/* Record Payment Dialog */}
-      <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+      <Dialog
+        open={paymentOpen}
+        onOpenChange={(nextOpen) => {
+          setPaymentOpen(nextOpen);
+          if (nextOpen) {
+            setPaymentAmount(student.detail.paymentDefaultAmount);
+            setPaymentDate(student.detail.paymentDefaultDate);
+            setNextPaymentDate(student.detail.paymentDefaultNextDate);
+          }
+        }}
+      >
         <DialogTrigger asChild>
           <Button className="student-action-payment" variant="secondary" type="button" disabled={!permissions.canRecordPayment}>
             <Banknote data-icon="inline-start" />
@@ -186,8 +209,13 @@ export function StudentDetailActions({
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
               try {
-                unwrapActionResult(await recordPaymentAction(formData));
+                const result = unwrapActionResult(await recordPaymentAction(formData)) as {
+                  redirectTo: string;
+                };
                 setPaymentOpen(false);
+                notifySuccess("Ödəniş qəbul edildi", "Tələbənin balansı yeniləndi.");
+                router.replace(result.redirectTo as Route, { scroll: false });
+                router.refresh();
               } catch (error) {
                 notifyCaughtError(error, "Ödəniş qeydə alınmadı.");
               }
