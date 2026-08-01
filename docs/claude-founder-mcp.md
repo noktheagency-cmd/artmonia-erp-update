@@ -6,8 +6,9 @@ Streamable HTTP MCP connector kimi qoşur.
 ## Təhlükəsizlik sərhədi
 
 - Yalnız etibarlı Supabase OAuth access token qəbul olunur.
-- OAuth tokenindəki `client_id` Railway-dəki `MCP_OAUTH_CLIENT_ID` ilə eyni
-  olmalıdır.
+- OAuth tokenindəki `client_id` Railway-dəki `MCP_OAUTH_CLIENT_IDS`
+  allowlist-ində olmalıdır. Tək client üçün köhnə `MCP_OAUTH_CLIENT_ID`
+  fallback kimi dəstəklənir.
 - Tokenin `sub` dəyəri ERP-də aktiv `SUPER_ADMIN` istifadəçisinə bağlı olmalıdır.
 - MCP tool-ları yalnız oxuyur; biznes məlumatı əlavə etmir, dəyişmir və silmir.
 - Sxem yoxlamasından keçmiş hər autentifikasiya olunmuş tool icrası
@@ -67,7 +68,7 @@ Railway service-də bunları əlavə et:
 
 ```dotenv
 MCP_PUBLIC_URL=https://<railway-domain>/mcp
-MCP_OAUTH_CLIENT_ID=<supabase-oauth-client-uuid>
+MCP_OAUTH_CLIENT_IDS=<claude-supabase-oauth-client-uuid>
 MCP_ALLOWED_ORIGINS=https://claude.ai,https://claude.com
 ```
 
@@ -152,8 +153,9 @@ Connector girişini dərhal dayandırmaq üçün:
 1. Claude `Customize → Connectors` bölməsində connector-u disconnect et.
 2. Supabase-də Founder-in OAuth grant-ını revoke et.
 3. Lazımdırsa OAuth App Client Secret-i rotate et.
-4. Təcili halda Railway-də `MCP_OAUTH_CLIENT_ID` dəyərini dəyiş və redeploy et;
-   köhnə tokenlər connector tərəfindən dərhal rədd ediləcək.
+4. Təcili halda Railway-də `MCP_OAUTH_CLIENT_IDS` allowlist-indən həmin client
+   ID-ni çıxar və redeploy et; həmin client-in tokenləri connector tərəfindən
+   dərhal rədd ediləcək.
 5. `AuditLog` içində `action = MCP_READ` qeydlərini zaman və IP üzrə araşdır.
 
 ## Sonrakı mərhələ

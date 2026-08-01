@@ -5,7 +5,7 @@ import type { Route } from "next";
 import { z } from "zod";
 import { AppRole } from "@/generated/prisma/client";
 import { getCurrentErpUser } from "@/server/auth/session";
-import { requireEnv } from "@/server/env";
+import { isApprovedMcpOAuthClient } from "@/server/mcp/config";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 const decisionSchema = z.object({
@@ -35,7 +35,7 @@ export async function decideOAuthConsent(formData: FormData) {
     throw new Error("OAuth authorization request is no longer valid");
   }
 
-  if (detailsResult.data.client.id !== requireEnv("MCP_OAUTH_CLIENT_ID")) {
+  if (!isApprovedMcpOAuthClient(detailsResult.data.client.id)) {
     throw new Error("OAuth client is not approved for the ERP connector");
   }
 

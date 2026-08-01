@@ -37,6 +37,23 @@ export function getMcpPublicUrl() {
   throw new Error("Missing required environment variable: MCP_PUBLIC_URL");
 }
 
+export function getMcpOAuthClientIds() {
+  const env = getEnv();
+  const clientIds = csv(env.MCP_OAUTH_CLIENT_IDS ?? env.MCP_OAUTH_CLIENT_ID);
+
+  if (clientIds.length === 0) {
+    throw new Error(
+      "Missing required environment variable: MCP_OAUTH_CLIENT_IDS or MCP_OAUTH_CLIENT_ID",
+    );
+  }
+
+  return new Set(clientIds);
+}
+
+export function isApprovedMcpOAuthClient(clientId: string) {
+  return getMcpOAuthClientIds().has(clientId);
+}
+
 export function getMcpNetworkPolicy() {
   const env = getEnv();
   const allowedHosts = new Set([

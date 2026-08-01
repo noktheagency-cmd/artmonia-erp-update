@@ -2,7 +2,7 @@ import { AppRole } from "@/generated/prisma/client";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentErpUser } from "@/server/auth/session";
-import { requireEnv } from "@/server/env";
+import { isApprovedMcpOAuthClient } from "@/server/mcp/config";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { decideOAuthConsent } from "./actions";
 import styles from "./styles.module.css";
@@ -49,7 +49,7 @@ export default async function OAuthConsentPage({
     redirect(data.redirect_url as Route);
   }
 
-  if (data.client.id !== requireEnv("MCP_OAUTH_CLIENT_ID")) {
+  if (!isApprovedMcpOAuthClient(data.client.id)) {
     return <ConsentError message="Bu OAuth tətbiqi ERP connector-u üçün təsdiqlənməyib." />;
   }
 
@@ -60,7 +60,7 @@ export default async function OAuthConsentPage({
       <section className={styles.card}>
         <div className={styles.brand}>ARTMONIA ERP</div>
         <p className={styles.eyebrow}>Founder connector</p>
-        <h1>Claude-a ERP məlumatlarını oxuma icazəsi verilsin?</h1>
+        <h1>ERP məlumatlarını oxuma icazəsi verilsin?</h1>
         <p className={styles.intro}>
           <strong>{data.client.name}</strong> sizin Founder hesabınızla
           Artmonia ERP-yə yalnız oxuma rejimində qoşulmaq istəyir.
@@ -100,7 +100,7 @@ export default async function OAuthConsentPage({
             İmtina et
           </button>
           <button name="decision" value="approve" className={styles.approve}>
-            Claude-a icazə ver
+            İcazə ver
           </button>
         </form>
       </section>

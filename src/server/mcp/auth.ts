@@ -10,7 +10,10 @@ import { createClient } from "@supabase/supabase-js";
 import { AppRole } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv, requireEnv } from "@/server/env";
-import { getMcpPublicUrl } from "@/server/mcp/config";
+import {
+  getMcpOAuthClientIds,
+  getMcpPublicUrl,
+} from "@/server/mcp/config";
 
 type Claims = Record<string, unknown>;
 
@@ -73,7 +76,7 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
     const issuer = stringClaim(claims, "iss");
     const expiresAt = numericClaim(claims, "exp");
     const env = getEnv();
-    const expectedClientId = requireEnv("MCP_OAUTH_CLIENT_ID");
+    const approvedClientIds = getMcpOAuthClientIds();
     const expectedIssuer = new URL(
       "/auth/v1",
       requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -89,7 +92,7 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
       throw invalidToken();
     }
 
-    if (clientId !== expectedClientId) {
+    if (!approvedClientIds.has(clientId)) {
       throw invalidToken();
     }
 

@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+const uuidSchema = z.string().uuid();
+const commaSeparatedUuids = z.string().refine(
+  (value) => {
+    const items = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    return (
+      items.length > 0 &&
+      items.every((item) => uuidSchema.safeParse(item).success)
+    );
+  },
+  { message: "Expected a comma-separated list of UUIDs" },
+);
+
 const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
@@ -11,6 +27,7 @@ const envSchema = z.object({
   CRON_SECRET: z.string().optional(),
   MCP_PUBLIC_URL: z.string().url().optional(),
   MCP_OAUTH_CLIENT_ID: z.string().uuid().optional(),
+  MCP_OAUTH_CLIENT_IDS: commaSeparatedUuids.optional(),
   MCP_EXPECTED_AUDIENCE: z.string().optional(),
   MCP_ALLOWED_HOSTS: z.string().optional(),
   MCP_ALLOWED_ORIGINS: z.string().optional(),
