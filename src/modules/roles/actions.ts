@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
+import { persistStandaloneUser } from "@/modules/roles/standalone-user-service";
 import type { CreateRoleResult, DeleteRoleResult, RoleSummaryDto, UpdateRolePermissionsResult, UpdateUserRolesResult } from "@/modules/roles/types";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
@@ -53,29 +54,12 @@ async function createStandaloneUserActionImpl(formData: FormData) {
 
   try {
     const user = await prisma.$transaction(async (tx) => {
-      const created = await tx.user.create({
-        data: {
-          authUserId: data.user.id,
-          fullName: input.email,
-          email: input.email,
-          isActive: true,
-        },
-      });
-      await tx.userRole.create({ data: { userId: created.id, roleId: role.id } });
-      await writeAuditLog(tx, {
+      return persistStandaloneUser(tx, {
+        authUserId: data.user.id,
+        email: input.email,
+        role: { id: role.id, name: role.name },
         actorUserId: actor.id,
-        action: "auth.user.create",
-        entityType: "user",
-        entityId: created.id,
-        after: {
-          email: input.email,
-          role: { id: role.id, name: role.name },
-          loginCreated: true,
-          hrEmployeeCreated: false,
-        } as Prisma.InputJsonValue,
-        reason: "HR profilindən kənar ERP giriş hesabı yaradıldı",
       });
-      return created;
     });
 
     revalidatePath("/settings/roles");

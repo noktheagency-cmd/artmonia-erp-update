@@ -23420,3 +23420,141 @@ body:has(.workshop-dialog) .ui-select-content {
     border-radius: 10px;
   }
 }
+
+/* Premium warm-light refinement -----------------------------------------
+   Mirrors the amber lighting language of dark mode while keeping content
+   surfaces bright, neutral and comfortable for long working sessions. */
+html:not(.dark) .app-stage {
+  --lm-canvas: #f3f1ec;
+  --lm-surface: #fffdf9;
+  --lm-surface-warm: #fff7ed;
+  --lm-line: rgb(196 105 30 / 16%);
+  --lm-shadow: 0 18px 48px rgb(91 48 14 / 8%);
+}
+
+html:not(.dark) .studio-wash {
+  background:
+    radial-gradient(ellipse at 8% 4%, rgb(242 138 36 / 18%), transparent 38%),
+    radial-gradient(ellipse at 92% 12%, rgb(255 184 107 / 17%), transparent 34%),
+    linear-gradient(145deg, #f8f5ef 0%, #f2eee7 52%, #f7f3ed 100%);
+}
+
+html:not(.dark) .studio-wash::after {
+  background: linear-gradient(125deg, transparent 18%, rgb(242 138 36 / 8%) 52%, transparent 82%);
+}
+
+html:not(.dark) .erp-frame,
+html:not(.dark) .erp-frame[data-dashboard-section="false"],
+html:not(.dark) .erp-frame[data-dashboard-section="true"] {
+  background:
+    radial-gradient(circle at 88% -6%, rgb(242 138 36 / 14%), transparent 32%),
+    radial-gradient(circle at 12% 104%, rgb(194 84 12 / 7%), transparent 30%),
+    linear-gradient(145deg, rgb(255 252 247 / 98%), rgb(239 237 232 / 97%)) !important;
+  border-color: rgb(196 105 30 / 15%) !important;
+  box-shadow:
+    0 22px 58px rgb(91 48 14 / 8%),
+    inset 0 1px 0 rgb(255 255 255 / 85%) !important;
+}
+
+html:not(.dark) .side-rail,
+html:not(.dark) .app-stage.is-sidebar-compact .side-rail {
+  background:
+    radial-gradient(circle at 28% 0%, rgb(242 138 36 / 18%), transparent 31%),
+    linear-gradient(180deg, rgb(255 253 249 / 98%), rgb(249 241 231 / 98%)) !important;
+  border-color: rgb(196 105 30 / 15%) !important;
+  box-shadow:
+    inset -1px 0 0 rgb(255 255 255 / 70%),
+    14px 0 42px rgb(91 48 14 / 9%) !important;
+}
+
+html:not(.dark) .side-rail .nav-icon:hover,
+html:not(.dark) .side-rail .nav-icon:focus-visible,
+html:not(.dark) .rail-user-card:hover,
+html:not(.dark) .rail-user-card:focus-visible,
+html:not(.dark) .rail-user-card.is-active {
+  background: linear-gradient(145deg, rgb(255 249 240 / 98%), rgb(255 237 215 / 94%));
+  border-color: rgb(217 106 8 / 17%);
+}
+
+html:not(.dark) .side-rail .nav-icon.is-active,
+html:not(.dark) .side-rail .nav-icon.is-active:hover {
+  background: linear-gradient(100deg, rgb(242 138 36 / 18%), rgb(255 246 234 / 96%) 76%);
+  border-color: rgb(217 106 8 / 20%);
+  box-shadow: inset 3px 0 0 #e77905, 0 10px 24px rgb(144 71 13 / 7%);
+}
+
+html:not(.dark) :is(
+  .students-command-shell,
+  .students-kpi,
+  .students-analytics-card,
+  .students-table-panel,
+  .owner-dashboard-kpi,
+  .owner-dashboard-panel,
+  .owner-dashboard-revenue-panel,
+  .owner-dashboard-revenue-summary,
+  .owner-dashboard-monthly-metric,
+  .owner-dashboard-team-summary,
+  .hr-kpi,
+  .hr-surface,
+  .crm-command-header,
+  .crm-filter-panel,
+  .crm-metric-card,
+  .crm-panel,
+  .crm-view-tabs,
+  .finance-command-hero,
+  .finance-tabs,
+  .finance-panel,
+  .tasks-header,
+  .tasks-summary-item,
+  .tasks-toolbar,
+  .tasks-list-panel,
+  .workshop-topbar,
+  .workshop-detail-topbar
+) {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(242 138 36 / 9%), transparent 36%),
+    linear-gradient(145deg, rgb(255 255 255 / 98%), rgb(255 247 237 / 94%)) !important;
+  border-color: var(--lm-line) !important;
+  box-shadow: var(--lm-shadow) !important;
+}
+
+html:not(.dark) .erp-frame[data-dashboard-section="true"] :is(
+  .owner-dashboard-kpi,
+  .owner-dashboard-panel,
+  .owner-dashboard-revenue-panel,
+  .owner-dashboard-revenue-summary,
+  .owner-dashboard-monthly-metric,
+  .owner-dashboard-team-summary,
+  .owner-dashboard-date-trigger,
+  .owner-dashboard-icon-link
+) {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(242 138 36 / 9%), transparent 36%),
+    linear-gradient(145deg, rgb(255 255 255 / 98%), rgb(255 247 237 / 94%)) !important;
+  border-color: var(--lm-line) !important;
+  box-shadow: var(--lm-shadow) !important;
+}
+
+html:not(.dark) :is(
+  .ui-select-content,
+  .date-picker-popover,
+  .dashboard-date-popover,
+  .ui-dialog-content,
+  .app-toast,
+  .crm-toast,
+  .finance-toast,
+  .playbook-toast
+) {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(242 138 36 / 10%), transparent 34%),
+    linear-gradient(145deg, #fffefa, #fff7ed) !important;
+  border-color: rgb(196 105 30 / 18%) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 88%), 0 24px 64px rgb(91 48 14 / 13%) !important;
+}
+
+html:not(.dark) .mobile-shell-bar,
+html:not(.dark) .mobile-bottom-nav {
+  background: linear-gradient(180deg, rgb(255 253 249 / 97%), rgb(255 244 229 / 97%)) !important;
+  border-color: rgb(196 105 30 / 15%) !important;
+  box-shadow: 0 -12px 32px rgb(91 48 14 / 9%) !important;
+}
