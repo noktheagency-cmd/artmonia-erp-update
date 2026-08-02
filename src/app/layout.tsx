@@ -16,7 +16,7 @@ const themeInitScript = `
       var stored = localStorage.getItem(key);
       var theme = stored === "dark" || stored === "light"
         ? stored
-        : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        : "light";
       var root = document.documentElement;
       root.classList.toggle("dark", theme === "dark");
       root.dataset.theme = theme;
