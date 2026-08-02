@@ -134,6 +134,7 @@
 .students-filter-primary .ui-button { width: 42px; min-width: 42px; min-height: 42px; padding: 0; border-radius: 12px; }
 .students-filter-primary .date-picker,
 .students-filter-primary .date-picker-trigger { width: 100%; }
+.students-filter-primary .date-picker { min-width: 0; max-width: 100%; }
 .students-filter-primary .date-picker-trigger { min-height: 42px; border-radius: 12px; }
 
 .students-filter-primary .ui-button[type="submit"] { box-shadow: 0 6px 14px rgb(70 103 232 / 18%); }
