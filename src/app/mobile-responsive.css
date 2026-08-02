@@ -1262,6 +1262,7 @@
   .app-stage.is-sidebar-compact .side-rail {
     padding: calc(18px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
     background: #ffffff !important;
+    border-radius: 0 28px 28px 0;
   }
 
   .side-rail .sidebar-brand-row,

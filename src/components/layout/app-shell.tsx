@@ -321,7 +321,22 @@ export function AppShell({
             prefetch={false}
           >
             <span className="brand-symbol" aria-hidden="true">
-              <Image className="brand-logo" src="/logo-sidebar-safe.png" alt="" width={140} height={92} priority />
+              <Image
+                className="brand-logo brand-logo-light"
+                src="/logo-sidebar-safe.png"
+                alt=""
+                width={1254}
+                height={820}
+                priority
+              />
+              <Image
+                className="brand-logo brand-logo-dark"
+                src="/logo-sidebar-dark.png"
+                alt=""
+                width={768}
+                height={529}
+                priority
+              />
             </span>
             <span className="brand-copy">
               <strong>Artmonia ERP</strong>

@@ -70,28 +70,32 @@
 }
 
 html.dark {
-  --dm-canvas: #000000;
-  --dm-canvas-raised: #050505;
-  --dm-surface: #0a0a0a;
-  --dm-surface-2: #111111;
-  --dm-surface-3: #181818;
-  --dm-surface-hover: #202020;
-  --dm-text: #f5f5f5;
-  --dm-text-soft: #d4d4d4;
-  --dm-muted: #a3a3a3;
-  --dm-subtle: #737373;
-  --dm-line: #262626;
-  --dm-line-strong: #3f3f46;
-  --dm-accent: #f0a14a;
-  --dm-accent-strong: #ffb45f;
-  --dm-accent-soft: rgb(240 161 74 / 14%);
+  --dm-canvas: #0c0805;
+  --dm-canvas-raised: #120c08;
+  --dm-surface: #18100b;
+  --dm-surface-2: #21160f;
+  --dm-surface-3: #2b1c12;
+  --dm-surface-hover: #352217;
+  --dm-text: #faf6f1;
+  --dm-text-soft: #e3d8cc;
+  --dm-muted: #b7a696;
+  --dm-subtle: #8f7c6c;
+  --dm-line: #3b291d;
+  --dm-line-strong: #5a3b26;
+  --dm-accent: #f28a24;
+  --dm-accent-strong: #ffb45e;
+  --dm-accent-soft: rgb(242 138 36 / 15%);
+  --dm-accent-glow: rgb(242 138 36 / 18%);
+  --dm-surface-gradient: linear-gradient(145deg, rgb(34 22 14 / 98%), rgb(20 13 9 / 98%));
+  --dm-surface-gradient-soft: linear-gradient(145deg, rgb(43 27 17 / 96%), rgb(27 17 11 / 98%));
+  --dm-elevation: inset 0 1px 0 rgb(255 231 206 / 4%), 0 18px 46px rgb(0 0 0 / 30%);
   --dm-blue: #78a6ff;
   --dm-green: #55d6a5;
   --dm-red: #ff818c;
   --dm-yellow: #f4c96b;
 
   --workspace: var(--dm-canvas);
-  --workspace-strong: #050505;
+  --workspace-strong: #140d09;
   --surface: var(--dm-surface);
   --surface-soft: var(--dm-surface-2);
   --ink: var(--dm-text);
@@ -100,12 +104,12 @@ html.dark {
   --line: var(--dm-line);
   --primary: var(--dm-accent);
   --primary-2: var(--dm-accent-strong);
-  --deep: #000000;
-  --background: #000000;
+  --deep: #080503;
+  --background: var(--dm-canvas);
   --foreground: var(--dm-text);
   --card: var(--dm-surface);
   --card-foreground: var(--dm-text);
-  --popover: #0a0a0a;
+  --popover: #1a110b;
   --popover-foreground: var(--dm-text);
   --primary-foreground: #1d1207;
   --secondary: var(--dm-surface-2);
@@ -122,7 +126,7 @@ html.dark {
   --chart-3: #f0a14a;
   --chart-4: #a991ff;
   --chart-5: #ff818c;
-  --sidebar: #050505;
+  --sidebar: #130c08;
   --sidebar-foreground: var(--dm-text);
   --sidebar-primary: var(--dm-accent);
   --sidebar-primary-foreground: #1d1207;
@@ -140,12 +144,16 @@ html.dark body {
 
 html.dark body {
   color: var(--dm-text);
-  background: #000000;
+  background:
+    radial-gradient(circle at 12% -10%, rgb(242 138 36 / 19%), transparent 32%),
+    radial-gradient(circle at 92% 4%, rgb(255 180 94 / 10%), transparent 27%),
+    linear-gradient(145deg, #0c0805 0%, #130b06 48%, #090503 100%);
+  background-attachment: fixed;
 }
 
 html.dark body::before {
-  background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 7%) 1px, transparent 0);
-  opacity: 0.12;
+  background-image: radial-gradient(circle at 1px 1px, rgb(255 194 132 / 9%) 1px, transparent 0);
+  opacity: 0.18;
 }
 
 html.dark ::selection {
@@ -158,12 +166,14 @@ html.dark .app-stage {
 }
 
 html.dark .studio-wash {
-  background: none;
-  opacity: 0;
+  background:
+    radial-gradient(ellipse at 72% 14%, rgb(242 138 36 / 11%), transparent 52%),
+    radial-gradient(ellipse at 20% 88%, rgb(176 76 14 / 7%), transparent 48%);
+  opacity: 1;
 }
 
 html.dark .studio-wash::after {
-  background: none;
+  background: linear-gradient(120deg, transparent 20%, rgb(255 177 90 / 3%) 50%, transparent 78%);
 }
 
 /* Shell */
@@ -1077,7 +1087,7 @@ html.dark .side-rail .sidebar-avatar {
   border-color: #5c4226;
 }
 
-/* True-black system theme -------------------------------------------------
+/* Unified dark system -----------------------------------------------------
    Module styles define their own light palettes. Rebind those palettes here
    so text, controls, charts and portalled layers all share one dark system. */
 html.dark .side-rail,
@@ -1133,7 +1143,7 @@ html.dark .erp-frame[data-section="students"] {
 }
 
 html.dark .owner-dashboard {
-  --dashboard-bg: #000000;
+  --dashboard-bg: var(--dm-canvas);
   --dashboard-surface: var(--dm-surface);
   --dashboard-ink: var(--dm-text);
   --dashboard-muted: var(--dm-muted);
@@ -1164,7 +1174,7 @@ html.dark .students-command-page {
 }
 
 html.dark .crm-command-page {
-  --crm-bg: #000000;
+  --crm-bg: var(--dm-canvas);
   --crm-surface: var(--dm-surface);
   --crm-soft: var(--dm-surface-2);
   --crm-ink: var(--dm-text);
@@ -1174,7 +1184,7 @@ html.dark .crm-command-page {
 }
 
 html.dark .finance-command-page {
-  --finance-bg: #000000;
+  --finance-bg: var(--dm-canvas);
   --finance-panel: var(--dm-surface);
   --finance-panel-strong: var(--dm-surface-2);
   --finance-ink: var(--dm-text);
@@ -1224,7 +1234,7 @@ html.dark .playbook-page {
 
 html.dark .workshop-shell,
 html.dark .workshop-detail-shell {
-  --ws-background: #000000;
+  --ws-background: var(--dm-canvas);
   --ws-surface: var(--dm-surface);
   --ws-surface-soft: var(--dm-surface-2);
   --ws-line: rgb(255 255 255 / 10%);
@@ -1601,7 +1611,7 @@ html.dark :is(
 }
 
 html.dark .erp-frame[data-section="groups"] [class*="planner-module"][class*="__page"] {
-  --p-bg: #000000;
+  --p-bg: var(--dm-canvas);
   --p-ink: var(--dm-text);
   --p-muted: var(--dm-muted);
   --p-line: var(--dm-line);
@@ -1906,4 +1916,388 @@ html.dark .side-rail .brand-logo,
 html.dark .side-rail .brand-mark:hover .brand-logo {
   opacity: 1;
   transform: none;
+}
+
+/* Premium warm-dark refinement -------------------------------------------
+   Dark remains neutral and readable; amber is used as directional light,
+   selection and focus instead of becoming a heavy color wash. */
+html.dark .erp-frame,
+html.dark .erp-frame[data-dashboard-section="false"],
+html.dark .erp-frame[data-section="students"] {
+  background:
+    radial-gradient(circle at 88% -8%, rgb(242 138 36 / 12%), transparent 31%),
+    radial-gradient(circle at 18% 102%, rgb(137 54 9 / 7%), transparent 32%),
+    linear-gradient(145deg, rgb(15 9 5 / 97%), rgb(9 6 4 / 99%)) !important;
+  border-color: rgb(255 177 92 / 12%) !important;
+  outline: 0 !important;
+  box-shadow:
+    0 20px 58px rgb(0 0 0 / 30%),
+    inset 0 1px 0 rgb(255 226 196 / 2%) !important;
+}
+
+html.dark .side-rail,
+html.dark .app-stage.is-sidebar-compact .side-rail {
+  background:
+    radial-gradient(circle at 30% 0%, rgb(255 174 83 / 13%), transparent 30%),
+    linear-gradient(180deg, rgb(27 17 10 / 98%), rgb(12 8 5 / 99%)) !important;
+  border-color: rgb(255 171 83 / 14%) !important;
+  box-shadow:
+    inset -1px 0 0 rgb(255 190 120 / 5%),
+    14px 0 42px rgb(0 0 0 / 34%) !important;
+}
+
+html.dark .side-rail .nav-icon:hover,
+html.dark .side-rail .nav-icon:focus-visible,
+html.dark .rail-user-card:hover,
+html.dark .rail-user-card:focus-visible,
+html.dark .rail-user-card.is-active,
+html.dark .side-rail .sidebar-toggle,
+html.dark .app-stage.is-sidebar-compact .sidebar-toggle,
+html.dark .rail-utility-button {
+  background: linear-gradient(145deg, rgb(48 30 18 / 92%), rgb(29 19 13 / 96%));
+  border-color: rgb(255 178 97 / 15%);
+}
+
+html.dark .side-rail .nav-icon:hover,
+html.dark .side-rail .nav-icon:focus-visible {
+  color: var(--dm-text) !important;
+}
+
+html.dark .side-rail .nav-icon:hover .nav-icon-box,
+html.dark .side-rail .nav-icon:focus-visible .nav-icon-box {
+  color: var(--dm-accent-strong) !important;
+  background: rgb(242 138 36 / 10%);
+}
+
+html.dark .side-rail .nav-icon.is-active,
+html.dark .side-rail .nav-icon.is-active:hover {
+  background: linear-gradient(100deg, rgb(242 138 36 / 22%), rgb(49 29 15 / 82%) 72%);
+  border-color: rgb(255 174 83 / 25%);
+  box-shadow: inset 3px 0 0 var(--dm-accent), 0 10px 26px rgb(0 0 0 / 18%);
+}
+
+html.dark :is(
+  .students-command-shell,
+  .students-kpi,
+  .students-analytics-card,
+  .students-table-panel,
+  .owner-dashboard-kpi,
+  .owner-dashboard-panel,
+  .owner-dashboard-revenue-summary,
+  .owner-dashboard-monthly-metric,
+  .owner-dashboard-team-summary,
+  .hr-kpi,
+  .hr-surface,
+  .crm-command-header,
+  .crm-filter-panel,
+  .crm-metric-card,
+  .crm-panel,
+  .crm-view-tabs,
+  .finance-command-hero,
+  .finance-tabs,
+  .finance-panel,
+  .finance-panel-head,
+  .finance-expense-category-chart,
+  .tasks-header,
+  .tasks-summary-item,
+  .tasks-toolbar,
+  .tasks-search,
+  .tasks-list-panel,
+  .workshop-topbar,
+  .workshop-detail-topbar
+) {
+  background: var(--dm-surface-gradient) !important;
+  border-color: rgb(255 177 92 / 13%) !important;
+  box-shadow: var(--dm-elevation) !important;
+}
+
+html.dark .marketing-redesign :is(
+  .marketing-view-tabs,
+  .marketing-search-field,
+  .marketing-overview-grid,
+  .marketing-workspace-grid,
+  .marketing-campaign-rail,
+  .marketing-rail-head,
+  .marketing-campaign-detail,
+  .marketing-detail-metrics,
+  .marketing-ad-panel-head,
+  .marketing-ad-table-head,
+  .marketing-campaign-item,
+  .marketing-ad-table,
+  .marketing-ad-list,
+  .marketing-ad-row
+) {
+  background: var(--dm-surface-gradient) !important;
+  border-color: rgb(255 177 92 / 13%) !important;
+}
+
+html.dark [class*="role-permissions-module"][class*="__permissionShell"],
+html.dark [class*="role-permissions-module"][class*="__roleRail"],
+html.dark [class*="role-permissions-module"][class*="__permissionEditor"],
+html.dark [class*="role-permissions-module"][class*="__roleMembers"],
+html.dark [class*="role-permissions-module"][class*="__permissionRow"] {
+  background: var(--dm-surface-gradient) !important;
+  border-color: rgb(255 177 92 / 13%) !important;
+}
+
+html.dark :is(
+  .students-tabs,
+  .students-view-toolbar,
+  .owner-dashboard-best-month,
+  .owner-dashboard-revenue-stat,
+  .owner-dashboard-footer-link,
+  .owner-dashboard-icon-link,
+  .hr-filter-band,
+  .hr-search,
+  .crm-header-actions .export-trigger,
+  .crm-filter-icon-action.is-clear,
+  .playbook-button-secondary,
+  .playbook-section-button,
+  .playbook-department-tab,
+  .playbook-add-department,
+  .playbook-search,
+  .playbook-table-header,
+  .playbook-dropzone,
+  .playbook-quick-upload
+) {
+  background: var(--dm-surface-gradient-soft) !important;
+  border-color: rgb(255 177 92 / 15%) !important;
+}
+
+html.dark :is(
+  .ui-select-content,
+  .date-picker-popover,
+  .dashboard-date-popover,
+  .workshop-event-actions-popover,
+  .rowMenu,
+  .contextControl,
+  .ui-dialog-content,
+  .ui-dialog-header,
+  .ui-dialog-footer,
+  .createDrawer,
+  .drawerModule,
+  .drawerFooter,
+  .app-toast,
+  .crm-toast,
+  .finance-toast,
+  .playbook-toast,
+  .student-create-dialog,
+  .student-payment-dialog,
+  .student-edit-dialog
+) {
+  color: var(--dm-text) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgb(242 138 36 / 11%), transparent 30%),
+    linear-gradient(145deg, rgb(35 22 14 / 99%), rgb(20 13 9 / 99%)) !important;
+  border-color: rgb(255 178 94 / 20%) !important;
+  box-shadow: inset 0 1px 0 rgb(255 235 216 / 4%), 0 24px 70px rgb(0 0 0 / 48%) !important;
+}
+
+html.dark :is(
+  input,
+  textarea,
+  select,
+  .ui-input,
+  .ui-select-trigger,
+  .date-picker-trigger,
+  .student-readonly-status
+) {
+  color: var(--dm-text) !important;
+  background-color: rgb(36 23 15 / 94%) !important;
+  border-color: rgb(255 178 94 / 16%) !important;
+}
+
+html.dark :is(input, textarea, select, .ui-input, .ui-select-trigger, .date-picker-trigger):focus,
+html.dark :is(input, textarea, select, .ui-input, .ui-select-trigger, .date-picker-trigger):focus-visible {
+  border-color: rgb(255 171 78 / 52%) !important;
+  box-shadow: 0 0 0 3px rgb(242 138 36 / 12%) !important;
+}
+
+html.dark .mobile-shell-bar,
+html.dark .mobile-bottom-nav {
+  background: linear-gradient(180deg, rgb(31 19 11 / 96%), rgb(14 9 6 / 98%)) !important;
+  border-color: rgb(255 177 92 / 15%) !important;
+  box-shadow: 0 -14px 34px rgb(0 0 0 / 34%) !important;
+  backdrop-filter: blur(18px) saturate(118%);
+}
+
+html.dark .erp-frame [class*="skeleton"],
+html.dark .erp-frame [data-slot="skeleton"],
+html.dark .ui-skeleton {
+  background: linear-gradient(100deg, #17100b 20%, #352116 42%, #17100b 64%) !important;
+}
+
+html.dark .theme-toggle-login {
+  color: var(--dm-text-soft);
+  background: linear-gradient(145deg, rgb(42 26 16 / 88%), rgb(18 12 8 / 92%));
+  border-color: rgb(255 178 94 / 18%);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 32%), 0 0 26px rgb(242 138 36 / 6%);
+}
+
+html.dark .dashboard-date-popover button:not(.date-picker-trigger):not(.dashboard-date-apply) {
+  color: var(--dm-text-soft) !important;
+  background: var(--dm-surface-gradient-soft) !important;
+  border-color: rgb(255 178 94 / 16%) !important;
+  box-shadow: none !important;
+}
+
+html.dark .dashboard-date-popover button:not(.date-picker-trigger):not(.dashboard-date-apply):hover,
+html.dark .dashboard-date-popover button.is-active {
+  color: #fff8ef !important;
+  background: linear-gradient(135deg, rgb(242 138 36 / 28%), rgb(101 50 16 / 64%)) !important;
+  border-color: rgb(255 174 83 / 34%) !important;
+}
+
+html.dark .dashboard-date-popover .dashboard-date-reset {
+  color: var(--dm-muted) !important;
+}
+
+html.dark .dashboard-date-popover .dashboard-date-apply {
+  color: #231204 !important;
+  background: linear-gradient(135deg, var(--dm-accent-strong), var(--dm-accent)) !important;
+  border-color: transparent !important;
+  box-shadow: 0 10px 24px rgb(242 138 36 / 24%) !important;
+}
+
+/* Portalled right-side detail drawers must not retain their light shell. */
+html.dark .playbook-drawer {
+  color: var(--dm-text-soft);
+  background:
+    radial-gradient(circle at 100% 0%, rgb(242 138 36 / 13%), transparent 34%),
+    linear-gradient(155deg, rgb(35 22 14 / 99%), rgb(17 11 7 / 99%));
+  border-left: 1px solid rgb(255 177 92 / 20%);
+  outline: 0;
+  box-shadow:
+    inset 1px 0 0 rgb(255 226 196 / 3%),
+    -28px 0 72px rgb(0 0 0 / 42%);
+}
+
+html.dark .playbook-drawer-backdrop {
+  background: rgb(5 3 2 / 70%);
+  backdrop-filter: blur(9px);
+}
+
+html.dark .playbook-drawer-head h2,
+html.dark .playbook-field > span,
+html.dark .playbook-choice-field legend,
+html.dark .playbook-drawer-preview strong {
+  color: var(--dm-text) !important;
+}
+
+html.dark .playbook-drawer-head > div > span,
+html.dark .playbook-drawer-head > button {
+  color: var(--dm-accent-strong);
+  background: rgb(242 138 36 / 12%);
+  border: 1px solid rgb(255 177 92 / 16%);
+}
+
+html.dark .playbook-drawer-head > button:hover {
+  color: #fff8ef;
+  background: rgb(242 138 36 / 20%);
+}
+
+html.dark .playbook-field input,
+html.dark .playbook-color-grid button,
+html.dark .playbook-icon-grid button,
+html.dark .playbook-drawer-preview,
+html.dark .playbook-drawer-actions > button:nth-last-child(2) {
+  color: var(--dm-text-soft) !important;
+  background: var(--dm-surface-gradient-soft) !important;
+  border-color: rgb(255 177 92 / 16%) !important;
+}
+
+html.dark .playbook-drawer-actions button:last-child {
+  color: #231204 !important;
+  background: linear-gradient(135deg, var(--dm-accent-strong), var(--dm-accent)) !important;
+  border-color: transparent !important;
+  box-shadow: 0 12px 26px rgb(242 138 36 / 22%) !important;
+}
+
+html.dark .playbook-drawer-preview small,
+html.dark .playbook-field input::placeholder {
+  color: var(--dm-muted) !important;
+}
+
+html.dark .playbook-color-grid button:hover,
+html.dark .playbook-icon-grid button:hover,
+html.dark .playbook-color-grid button.is-selected,
+html.dark .playbook-icon-grid button.is-selected {
+  border-color: rgb(255 171 78 / 48%) !important;
+  box-shadow: 0 0 0 3px rgb(242 138 36 / 10%) !important;
+}
+
+html.dark .hr-bonus-drawer.ui-dialog-content {
+  border: 0 !important;
+  border-left: 1px solid rgb(255 177 92 / 20%) !important;
+  outline: 0 !important;
+  box-shadow: inset 1px 0 0 rgb(255 226 196 / 3%), -28px 0 72px rgb(0 0 0 / 42%) !important;
+}
+
+/* Transparent white wordmark for the dark sidebar. */
+html.dark .side-rail .brand-symbol,
+html.dark .app-stage.is-sidebar-compact .side-rail .brand-symbol {
+  overflow: hidden !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html.dark .side-rail .brand-logo-light {
+  display: none !important;
+}
+
+html.dark .side-rail .brand-logo-dark,
+html.dark .side-rail .brand-mark:hover .brand-logo-dark {
+  display: block !important;
+  width: 140px !important;
+  height: auto !important;
+  max-height: 96px;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 14px rgb(0 0 0 / 24%));
+}
+
+@media (min-width: 961px) {
+  html.dark .app-stage.is-sidebar-compact .side-rail .brand-logo-dark {
+    width: 42px !important;
+    height: auto !important;
+    max-height: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.dark .side-rail .nav-icon.is-active,
+  html.dark :is(.ui-button-primary, button[data-active="true"], a.is-active) {
+    transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+}
+
+/* Compact sidebar docks retain their hierarchy in the warm dark theme. */
+@media (min-width: 961px) {
+  html.dark .app-stage.is-sidebar-compact .sidebar-brand-row,
+  html.dark .app-stage.is-sidebar-compact .side-rail .rail-bottom-stack {
+    border-color: rgb(255 177 92 / 12%);
+  }
+
+  html.dark .app-stage.is-sidebar-compact .side-rail .brand-mark {
+    background: rgb(28 18 11 / 88%);
+    border: 1px solid rgb(255 177 92 / 14%);
+  }
+
+  html.dark .app-stage.is-sidebar-compact .sidebar-toggle,
+  html.dark .app-stage.is-sidebar-compact .rail-utility-actions {
+    background: rgb(22 15 10 / 88%);
+    border-color: rgb(255 177 92 / 13%);
+    box-shadow: none;
+  }
+
+  html.dark .app-stage.is-sidebar-compact .rail-utility-button {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  html.dark .app-stage.is-sidebar-compact .side-rail .brand-logo-dark {
+    width: 38px !important;
+    max-height: 38px;
+  }
 }
