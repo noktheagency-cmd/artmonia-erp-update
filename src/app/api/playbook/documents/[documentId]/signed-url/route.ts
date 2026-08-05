@@ -17,7 +17,7 @@ export async function GET(
   context: { params: Promise<{ documentId: string }> },
 ) {
   try {
-    await requireErpActor("playbook.read");
+    const actor = await requireErpActor("playbook.read");
 
     const { documentId } = paramsSchema.parse(await context.params);
     const url = new URL(request.url);
@@ -28,7 +28,7 @@ export async function GET(
     const supabase = getSupabaseAdminClient();
     const documentResult = await supabase
       .from("playbook_documents")
-      .select("storage_path, original_name")
+      .select("storage_path, original_name, department_id")
       .eq("id", documentId)
       .maybeSingle();
 
@@ -41,6 +41,25 @@ export async function GET(
         { error: "Sənəd tapılmadı." },
         { status: 404, headers: { "Cache-Control": "private, no-store" } },
       );
+    }
+
+    if (!actor.permissions.has("playbook.guideline.read")) {
+      const departmentResult = await supabase
+        .from("playbook_departments")
+        .select("section")
+        .eq("id", documentResult.data.department_id)
+        .maybeSingle();
+
+      if (departmentResult.error) throw departmentResult.error;
+      if (!departmentResult.data) {
+        return NextResponse.json(
+          { error: "Sənəd tapılmadı." },
+          { status: 404, headers: { "Cache-Control": "private, no-store" } },
+        );
+      }
+      if (departmentResult.data.section === "GUIDELINE") {
+        throw new Error("Missing permission: playbook.guideline.read");
+      }
     }
 
     const signedUrlResult = await supabase.storage

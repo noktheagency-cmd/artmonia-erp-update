@@ -9,7 +9,7 @@ import type { CreateRoleResult, DeleteRoleResult, RoleSummaryDto, RoleUserDto, U
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
-import { isPermissionCode, permissionDefinitions, type PermissionCode, type PermissionScope } from "@/server/rbac/permissions";
+import { isPermissionCode, isSuperAdminManagedPermission, permissionDefinitions, type PermissionCode, type PermissionScope } from "@/server/rbac/permissions";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
 
 type SubmittedGrant = { code?: unknown; scope?: unknown };
@@ -92,6 +92,7 @@ export const createStandaloneUserAction = safeServerAction(
 export async function updateRolePermissionsAction(formData: FormData): Promise<UpdateRolePermissionsResult> {
   try {
     const actor = await requireMutationActor("auth.role.manage");
+    const canManageSuperAdminPermissions = actor.roles.includes(AppRole.SUPER_ADMIN);
     const roleId = String(formData.get("roleId") ?? "");
     const expectedUpdatedAt = String(formData.get("updatedAt") ?? "");
     const reason = String(formData.get("reason") ?? "").trim();
@@ -104,25 +105,21 @@ export async function updateRolePermissionsAction(formData: FormData): Promise<U
       submitted = parsed;
     } catch { return failure("VALIDATION", "İcazə siyahısı etibarlı deyil."); }
 
-    const definitionByCode = new Map(permissionDefinitions.map((definition) => [definition.code, definition]));
-    const normalized = new Map<PermissionCode, PermissionScope>();
-    for (const grant of submitted) {
-      const code = String(grant.code ?? "");
-      if (!isPermissionCode(code)) continue;
-      const definition = definitionByCode.get(code);
-      const supportsScope = definition && "supportsScope" in definition && definition.supportsScope;
-      normalized.set(code, supportsScope && grant.scope === "ASSIGNED" ? "ASSIGNED" : "ALL");
-    }
-    for (const code of [...normalized.keys()]) {
-      const definition = definitionByCode.get(code);
-      if (definition && "dependsOn" in definition && isPermissionCode(definition.dependsOn) && !normalized.has(definition.dependsOn)) normalized.set(definition.dependsOn, "ALL");
-    }
+    const normalized = normalizeGrants(submitted, canManageSuperAdminPermissions);
 
     const result = await getPrisma().$transaction(async (tx) => {
       const role = await tx.role.findUnique({ where: { id: roleId }, include: { permissions: { include: { permission: true } } } });
       if (!role) return { kind: "NOT_FOUND" as const };
       if (role.code === AppRole.SUPER_ADMIN) return { kind: "FORBIDDEN" as const };
       if (role.updatedAt.toISOString() !== expectedUpdatedAt) return { kind: "CONFLICT" as const };
+      if (!canManageSuperAdminPermissions) {
+        for (const { permission, scope } of role.permissions) {
+          if (isPermissionCode(permission.code) && isSuperAdminManagedPermission(permission.code)) {
+            normalized.set(permission.code, scope as PermissionScope);
+          }
+        }
+        ensurePermissionDependencies(normalized);
+      }
       const permissionRows = await resolvePermissionRows(tx, normalized);
       const nextUpdatedAt = new Date();
       await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
@@ -144,6 +141,7 @@ export async function updateRolePermissionsAction(formData: FormData): Promise<U
 export async function createRoleAction(formData: FormData): Promise<CreateRoleResult> {
   try {
     const actor = await requireMutationActor("auth.role.manage");
+    const canManageSuperAdminPermissions = actor.roles.includes(AppRole.SUPER_ADMIN);
     const name = String(formData.get("name") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     const copyFromRoleId = String(formData.get("copyFromRoleId") ?? "").trim();
@@ -159,15 +157,23 @@ export async function createRoleAction(formData: FormData): Promise<CreateRoleRe
     if (name.length < 2 || name.length > 60 || description.length > 240 || (copyFromRoleId && !isUuid(copyFromRoleId))) return failure("VALIDATION", "Rol adı 2–60, açıqlama isə maksimum 240 simvol olmalıdır.");
 
     const createdId = await getPrisma().$transaction(async (tx) => {
-      const source = copyFromRoleId ? await tx.role.findUnique({ where: { id: copyFromRoleId }, include: { permissions: true } }) : null;
+      const source = copyFromRoleId ? await tx.role.findUnique({ where: { id: copyFromRoleId }, include: { permissions: { include: { permission: { select: { code: true } } } } } }) : null;
       if (copyFromRoleId && !source) return null;
       const role = await tx.role.create({ data: { key: `custom.${slugify(name)}.${crypto.randomUUID().slice(0, 8)}`, name, description: description || null, isSystem: false } });
       if (submitted) {
-        const normalized = normalizeGrants(submitted);
+        const normalized = normalizeGrants(submitted, canManageSuperAdminPermissions);
         const permissions = await resolvePermissionRows(tx, normalized);
         if (permissions.length) await tx.rolePermission.createMany({ data: permissions.map((permission) => ({ roleId: role.id, permissionId: permission.id, scope: normalized.get(permission.code as PermissionCode) ?? "ALL" })) });
       } else if (source?.permissions.length) {
-        await tx.rolePermission.createMany({ data: source.permissions.map((grant) => ({ roleId: role.id, permissionId: grant.permissionId, scope: grant.scope })) });
+        const copiedPermissions = source.permissions.filter(
+          ({ permission }) =>
+            canManageSuperAdminPermissions
+            || !isPermissionCode(permission.code)
+            || !isSuperAdminManagedPermission(permission.code),
+        );
+        if (copiedPermissions.length) {
+          await tx.rolePermission.createMany({ data: copiedPermissions.map((grant) => ({ roleId: role.id, permissionId: grant.permissionId, scope: grant.scope })) });
+        }
       }
       await writeAuditLog(tx, { actorUserId: actor.id, action: "role.create", entityType: "role", entityId: role.id, after: { name, description: description || null, copiedFrom: source?.name ?? null } as Prisma.InputJsonValue, reason: "Yeni fərdi rol yaradıldı" });
       return role.id;
@@ -494,21 +500,27 @@ export async function updateRoleUserAction(formData: FormData) {
 }
 
 function failure<T extends string>(code: T, message: string) { return { ok: false as const, code, message }; }
-function normalizeGrants(submitted: SubmittedGrant[]) {
+function normalizeGrants(submitted: SubmittedGrant[], includeSuperAdminManaged: boolean) {
   const definitions = new Map(permissionDefinitions.map((definition) => [definition.code, definition]));
   const normalized = new Map<PermissionCode, PermissionScope>();
   for (const grant of submitted) {
     const code = String(grant.code ?? "");
     if (!isPermissionCode(code)) continue;
+    if (!includeSuperAdminManaged && isSuperAdminManagedPermission(code)) continue;
     const definition = definitions.get(code);
     const supportsScope = definition && "supportsScope" in definition && definition.supportsScope;
     normalized.set(code, supportsScope && grant.scope === "ASSIGNED" ? "ASSIGNED" : "ALL");
   }
+  ensurePermissionDependencies(normalized);
+  return normalized;
+}
+
+function ensurePermissionDependencies(normalized: Map<PermissionCode, PermissionScope>) {
+  const definitions = new Map(permissionDefinitions.map((definition) => [definition.code, definition]));
   for (const code of [...normalized.keys()]) {
     const definition = definitions.get(code);
     if (definition && "dependsOn" in definition && isPermissionCode(definition.dependsOn) && !normalized.has(definition.dependsOn)) normalized.set(definition.dependsOn, "ALL");
   }
-  return normalized;
 }
 async function resolvePermissionRows(
   tx: Prisma.TransactionClient,

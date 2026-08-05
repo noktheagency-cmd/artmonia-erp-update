@@ -23,7 +23,7 @@ type ExportDialogProps = {
   module: ExportModule;
   filters: Record<string, string>;
   resultCount: number;
-  previewRows?: Array<Record<string, string>>;
+  previewRows?: Array<Record<string, string | number | null>>;
   initialDataset?: string;
 };
 
@@ -32,7 +32,7 @@ export function ExportDialog({ module, filters, resultCount, previewRows = [], i
   const initialDatasetKey = datasets.some((dataset) => dataset.key === initialDataset) ? initialDataset! : datasets[0].key;
   const [datasetKey, setDatasetKey] = useState(initialDatasetKey);
   const [scope, setScope] = useState<"filtered" | "all">("filtered");
-  const [format, setFormat] = useState<"csv" | "pdf">("pdf");
+  const [format, setFormat] = useState<"xlsx" | "pdf">("xlsx");
   const [includeSummary, setIncludeSummary] = useState(true);
   const [fields, setFields] = useState(() => getDefaultExportFields(module, initialDatasetKey));
   const [isExporting, setIsExporting] = useState(false);
@@ -81,8 +81,9 @@ export function ExportDialog({ module, filters, resultCount, previewRows = [], i
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setFeedback(`${format.toUpperCase()} faylı hazırlandı.`);
-      notifySuccess("İxrac hazırdır", `${format.toUpperCase()} faylı uğurla yaradıldı.`);
+      const formatLabel = format === "xlsx" ? "Excel" : "PDF";
+      setFeedback(`${formatLabel} faylı hazırlandı.`);
+      notifySuccess("İxrac hazırdır", `${formatLabel} faylı uğurla yaradıldı.`);
     } catch (error) {
       setFeedback(notifyCaughtError(error, "İxrac hazırlanmadı.", "İxrac alınmadı"));
     } finally {
@@ -148,19 +149,19 @@ export function ExportDialog({ module, filters, resultCount, previewRows = [], i
               <div className="export-preview-head">{fields.slice(0, 4).map((key) => <span key={key}>{dataset.fields.find((field) => field.key === key)?.label}</span>)}</div>
               {preview.length ? preview.map((row, index) => <div className="export-preview-row" key={index}>{fields.slice(0, 4).map((key) => <span key={key}>{row[key] ?? "—"}</span>)}</div>) : <p>Önizləmə üçün seçilmiş məlumat görünmür.</p>}
             </div>
-            {format === "pdf" ? <label className="export-summary-toggle"><input type="checkbox" checked={includeSummary} onChange={(event) => setIncludeSummary(event.target.checked)} /><span><strong>PDF-də yekun cədvəli daxil et</strong><small>Filtrlər, ixrac tarixi və nəticə sayı göstəriləcək.</small></span></label> : null}
+            <label className="export-summary-toggle"><input type="checkbox" checked={includeSummary} onChange={(event) => setIncludeSummary(event.target.checked)} /><span><strong>{format === "xlsx" ? "Excel-də hesabat xülasəsini göstər" : "PDF-də hesabat xülasəsini göstər"}</strong><small>Filtrlər, ixrac tarixi və nəticə sayı göstəriləcək.</small></span></label>
           </section>
         </div>
 
         {feedback ? <p className="export-feedback" role="status">{feedback}</p> : null}
         <DialogFooter className="export-dialog-footer">
           <div className="export-format-switch" aria-label="İxrac formatı">
-            <button type="button" className={format === "csv" ? "is-selected" : ""} onClick={() => setFormat("csv")}><FileSpreadsheet /> CSV</button>
+            <button type="button" className={format === "xlsx" ? "is-selected" : ""} onClick={() => setFormat("xlsx")}><FileSpreadsheet /> Excel</button>
             <button type="button" className={format === "pdf" ? "is-selected" : ""} onClick={() => setFormat("pdf")}><FileText /> PDF</button>
           </div>
           <Button type="button" onClick={() => void downloadExport()} disabled={isExporting}>
             {isExporting ? <LoaderCircle className="export-spin" data-icon="inline-start" /> : <Download data-icon="inline-start" />}
-            {isExporting ? "Hazırlanır..." : `${format.toUpperCase()} ixrac et`}
+            {isExporting ? "Hazırlanır..." : `${format === "xlsx" ? "Excel" : "PDF"} ixrac et`}
           </Button>
         </DialogFooter>
       </DialogContent>

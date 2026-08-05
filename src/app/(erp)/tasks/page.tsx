@@ -1,4 +1,4 @@
-import { createTaskAction, updateTaskStatusAction } from "@/modules/tasks/actions";
+import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/modules/tasks/actions";
 import { getTaskData } from "@/modules/tasks/queries";
 import { TaskWorkspace } from "@/modules/tasks/task-workspace";
 
@@ -10,6 +10,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       data={data}
       createTaskAction={createTaskAction}
       updateTaskStatusAction={updateTaskStatusAction}
+      deleteTaskAction={deleteTaskAction}
     />
   );
 }

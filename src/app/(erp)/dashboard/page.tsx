@@ -3,6 +3,7 @@ import { OwnerDashboard } from "@/modules/dashboard/owner-dashboard";
 import { getOwnerDashboardData } from "@/modules/dashboard/queries";
 import { createTaskAction } from "@/modules/tasks/actions";
 import { getTaskData } from "@/modules/tasks/queries";
+import { AppRole } from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { RoleDashboard } from "@/modules/dashboard/role-dashboard";
 import { getRoleDashboardData } from "@/modules/dashboard/role-dashboard-query";
@@ -24,7 +25,19 @@ export default async function DashboardPage({
     const [roleData, taskData] = await Promise.all([getRoleDashboardData(), getTaskData()]);
     return <RoleDashboard data={roleData} taskData={taskData} createTaskAction={createTaskAction} />;
   }
-  const data = await getOwnerDashboardData(filters);
+  const showTaskProgress =
+    !actor.roles.includes(AppRole.SUPER_ADMIN) && actor.permissions.has("task.read");
+  const [data, taskData] = await Promise.all([
+    getOwnerDashboardData(filters),
+    showTaskProgress ? getTaskData() : Promise.resolve(null),
+  ]);
 
-  return <OwnerDashboard data={data} />;
+  return (
+    <OwnerDashboard
+      data={data}
+      actorName={actor.fullName}
+      taskData={taskData}
+      createTaskAction={createTaskAction}
+    />
+  );
 }

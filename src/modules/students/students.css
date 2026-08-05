@@ -154,7 +154,7 @@
 .students-filter-selects { display: grid; grid-template-columns: repeat(4, minmax(145px, 1fr)); }
 .students-filter-selects .ui-select-trigger { width: 100%; min-height: 36px; border-radius: 10px; font-size: 11px; }
 
-.students-kpi-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
+.students-kpi-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px; }
 .students-kpi {
   --kpi-accent: var(--students-blue);
   position: relative;
@@ -442,9 +442,7 @@ button.students-kpi { cursor: pointer; }
 @media (max-width: 1380px) {
   .students-kpi-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
   .students-kpi { grid-column: span 3; }
-  .students-kpi:nth-child(n + 5) { grid-column: span 4; }
   .students-skeleton-kpi { grid-column: span 3; }
-  .students-skeleton-kpi:nth-child(n + 5) { grid-column: span 4; }
   .students-kpi { min-height: 122px; }
 }
 

@@ -14,9 +14,13 @@ import {
   WalletCards,
 } from "lucide-react";
 import type { DashboardData } from "@/modules/dashboard/queries";
+import { DashboardTasksPanel } from "@/modules/dashboard/dashboard-tasks-panel";
 import { DashboardDateFilter } from "@/modules/dashboard/dashboard-date-filter";
 import { DashboardInsights } from "@/modules/dashboard/dashboard-insights";
 import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashboard-visuals";
+import type { TaskData } from "@/modules/tasks/queries";
+
+type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 
 type KpiPresentation = {
   icon: LucideIcon;
@@ -30,12 +34,22 @@ const kpiPresentation: readonly KpiPresentation[] = [
   { icon: BadgeDollarSign, tone: "violet" },
 ];
 
-export function OwnerDashboard({ data }: { data: DashboardData }) {
+export function OwnerDashboard({
+  data,
+  actorName,
+  taskData,
+  createTaskAction,
+}: {
+  data: DashboardData;
+  actorName: string;
+  taskData: TaskData | null;
+  createTaskAction: TaskAction;
+}) {
   return (
     <section className="owner-dashboard" aria-labelledby="owner-dashboard-title">
       <header className="owner-dashboard-header">
         <div>
-          <h1 id="owner-dashboard-title">Salam, Artmonia</h1>
+          <h1 id="owner-dashboard-title">Salam, {firstName(actorName)}</h1>
         </div>
         <DashboardDateFilter from={data.filters.from} to={data.filters.to} label={data.filters.label} />
       </header>
@@ -74,6 +88,15 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
           churnCounts={data.churnCounts}
         />
       </div>
+
+      {taskData ? (
+        <div className="owner-dashboard-lower-grid">
+          <DashboardTasksPanel
+            data={taskData}
+            createTaskAction={createTaskAction}
+          />
+        </div>
+      ) : null}
 
     </section>
   );
@@ -160,4 +183,8 @@ function DashboardPanelHeader({
 
 function sequenceStyle(index: number) {
   return { "--dashboard-sequence": index } as CSSProperties;
+}
+
+function firstName(value: string) {
+  return value.trim().split(/\s+/)[0] || "komanda üzvü";
 }

@@ -55,6 +55,10 @@
   gap: 12px;
 }
 
+.playbook-section-switcher.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .playbook-section-button {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

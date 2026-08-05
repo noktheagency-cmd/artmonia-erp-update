@@ -51,6 +51,7 @@ const visibleStatuses = [
   "FROZEN",
   "STOPPED",
   "DECLINED",
+  "COMPLETED",
 ] as const;
 
 const metricIcons: readonly LucideIcon[] = [
@@ -60,6 +61,7 @@ const metricIcons: readonly LucideIcon[] = [
   Snowflake,
   CirclePause,
   CircleX,
+  UserRoundCheck,
 ];
 
 export function StudentList({ data }: { data: StudentListData }) {
@@ -82,6 +84,9 @@ export function StudentList({ data }: { data: StudentListData }) {
 
   function handleQuickFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
+    if (key === "status" && value) {
+      params.delete("churn");
+    }
     if (value) {
       params.set(key, value);
     } else {
@@ -431,6 +436,9 @@ function ActiveFilterBar({
       <span>{data.students.length} nəticə</span>
       {data.filters.status ? (
         <FilterChip label={`Status: ${data.filterLabels.status}`} onRemove={() => onQuickFilter("status", "")} />
+      ) : null}
+      {data.filters.churn ? (
+        <FilterChip label="Churn: bütün əlaqəli tələbələr" onRemove={() => onQuickFilter("churn", "")} />
       ) : null}
       {data.filters.payment !== "all" ? (
         <FilterChip label={`Ödəniş: ${data.filterLabels.payment}`} onRemove={() => onQuickFilter("payment", "all")} />

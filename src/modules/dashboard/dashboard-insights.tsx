@@ -1,7 +1,8 @@
 "use client";
 
 import { type CSSProperties, useState } from "react";
-import { CircleDollarSign, Percent, TrendingDown } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CircleDollarSign, Percent, TrendingDown } from "lucide-react";
 import { Area, AreaChart, PolarAngleAxis, RadialBar, RadialBarChart } from "recharts";
 import {
   type ChartConfig,
@@ -53,6 +54,11 @@ export function DashboardInsights({
   const [churnOpen, setChurnOpen] = useState(false);
   const conversionValue = percentageToNumber(conversionRate);
   const churnValue = percentageToNumber(churnRate);
+  const churnDetails = [
+    { label: "Dondurulan tələbələr", status: "FROZEN", count: churnCounts.frozen },
+    { label: "Təhsili dayandıranlar", status: "STOPPED", count: churnCounts.stopped },
+    { label: "İmtina edənlər", status: "DECLINED", count: churnCounts.declined },
+  ] as const;
 
   return (
     <aside className="owner-dashboard-panel owner-dashboard-insights-panel owner-dashboard-entrance">
@@ -103,12 +109,36 @@ export function DashboardInsights({
             </div>
             <ChurnRateDial rate={churnRate} />
           </DialogHeader>
-          <dl className="owner-dashboard-churn-breakdown">
-            <div><dt>Donduranların sayı</dt><dd>{churnCounts.frozen}</dd></div>
-            <div><dt>Dayandıranların sayı</dt><dd>{churnCounts.stopped}</dd></div>
-            <div><dt>İmtina edənlərin sayı</dt><dd>{churnCounts.declined}</dd></div>
-            <div className="owner-dashboard-churn-total"><dt>Ümumi churn sayı</dt><dd>{churnCounts.total}</dd></div>
-          </dl>
+          <div className="owner-dashboard-churn-summary" aria-label="Churn xülasəsi">
+            <div><span>Ümumi tələbə</span><strong>{churnCounts.population}</strong></div>
+            <div><span>Churn statusunda</span><strong>{churnCounts.total}</strong></div>
+            <div><span>Churndan kənar</span><strong>{Math.max(0, churnCounts.population - churnCounts.total)}</strong></div>
+          </div>
+          <nav className="owner-dashboard-churn-breakdown" aria-label="Churn statusları üzrə tələbə siyahıları">
+            {churnDetails.map((item) => (
+              <Link
+                href={`/students?status=${item.status}&tab=list`}
+                key={item.status}
+                onClick={() => setChurnOpen(false)}
+              >
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>Ümumi tələbələrin {formatShare(item.count, churnCounts.population)}-i</small>
+                </span>
+                <b>{item.count}</b>
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            ))}
+          </nav>
+          <Link
+            className="owner-dashboard-churn-total-link"
+            href="/students?churn=1&tab=list"
+            onClick={() => setChurnOpen(false)}
+          >
+            Bütün churn tələbələrini aç
+            <span>{churnCounts.total}</span>
+            <ArrowRight aria-hidden="true" />
+          </Link>
         </DialogContent>
       </Dialog>
     </aside>
@@ -189,4 +219,8 @@ function ForecastTrend({ items }: { items: RevenuePoint[] }) {
 
 function percentageToNumber(value: string) {
   return Math.min(100, Math.max(0, Number.parseFloat(value) || 0));
+}
+
+function formatShare(value: number, total: number) {
+  return `${total > 0 ? Math.round((value / total) * 100) : 0}%`;
 }

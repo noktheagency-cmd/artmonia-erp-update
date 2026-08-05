@@ -5,6 +5,7 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   CalendarClock,
+  BookOpen,
   CircleUserRound,
   Clock3,
   FileText,
@@ -26,7 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   InputGroup,
   InputGroupAddon,
@@ -38,9 +39,11 @@ import type { CrmData } from "@/modules/crm/queries";
 import {
   leadPrioritySelectOptions,
   nextActionTypeSelectOptions,
+  type NextActionTypeValue,
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
-import { leadStageSelectOptions } from "@/modules/crm/stage";
+import { leadStageSelectOptions, type LeadStageValue } from "@/modules/crm/stage";
+import { DEFAULT_TRIAL_LESSON_COUNT } from "@/modules/crm/trial-lesson";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -67,6 +70,32 @@ export function LeadDetailDialogClient({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [stage, setStage] = useState<LeadStageValue>(lead.detail.stage);
+  const [nextActionType, setNextActionType] = useState<NextActionTypeValue | "">(
+    lead.detail.nextActionType,
+  );
+  const [trialLessonCount, setTrialLessonCount] = useState(
+    String(lead.detail.trialLessonCount || DEFAULT_TRIAL_LESSON_COUNT),
+  );
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) return;
+
+    setStage(lead.detail.stage);
+    setNextActionType(lead.detail.nextActionType);
+    setTrialLessonCount(String(lead.detail.trialLessonCount || DEFAULT_TRIAL_LESSON_COUNT));
+  }
+
+  function handleStageChange(nextStage: string) {
+    const normalizedStage = nextStage as LeadStageValue;
+    setStage(normalizedStage);
+
+    if (normalizedStage === "TRIAL_LESSON") {
+      setTrialLessonCount((current) => current || String(DEFAULT_TRIAL_LESSON_COUNT));
+      setNextActionType("TRIAL_LESSON_REMINDER");
+    }
+  }
 
   async function updateLead(formData: FormData) {
     try {
@@ -98,7 +127,7 @@ export function LeadDetailDialogClient({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <button className="crm-lead-open-button" type="button">
           <strong>{lead.name}</strong>
@@ -212,8 +241,35 @@ export function LeadDetailDialogClient({
                 </Field>
                 <Field>
                   <FieldLabel>Status</FieldLabel>
-                  <FormSelect aria-label="Status" name="stage" defaultValue={lead.detail.stage} options={leadStageSelectOptions} />
+                  <FormSelect
+                    aria-label="Status"
+                    name="stage"
+                    value={stage}
+                    onValueChange={handleStageChange}
+                    options={leadStageSelectOptions}
+                  />
                 </Field>
+                {stage === "TRIAL_LESSON" ? (
+                  <Field>
+                    <FieldLabel htmlFor={`lead-trial-count-${lead.id}`}>Sınaq dərsi sayı</FieldLabel>
+                    <InputGroup>
+                      <InputGroupAddon aria-hidden="true"><BookOpen /></InputGroupAddon>
+                      <InputGroupInput
+                        id={`lead-trial-count-${lead.id}`}
+                        name="trialLessonCount"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={100}
+                        step={1}
+                        value={trialLessonCount}
+                        onChange={(event) => setTrialLessonCount(event.currentTarget.value)}
+                        required
+                      />
+                    </InputGroup>
+                    <FieldDescription>Seçim zamanı 1 dərs avtomatik qeyd olunur.</FieldDescription>
+                  </Field>
+                ) : null}
               </FieldGroup>
             </section>
 
@@ -234,7 +290,8 @@ export function LeadDetailDialogClient({
                   <FormSelect
                     aria-label="Növbəti addım"
                     name="nextActionType"
-                    defaultValue={lead.detail.nextActionType}
+                    value={nextActionType}
+                    onValueChange={(value) => setNextActionType(value as NextActionTypeValue | "")}
                     emptyLabel="Təyin edilməyib"
                     options={nextActionTypeSelectOptions}
                   />

@@ -13,6 +13,7 @@ export type HrEmployeeRow = {
   profilePhotoUrl: string;
   email: string;
   phone: string;
+  address: string;
   department: string;
   position: string;
   hireDate: string;
@@ -62,6 +63,7 @@ export async function getHrEmployeeData(): Promise<HrEmployeeData> {
     profilePhotoUrl: employee.profilePhotoUrl ?? "",
     email: employee.email ?? "",
     phone: employee.phone ?? "",
+    address: employee.address ?? "",
     department: normalizeReservedLookup(
       employee.department,
       employee.staffType === "TEACHER" ? "Tədris" : "Ümumi",

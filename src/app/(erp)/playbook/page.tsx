@@ -9,5 +9,11 @@ export default async function PlaybookPage() {
     getPlaybookData(),
   ]);
 
-  return <PlaybookWorkspace initialData={data} canManage={actor.permissions.has("playbook.manage")} />;
+  return (
+    <PlaybookWorkspace
+      initialData={data}
+      canManage={actor.permissions.has("playbook.manage")}
+      canViewGuideline={actor.permissions.has("playbook.guideline.read")}
+    />
+  );
 }

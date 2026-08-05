@@ -1,6 +1,7 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { AppRole, Prisma } from "@/generated/prisma/client";
+import { syncVerifiedAuthSession } from "@/modules/audit/session-registry";
 import { getPrisma } from "@/server/db/prisma";
 import {
   loadPermissionsForUser,
@@ -13,6 +14,7 @@ import { createSupabaseServerClient } from "@/server/supabase/server";
 export type CurrentErpUser = {
   id: string;
   authUserId: string | null;
+  currentSessionId: string;
   fullName: string;
   email: string;
   profilePhotoUrl: string | null;
@@ -44,6 +46,11 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
     return null;
   }
 
+  const sessionId = data.claims.session_id;
+  if (!sessionId) {
+    return null;
+  }
+
   const [user] = await getPrisma().$queryRaw<CurrentErpUserRow[]>(Prisma.sql`
     select
       u.id::text as "id",
@@ -66,11 +73,25 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
     return null;
   }
 
+  const syncResult = await syncVerifiedAuthSession({
+    db: getPrisma(),
+    sessionId,
+    userId: user.id,
+    issuedAt: data.claims.iat,
+    headers: await headers(),
+  });
+
+  if (syncResult.revoked) {
+    await supabase.auth.signOut({ scope: "local" });
+    return null;
+  }
+
   const roles = normalizeRoles(user.roles);
 
   return {
     id: user.id,
     authUserId: user.authUserId,
+    currentSessionId: sessionId,
     fullName: user.fullName,
     email: user.email,
     profilePhotoUrl: user.profilePhotoUrl,
@@ -79,7 +100,7 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
   };
 });
 
-type CurrentErpUserRow = Omit<CurrentErpUser, "permissions" | "roles"> & {
+type CurrentErpUserRow = Omit<CurrentErpUser, "permissions" | "roles" | "currentSessionId"> & {
   roles: unknown;
 };
 

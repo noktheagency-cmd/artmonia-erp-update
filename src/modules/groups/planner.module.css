@@ -4,3 +4,515 @@
 .assignmentHeader{padding:24px 28px 0}
 .primaryButton{border-color:#1769e8!important;background:#1769e8!important;color:#fff!important;box-shadow:0 8px 18px rgba(23,105,232,.16)!important}.primaryButton:hover{border-color:#0e5ed7!important;background:#0e5ed7!important}.primaryButton:disabled{border-color:#9bbdf1!important;background:#9bbdf1!important;box-shadow:none!important}
 @media(max-width:640px){.heading p{overflow:visible;white-space:normal}}
+
+/* Student assignment modal redesign */
+.assignmentDialog {
+  --assignment-blue: #1769e8;
+  --assignment-blue-soft: #f2f6ff;
+  --assignment-ink: #111d35;
+  --assignment-muted: #69778f;
+  --assignment-line: #dfe6f0;
+  width: min(1120px, calc(100vw - 40px));
+  max-width: 1120px;
+  max-height: min(90vh, 780px);
+  padding: 0;
+  overflow: visible;
+  color: var(--assignment-ink);
+  background: #fff;
+  border: 1px solid rgba(214, 222, 234, .95);
+  border-radius: 24px;
+  box-shadow: 0 36px 90px rgba(18, 31, 54, .24);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.assignmentDialog:global(.ui-dialog-content) {
+  background: #fff !important;
+  border-color: rgba(214, 222, 234, .95) !important;
+  box-shadow: 0 36px 90px rgba(18, 31, 54, .24) !important;
+}
+
+:global(html:not(.dark)) .assignmentDialog:global(.ui-dialog-content) {
+  background: #fff !important;
+  border-color: rgba(214, 222, 234, .95) !important;
+  box-shadow: 0 36px 90px rgba(18, 31, 54, .24) !important;
+}
+
+.assignmentDialog :global(.ui-dialog-close) {
+  top: 24px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  color: #536179;
+  background: #fff;
+  border-color: #dce3ed;
+  border-radius: 13px;
+  box-shadow: 0 5px 16px rgba(22, 38, 66, .06);
+}
+
+.assignmentHeader {
+  gap: 7px;
+  padding: 28px 74px 24px 32px;
+}
+
+.assignmentHeader :global(.ui-dialog-title) {
+  color: var(--assignment-ink);
+  font-size: 25px;
+  font-weight: 760;
+  line-height: 1.16;
+  letter-spacing: -.035em;
+}
+
+.assignmentHeader :global(.ui-dialog-description) {
+  color: var(--assignment-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.assignmentForm {
+  min-height: 0;
+}
+
+.assignmentBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 318px;
+  margin-top: 0;
+  border-top: 1px solid var(--assignment-line);
+}
+
+.assignmentMain {
+  min-width: 0;
+  padding: 24px 32px 30px;
+}
+
+.studentField {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+}
+
+.studentField > span,
+.startDateField > span {
+  color: #303b50;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.studentCombobox:global(.ui-select-trigger) {
+  height: 54px;
+  padding: 0 16px;
+  color: var(--assignment-ink);
+  background: #fff;
+  border: 1px solid #d6deea;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(20, 35, 60, .02);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.studentCombobox:global(.ui-select-trigger):hover {
+  border-color: #aebed6;
+}
+
+.studentCombobox:global(.ui-select-trigger):focus-visible,
+.studentCombobox:global(.ui-select-trigger)[data-popup-open] {
+  border-color: var(--assignment-blue);
+  box-shadow: 0 0 0 3px rgba(23, 105, 232, .12);
+}
+
+.studentCombobox :global(.ui-select-trigger-inline-icon) {
+  color: #60708a;
+}
+
+.studentDropdown:global(.ui-select-content) {
+  z-index: 120;
+  min-width: var(--anchor-width);
+  max-height: min(320px, var(--available-height));
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #d9e1ed;
+  border-radius: 14px;
+  box-shadow: 0 20px 46px rgba(22, 38, 66, .18), 0 3px 10px rgba(22, 38, 66, .08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.studentDropdown:global(.ui-select-content) {
+  background: #fff !important;
+  border-color: #d9e1ed !important;
+  box-shadow: 0 20px 46px rgba(22, 38, 66, .18), 0 3px 10px rgba(22, 38, 66, .08) !important;
+}
+
+:global(html:not(.dark)) .studentDropdown:global(.ui-select-content) {
+  background: #fff !important;
+  border-color: #d9e1ed !important;
+  box-shadow: 0 20px 46px rgba(22, 38, 66, .18), 0 3px 10px rgba(22, 38, 66, .08) !important;
+}
+
+.studentDropdown :global(.ui-select-search) {
+  min-height: 42px;
+  margin: 8px;
+  color: #627089;
+  background: #f7f9fc;
+  border-color: #e1e7f0;
+  border-radius: 10px;
+}
+
+.studentDropdown :global(.ui-select-search input) {
+  font-size: 12px;
+  font-weight: 580;
+}
+
+.studentDropdown :global(.ui-select-viewport) {
+  max-height: 248px;
+  padding: 0 7px 8px;
+}
+
+.studentDropdown :global(.ui-select-item) {
+  min-height: 46px;
+  margin: 1px 0;
+  padding: 7px 12px 7px 38px;
+  color: #26334a;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.studentDropdown :global(.ui-select-item[data-highlighted]),
+.studentDropdown :global(.ui-select-item[data-selected]) {
+  color: #154faa;
+  background: #f1f6ff;
+}
+
+.assignmentSectionHeading {
+  display: flex;
+  align-items: center;
+  margin: 28px 0 16px;
+}
+
+.assignmentSectionHeading h3,
+.assignmentSummary h3 {
+  margin: 0;
+  color: var(--assignment-ink);
+  font-size: 16px;
+  font-weight: 760;
+  line-height: 1.25;
+  letter-spacing: -.015em;
+}
+
+.slotChoiceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(118px, 1fr));
+  gap: 12px;
+}
+
+.slotDay {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.slotDay > strong {
+  padding: 0 4px 2px;
+  color: #354157;
+  font-size: 11px;
+  font-weight: 760;
+  text-align: left;
+}
+
+.slotChoice {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-height: 112px;
+  padding: 15px 14px;
+  color: var(--assignment-ink);
+  text-align: left;
+  background: #fff;
+  border: 1px solid #dce3ed;
+  border-radius: 13px;
+  cursor: pointer;
+  box-shadow: 0 2px 7px rgba(27, 42, 68, .025);
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.slotChoice:hover:not(:disabled) {
+  border-color: #a9bddb;
+  box-shadow: 0 9px 22px rgba(27, 55, 98, .08);
+  transform: translateY(-2px);
+}
+
+.slotChoice > span {
+  padding-right: 26px;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.slotChoice small,
+.slotChoice b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.slotChoice small svg,
+.slotChoice b svg {
+  position: static;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.slotChoice small {
+  color: #5d6d86;
+}
+
+.slotChoice b {
+  margin-top: auto;
+  color: #13845a;
+  font-weight: 760;
+}
+
+.slotChoiceCheck {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  display: block;
+  padding: 3px;
+  color: #fff;
+  background: var(--assignment-blue);
+  border-radius: 50%;
+  box-sizing: content-box;
+}
+
+.activeChoice {
+  color: var(--assignment-ink);
+  background: #f3f7ff;
+  border-color: var(--assignment-blue);
+  box-shadow: 0 0 0 1px rgba(23, 105, 232, .08), 0 10px 24px rgba(23, 105, 232, .1);
+}
+
+.activeChoice small {
+  color: #48617f;
+}
+
+.activeChoice b {
+  color: #0f7652;
+}
+
+.disabledChoice {
+  color: #8f5b5a;
+  background: #fff8f7;
+  border-color: #edceca;
+  box-shadow: none;
+}
+
+.disabledChoice b {
+  color: #c5524d;
+}
+
+.assignmentSummary {
+  min-width: 0;
+  padding: 28px 28px 30px;
+  background: #f9fbfe;
+  border-left: 1px solid var(--assignment-line);
+}
+
+.planCount {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 14px;
+  color: #1558be;
+  background: #f1f6ff;
+  border: 1px solid #bfd3f7;
+  border-radius: 13px;
+}
+
+.planCount > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  background: #fff;
+  border: 1px solid #d4e2fa;
+  border-radius: 10px;
+}
+
+.planCount strong {
+  display: block;
+}
+
+.planCount strong {
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.summaryDetails {
+  display: grid;
+  gap: 13px;
+  margin: 20px 0;
+  padding: 18px 0;
+  border-top: 1px solid #e2e8f1;
+  border-bottom: 1px solid #e2e8f1;
+}
+
+.summaryDetails ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summaryDetails li,
+.summaryDetails p {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #40506a;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.summaryDetails svg {
+  flex: 0 0 auto;
+  color: #6d7f9c;
+}
+
+.startDateField {
+  display: grid;
+  gap: 8px;
+}
+
+.startDateField input {
+  width: 100%;
+  height: 48px;
+  padding: 0 13px;
+  color: #26334a;
+  background: #fff;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+  outline: none;
+  font: inherit;
+  font-size: 12px;
+}
+
+.startDateField input:focus {
+  border-color: var(--assignment-blue);
+  box-shadow: 0 0 0 3px rgba(23, 105, 232, .12);
+}
+
+.packageNote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 11px 12px;
+  color: #187453;
+  background: #f0faf6;
+  border: 1px solid #ccebdd;
+  border-radius: 11px;
+  font-size: 10px;
+}
+
+.packageNote strong {
+  font-size: 11px;
+}
+
+.assignmentFooter {
+  gap: 10px;
+  margin: 0;
+  padding: 18px 28px;
+  background: #fff;
+  border-top: 1px solid var(--assignment-line);
+  border-radius: 0 0 24px 24px;
+}
+
+.assignmentFooter :global(.ui-button) {
+  min-height: 44px;
+  padding-inline: 18px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.primaryButton {
+  min-width: 154px;
+  border-color: var(--assignment-blue) !important;
+  background: var(--assignment-blue) !important;
+  color: #fff !important;
+  box-shadow: 0 9px 20px rgba(23, 105, 232, .2) !important;
+}
+
+.primaryButton:hover {
+  border-color: #0e5ed7 !important;
+  background: #0e5ed7 !important;
+}
+
+.primaryButton:disabled {
+  border-color: #aec8ef !important;
+  background: #aec8ef !important;
+  box-shadow: none !important;
+}
+
+@media(max-width:900px) {
+  .assignmentDialog {
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+
+  .assignmentBody {
+    grid-template-columns: 1fr;
+  }
+
+  .assignmentSummary {
+    border-top: 1px solid var(--assignment-line);
+    border-left: 0;
+  }
+
+  .slotChoiceGrid {
+    grid-template-columns: repeat(3, minmax(118px, 1fr));
+  }
+}
+
+@media(max-width:640px) {
+  .assignmentDialog {
+    overflow-x: hidden;
+  }
+
+  .assignmentHeader {
+    padding: 20px 58px 16px 16px;
+  }
+
+  .assignmentForm {
+    padding: 0;
+  }
+
+  .assignmentMain,
+  .assignmentSummary {
+    padding: 20px 16px;
+  }
+
+  .slotChoiceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .assignmentFooter {
+    border-radius: 0;
+  }
+}
+
+@media(prefers-reduced-motion:reduce) {
+  .slotChoice {
+    transition: none;
+  }
+}

@@ -27,6 +27,7 @@ export default async function ErpLayout({
         permissions: [...actor.permissions.keys()],
       }}
       signOutAction={signOutAction}
+      sessionGuardEnabled={Boolean(actor.currentSessionId)}
     >
       {children}
     </AppShell>

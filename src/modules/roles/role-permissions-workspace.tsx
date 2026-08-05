@@ -147,33 +147,47 @@ export function RolePermissionsWorkspace({
   }
 
   function togglePermission(definition: PermissionDefinitionDto, checked: boolean) {
+    if (isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions)) return;
     updateDraft((draft) =>
       changePermission(draft, definition, checked, initialData.definitions),
     );
   }
 
   function setModule(definitions: PermissionDefinitionDto[], checked: boolean) {
+    const editableDefinitions = definitions.filter(
+      (definition) => !isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions),
+    );
     updateDraft((draft) =>
-      changePermissionGroup(draft, definitions, checked, initialData.definitions),
+      changePermissionGroup(draft, editableDefinitions, checked, initialData.definitions),
     );
   }
 
   function toggleNewRolePermission(definition: PermissionDefinitionDto, checked: boolean) {
+    if (definition.superAdminManaged && !initialData.canManageSuperAdminPermissions) return;
     setNewRoleDraft((draft) =>
       changePermission(draft, definition, checked, initialData.definitions),
     );
   }
 
   function setNewRoleModule(definitions: PermissionDefinitionDto[], checked: boolean) {
+    const assignableDefinitions = definitions.filter(
+      (definition) => initialData.canManageSuperAdminPermissions || !definition.superAdminManaged,
+    );
     setNewRoleDraft((draft) =>
-      changePermissionGroup(draft, definitions, checked, initialData.definitions),
+      changePermissionGroup(draft, assignableDefinitions, checked, initialData.definitions),
     );
   }
 
   function copyRolePermissions(roleId: string) {
     setCopyFromRoleId(roleId);
     const source = roles.find((role) => role.id === roleId);
-    setNewRoleDraft(source ? grantsToRecord(source.grants) : {});
+    const copiedDraft = source ? grantsToRecord(source.grants) : {};
+    if (!initialData.canManageSuperAdminPermissions) {
+      for (const definition of initialData.definitions) {
+        if (definition.superAdminManaged) delete copiedDraft[definition.code];
+      }
+    }
+    setNewRoleDraft(copiedDraft);
   }
 
   function resetCreateFlow() {
@@ -563,8 +577,11 @@ export function RolePermissionsWorkspace({
                 {visibleModules.length ? (
                   visibleModules.map((module) => {
                     const definitions = module.definitions;
+                    const editableDefinitions = definitions.filter(
+                      (definition) => !isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions),
+                    );
                     const activeCount = definitions.filter((item) => currentDraft[item.code]).length;
-                    const allSelected = activeCount === definitions.length;
+                    const allEditableSelected = editableDefinitions.every((item) => currentDraft[item.code]);
                     return (
                       <section className={styles.moduleSection} key={module.key}>
                         <header className={styles.moduleHeader}>
@@ -577,13 +594,13 @@ export function RolePermissionsWorkspace({
                               <p>{activeCount}/{definitions.length} aktivdir</p>
                             </div>
                           </div>
-                          {!readOnly ? (
+                          {!readOnly && editableDefinitions.length ? (
                             <label className={styles.selectAll}>
                               <span>Hamısını seç</span>
                               <input
                                 type="checkbox"
-                                checked={allSelected}
-                                onChange={(event) => setModule(definitions, event.target.checked)}
+                                checked={allEditableSelected}
+                                onChange={(event) => setModule(editableDefinitions, event.target.checked)}
                               />
                             </label>
                           ) : null}
@@ -596,7 +613,7 @@ export function RolePermissionsWorkspace({
                               checked={Boolean(currentDraft[definition.code])}
                               scope={currentDraft[definition.code]}
                               changed={currentDraft[definition.code] !== original[definition.code]}
-                              readOnly={readOnly}
+                              readOnly={readOnly || isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions)}
                               onToggle={(checked) => togglePermission(definition, checked)}
                               onScope={(scope) =>
                                 updateDraft((draft) => ({ ...draft, [definition.code]: scope }))
@@ -959,6 +976,9 @@ export function RolePermissionsWorkspace({
                 </div>
                 <div className={styles.drawerModuleList}>
                   {createModules.map((module) => {
+                    const assignableDefinitions = module.definitions.filter(
+                      (definition) => initialData.canManageSuperAdminPermissions || !definition.superAdminManaged,
+                    );
                     const activeCount = module.definitions.filter((item) => newRoleDraft[item.code]).length;
                     return (
                       <section className={styles.drawerModule} key={module.key}>
@@ -968,14 +988,14 @@ export function RolePermissionsWorkspace({
                             <strong>{module.label}</strong>
                             <span>{activeCount}/{module.definitions.length}</span>
                           </div>
-                          <label className={styles.selectAll}>
+                          {assignableDefinitions.length ? <label className={styles.selectAll}>
                             <span>Hamısını seç</span>
                             <input
                               type="checkbox"
-                              checked={activeCount === module.definitions.length}
-                              onChange={(event) => setNewRoleModule(module.definitions, event.target.checked)}
+                              checked={assignableDefinitions.every((item) => newRoleDraft[item.code])}
+                              onChange={(event) => setNewRoleModule(assignableDefinitions, event.target.checked)}
                             />
-                          </label>
+                          </label> : null}
                         </header>
                         {module.definitions.map((definition) => (
                           <PermissionRow
@@ -985,7 +1005,7 @@ export function RolePermissionsWorkspace({
                             checked={Boolean(newRoleDraft[definition.code])}
                             scope={newRoleDraft[definition.code]}
                             changed={false}
-                            readOnly={false}
+                            readOnly={definition.superAdminManaged && !initialData.canManageSuperAdminPermissions}
                             onToggle={(checked) => toggleNewRolePermission(definition, checked)}
                             onScope={(scope) =>
                               setNewRoleDraft((draft) => ({ ...draft, [definition.code]: scope }))
@@ -1114,6 +1134,7 @@ function PermissionRow({
         <div>
           <strong>{definition.actionLabel}</strong>
           {definition.sensitive ? <span>Həssas</span> : null}
+          {definition.superAdminManaged ? <span>Yalnız Super Admin</span> : null}
         </div>
         <p><b>{definition.tabLabel}</b> — {definition.description}</p>
       </div>
@@ -1200,6 +1221,27 @@ function changePermission(
     removePermissionAndDependents(next, definition.code, definitions);
   }
   return next;
+}
+
+function isPermissionLocked(
+  definition: PermissionDefinitionDto,
+  draft: PermissionDraft,
+  definitions: PermissionDefinitionDto[],
+  canManageSuperAdminPermissions: boolean,
+) {
+  if (canManageSuperAdminPermissions) return false;
+  if (definition.superAdminManaged) return true;
+
+  const byCode = new Map(definitions.map((item) => [item.code, item]));
+  return definitions.some((candidate) => {
+    if (!candidate.superAdminManaged || !draft[candidate.code]) return false;
+    let dependencyCode = candidate.dependsOn;
+    while (dependencyCode) {
+      if (dependencyCode === definition.code) return true;
+      dependencyCode = byCode.get(dependencyCode)?.dependsOn ?? null;
+    }
+    return false;
+  });
 }
 
 function changePermissionGroup(

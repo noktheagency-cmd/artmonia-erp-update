@@ -12,12 +12,15 @@ import {
   Eye,
   EyeOff,
   GraduationCap,
+  LoaderCircle,
   MoreHorizontal,
+  Power,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -38,13 +41,20 @@ import type { HrEmployeeData, HrEmployeeRow } from "@/modules/hr/employee-data";
 import type { TeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 import type { HrBonusData } from "@/modules/hr/bonus-data";
 import { BonusWorkspace } from "@/modules/hr/bonus-workspace";
-import { notifyCaughtError } from "@/lib/app-notifications";
+import type { CorporateCustomerData, CorporateCustomerRow } from "@/modules/hr/corporate-customer-data";
+import {
+  CorporateCustomerDeleteDialog,
+  CorporateCustomerDialog,
+  CorporateCustomerWorkspace,
+} from "@/modules/hr/corporate-customers";
+import { exportHrExcel } from "@/modules/hr/hr-excel-export";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import "./hr.css";
 import "./hr-payroll.css";
 import "./staff.css";
 
-type View = "overview" | "employees" | "teachers" | "bonus";
+type View = "overview" | "employees" | "teachers" | "corporate" | "bonus";
 type Action = (formData: FormData) => Promise<unknown>;
 const statusMeta = {
   ACTIVE: { label: "Aktiv", color: "#22a06b", className: "active" },
@@ -57,24 +67,30 @@ export function HrWorkspace({
   teacherData,
   employeeData,
   bonusData,
+  corporateData,
   actions,
 }: {
   teacherData: TeacherDirectoryData;
   employeeData: HrEmployeeData;
   bonusData: HrBonusData;
+  corporateData: CorporateCustomerData;
   actions: {
     create: Action;
     update: Action;
     remove: Action;
     updateTeacherSalary: Action;
     updateTeacher: Action;
-    archiveTeacher: Action;
+    setTeacherStatus: Action;
+    deleteTeacher: Action;
     createBonus: Action;
     adjustBonus: Action;
     approveBonus: Action;
     postBonus: Action;
     cancelBonus: Action;
     refreshBonuses: Action;
+    createCorporate: Action;
+    updateCorporate: Action;
+    deleteCorporate: Action;
   };
 }) {
   const router = useRouter();
@@ -83,12 +99,15 @@ export function HrWorkspace({
       ? "overview"
       : teacherData.permissions.canReadTeachers
         ? "teachers"
-        : "bonus",
+        : corporateData.permissions.canRead
+          ? "corporate"
+          : "bonus",
   );
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
   const [status, setStatus] = useState("all");
   const [editor, setEditor] = useState<HrEmployeeRow | "new" | null>(null);
+  const [newStaffType, setNewStaffType] = useState<"EMPLOYEE" | "TEACHER">("EMPLOYEE");
   const [deleting, setDeleting] = useState<HrEmployeeRow | null>(null);
   const [salaryTeacher, setSalaryTeacher] = useState<
     TeacherDirectoryData["teachers"][number] | null
@@ -99,7 +118,10 @@ export function HrWorkspace({
   const [deletingTeacher, setDeletingTeacher] = useState<
     TeacherDirectoryData["teachers"][number] | null
   >(null);
+  const [corporateEditor, setCorporateEditor] = useState<CorporateCustomerRow | "new" | null>(null);
+  const [deletingCorporate, setDeletingCorporate] = useState<CorporateCustomerRow | null>(null);
   const [notice, setNotice] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [pending, startTransition] = useTransition();
   const departments = useMemo(
     () =>
@@ -114,7 +136,7 @@ export function HrWorkspace({
         const needle = query.trim().toLocaleLowerCase("az");
         return (
           (!needle ||
-            `${item.fullName} ${item.position} ${item.department} ${item.email}`
+            `${item.fullName} ${item.position} ${item.department} ${item.email} ${item.phone} ${item.address}`
               .toLocaleLowerCase("az")
               .includes(needle)) &&
           (department === "all" || item.department === department) &&
@@ -144,6 +166,11 @@ export function HrWorkspace({
             setNotice(message);
             setEditor(null);
             setDeleting(null);
+            setSalaryTeacher(null);
+            setTeacherEditor(null);
+            setDeletingTeacher(null);
+            setCorporateEditor(null);
+            setDeletingCorporate(null);
             router.refresh();
           })
           .catch((error) =>
@@ -156,34 +183,18 @@ export function HrWorkspace({
     setDepartment("all");
     setStatus("all");
   }
-  function exportRows() {
-    const values = [
-      ["Ad soyad", "Vəzifə", "Departament", "Status", "Telefon"],
-      ...employees.map((item) => [
-        item.fullName,
-        item.position,
-        item.department,
-        statusMeta[item.status].label,
-        item.phone,
-      ]),
-    ];
-    const blob = new Blob(
-      [
-        "\ufeff",
-        values
-          .map((row) =>
-            row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(","),
-          )
-          .join("\n"),
-      ],
-      { type: "text/csv;charset=utf-8" },
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "hr-isciler.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  async function exportRows() {
+    if (view === "bonus" || exporting) return;
+    setExporting(true);
+    setNotice("");
+    try {
+      await exportHrExcel({ view, employees, teachers, corporateData });
+      notifySuccess("Excel ixracı hazırdır", "Peşəkar formatlı Excel faylı uğurla yaradıldı.");
+    } catch (error) {
+      setNotice(notifyCaughtError(error, "Excel ixracı hazırlanmadı.", "İxrac alınmadı"));
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -198,9 +209,10 @@ export function HrWorkspace({
             </p>
           </div>
           <div className="hr-command-actions">
-            {view !== "bonus" && employeeData.permissions.canExport ? (
-              <Button variant="outline" onClick={exportRows}>
-                <Download data-icon="inline-start" /> İxrac et
+            {view !== "bonus" && (view === "corporate" ? corporateData.permissions.canExport : view === "teachers" ? teacherData.permissions.canExport : employeeData.permissions.canExport) ? (
+              <Button variant="outline" disabled={exporting} onClick={() => void exportRows()}>
+                {exporting ? <LoaderCircle className="export-spin" data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+                {exporting ? "Hazırlanır..." : "Excel ixrac et"}
               </Button>
             ) : null}
             {view !== "bonus" ? <Button
@@ -211,9 +223,16 @@ export function HrWorkspace({
             >
               <RefreshCw />
             </Button> : null}
-            {view !== "bonus" && employeeData.permissions.canManage ? (
-              <Button onClick={() => setEditor("new")}>
-                <Plus data-icon="inline-start" /> Əməkdaş yarat
+            {view === "corporate" && corporateData.permissions.canManage ? (
+              <Button onClick={() => setCorporateEditor("new")}>
+                <Plus data-icon="inline-start" /> Şirkət əlavə et
+              </Button>
+            ) : view !== "bonus" && view !== "corporate" && employeeData.permissions.canManage ? (
+              <Button onClick={() => {
+                setNewStaffType(view === "teachers" ? "TEACHER" : "EMPLOYEE");
+                setEditor("new");
+              }}>
+                <Plus data-icon="inline-start" /> {view === "teachers" ? "Müəllim əlavə et" : "Əməkdaş yarat"}
               </Button>
             ) : null}
           </div>
@@ -222,9 +241,10 @@ export function HrWorkspace({
           {employeeData.permissions.canRead ? <TabsTrigger value="overview">İcmal</TabsTrigger> : null}
           {employeeData.permissions.canRead ? <TabsTrigger value="employees">Əməkdaşlar</TabsTrigger> : null}
           {teacherData.permissions.canReadTeachers ? <TabsTrigger value="teachers">Müəllim göstəriciləri</TabsTrigger> : null}
+          {corporateData.permissions.canRead ? <TabsTrigger value="corporate">Korporativ müştərilər</TabsTrigger> : null}
           {bonusData.permissions.canManage || bonusData.actorEmployeeId || bonusData.permissions.canSeeAll ? <TabsTrigger value="bonus">Bonus</TabsTrigger> : null}
         </TabsList>
-        {view !== "bonus" ? <div className="hr-filter-band">
+        {view !== "bonus" && view !== "corporate" ? <div className="hr-filter-band">
           <label className="hr-search">
             <Search />
             <input
@@ -299,7 +319,24 @@ export function HrWorkspace({
             canManage={teacherData.permissions.canManageTeacherRules}
             onEdit={setTeacherEditor}
             onEditSalary={setSalaryTeacher}
+            onStatusChange={(teacher) => {
+              const form = new FormData();
+              form.set("id", teacher.id);
+              form.set("status", teacher.isActive ? "INACTIVE" : "ACTIVE");
+              run(
+                () => actions.setTeacherStatus(form),
+                teacher.isActive ? "Müəllim passiv edildi." : "Müəllim aktiv edildi.",
+              );
+            }}
             onDelete={setDeletingTeacher}
+          />
+        </TabsContent>
+        <TabsContent value="corporate">
+          <CorporateCustomerWorkspace
+            data={corporateData}
+            onCreate={() => setCorporateEditor("new")}
+            onEdit={setCorporateEditor}
+            onDelete={setDeletingCorporate}
           />
         </TabsContent>
         <TabsContent value="bonus">
@@ -316,6 +353,35 @@ export function HrWorkspace({
           />
         </TabsContent>
       </Tabs>
+      {corporateEditor ? (
+        <CorporateCustomerDialog
+          customer={corporateEditor === "new" ? undefined : corporateEditor}
+          pending={pending}
+          onClose={() => setCorporateEditor(null)}
+          onSubmit={(formData) =>
+            run(
+              () => corporateEditor === "new"
+                ? actions.createCorporate(formData)
+                : actions.updateCorporate(formData),
+              corporateEditor === "new"
+                ? "Şirkət yaradıldı."
+                : "Şirkət məlumatları yeniləndi.",
+            )
+          }
+        />
+      ) : null}
+      {deletingCorporate ? (
+        <CorporateCustomerDeleteDialog
+          customer={deletingCorporate}
+          pending={pending}
+          onClose={() => setDeletingCorporate(null)}
+          onConfirm={() => {
+            const form = new FormData();
+            form.set("id", deletingCorporate.id);
+            run(() => actions.deleteCorporate(form), "Şirkət silindi.");
+          }}
+        />
+      ) : null}
       {editor ? (
         <EmployeeDialog
           employee={editor === "new" ? undefined : editor}
@@ -323,6 +389,7 @@ export function HrWorkspace({
           lookups={employeeData.lookups}
           roleOptions={employeeData.roleOptions}
           canCreateAccount={employeeData.permissions.canCreateAccount}
+          initialStaffType={newStaffType}
           pending={pending}
           onClose={() => setEditor(null)}
           onSubmit={(formData) =>
@@ -396,10 +463,11 @@ export function HrWorkspace({
         <Dialog open onOpenChange={(open) => !open && setDeletingTeacher(null)}>
           <DialogContent className="hr-confirm-dialog">
             <DialogHeader>
-              <DialogTitle>Müəllimi passiv etmək?</DialogTitle>
+              <DialogTitle>Müəllimlik statusunu silmək?</DialogTitle>
               <DialogDescription>
-                {deletingTeacher.fullName} yeni təyinatlarda görünməyəcək;
-                jurnal və maliyyə tarixçəsi qorunacaq.
+                {deletingTeacher.fullName} artıq müəllim kimi görünməyəcək.
+                İstifadəçi hesabı, digər rolları, jurnal və maliyyə tarixçəsi qorunacaq.
+                Aktiv təyinat varsa əvvəlcə başqa müəllimə keçirilməlidir.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -416,12 +484,12 @@ export function HrWorkspace({
                   const form = new FormData();
                   form.set("id", deletingTeacher.id);
                   run(
-                    () => actions.archiveTeacher(form),
-                    "Müəllim passiv edildi.",
+                    () => actions.deleteTeacher(form),
+                    "Müəllimlik statusu silindi; digər rollar qorundu.",
                   );
                 }}
               >
-                Passiv et
+                Müəllimlikdən sil
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -796,12 +864,14 @@ function TeacherTable({
   canManage,
   onEdit,
   onEditSalary,
+  onStatusChange,
   onDelete,
 }: {
   teachers: TeacherDirectoryData["teachers"];
   canManage: boolean;
   onEdit: (teacher: TeacherDirectoryData["teachers"][number]) => void;
   onEditSalary: (teacher: TeacherDirectoryData["teachers"][number]) => void;
+  onStatusChange: (teacher: TeacherDirectoryData["teachers"][number]) => void;
   onDelete: (teacher: TeacherDirectoryData["teachers"][number]) => void;
 }) {
   return (
@@ -887,12 +957,21 @@ function TeacherTable({
                           </Button>
                         ) : null}
                         <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`${teacher.fullName} ${teacher.isActive ? "passiv" : "aktiv"} et`}
+                          onClick={() => onStatusChange(teacher)}
+                        >
+                          <Power data-icon="inline-start" />
+                          {teacher.isActive ? "Passiv et" : "Aktiv et"}
+                        </Button>
+                        <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`${teacher.fullName} passiv et`}
+                          aria-label={`${teacher.fullName} müəllimlik statusunu sil`}
                           onClick={() => onDelete(teacher)}
                         >
-                          <MoreHorizontal />
+                          <Trash2 />
                         </Button>
                       </div>
                     </td>
@@ -919,6 +998,7 @@ function EmployeeDialog({
   lookups,
   roleOptions,
   canCreateAccount,
+  initialStaffType,
   pending,
   onClose,
   onSubmit,
@@ -928,12 +1008,13 @@ function EmployeeDialog({
   lookups: HrEmployeeData["lookups"];
   roleOptions: HrEmployeeData["roleOptions"];
   canCreateAccount: boolean;
+  initialStaffType: "EMPLOYEE" | "TEACHER";
   pending: boolean;
   onClose: () => void;
   onSubmit: (form: FormData) => void;
 }) {
   const [staffType, setStaffType] = useState<"EMPLOYEE" | "TEACHER">(
-    employee?.staffType ?? "EMPLOYEE",
+    employee?.staffType ?? initialStaffType,
   );
   const [salaryMode, setSalaryMode] = useState<"STATIC" | "PERCENT">(
     employee?.salaryMode ?? "STATIC",
@@ -943,7 +1024,10 @@ function EmployeeDialog({
   const [photoPreview, setPhotoPreview] = useState(employee?.profilePhotoUrl ?? "");
   const [photoError, setPhotoError] = useState("");
   const teacherRole = roleOptions.find((role) => role.code === "TEACHER");
-  const [roleIds, setRoleIds] = useState<string[]>(employee?.roles.map((role) => role.id) ?? []);
+  const [roleIds, setRoleIds] = useState<string[]>(
+    employee?.roles.map((role) => role.id)
+      ?? (initialStaffType === "TEACHER" && teacherRole ? [teacherRole.id] : []),
+  );
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSubmit(new FormData(event.currentTarget));
@@ -955,6 +1039,8 @@ function EmployeeDialog({
       if (teacherRole) {
         setRoleIds((current) => current.includes(teacherRole.id) ? current : [...current, teacherRole.id]);
       }
+    } else if (teacherRole) {
+      setRoleIds((current) => current.filter((roleId) => roleId !== teacherRole.id));
     }
   }
   function changeProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -988,10 +1074,7 @@ function EmployeeDialog({
         </DialogHeader>
         <form onSubmit={submit} className="hr-employee-form">
           {employee ? (
-            <>
-              <input type="hidden" name="id" value={employee.id} />
-              <input type="hidden" name="staffType" value={staffType} />
-            </>
+            <input type="hidden" name="id" value={employee.id} />
           ) : null}
           <div className="hr-profile-photo-field is-wide">
             <div className="hr-profile-photo-preview" aria-hidden="true">
@@ -1011,9 +1094,8 @@ function EmployeeDialog({
           <label className="is-wide">
             <span>Əməkdaş tipi</span>
             <select
-              name={employee ? undefined : "staffType"}
+              name="staffType"
               value={staffType}
-              disabled={Boolean(employee)}
               onChange={(event) =>
                 changeStaffType(event.target.value as "EMPLOYEE" | "TEACHER")
               }
@@ -1033,6 +1115,15 @@ function EmployeeDialog({
           <label>
             <span>Telefon</span>
             <Input name="phone" defaultValue={employee?.phone} />
+          </label>
+          <label className="is-wide">
+            <span>Ünvan</span>
+            <Input
+              name="address"
+              defaultValue={employee?.address}
+              maxLength={240}
+              placeholder="Yaşayış ünvanı"
+            />
           </label>
           <CreatableLookup
             name="department"
@@ -1200,7 +1291,7 @@ function EmployeeDialog({
                     </div>
                   </label>
                   <RoleMultiSelect
-                    roleOptions={roleOptions}
+                    roleOptions={roleOptions.filter((role) => staffType === "TEACHER" || role.code !== "TEACHER")}
                     value={roleIds}
                     onValueChange={setRoleIds}
                   />
@@ -1227,7 +1318,7 @@ function EmployeeDialog({
                 <small>Əməkdaşa bir və ya bir neçə rol verə bilərsiniz.</small>
               </div>
               <RoleMultiSelect
-                roleOptions={roleOptions}
+                roleOptions={roleOptions.filter((role) => staffType === "TEACHER" || role.code !== "TEACHER")}
                 value={roleIds}
                 onValueChange={setRoleIds}
               />
@@ -1242,8 +1333,15 @@ function EmployeeDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Ləğv et
             </Button>
-            <Button type="submit" disabled={pending || ((createAccount || Boolean(employee?.userId && canCreateAccount)) && roleIds.length === 0)}>
-              {employee ? "Yadda saxla" : "Əməkdaşı yarat"}
+            <Button
+              type="submit"
+              disabled={pending || (
+                (createAccount || Boolean(employee?.userId && canCreateAccount))
+                && roleIds.length === 0
+                && !(employee?.staffType === "TEACHER" && staffType === "EMPLOYEE")
+              )}
+            >
+              {employee ? "Yadda saxla" : staffType === "TEACHER" ? "Müəllimi əlavə et" : "Əməkdaşı yarat"}
             </Button>
           </DialogFooter>
         </form>
@@ -1407,7 +1505,8 @@ function TeacherProfileDialog({
             {teacher ? "Müəllim profilini yenilə" : "Yeni müəllim"}
           </DialogTitle>
           <DialogDescription>
-            Profil, tutum və maaş faizi eyni əməliyyatda saxlanacaq.
+            Profil və tutum yenilənəcək
+            {teacher?.salaryMode === "PERCENT" ? "; maaş faizi də eyni əməliyyatda saxlanacaq." : "."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="hr-teacher-salary-form">
@@ -1433,18 +1532,20 @@ function TeacherProfileDialog({
               required
             />
           </label>
-          <label>
-            <span>Maaş faizi</span>
-            <Input
-              name="salaryPercent"
-              type="number"
-              min="0.01"
-              max="100"
-              step="0.01"
-              defaultValue={teacher?.salaryPercent || ""}
-              required
-            />
-          </label>
+          {teacher?.salaryMode !== "STATIC" ? (
+            <label>
+              <span>Maaş faizi</span>
+              <Input
+                name="salaryPercent"
+                type="number"
+                min="0.01"
+                max="100"
+                step="0.01"
+                defaultValue={teacher?.salaryPercent || ""}
+                required
+              />
+            </label>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Ləğv et

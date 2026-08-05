@@ -26,11 +26,13 @@ import {
   PanelLeftOpen,
   Presentation,
   Settings2,
+  ShieldCheck,
   ListTodo,
   UsersRound,
   X,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
+import { SessionHeartbeat } from "@/components/auth/session-heartbeat";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 type ShellUser = {
@@ -52,12 +54,13 @@ const primaryNavItems: NavItem[] = [
   { href: "/students", label: "Tələbələr", icon: GraduationCap, requiredPermissions: ["student.read"] },
   { href: "/crm", label: "Follow-up", icon: UsersRound, requiredPermissions: ["crm.lead.read"] },
   { href: "/finance", label: "Maliyyə", icon: CreditCard, requiredPermissions: ["billing.invoice.read", "billing.payment.read", "billing.expense.read"] },
-  { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness, requiredPermissions: ["hr.employee.read", "teacher.read", "hr.bonus.read"] },
+  { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness, requiredPermissions: ["hr.employee.read", "teacher.read", "hr.corporate.read", "hr.bonus.read"] },
   { href: "/groups" as Route, label: "Qruplar", icon: CalendarDays, requiredPermissions: ["group.read", "attendance.read"] },
   { href: "/tasks" as Route, label: "Tasklar", icon: ListTodo, requiredPermissions: ["task.read"] },
 ];
 
 const secondaryNavItems: NavItem[] = [
+  { href: "/audit" as Route, label: "Audit və təhlükəsizlik", icon: ShieldCheck, requiredPermissions: [] },
   { href: "/marketing" as Route, label: "Marketing", icon: Megaphone, requiredPermissions: ["marketing.read"] },
   { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText, requiredPermissions: ["playbook.read"] },
   { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation, requiredPermissions: ["workshop.read"] },
@@ -75,10 +78,12 @@ export function AppShell({
   children,
   currentUser,
   signOutAction,
+  sessionGuardEnabled,
 }: {
   children: React.ReactNode;
   currentUser: ShellUser;
   signOutAction: () => void | Promise<void>;
+  sessionGuardEnabled: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -100,7 +105,9 @@ export function AppShell({
   const activePendingHref = pendingHref && pendingHref !== currentHref ? pendingHref : null;
   const isNavigating = Boolean(activePendingHref);
   const permissionSet = new Set(currentUser.permissions);
-  const isVisible = (item: NavItem) => item.requiredPermissions.some((permission) => permissionSet.has(permission));
+  const isVisible = (item: NavItem) =>
+    item.requiredPermissions.length === 0 ||
+    item.requiredPermissions.some((permission) => permissionSet.has(permission));
   const visiblePrimaryNavItems = primaryNavItems.filter(isVisible);
   const visibleSecondaryNavItems = secondaryNavItems.filter(isVisible);
   const mobileNavCandidates = [
@@ -254,6 +261,7 @@ export function AppShell({
         isMobileSidebarOpen && "is-mobile-sidebar-open"
       )}
     >
+      {sessionGuardEnabled ? <SessionHeartbeat /> : null}
       <div className="studio-wash" aria-hidden="true" />
       <div className="route-progress" aria-hidden={!isNavigating} data-visible={isNavigating} />
       <header className="mobile-shell-bar">

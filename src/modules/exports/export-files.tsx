@@ -2,6 +2,10 @@ import { join } from "node:path";
 import React from "react";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { ExportField } from "@/modules/exports/export-config";
+import {
+  createProfessionalExcelFile,
+  type ExcelColumnKind,
+} from "@/modules/exports/excel-workbook";
 
 Font.register({
   family: "Noto Sans",
@@ -32,7 +36,7 @@ const styles = StyleSheet.create({
 export type PreparedExport = {
   title: string;
   fields: ExportField[];
-  rows: Array<Record<string, string>>;
+  rows: Array<Record<string, string | number | null>>;
   summary: string[];
 };
 
@@ -40,9 +44,24 @@ export function createCsvFile(exportData: PreparedExport) {
   const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const lines = [
     exportData.fields.map((field) => escape(field.label)).join(","),
-    ...exportData.rows.map((row) => exportData.fields.map((field) => escape(row[field.key] ?? "")).join(",")),
+    ...exportData.rows.map((row) => exportData.fields.map((field) => escape(String(row[field.key] ?? ""))).join(",")),
   ];
   return `\uFEFF${lines.join("\r\n")}`;
+}
+
+export function createExcelFile(exportData: PreparedExport) {
+  return createProfessionalExcelFile({
+    title: exportData.title,
+    worksheetName: exportData.title,
+    summary: exportData.summary,
+    columns: exportData.fields.map((field) => ({
+      key: field.key,
+      label: field.label,
+      kind: excelKindForField(field),
+      wrap: Boolean(field.detail),
+    })),
+    rows: exportData.rows,
+  });
 }
 
 export async function createPdfFile(exportData: PreparedExport) {
@@ -92,4 +111,13 @@ function ExportPdf({ exportData }: { exportData: PreparedExport }) {
       </Page>
     </Document>
   );
+}
+
+function excelKindForField(field: ExportField): ExcelColumnKind {
+  if (["amount", "balance"].includes(field.key)) return "currency";
+  if (["overdueDays", "trialLessonCount"].includes(field.key)) return "number";
+  if (["nextFollowUp", "createdAt"].includes(field.key)) return "datetime";
+  if (["dueDate", "registeredAt", "paidAt", "expenseDate", "joinedAt", "date"].includes(field.key)) return "date";
+  if (["stage", "priority", "lifecycle", "paymentStatus", "attendance", "status"].includes(field.key)) return "status";
+  return "text";
 }

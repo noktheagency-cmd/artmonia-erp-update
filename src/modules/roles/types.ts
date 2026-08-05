@@ -60,6 +60,7 @@ export type PermissionDefinitionDto = {
   actionLabel: string;
   description: string;
   sensitive: boolean;
+  superAdminManaged: boolean;
   supportsScope: boolean;
   dependsOn: PermissionCode | null;
 };
@@ -70,6 +71,7 @@ export type RolePermissionMatrix = {
   definitions: PermissionDefinitionDto[];
   auditLogs: AuditLogDto[];
   canManage: boolean;
+  canManageSuperAdminPermissions: boolean;
   canManageUsers: boolean;
   canViewAudit: boolean;
 };

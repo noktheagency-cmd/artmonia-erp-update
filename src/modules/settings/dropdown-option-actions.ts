@@ -25,6 +25,7 @@ const catalogConfig: Record<
 > = {
   CRM_SOURCE: { permission: "crm.lead.update", revalidate: ["/crm", "/students"], renameValue: true },
   STUDENT_EDUCATION_LEVEL: { permission: "settings.manage", revalidate: ["/students", "/crm"], renameValue: true },
+  STUDENT_DISCOUNT_TYPE: { permission: "student.create", revalidate: ["/students"], renameValue: false },
   HR_DEPARTMENT: { permission: "hr.employee.manage", revalidate: ["/hr"], renameValue: true },
   HR_POSITION: { permission: "hr.employee.manage", revalidate: ["/hr"], renameValue: true },
   WORKSHOP_EVENT_TYPE: { permission: "workshop.manage", revalidate: ["/workshops"], renameValue: false },
@@ -167,6 +168,9 @@ async function migrateDropdownCatalogValue(
         tx.student.updateMany({ where: { educationLevel: from }, data: { educationLevel: to } }),
         tx.lead.updateMany({ where: { educationLevel: from }, data: { educationLevel: to } }),
       ]);
+      return;
+    case "STUDENT_DISCOUNT_TYPE":
+      await tx.enrollment.updateMany({ where: { discountType: from }, data: { discountType: to } });
       return;
     case "HR_DEPARTMENT":
       await Promise.all([

@@ -12,6 +12,7 @@ import {
 export type ErpActor = {
   id: string;
   authUserId: string | null;
+  currentSessionId: string | null;
   fullName: string;
   email: string;
   profilePhotoUrl: string | null;
@@ -38,6 +39,7 @@ export async function requireErpActor(
     const actor = {
       id: currentUser.id,
       authUserId: currentUser.authUserId,
+      currentSessionId: currentUser.currentSessionId,
       fullName: currentUser.fullName,
       email: currentUser.email,
       profilePhotoUrl: currentUser.profilePhotoUrl,
@@ -103,6 +105,7 @@ const getDevelopmentActor = cache(async (): Promise<ErpActor> => {
   return {
     id: demoActor.id,
     authUserId: demoActor.authUserId,
+    currentSessionId: null,
     fullName: demoActor.fullName,
     email: demoActor.email,
     profilePhotoUrl: demoActor.profilePhotoUrl,

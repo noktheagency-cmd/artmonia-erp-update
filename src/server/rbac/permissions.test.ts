@@ -27,6 +27,18 @@ test("Owner can read and manage role permissions by default", () => {
   const permissions = getPermissionsForRoles([AppRole.OWNER]);
   assert.equal(permissions.has("auth.role.read"), true);
   assert.equal(permissions.has("auth.role.manage"), true);
+  assert.equal(permissions.has("playbook.guideline.read"), false);
+});
+
+test("Guideline access defaults to Super Admin only", () => {
+  const definition = permissionDefinitions.find(({ code }) => code === "playbook.guideline.read");
+
+  assert.equal(definition && "dependsOn" in definition ? definition.dependsOn : null, "playbook.read");
+  assert.equal(definition && "superAdminManaged" in definition ? definition.superAdminManaged : false, true);
+  assert.equal(getPermissionsForRoles([AppRole.SUPER_ADMIN]).has("playbook.guideline.read"), true);
+  for (const role of Object.values(AppRole).filter((role) => role !== AppRole.SUPER_ADMIN)) {
+    assert.equal(getPermissionsForRoles([role]).has("playbook.guideline.read"), false, role);
+  }
 });
 
 test("multiple roles are merged without removing broader grants", () => {

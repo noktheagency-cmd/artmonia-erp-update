@@ -184,7 +184,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
               module="crm"
               resultCount={data.leads.length}
               filters={{ q: data.query, stage: data.filters.stage, owner: data.filters.owner, program: data.filters.program, source: data.filters.source, priority: data.filters.priority, followUp: data.filters.followUp, from: data.filters.dateFrom, to: data.filters.dateTo }}
-              previewRows={data.leads.map((lead) => ({ name: lead.name, phone: lead.phone, program: lead.program, source: lead.source, stage: lead.stageLabel, priority: lead.priorityLabel, nextAction: lead.nextActionTypeLabel, nextFollowUp: lead.nextFollowUpAt, manager: lead.manager, createdAt: lead.createdAt, note: lead.latestNote, convertedStudent: lead.detail.convertedStudentCode, history: "" }))}
+              previewRows={data.leads.map((lead) => ({ name: lead.name, phone: lead.phone, program: lead.program, source: lead.source, stage: lead.stageLabel, trialLessonCount: lead.trialLessonCount || "-", priority: lead.priorityLabel, nextAction: lead.nextActionTypeLabel, nextFollowUp: lead.nextFollowUpAt, manager: lead.manager, createdAt: lead.createdAt, note: lead.latestNote, convertedStudent: lead.detail.convertedStudentCode, history: "" }))}
             />
           ) : null}
           {data.access.canCreateLead ? (

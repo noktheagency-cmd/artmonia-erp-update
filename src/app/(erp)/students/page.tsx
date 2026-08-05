@@ -10,6 +10,7 @@ export default async function StudentsPage({
   searchParams: Promise<{
     q?: string;
     status?: string;
+    churn?: string;
     program?: string;
     teacher?: string;
     payment?: string;

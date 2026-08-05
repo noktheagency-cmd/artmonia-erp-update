@@ -31,6 +31,7 @@ enum LeadStage {
   NEW
   CONTACTED
   QUALIFIED
+  TRIAL_LESSON
   TRIAL_CONSULTATION
   REGISTERED
   LOST
@@ -50,6 +51,7 @@ enum LeadPriority {
 enum LeadNextActionType {
   CALL
   CONSULTATION_REMINDER
+  TRIAL_LESSON_REMINDER
   PAYMENT_REMINDER
   FOLLOW_UP
 
@@ -233,6 +235,15 @@ enum HrEmployeeStatus {
   @@schema("erp")
 }
 
+enum HrCorporateCustomerStatus {
+  ACTIVE
+  POTENTIAL
+  PAUSED
+  INACTIVE
+
+  @@schema("erp")
+}
+
 enum HrStaffType {
   EMPLOYEE
   TEACHER
@@ -339,6 +350,8 @@ model User {
   ownedTargets                     Target[]                    @relation("TargetOwner")
   managedTargets                   Target[]                    @relation("TargetManager")
   auditLogs                        AuditLog[]                  @relation("AuditActor")
+  authSessions                     AuthSessionRecord[]         @relation("AuthSessionUser")
+  revokedAuthSessions              AuthSessionRecord[]         @relation("AuthSessionRevoker")
   exports                          DataExport[]                @relation("ExportRequestedBy")
   createdFinanceExpenses           FinanceExpense[]            @relation("FinanceExpenseCreator")
   employeeFinanceExpenses          FinanceExpense[]            @relation("FinanceExpenseEmployee")
@@ -370,7 +383,8 @@ model User {
   bonusProgressAdjustments         HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
   approvedBonusAwards              HrBonusAward[]              @relation("HrBonusAwardApprover")
   createdHrNotifications           HrStaffNotification[]       @relation("HrNotificationCreator")
-  createdDropdownCatalogOptions    DropdownCatalogOption[]      @relation("DropdownCatalogOptionCreator")
+  createdCorporateCustomers        HrCorporateCustomer[]       @relation("HrCorporateCustomerCreator")
+  createdDropdownCatalogOptions    DropdownCatalogOption[]     @relation("DropdownCatalogOptionCreator")
 
   @@map("users")
   @@schema("erp")
@@ -384,6 +398,7 @@ model HrEmployee {
   fullName        String            @map("full_name")
   email           String?
   phone           String?
+  address         String?
   department      String
   position        String
   hireDate        DateTime          @map("hire_date") @db.Date
@@ -407,6 +422,47 @@ model HrEmployee {
   @@index([status])
   @@index([department])
   @@map("hr_employees")
+  @@schema("erp")
+}
+
+model HrCorporateCustomer {
+  id            String                    @id @default(uuid()) @db.Uuid
+  name          String
+  taxId         String?                   @unique @map("tax_id")
+  status        HrCorporateCustomerStatus @default(ACTIVE)
+  monthlyBudget Decimal                   @map("monthly_budget") @db.Decimal(14, 2)
+  contractValue Decimal?                  @map("contract_value") @db.Decimal(14, 2)
+  note          String?
+  createdById   String?                   @map("created_by_id") @db.Uuid
+  createdAt     DateTime                  @default(now()) @map("created_at")
+  updatedAt     DateTime                  @updatedAt @map("updated_at")
+
+  createdBy User?                @relation("HrCorporateCustomerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  contacts  HrCorporateContact[]
+
+  @@index([status, updatedAt])
+  @@index([name])
+  @@index([createdById])
+  @@map("hr_corporate_customers")
+  @@schema("erp")
+}
+
+model HrCorporateContact {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  fullName   String   @map("full_name")
+  position   String?
+  phone      String?
+  email      String?
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  customer HrCorporateCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, isPrimary])
+  @@index([email])
+  @@map("hr_corporate_contacts")
   @@schema("erp")
 }
 
@@ -959,6 +1015,7 @@ model Lead {
   programInterestId  String?             @map("program_interest_id") @db.Uuid
   nextFollowUpAt     DateTime?           @map("next_follow_up_at")
   nextActionType     LeadNextActionType? @map("next_action_type")
+  trialLessonCount   Int?                @map("trial_lesson_count")
   priority           LeadPriority        @default(NORMAL)
   lostReason         String?             @map("lost_reason")
   convertedStudentId String?             @unique @map("converted_student_id") @db.Uuid
@@ -1181,6 +1238,7 @@ model Enrollment {
   startDate       DateTime         @map("start_date") @db.Date
   firstLessonAt   DateTime?        @map("first_lesson_at") @db.Date
   monthlyFee      Decimal          @map("monthly_fee") @db.Decimal(12, 2)
+  discountType    String?          @map("discount_type")
   lessonsPerMonth Int?             @map("lessons_per_month")
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
@@ -1831,6 +1889,38 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("audit_logs")
+  @@schema("erp")
+}
+
+model AuthSessionRecord {
+  id             String    @id @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  userAgent      String?   @map("user_agent")
+  clientHints    Json?     @map("client_hints")
+  ipAddress      String?   @map("ip_address")
+  city           String?
+  country        String?
+  deviceType     String    @default("UNKNOWN") @map("device_type")
+  deviceName     String    @default("Naməlum cihaz") @map("device_name")
+  browserName    String    @default("Naməlum brauzer") @map("browser_name")
+  browserVersion String?   @map("browser_version")
+  osName         String    @default("Naməlum sistem") @map("os_name")
+  osVersion      String?   @map("os_version")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  lastSeenAt     DateTime  @default(now()) @map("last_seen_at")
+  revokedAt      DateTime? @map("revoked_at")
+  revokedById    String?   @map("revoked_by_id") @db.Uuid
+  revokeReason   String?   @map("revoke_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user      User  @relation("AuthSessionUser", fields: [userId], references: [id], onDelete: Cascade)
+  revokedBy User? @relation("AuthSessionRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, revokedAt, lastSeenAt])
+  @@index([revokedById, revokedAt])
+  @@index([lastSeenAt])
+  @@map("auth_session_records")
   @@schema("erp")
 }
 

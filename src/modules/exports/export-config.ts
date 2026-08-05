@@ -3,7 +3,7 @@ import { z } from "zod";
 export const exportModules = ["crm", "students", "finance", "groups"] as const;
 export type ExportModule = (typeof exportModules)[number];
 
-export const exportFormats = ["csv", "pdf"] as const;
+export const exportFormats = ["xlsx", "csv", "pdf"] as const;
 export type ExportFormat = (typeof exportFormats)[number];
 
 export type ExportField = {
@@ -25,6 +25,7 @@ const commonLeadFields: ExportField[] = [
   { key: "program", label: "Proqram", defaultSelected: true },
   { key: "source", label: "Mənbə", defaultSelected: true },
   { key: "stage", label: "Mərhələ", defaultSelected: true },
+  { key: "trialLessonCount", label: "Sınaq dərsi sayı", defaultSelected: true },
   { key: "priority", label: "Prioritet", defaultSelected: true },
   { key: "nextAction", label: "Növbəti addım", defaultSelected: true },
   { key: "nextFollowUp", label: "Növbəti əlaqə tarixi", defaultSelected: true },

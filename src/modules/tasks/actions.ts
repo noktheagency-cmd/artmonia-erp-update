@@ -7,7 +7,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
-import { safeServerAction } from "@/server/actions/safe-action";
+import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -19,6 +19,10 @@ const createTaskSchema = z.object({
 const updateStatusSchema = z.object({
   taskId: z.string().uuid(),
   status: z.nativeEnum(TaskStatus),
+});
+
+const deleteTaskSchema = z.object({
+  taskId: z.string().uuid(),
 });
 
 async function createTaskActionImpl(formData: FormData) {
@@ -116,6 +120,51 @@ async function updateTaskStatusActionImpl(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+async function deleteTaskActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("task.manage");
+  const input = deleteTaskSchema.parse(Object.fromEntries(formData));
+  const manageScope = scopeFor(actor.permissions, "task.manage");
+
+  await getPrisma().$transaction(async (tx) => {
+    const task = await tx.task.findUnique({
+      where: { id: input.taskId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        dueAt: true,
+        ownerUserId: true,
+        createdById: true,
+      },
+    });
+
+    if (!task) {
+      throw new PublicActionError("Task tapılmadı.", "NOT_FOUND");
+    }
+
+    if (manageScope !== "ALL" && task.ownerUserId !== actor.id) {
+      throw new PublicActionError("Bu taskı silmək icazəniz yoxdur.", "FORBIDDEN");
+    }
+
+    await tx.task.delete({ where: { id: task.id } });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "task.delete",
+      entityType: "task",
+      entityId: task.id,
+      before: {
+        ...task,
+        dueAt: task.dueAt?.toISOString() ?? null,
+      } satisfies Prisma.InputJsonValue,
+      reason: "Task tamamilə silindi",
+    });
+  });
+
+  revalidatePath("/tasks");
+  revalidatePath("/dashboard");
+}
+
 export const createTaskAction = safeServerAction(
   createTaskActionImpl,
   "Task yaradılmadı.",
@@ -124,4 +173,9 @@ export const createTaskAction = safeServerAction(
 export const updateTaskStatusAction = safeServerAction(
   updateTaskStatusActionImpl,
   "Task statusu yenilənmədi.",
+);
+
+export const deleteTaskAction = safeServerAction(
+  deleteTaskActionImpl,
+  "Task silinmədi.",
 );

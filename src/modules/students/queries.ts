@@ -26,6 +26,7 @@ type FilterOption = { value: string; label: string };
 export type StudentListFilters = {
   q?: string;
   status?: string;
+  churn?: string;
   program?: string;
   teacher?: string;
   payment?: string;
@@ -69,6 +70,7 @@ export type StudentListData = {
     }>;
     teachers: Array<{ id: string; fullName: string }>;
     campaigns: Array<{ id: string; name: string }>;
+    discountTypes: Array<{ value: string; label: string }>;
     sourceOptions: string[];
     currentManagerName: string;
     defaultRegisteredDate: string;
@@ -77,6 +79,7 @@ export type StudentListData = {
   };
   filters: {
     status: string;
+    churn: boolean;
     program: string;
     teacher: string;
     payment: StudentPaymentFilter;
@@ -186,6 +189,7 @@ const UNASSIGNED_TEACHER = "unassigned";
 type StudentListCacheInput = {
   search: string;
   statusFilter: StudentLifecycleStatus | "";
+  churnOnly: boolean;
   programFilter: string;
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
@@ -291,6 +295,7 @@ export async function getStudentListData(
   const actor = await requireErpActor("student.read");
   const search = (input.q ?? "").trim();
   const statusFilter = normalizeLifecycleStatus(input.status);
+  const churnOnly = normalizeChurnFilter(input.churn);
   const programFilter = formFilterString(input.program);
   const teacherFilter = formFilterString(input.teacher);
   const paymentFilter = normalizePaymentFilter(input.payment);
@@ -300,6 +305,7 @@ export async function getStudentListData(
   const { rows, options, clv, paymentSummary } = await readStudentListRawData({
     search,
     statusFilter,
+    churnOnly,
     programFilter,
     teacherFilter,
     paymentFilter,
@@ -307,7 +313,7 @@ export async function getStudentListData(
     dateFrom: dateFromFilter.input,
     dateTo: dateToFilter.input,
   });
-  const { programs, teachers, leads: convertibleLeads, sources, campaigns } = options;
+  const { programs, teachers, leads: convertibleLeads, sources, campaigns, discountTypes } = options;
 
   const summaryCounts = new Map(
     Object.entries(options.summaryCounts).map(([status, count]) => [
@@ -328,6 +334,7 @@ export async function getStudentListData(
     StudentLifecycleStatus.FROZEN,
     StudentLifecycleStatus.STOPPED,
     StudentLifecycleStatus.DECLINED,
+    StudentLifecycleStatus.COMPLETED,
   ];
   const programOptions = programs.map((program) => ({
     value: program.id,
@@ -343,6 +350,7 @@ export async function getStudentListData(
   const activeCount = [
     search,
     statusFilter,
+    churnOnly,
     programFilter,
     teacherFilter,
     paymentFilter !== "all" ? paymentFilter : "",
@@ -355,6 +363,7 @@ export async function getStudentListData(
     returnTo: buildStudentsUrl({
       q: search,
       status: statusFilter,
+      churn: churnOnly,
       program: programFilter,
       teacher: teacherFilter,
       payment: paymentFilter,
@@ -384,6 +393,7 @@ export async function getStudentListData(
       })),
       teachers,
       campaigns,
+      discountTypes,
       sourceOptions: buildCrmSourceOptions(sources),
       currentManagerName: actor.fullName,
       defaultRegisteredDate: formatDateInput(new Date()),
@@ -392,6 +402,7 @@ export async function getStudentListData(
     },
     filters: {
       status: statusFilter,
+      churn: churnOnly,
       program: programFilter,
       teacher: teacherFilter,
       payment: paymentFilter,
@@ -623,6 +634,7 @@ async function getStudentRows(
   input: {
     search: string;
     statusFilter: StudentLifecycleStatus | "";
+    churnOnly: boolean;
     programFilter: string;
     teacherFilter: string;
     paymentFilter: StudentPaymentFilter;
@@ -824,6 +836,7 @@ type StudentCreateOptionRows = {
   }>;
   teachers: Array<{ id: string; fullName: string }>;
   campaigns: Array<{ id: string; name: string }>;
+  discountTypes: Array<{ value: string; label: string }>;
   sources: string[];
   leads: StudentListData["createOptions"]["leads"];
 };
@@ -834,13 +847,14 @@ type StudentCreateOptionsRawRow = {
   programs: unknown;
   teachers: unknown;
   campaigns: unknown;
+  discountTypes: unknown;
   sources: unknown;
   leads: unknown;
 };
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v6"],
+  ["student-list-data-v7"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -868,6 +882,7 @@ async function getStudentListRawData(
   const filterInput = {
     search: input.search,
     statusFilter: input.statusFilter,
+    churnOnly: input.churnOnly,
     programFilter: input.programFilter,
     teacherFilter: input.teacherFilter,
     paymentFilter: input.paymentFilter,
@@ -1018,6 +1033,15 @@ async function getStudentCreateOptions(
       ), '[]'::jsonb) as "campaigns",
       coalesce((
         select jsonb_agg(
+          jsonb_build_object('value', dco.value, 'label', dco.label)
+          order by dco.label asc, dco.created_at asc
+        )
+        from erp.dropdown_catalog_options dco
+        where dco.catalog = 'STUDENT_DISCOUNT_TYPE'
+          and dco.is_active = true
+      ), '[]'::jsonb) as "discountTypes",
+      coalesce((
+        select jsonb_agg(
           jsonb_build_object(
             'id', ordered.id,
             'name', ordered.name,
@@ -1071,6 +1095,7 @@ async function getStudentCreateOptions(
       row?.teachers
     ),
     campaigns: asJsonArray<StudentCreateOptionRows["campaigns"][number]>(row?.campaigns),
+    discountTypes: asJsonArray<StudentCreateOptionRows["discountTypes"][number]>(row?.discountTypes),
     sources: asJsonArray<string>(row?.sources),
     leads: asJsonArray<StudentCreateOptionRows["leads"][number]>(row?.leads),
   };
@@ -1079,6 +1104,7 @@ async function getStudentCreateOptions(
 function buildStudentWhereSql({
   search,
   statusFilter,
+  churnOnly,
   programFilter,
   teacherFilter,
   paymentFilter,
@@ -1088,6 +1114,7 @@ function buildStudentWhereSql({
 }: {
   search: string;
   statusFilter: StudentLifecycleStatus | "";
+  churnOnly: boolean;
   programFilter: string;
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
@@ -1117,6 +1144,14 @@ function buildStudentWhereSql({
     conditions.push(
       Prisma.sql`s.lifecycle_status = ${statusFilter}::"erp"."StudentLifecycleStatus"`
     );
+  }
+
+  if (churnOnly) {
+    conditions.push(Prisma.sql`s.lifecycle_status in (
+      'FROZEN'::"erp"."StudentLifecycleStatus",
+      'STOPPED'::"erp"."StudentLifecycleStatus",
+      'DECLINED'::"erp"."StudentLifecycleStatus"
+    )`);
   }
 
   if (programFilter) {
@@ -1278,6 +1313,10 @@ function normalizePaymentFilter(value: string | undefined): StudentPaymentFilter
     : "all";
 }
 
+function normalizeChurnFilter(value: string | undefined) {
+  return value === "1" || value === "true";
+}
+
 function getPaymentStatus(
   balance: number,
   nextDueDate: Date | undefined,
@@ -1338,6 +1377,7 @@ function normalizeDateValue(value: string | undefined) {
 function buildStudentsUrl({
   q,
   status,
+  churn,
   program,
   teacher,
   payment,
@@ -1346,6 +1386,7 @@ function buildStudentsUrl({
 }: {
   q: string;
   status: StudentLifecycleStatus | "";
+  churn: boolean;
   program: string;
   teacher: string;
   payment: StudentPaymentFilter;
@@ -1360,6 +1401,10 @@ function buildStudentsUrl({
 
   if (status) {
     params.set("status", status);
+  }
+
+  if (churn) {
+    params.set("churn", "1");
   }
 
   if (program) {

@@ -33,6 +33,7 @@ export type HrStaffProfileData = {
     staffType: "EMPLOYEE" | "TEACHER";
     email: string;
     phone: string;
+    address: string;
     department: string;
     position: string;
     hireDate: string;
@@ -125,6 +126,7 @@ export async function getHrStaffProfileData(
       staffType: employee.staffType,
       email: employee.email ?? "",
       phone: employee.phone ?? "",
+      address: employee.address ?? "",
       department: employee.department,
       position: employee.position,
       hireDate: employee.hireDate.toISOString(),

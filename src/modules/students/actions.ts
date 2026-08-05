@@ -7,9 +7,10 @@ import {
   InvoiceStatus,
   LeadStage,
   PaymentAllocationMode,
+  Prisma,
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
-import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
+import type { PaymentMethod } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
@@ -18,6 +19,10 @@ import { optionalFormString } from "@/modules/shared/form-values";
 import { toNumber } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
+import {
+  isGiftDiscount,
+  resolveStudentMonthlyFee,
+} from "@/modules/students/student-create-rules";
 import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 import {
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
@@ -25,7 +30,7 @@ import {
   isBillingPausedStatus as isSharedBillingPausedStatus,
   syncActivationBilling as syncSharedActivationBilling,
 } from "@/modules/students/lifecycle-service";
-import { safeServerAction } from "@/server/actions/safe-action";
+import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -75,10 +80,11 @@ const createStudentSchema = z.object({
   programId: requiredUuid("Proqram"),
   teacherId: optionalUuid("Müəllim"),
   campaignId: optionalUuid("Kampaniya"),
+  discountType: optionalText(100),
   lifecycleStatus: z.enum(studentLifecycleStatusValues).default(StudentLifecycleStatus.GROUP_WAITING),
   registeredDate: z.string().trim().min(1).max(20),
   firstLessonDate: optionalText(20),
-  monthlyFee: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
+  monthlyFee: z.preprocess(parseAmountInput, z.number().nonnegative().max(100_000)),
   lessonsPerMonth: optionalInteger,
   notes: optionalText(500),
   acceptPayment: z.preprocess(
@@ -92,6 +98,14 @@ const createStudentSchema = z.object({
   paymentMethod: z.enum(studentPaymentMethodValues).default("CASH"),
   paymentNote: optionalText(240),
   returnTo: optionalText(260),
+}).superRefine((value, context) => {
+  if (!isGiftDiscount(value.discountType) && value.monthlyFee <= 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["monthlyFee"],
+      message: "Aylıq məbləğ sıfırdan böyük olmalıdır.",
+    });
+  }
 });
 
 const recordPaymentSchema = z.object({
@@ -143,6 +157,10 @@ async function createStudentActionImpl(formData: FormData) {
     throw new Error("Ödənişi qəbul etmək üçün məbləğ yazın");
   }
 
+  if (isGiftDiscount(input.discountType) && input.acceptPayment) {
+    throw new PublicActionError("Hədiyyə güzəşti seçilən tələbə üçün ilkin ödəniş qəbul edilə bilməz.");
+  }
+
   const phoneNormalized = normalizePhone(input.phone);
 
   if (!phoneNormalized) {
@@ -166,15 +184,43 @@ async function createStudentActionImpl(formData: FormData) {
   const paymentMonth = paymentDate ? startOfMonth(paymentDate) : null;
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx) => {
-    const program = await tx.program.findUnique({
-      where: { id: input.programId },
-      select: { id: true },
-    });
+  const existingStudent = await prisma.student.findUnique({
+    where: { creationIdempotencyKey: input.idempotencyKey },
+    select: { id: true },
+  });
+  if (existingStudent) {
+    return { redirectTo: safeStudentsRedirect(input.returnTo) };
+  }
 
-    if (!program) {
-      throw new Error("Proqram tapılmadı");
-    }
+  try {
+    await prisma.$transaction(async (tx) => {
+      const [program, discountType] = await Promise.all([
+        tx.program.findUnique({
+          where: { id: input.programId },
+          select: { id: true },
+        }),
+        input.discountType
+          ? tx.dropdownCatalogOption.findUnique({
+              where: {
+                catalog_value: {
+                  catalog: "STUDENT_DISCOUNT_TYPE",
+                  value: input.discountType,
+                },
+              },
+              select: { value: true, isActive: true },
+            })
+          : Promise.resolve(null),
+      ]);
+
+      if (!program) {
+        throw new Error("Proqram tapılmadı");
+      }
+
+      if (input.discountType && (!discountType || !discountType.isActive)) {
+        throw new PublicActionError("Seçilmiş güzəşt növü artıq aktiv deyil. Siyahını yeniləyib yenidən seçin.");
+      }
+
+      const effectiveMonthlyFee = resolveStudentMonthlyFee(discountType?.value, input.monthlyFee);
 
     const educationLevel = input.educationLevel
       ? await tx.dropdownCatalogOption.findUnique({
@@ -250,7 +296,8 @@ async function createStudentActionImpl(formData: FormData) {
         status: EnrollmentStatus.ACTIVE,
         startDate: enrollmentStartDate,
         firstLessonAt,
-        monthlyFee: input.monthlyFee,
+        monthlyFee: effectiveMonthlyFee,
+        discountType: discountType?.value ?? null,
         lessonsPerMonth: input.lessonsPerMonth ?? null,
       },
       select: { id: true },
@@ -264,11 +311,11 @@ async function createStudentActionImpl(formData: FormData) {
             periodMonth: startOfMonth(billingStartAt),
             issueDate: registeredAt,
             dueDate: billingStartAt,
-            amount: input.monthlyFee,
-            balanceDue: input.monthlyFee,
+            amount: effectiveMonthlyFee,
+            balanceDue: effectiveMonthlyFee,
             status: resolveInvoiceStatus({
-              amount: input.monthlyFee,
-              balanceDue: input.monthlyFee,
+              amount: effectiveMonthlyFee,
+              balanceDue: effectiveMonthlyFee,
               dueDate: billingStartAt,
             }),
             idempotencyKey: `student-create-${student.code}-${startOfMonth(billingStartAt).toISOString().slice(0, 10)}`,
@@ -324,6 +371,7 @@ async function createStudentActionImpl(formData: FormData) {
         mode: input.mode,
         leadId: lead?.id ?? null,
         campaignId,
+        discountType: discountType?.value ?? null,
         enrollmentId: enrollment.id,
         invoiceId: invoice?.id ?? null,
         paymentId: paymentResult?.payment.id ?? null,
@@ -341,7 +389,14 @@ async function createStudentActionImpl(formData: FormData) {
         reason: input.paymentNote ?? `${student.code} üçün ilkin ödəniş qəbul edildi`,
       });
     }
-  });
+    });
+  } catch (error) {
+    const recoveredStudent = await prisma.student.findUnique({
+      where: { creationIdempotencyKey: input.idempotencyKey },
+      select: { id: true },
+    });
+    if (!recoveredStudent) throw error;
+  }
 
   revalidatePath("/students");
   revalidatePath("/crm");
@@ -971,24 +1026,15 @@ async function createPaymentAndAllocate(
 }
 
 async function generateStudentCode(tx: Prisma.TransactionClient) {
-  const total = await tx.student.count();
-  let candidateNumber = total + 1001;
+  const [row] = await tx.$queryRaw<Array<{ value: bigint }>>(Prisma.sql`
+    select nextval('"erp"."student_code_seq"') as value
+  `);
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const candidate = `ART-${candidateNumber.toString().padStart(4, "0")}`;
-    const existing = await tx.student.findUnique({
-      where: { code: candidate },
-      select: { id: true },
-    });
-
-    if (!existing) {
-      return candidate;
-    }
-
-    candidateNumber += 1;
+  if (!row) {
+    throw new PublicActionError("Tələbə kodu yaradıla bilmədi. Yenidən cəhd edin.", "CONFLICT");
   }
 
-  return `ART-${Date.now().toString().slice(-8)}`;
+  return `ART-${row.value.toString().padStart(4, "0")}`;
 }
 
 function toPaymentAuditJson(

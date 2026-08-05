@@ -21,6 +21,7 @@ import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { isGiftDiscount } from "@/modules/students/student-create-rules";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -44,6 +45,7 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
     programId: "",
     teacherId: "",
     campaignId: "",
+    discountType: "",
     lifecycleStatus: "GROUP_WAITING",
     registeredDate: createOptions.defaultRegisteredDate,
     monthlyFee: "",
@@ -77,6 +79,7 @@ export function StudentCreateDialogClient({
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [acceptPayment, setAcceptPayment] = useState(false);
   const [values, setValues] = useState(() => buildInitialStudentValues(createOptions));
+  const isGift = isGiftDiscount(values.discountType);
 
   function resetCreateForm() {
     setSelectedLeadId("");
@@ -121,10 +124,10 @@ export function StudentCreateDialogClient({
       educationLevel: lead.educationLevel,
       programId: lead.programId,
       campaignId: lead.campaignId,
-      monthlyFee: program?.monthlyFee ?? "",
+      monthlyFee: isGiftDiscount(current.discountType) ? "0" : program?.monthlyFee ?? "",
       lessonsPerMonth: program?.lessonsPerMonth ?? "",
       notes: lead.note,
-      paymentAmount: program?.monthlyFee ?? "",
+      paymentAmount: isGiftDiscount(current.discountType) ? "" : program?.monthlyFee ?? "",
     }));
   }
 
@@ -134,9 +137,27 @@ export function StudentCreateDialogClient({
     setValues((current) => ({
       ...current,
       programId,
-      monthlyFee: program?.monthlyFee ?? "",
+      monthlyFee: isGiftDiscount(current.discountType) ? "0" : program?.monthlyFee ?? "",
       lessonsPerMonth: program?.lessonsPerMonth ?? "",
-      paymentAmount: program?.monthlyFee ?? "",
+      paymentAmount: isGiftDiscount(current.discountType) ? "" : program?.monthlyFee ?? "",
+    }));
+  }
+
+  function handleDiscountTypeChange(value: string) {
+    const discountType = cleanSelectValue(value);
+    const giftSelected = isGiftDiscount(discountType);
+    const program = createOptions.programs.find((item) => item.id === values.programId);
+    if (giftSelected) setAcceptPayment(false);
+    setValues((current) => ({
+      ...current,
+      discountType,
+      monthlyFee: giftSelected
+        ? "0"
+        : current.monthlyFee === "0"
+          ? program?.monthlyFee ?? ""
+          : current.monthlyFee,
+      paymentAmount: giftSelected ? "" : current.paymentAmount,
+      paymentNote: giftSelected ? "" : current.paymentNote,
     }));
   }
 
@@ -184,19 +205,22 @@ export function StudentCreateDialogClient({
               <DialogDescription>Müraciəti tələbəyə çevirin və tədris məlumatlarını tamamlayın.</DialogDescription>
             </div>
           </div>
-          <InitialPaymentDialog
-            accepted={acceptPayment}
-            canRecordPayment={canRecordPayment}
-            values={values}
-            onChange={updateValue}
-            onRemove={removePayment}
-            onSave={() => setAcceptPayment(true)}
-          />
+          {!isGift ? (
+            <InitialPaymentDialog
+              accepted={acceptPayment}
+              canRecordPayment={canRecordPayment}
+              values={values}
+              onChange={updateValue}
+              onRemove={removePayment}
+              onSave={() => setAcceptPayment(true)}
+            />
+          ) : null}
         </DialogHeader>
 
         <form action={createStudent} className="student-create-form" id="student-create-form">
           <input name="returnTo" type="hidden" value={returnTo} />
           <input name="acceptPayment" type="hidden" value={acceptPayment ? "true" : "false"} />
+          <input name="discountType" type="hidden" value={values.discountType} />
           <input name="paymentAmount" type="hidden" value={values.paymentAmount} />
           <input name="paymentDate" type="hidden" value={values.paymentDate} />
           <input name="paymentMonth" type="hidden" value={getPaymentMonth(values.paymentDate)} />
@@ -369,15 +393,34 @@ export function StudentCreateDialogClient({
                 />
               </label>
               <label className="form-field">
-                <span>Aylıq məbləğ</span>
-                <Input
-                  name="monthlyFee"
-                  value={values.monthlyFee}
-                  onChange={(event) => updateValue("monthlyFee", event.target.value)}
-                  inputMode="decimal"
-                  required
+                <span>Güzəşt növü</span>
+                <FormSelect
+                  aria-label="Güzəşt növü"
+                  name="discountTypeSelect"
+                  value={values.discountType}
+                  onValueChange={handleDiscountTypeChange}
+                  emptyLabel="Güzəşt yoxdur"
+                  options={createOptions.discountTypes}
+                  searchable
+                  searchPlaceholder="Güzəşt növü axtar..."
+                  catalogKey="STUDENT_DISCOUNT_TYPE"
+                  createLabel="Yeni güzəşt növü əlavə et"
                 />
               </label>
+              {isGift ? (
+                <input name="monthlyFee" type="hidden" value="0" />
+              ) : (
+                <label className="form-field">
+                  <span>{values.discountType ? "Güzəştli aylıq məbləğ" : "Aylıq məbləğ"}</span>
+                  <Input
+                    name="monthlyFee"
+                    value={values.monthlyFee}
+                    onChange={(event) => updateValue("monthlyFee", event.target.value)}
+                    inputMode="decimal"
+                    required
+                  />
+                </label>
+              )}
               <label className="form-field">
                 <span>Aylıq dərs sayı</span>
                 <Input

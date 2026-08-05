@@ -11,7 +11,7 @@ import { getPrisma } from "@/server/db/prisma";
 import type { ErpActor } from "@/server/auth/actor";
 import { Prisma } from "@/generated/prisma/client";
 
-const MAX_EXPORT_ROWS = { csv: 10_000, pdf: 2_000 } as const;
+const MAX_EXPORT_ROWS = { xlsx: 10_000, csv: 10_000, pdf: 2_000 } as const;
 
 type GroupAttendanceExportRow = {
   groupId: string;
@@ -87,6 +87,7 @@ async function buildCrmReport(request: ExportRequest) {
       program: lead.program,
       source: lead.source,
       stage: lead.stageLabel,
+      trialLessonCount: lead.trialLessonCount || "-",
       priority: lead.priorityLabel,
       nextAction: lead.nextActionTypeLabel,
       nextFollowUp: lead.nextFollowUpAt,

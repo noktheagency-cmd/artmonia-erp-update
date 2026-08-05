@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AppRole, FinanceSalaryMode, HrLookupKind } from "@/generated/prisma/client";
+import { AppRole, FinanceSalaryMode, HrLookupKind, Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
@@ -102,16 +102,21 @@ const teacherProfileSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   phone: z.string().trim().max(40),
   capacity: z.coerce.number().int().positive().max(500),
-  salaryPercent: z.coerce.number().positive().max(100),
+  salaryPercent: z.preprocess(
+    (value) => value === "" || value == null ? undefined : value,
+    z.coerce.number().positive().max(100).optional(),
+  ),
 });
 
 async function createTeacherActionImpl(formData: FormData) {
   const actor = await requireMutationActor("teacher.rule.manage");
   const input = teacherProfileSchema.omit({ id: true }).parse(Object.fromEntries(formData));
+  const salaryPercent = input.salaryPercent;
+  if (!salaryPercent) throw new PublicActionError("Maaş faizi tələb olunur");
   const periodMonth = currentMonth();
   const teacher = await getPrisma().$transaction(async (tx) => {
     const created = await tx.teacher.create({ data: { fullName: input.fullName, phone: input.phone || null, capacity: input.capacity } });
-    await tx.teacherContractRule.create({ data: { teacherId: created.id, salaryPercent: input.salaryPercent, validFrom: periodMonth, createdById: actor.id } });
+    await tx.teacherContractRule.create({ data: { teacherId: created.id, salaryPercent, validFrom: periodMonth, createdById: actor.id } });
     await writeAuditLog(tx, { actorUserId: actor.id, action: "teacher.create", entityType: "teacher", entityId: created.id, after: input, reason: "Müəllim profili yaradıldı" });
     return created;
   });
@@ -127,12 +132,18 @@ async function updateTeacherActionImpl(formData: FormData) {
   await getPrisma().$transaction(async (tx) => {
     const before = await tx.teacher.findUnique({ where: { id: input.id } });
     if (!before) throw new PublicActionError("Müəllim tapılmadı", "NOT_FOUND");
-    await tx.teacher.update({ where: { id: input.id }, data: { fullName: input.fullName, phone: input.phone || null, capacity: input.capacity, isActive: true } });
-    const rule = await tx.teacherContractRule.findFirst({ where: { teacherId: input.id, validFrom: { lte: periodMonth }, OR: [{ validTo: null }, { validTo: { gte: periodMonth } }] }, orderBy: { validFrom: "desc" } });
-    if (rule?.validFrom.getTime() === periodMonth.getTime()) await tx.teacherContractRule.update({ where: { id: rule.id }, data: { salaryPercent: input.salaryPercent } });
-    else {
-      if (rule) await tx.teacherContractRule.update({ where: { id: rule.id }, data: { validTo: new Date(periodMonth.getTime() - 86_400_000) } });
-      await tx.teacherContractRule.create({ data: { teacherId: input.id, salaryPercent: input.salaryPercent, validFrom: periodMonth, createdById: actor.id } });
+    await tx.teacher.update({ where: { id: input.id }, data: { fullName: input.fullName, phone: input.phone || null, capacity: input.capacity } });
+    await tx.hrEmployee.updateMany({
+      where: { teacherId: input.id },
+      data: { fullName: input.fullName, phone: input.phone || null },
+    });
+    if (input.salaryPercent) {
+      const rule = await tx.teacherContractRule.findFirst({ where: { teacherId: input.id, validFrom: { lte: periodMonth }, OR: [{ validTo: null }, { validTo: { gte: periodMonth } }] }, orderBy: { validFrom: "desc" } });
+      if (rule?.validFrom.getTime() === periodMonth.getTime()) await tx.teacherContractRule.update({ where: { id: rule.id }, data: { salaryPercent: input.salaryPercent } });
+      else {
+        if (rule) await tx.teacherContractRule.update({ where: { id: rule.id }, data: { validTo: new Date(periodMonth.getTime() - 86_400_000) } });
+        await tx.teacherContractRule.create({ data: { teacherId: input.id, salaryPercent: input.salaryPercent, validFrom: periodMonth, createdById: actor.id } });
+      }
     }
     await writeAuditLog(tx, { actorUserId: actor.id, action: "teacher.update", entityType: "teacher", entityId: input.id, before, after: input, reason: "Müəllim profili yeniləndi" });
   });
@@ -140,16 +151,107 @@ async function updateTeacherActionImpl(formData: FormData) {
   revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance");
 }
 
-async function archiveTeacherActionImpl(formData: FormData) {
+async function setTeacherStatusActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("teacher.rule.manage");
+  const input = z.object({
+    id: z.string().uuid(),
+    status: z.enum(["ACTIVE", "INACTIVE"]),
+  }).parse(Object.fromEntries(formData));
+  await getPrisma().$transaction(async (tx) => {
+    const before = await tx.teacher.findUnique({ where: { id: input.id } });
+    if (!before) throw new PublicActionError("Müəllim tapılmadı", "NOT_FOUND");
+    const isActive = input.status === "ACTIVE";
+    await tx.teacher.update({ where: { id: input.id }, data: { isActive } });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: isActive ? "teacher.activate" : "teacher.deactivate",
+      entityType: "teacher",
+      entityId: input.id,
+      before: { isActive: before.isActive },
+      after: { isActive },
+      reason: isActive ? "Müəllim profili aktiv edildi" : "Müəllim profili passiv edildi",
+    });
+  });
+  revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance");
+}
+
+async function deleteTeacherActionImpl(formData: FormData) {
   const actor = await requireMutationActor("teacher.rule.manage");
   const id = z.string().uuid().parse(formData.get("id"));
   await getPrisma().$transaction(async (tx) => {
-    const before = await tx.teacher.findUnique({ where: { id } });
-    if (!before) throw new PublicActionError("Müəllim tapılmadı", "NOT_FOUND");
-    await tx.teacher.update({ where: { id }, data: { isActive: false } });
-    await writeAuditLog(tx, { actorUserId: actor.id, action: "teacher.archive", entityType: "teacher", entityId: id, before, after: { isActive: false }, reason: "Müəllim profili passiv edildi" });
+    const teacher = await tx.teacher.findUnique({
+      where: { id },
+      include: {
+        hrEmployee: { include: { user: { include: { roles: { include: { role: true } } } } } },
+        user: { include: { roles: { include: { role: true } } } },
+      },
+    });
+    if (!teacher) throw new PublicActionError("Müəllim tapılmadı", "NOT_FOUND");
+    await assertTeacherCanBeRemoved(tx, id);
+
+    const userId = teacher.userId ?? teacher.hrEmployee?.userId ?? null;
+    const teacherRole = userId
+      ? await tx.role.findUnique({ where: { code: AppRole.TEACHER } })
+      : null;
+    const linkedUser = teacher.user ?? teacher.hrEmployee?.user ?? null;
+    const otherRoleNames = linkedUser?.roles
+      .map(({ role }) => role)
+      .filter((role) => role.code !== AppRole.TEACHER)
+      .map((role) => role.name) ?? [];
+
+    if (teacher.hrEmployee) {
+      await tx.hrEmployee.update({
+        where: { id: teacher.hrEmployee.id },
+        data: {
+          teacherId: null,
+          staffType: "EMPLOYEE",
+          position: teacher.hrEmployee.position === "Müəllim"
+            ? otherRoleNames[0] ?? "Əməkdaş"
+            : teacher.hrEmployee.position,
+        },
+      });
+    }
+    if (userId && teacherRole) {
+      await tx.userRole.deleteMany({ where: { userId, roleId: teacherRole.id } });
+    }
+    await tx.teacher.update({
+      where: { id },
+      data: { isActive: false, userId: null },
+    });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "teacher.delete",
+      entityType: "teacher",
+      entityId: id,
+      before: {
+        fullName: teacher.fullName,
+        isActive: teacher.isActive,
+        userId,
+        roles: linkedUser?.roles.map(({ role }) => role.name) ?? [],
+      },
+      after: {
+        teacherIndicatorRemoved: true,
+        preservedRoles: otherRoleNames,
+        hrEmployeeId: teacher.hrEmployee?.id ?? null,
+      },
+      reason: "Müəllimlik statusu silindi; istifadəçi hesabı və digər rollar qorundu",
+    });
   });
   revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance");
+}
+
+async function assertTeacherCanBeRemoved(tx: Prisma.TransactionClient, teacherId: string) {
+  const [activeMemberships, activeClassSlots, activeEnrollments] = await Promise.all([
+    tx.groupMembership.count({ where: { teacherId, endedAt: null } }),
+    tx.classSlot.count({ where: { teacherId, isActive: true } }),
+    tx.enrollment.count({ where: { teacherId, status: "ACTIVE" } }),
+  ]);
+  if (activeMemberships || activeClassSlots || activeEnrollments) {
+    throw new PublicActionError(
+      "Müəllimlik statusunu silməzdən əvvəl aktiv qrup, dərs və tələbə təyinatlarını başqa müəllimə keçirin",
+      "CONFLICT",
+    );
+  }
 }
 
 function currentMonth() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); }
@@ -234,9 +336,13 @@ export const updateTeacherAction = safeServerAction(
   updateTeacherActionImpl,
   "Müəllim məlumatları yenilənə bilmədi.",
 );
-export const archiveTeacherAction = safeServerAction(
-  archiveTeacherActionImpl,
-  "Müəllim passiv edilə bilmədi.",
+export const setTeacherStatusAction = safeServerAction(
+  setTeacherStatusActionImpl,
+  "Müəllim statusu dəyişdirilə bilmədi.",
+);
+export const deleteTeacherAction = safeServerAction(
+  deleteTeacherActionImpl,
+  "Müəllimlik statusu silinə bilmədi.",
 );
 export const deleteEmployeeAction = safeServerAction(
   deleteEmployeeActionImpl,

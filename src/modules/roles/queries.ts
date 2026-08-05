@@ -120,6 +120,7 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
       actionLabel: definition.actionLabel,
       description: definition.description,
       sensitive: "sensitive" in definition ? Boolean(definition.sensitive) : false,
+      superAdminManaged: "superAdminManaged" in definition ? Boolean(definition.superAdminManaged) : false,
       supportsScope: "supportsScope" in definition ? Boolean(definition.supportsScope) : false,
       dependsOn:
         "dependsOn" in definition && isPermissionCode(definition.dependsOn)
@@ -127,6 +128,7 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
           : null,
     })),
     canManage: actor.permissions.has("auth.role.manage"),
+    canManageSuperAdminPermissions: actor.roles.includes(AppRole.SUPER_ADMIN),
     canManageUsers: actor.permissions.has("auth.user.manage"),
     canViewAudit: actor.permissions.has("audit.read"),
   };

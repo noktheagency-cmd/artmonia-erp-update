@@ -92,6 +92,7 @@ export type DashboardData = {
     stopped: number;
     declined: number;
     total: number;
+    population: number;
   };
   studentStatusCounts: Array<{
     label: string;
@@ -397,6 +398,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             'NEW'::"erp"."LeadStage",
             'CONTACTED'::"erp"."LeadStage",
             'QUALIFIED'::"erp"."LeadStage",
+            'TRIAL_LESSON'::"erp"."LeadStage",
             'TRIAL_CONSULTATION'::"erp"."LeadStage",
             'NURTURE'::"erp"."LeadStage"
           )
@@ -816,6 +818,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       stopped: stoppedStudents,
       declined: declinedStudents,
       total: totalChurn,
+      population: totalStudents,
     },
     studentStatusCounts,
   };

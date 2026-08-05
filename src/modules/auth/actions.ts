@@ -1,9 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { z } from "zod";
+import { writeAuditLog } from "@/modules/audit/audit-service";
+import { readSessionRequestMetadata } from "@/modules/audit/session-device";
+import { getCurrentErpUser } from "@/server/auth/session";
 import { getPrisma } from "@/server/db/prisma";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
@@ -61,7 +65,32 @@ export async function signInAction(
 
 export async function signOutAction() {
   const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
+  const currentUser = await getCurrentErpUser();
+
+  if (currentUser) {
+    const metadata = readSessionRequestMetadata(await headers());
+    await getPrisma().$transaction(async (tx) => {
+      await tx.authSessionRecord.updateMany({
+        where: { id: currentUser.currentSessionId, revokedAt: null },
+        data: {
+          revokedAt: new Date(),
+          revokedById: currentUser.id,
+          revokeReason: "İstifadəçi bu cihazdan çıxış etdi",
+        },
+      });
+      await writeAuditLog(tx, {
+        actorUserId: currentUser.id,
+        action: "SESSION_SIGNED_OUT",
+        entityType: "auth_session",
+        entityId: currentUser.currentSessionId,
+        reason: "İstifadəçi bu cihazdan çıxış etdi",
+        ipAddress: metadata.ipAddress,
+        userAgent: metadata.userAgent,
+      });
+    });
+  }
+
+  await supabase.auth.signOut({ scope: "local" });
   revalidatePath("/", "layout");
   redirect("/login");
 }

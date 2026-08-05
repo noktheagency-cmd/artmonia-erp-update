@@ -1,6 +1,7 @@
 export const dropdownCatalogKeys = [
   "CRM_SOURCE",
   "STUDENT_EDUCATION_LEVEL",
+  "STUDENT_DISCOUNT_TYPE",
   "HR_DEPARTMENT",
   "HR_POSITION",
   "WORKSHOP_EVENT_TYPE",

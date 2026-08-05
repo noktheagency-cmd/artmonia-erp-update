@@ -19,6 +19,7 @@ import {
   EyeOff,
   KeyRound,
   Mail,
+  MapPin,
   MessageSquareText,
   Phone,
   Send,
@@ -252,6 +253,9 @@ export function StaffProfile({
               </span>
               <span>
                 <Phone /> {employee.phone || "Telefon qeyd edilməyib"}
+              </span>
+              <span>
+                <MapPin /> {employee.address || "Ünvan qeyd edilməyib"}
               </span>
             </div>
           </div>

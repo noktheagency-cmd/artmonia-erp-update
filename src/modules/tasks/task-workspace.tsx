@@ -13,6 +13,7 @@ import {
   ListTodo,
   Plus,
   Search,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,10 +49,12 @@ export function TaskWorkspace({
   data,
   createTaskAction,
   updateTaskStatusAction,
+  deleteTaskAction,
 }: {
   data: TaskData;
   createTaskAction: TaskAction;
   updateTaskStatusAction: TaskAction;
+  deleteTaskAction: TaskAction;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
@@ -136,6 +139,8 @@ export function TaskWorkspace({
                 key={task.id}
                 task={task}
                 updateTaskStatusAction={updateTaskStatusAction}
+                deleteTaskAction={deleteTaskAction}
+                canDelete={data.permissions.canManage}
               />
             ))}
           </div>
@@ -167,7 +172,17 @@ function SummaryItem({ icon: Icon, label, value, tone }: { icon: typeof CircleDo
   );
 }
 
-function TaskListRow({ task, updateTaskStatusAction }: { task: TaskRow; updateTaskStatusAction: TaskAction }) {
+function TaskListRow({
+  task,
+  updateTaskStatusAction,
+  deleteTaskAction,
+  canDelete,
+}: {
+  task: TaskRow;
+  updateTaskStatusAction: TaskAction;
+  deleteTaskAction: TaskAction;
+  canDelete: boolean;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(
@@ -205,16 +220,73 @@ function TaskListRow({ task, updateTaskStatusAction }: { task: TaskRow; updateTa
         <CalendarClock size={16} />
         <div><small>{task.isOverdue ? "Gecikib" : "Deadline"}</small><strong>{task.dueLabel}</strong></div>
       </div>
-      <FormSelect
-        name={`status-${task.id}`}
-        value={optimisticStatus}
-        onValueChange={updateStatus}
-        options={statusOptions}
-        disabled={isPending}
-        className={cx("task-status-select", `is-${optimisticStatus.toLowerCase()}`)}
-        aria-label={`${task.title} statusu`}
-      />
+      <div className="task-row-controls">
+        <FormSelect
+          name={`status-${task.id}`}
+          value={optimisticStatus}
+          onValueChange={updateStatus}
+          options={statusOptions}
+          disabled={isPending}
+          className={cx("task-status-select", `is-${optimisticStatus.toLowerCase()}`)}
+          aria-label={`${task.title} statusu`}
+        />
+        {canDelete ? <DeleteTaskDialog task={task} action={deleteTaskAction} /> : null}
+      </div>
     </article>
+  );
+}
+
+function DeleteTaskDialog({ task, action }: { task: TaskRow; action: TaskAction }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+
+  function removeTask() {
+    const formData = new FormData();
+    formData.set("taskId", task.id);
+    setError("");
+    startTransition(async () => {
+      try {
+        unwrapActionResult(await action(formData));
+        setOpen(false);
+        router.refresh();
+      } catch (caught) {
+        setError(notifyCaughtError(caught, "Task silinmədi", "Task silinmədi"));
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="destructive"
+          size="icon"
+          aria-label={`${task.title} taskını tamamilə sil`}
+          title="Taskı tamamilə sil"
+        >
+          <Trash2 />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="task-delete-dialog">
+        <DialogHeader>
+          <DialogTitle>Taskı tamamilə silmək?</DialogTitle>
+          <DialogDescription>
+            “{task.title}” geri qaytarılmadan silinəcək. Audit qeydi saxlanılacaq.
+          </DialogDescription>
+        </DialogHeader>
+        {error ? <p className="task-form-error" role="alert">{error}</p> : null}
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button>
+          <Button type="button" variant="destructive" disabled={isPending} onClick={removeTask}>
+            <Trash2 data-icon="inline-start" />
+            {isPending ? "Silinir..." : "Tamamilə sil"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

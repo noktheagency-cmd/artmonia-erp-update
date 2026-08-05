@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormSelect } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -343,11 +344,27 @@ function SlotDialog({
 }
 
 function AssignmentDialog({ data, initialSlot, pending, onClose, onSubmit }: { data: PlannerWorkspaceData; initialSlot: PlannerSlot; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) {
-  const members = data.memberships.filter((member) => member.groupId === initialSlot.groupId);
-  const slots = data.slots.filter((slot) => slot.groupId === initialSlot.groupId);
+  const members = useMemo(
+    () => data.memberships.filter((member) => member.groupId === initialSlot.groupId),
+    [data.memberships, initialSlot.groupId],
+  );
+  const slots = useMemo(
+    () => data.slots.filter((slot) => slot.groupId === initialSlot.groupId),
+    [data.slots, initialSlot.groupId],
+  );
   const [membershipId, setMembershipId] = useState(members[0]?.id ?? "");
   const [selected, setSelected] = useState<string[]>([initialSlot.id]);
   const member = members.find((item) => item.id === membershipId);
+  const memberOptions = useMemo(
+    () => members.map((item) => ({
+      value: item.id,
+      label: `${item.studentName} · ${item.studentCode} · ${item.program}`,
+      searchText: `${item.studentName} ${item.studentCode} ${item.program}`,
+    })),
+    [members],
+  );
+  const selectedIds = useMemo(() => new Set(selected), [selected]);
+  const slotsById = useMemo(() => new Map(slots.map((slot) => [slot.id, slot])), [slots]);
   function toggle(slot: PlannerSlot) {
     if (slot.assignedCount >= slot.capacity && !selected.includes(slot.id)) return;
     setSelected((current) => current.includes(slot.id) ? current.filter((id) => id !== slot.id) : [...current, slot.id]);
@@ -358,30 +375,134 @@ function AssignmentDialog({ data, initialSlot, pending, onClose, onSubmit }: { d
     formData.set("slotIds", JSON.stringify(selected));
     onSubmit(formData);
   }
-  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className={styles.assignmentDialog}><DialogHeader className={styles.assignmentHeader}><DialogTitle>Tələbəni cədvələ əlavə et</DialogTitle><DialogDescription>Bir tələbə üçün bir və ya bir neçə həftəlik slot seçin.</DialogDescription></DialogHeader>
-    <form onSubmit={submit}>
-      <div className={styles.assignmentBody}>
-        <div className={styles.assignmentMain}>
-          <label className={styles.studentSelect}><span>Tələbə</span><select name="membershipId" value={membershipId} onChange={(event) => setMembershipId(event.target.value)} required>{members.map((item) => <option value={item.id} key={item.id}>{item.studentName} · {item.studentCode} · {item.program}</option>)}</select></label>
-          <h3>Həftəlik seçim</h3>
-          <div className={styles.slotChoiceGrid}>
-            {orderedWeekdays.filter((day) => slots.some((slot) => slot.weekday === day)).map((day) => <div key={day}><strong>{weekdayMeta[day].shortLabel}</strong>{slots.filter((slot) => slot.weekday === day).map((slot) => {
-              const active = selected.includes(slot.id);
-              const full = slot.assignedCount >= slot.capacity;
-              return <button className={cx(styles.slotChoice, active && styles.activeChoice, full && !active && styles.disabledChoice)} type="button" onClick={() => toggle(slot)} key={slot.id} disabled={full && !active}><span>{shiftMeta[slot.shift].label}</span><small>{slot.startTime}–{slot.endTime}</small><b>{full ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>{active ? <Check size={17} /> : null}</button>;
-            })}</div>)}
+  const availableDays = useMemo(
+    () => orderedWeekdays.filter((day) => slots.some((slot) => slot.weekday === day)),
+    [slots],
+  );
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className={styles.assignmentDialog}>
+        <DialogHeader className={styles.assignmentHeader}>
+          <DialogTitle>Tələbəni cədvələ əlavə et</DialogTitle>
+          <DialogDescription>
+            Bir tələbə üçün bir və ya bir neçə həftəlik slot seçin.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form className={styles.assignmentForm} onSubmit={submit}>
+          <div className={styles.assignmentBody}>
+            <div className={styles.assignmentMain}>
+              <div className={styles.studentField}>
+                <span>Tələbə</span>
+                <FormSelect
+                  name="membershipId"
+                  value={membershipId}
+                  onValueChange={setMembershipId}
+                  options={memberOptions}
+                  placeholder={members.length ? "Tələbə seçin" : "Bu qrupda tələbə tapılmadı"}
+                  searchPlaceholder="Tələbə adı, kodu və ya proqram üzrə axtarın..."
+                  aria-label="Tələbə seçin"
+                  icon={UserRound}
+                  searchable
+                  required
+                  className={styles.studentCombobox}
+                  contentClassName={styles.studentDropdown}
+                />
+              </div>
+
+              <div className={styles.assignmentSectionHeading}>
+                <h3>Həftəlik seçim</h3>
+              </div>
+
+              <div className={styles.slotChoiceGrid}>
+                {availableDays.map((day) => (
+                  <div className={styles.slotDay} key={day}>
+                    <strong>{weekdayMeta[day].shortLabel}</strong>
+                    {slots
+                      .filter((slot) => slot.weekday === day)
+                      .map((slot) => {
+                        const active = selectedIds.has(slot.id);
+                        const full = slot.assignedCount >= slot.capacity;
+
+                        return (
+                          <button
+                            className={cx(
+                              styles.slotChoice,
+                              active && styles.activeChoice,
+                              full && !active && styles.disabledChoice,
+                            )}
+                            type="button"
+                            onClick={() => toggle(slot)}
+                            key={slot.id}
+                            disabled={full && !active}
+                            aria-pressed={active}
+                          >
+                            <span>{shiftMeta[slot.shift].label}</span>
+                            <small><Clock3 size={13} />{slot.startTime}–{slot.endTime}</small>
+                            <b>
+                              <UsersRound size={13} />
+                              {full ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}
+                            </b>
+                            {active ? <Check className={styles.slotChoiceCheck} size={16} /> : null}
+                          </button>
+                        );
+                      })}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <aside className={styles.assignmentSummary}>
+              <h3>Seçilmiş plan</h3>
+              <div className={styles.planCount}>
+                <span><CalendarDays size={20} /></span>
+                <div>
+                  <strong>{selected.length} dərs / həftə</strong>
+                </div>
+              </div>
+
+              <div className={styles.summaryDetails}>
+                <ul>
+                  {selected.map((id) => {
+                    const slot = slotsById.get(id);
+                    return slot ? (
+                      <li key={id}>
+                        <CalendarDays size={16} />
+                        <span>{weekdayMeta[slot.weekday].shortLabel} {slot.startTime}–{slot.endTime}</span>
+                      </li>
+                    ) : null;
+                  })}
+                </ul>
+                {initialSlot ? <p><UserRound size={16} /> {initialSlot.teacherName}</p> : null}
+              </div>
+
+              <label className={styles.startDateField}>
+                <span>Başlama tarixi</span>
+                <input name="validFrom" type="date" defaultValue={data.today} required />
+              </label>
+
+              {member?.lessonsPerMonth ? (
+                <div className={styles.packageNote}>
+                  <span>Aylıq paket</span>
+                  <strong>{member.lessonsPerMonth} dərs</strong>
+                </div>
+              ) : null}
+            </aside>
           </div>
-        </div>
-        <aside className={styles.assignmentSummary}>
-          <h3>Seçilmiş plan</h3>
-          <div className={styles.planCount}><CalendarDays size={20} /><strong>{selected.length} dərs / həftə</strong></div>
-          <ul>{selected.map((id) => { const slot = slots.find((item) => item.id === id); return slot ? <li key={id}><i /><span>{weekdayMeta[slot.weekday].shortLabel} {slot.startTime}–{slot.endTime}</span></li> : null; })}</ul>
-          {initialSlot ? <p><UserRound size={16} /> {initialSlot.teacherName}</p> : null}
-          <label><span>Başlama tarixi</span><input name="validFrom" type="date" defaultValue={data.today} required /></label>
-          {member?.lessonsPerMonth ? <div className={styles.packageNote}>Aylıq paket: {member.lessonsPerMonth} dərs</div> : null}
-        </aside>
-      </div>
-      <DialogFooter className={styles.assignmentFooter}><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button className={styles.primaryButton} type="submit" disabled={pending || !membershipId || !selected.length}>Cədvələ əlavə et</Button></DialogFooter>
-    </form>
-  </DialogContent></Dialog>;
+
+          <DialogFooter className={styles.assignmentFooter}>
+            <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
+            <Button
+              className={styles.primaryButton}
+              type="submit"
+              disabled={pending || !membershipId || !selected.length}
+            >
+              {pending ? "Əlavə edilir..." : "Cədvələ əlavə et"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }

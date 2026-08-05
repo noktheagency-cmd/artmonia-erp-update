@@ -26,6 +26,11 @@ import {
   nextActionTypeOptions,
 } from "@/modules/crm/follow-up";
 import { leadStageOptions } from "@/modules/crm/stage";
+import {
+  MAX_TRIAL_LESSON_COUNT,
+  resolveTrialLessonCount,
+  resolveTrialLessonNextAction,
+} from "@/modules/crm/trial-lesson";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { isBillingPausedStatus } from "@/modules/students/lifecycle-service";
@@ -50,6 +55,14 @@ const optionalNextActionType = z.preprocess(
   z.enum(nextActionTypeOptions).optional()
 );
 
+const optionalTrialLessonCount = z.preprocess(
+  (value) => {
+    const normalized = optionalFormString(value);
+    return normalized === undefined ? undefined : Number(normalized);
+  },
+  z.number().int().min(1).max(MAX_TRIAL_LESSON_COUNT).optional(),
+);
+
 const createLeadSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   phone: optionalText(40),
@@ -61,6 +74,7 @@ const createLeadSchema = z.object({
   priority: z.enum(leadPriorityOptions).default("NORMAL"),
   nextActionType: optionalNextActionType,
   nextFollowUpDate: optionalText(20),
+  trialLessonCount: optionalTrialLessonCount,
   note: optionalText(180),
 });
 
@@ -83,6 +97,7 @@ const updateLeadSchema = z.object({
   priority: z.enum(leadPriorityOptions).default("NORMAL"),
   nextActionType: optionalNextActionType,
   nextFollowUpDate: optionalText(20),
+  trialLessonCount: optionalTrialLessonCount,
   note: optionalText(240),
   returnTo: optionalText(260),
 });
@@ -162,6 +177,11 @@ async function createLead(formData: FormData) {
   const managerId = actor.id;
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
+  const nextActionType =
+    input.nextActionType ??
+    (input.stage === LeadStage.TRIAL_LESSON
+      ? "TRIAL_LESSON_REMINDER"
+      : undefined);
   let createdLeadId = "";
 
   await prisma.$transaction(async (tx) => {
@@ -190,7 +210,11 @@ async function createLead(formData: FormData) {
         campaignId: input.campaignId ?? null,
         programInterestId: input.programId ?? null,
         nextFollowUpAt: followUpAt,
-        nextActionType: input.nextActionType ?? null,
+        nextActionType: nextActionType ?? null,
+        trialLessonCount: resolveTrialLessonCount({
+          stage: input.stage,
+          requestedCount: input.trialLessonCount,
+        }),
         priority: input.priority,
         stageHistory: {
           create: {
@@ -205,6 +229,8 @@ async function createLead(formData: FormData) {
         stage: true,
         contactId: true,
         source: true,
+        nextActionType: true,
+        trialLessonCount: true,
       },
     });
     createdLeadId = lead.id;
@@ -212,7 +238,7 @@ async function createLead(formData: FormData) {
     if (followUpAt) {
       await tx.task.create({
         data: {
-          title: buildFollowUpTaskTitle(input.fullName, input.nextActionType),
+          title: buildFollowUpTaskTitle(input.fullName, nextActionType),
           type: "lead_follow_up",
           entityType: "lead",
           entityId: lead.id,
@@ -244,6 +270,11 @@ async function updateLeadActionImpl(formData: FormData) {
   const managerId = resolveLeadManagerId(actor, input.managerId);
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
+  const nextActionType =
+    input.nextActionType ??
+    (input.stage === LeadStage.TRIAL_LESSON
+      ? "TRIAL_LESSON_REMINDER"
+      : undefined);
 
   await prisma.$transaction(async (tx) => {
     const current = await tx.lead.findUnique({
@@ -256,6 +287,7 @@ async function updateLeadActionImpl(formData: FormData) {
         priority: true,
         educationLevel: true,
         nextActionType: true,
+        trialLessonCount: true,
         programInterestId: true,
         nextFollowUpAt: true,
         contactId: true,
@@ -293,6 +325,11 @@ async function updateLeadActionImpl(formData: FormData) {
       input.educationLevel === current.educationLevel
         ? current.educationLevel
         : await resolveEducationLevelName(tx, input.educationLevel);
+    const trialLessonCount = resolveTrialLessonCount({
+      stage: input.stage,
+      requestedCount: input.trialLessonCount,
+      existingCount: current.trialLessonCount,
+    });
 
     await tx.contact.update({
       where: { id: current.contactId },
@@ -313,7 +350,8 @@ async function updateLeadActionImpl(formData: FormData) {
         managerId,
         programInterestId: input.programId ?? null,
         nextFollowUpAt: followUpAt,
-        nextActionType: input.nextActionType ?? null,
+        nextActionType: nextActionType ?? null,
+        trialLessonCount,
         priority: input.priority,
       },
       select: {
@@ -325,6 +363,7 @@ async function updateLeadActionImpl(formData: FormData) {
         programInterestId: true,
         nextFollowUpAt: true,
         nextActionType: true,
+        trialLessonCount: true,
         priority: true,
       },
     });
@@ -356,7 +395,7 @@ async function updateLeadActionImpl(formData: FormData) {
         await tx.task.update({
           where: { id: existingTask.id },
           data: {
-            title: buildFollowUpTaskTitle(input.fullName, input.nextActionType),
+            title: buildFollowUpTaskTitle(input.fullName, nextActionType),
             ownerUserId: managerId,
             dueAt: followUpAt,
           },
@@ -364,7 +403,7 @@ async function updateLeadActionImpl(formData: FormData) {
       } else {
         await tx.task.create({
           data: {
-            title: buildFollowUpTaskTitle(input.fullName, input.nextActionType),
+            title: buildFollowUpTaskTitle(input.fullName, nextActionType),
             type: "lead_follow_up",
             entityType: "lead",
             entityId: input.leadId,
@@ -389,6 +428,7 @@ async function updateLeadActionImpl(formData: FormData) {
         educationLevel: current.educationLevel,
         priority: current.priority,
         nextActionType: current.nextActionType,
+        trialLessonCount: current.trialLessonCount,
         managerId: current.managerId,
         programInterestId: current.programInterestId,
         nextFollowUpAt: current.nextFollowUpAt?.toISOString() ?? null,
@@ -610,6 +650,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         id: true,
         stage: true,
         convertedStudentId: true,
+        trialLessonCount: true,
       },
     });
 
@@ -664,6 +705,8 @@ async function updateLeadStageActionImpl(formData: FormData) {
         managerId: true,
         stage: true,
         convertedStudentId: true,
+        nextActionType: true,
+        trialLessonCount: true,
       },
     });
 
@@ -675,10 +718,22 @@ async function updateLeadStageActionImpl(formData: FormData) {
 
     const updated = await tx.lead.update({
       where: { id: input.leadId },
-      data: { stage: input.stage },
+      data: {
+        stage: input.stage,
+        trialLessonCount: resolveTrialLessonCount({
+          stage: input.stage,
+          existingCount: current.trialLessonCount,
+        }),
+        nextActionType: resolveTrialLessonNextAction({
+          stage: input.stage,
+          currentNextAction: current.nextActionType,
+        }),
+      },
       select: {
         id: true,
         stage: true,
+        nextActionType: true,
+        trialLessonCount: true,
       },
     });
 

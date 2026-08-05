@@ -25,6 +25,7 @@ export const leadPrioritySelectOptions = leadPriorityOptions.map((priority) => (
 export const nextActionTypeOptions = [
   "CALL",
   "CONSULTATION_REMINDER",
+  "TRIAL_LESSON_REMINDER",
   "PAYMENT_REMINDER",
   "FOLLOW_UP",
 ] as const;
@@ -34,6 +35,7 @@ export type NextActionTypeValue = (typeof nextActionTypeOptions)[number];
 export const nextActionTypeLabels: Record<NextActionTypeValue, string> = {
   CALL: "Zəng et",
   CONSULTATION_REMINDER: "Konsultasiya xatırlat",
+  TRIAL_LESSON_REMINDER: "Sınaq dərsini xatırlat",
   PAYMENT_REMINDER: "Ödəniş xatırlat",
   FOLLOW_UP: "Follow up et",
 };

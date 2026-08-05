@@ -33,6 +33,9 @@ const actionLabels: Record<string, string> = {
   "hr.bonus.teacher.award.calculate": "Müəllim bonusu hesablandı",
   "hr.credentials.create": "Sistemə giriş məlumatları yaradıldı",
   "hr.credentials.update": "Sistemə giriş məlumatları yeniləndi",
+  "hr.corporate.create": "Korporativ müştəri yaradıldı",
+  "hr.corporate.update": "Korporativ müştəri yeniləndi",
+  "hr.corporate.delete": "Korporativ müştəri silindi",
   "hr.employee.delete": "Əməkdaş profili silindi",
   "hr.employee.update": "Əməkdaş profili yeniləndi",
   "hr.notification.send": "Əməkdaşa bildiriş göndərildi",
@@ -61,6 +64,9 @@ const actionLabels: Record<string, string> = {
   "marketing.strategy.expense.create": "Marketinq strategiyasına xərc əlavə edildi",
   "marketing.strategy.update": "Marketinq strategiyası yeniləndi",
   MCP_READ: "Sistem məlumatları oxundu",
+  SESSION_REVOKED: "Sessiya bağlandı",
+  SESSION_SIGNED_IN: "Yeni giriş sessiyası yaradıldı",
+  SESSION_SIGNED_OUT: "Giriş sessiyası bitirildi",
   "payment.void": "Ödəniş ləğv edildi",
   "role.create": "Rol yaradıldı",
   "role.delete": "Rol silindi",
@@ -96,6 +102,7 @@ const actionLabels: Record<string, string> = {
 };
 
 const entityLabels: Record<string, string> = {
+  auth_session: "Giriş sessiyası",
   class_slot: "Dərs vaxtı",
   dropdown_catalog_option: "Siyahı seçimi",
   finance_expense: "Xərc qeydi",
@@ -106,6 +113,7 @@ const entityLabels: Record<string, string> = {
   hr_bonus_award: "Bonus payı",
   hr_bonus_campaign: "Bonus kampaniyası",
   hr_bonus_stage: "Bonus mərhələsi",
+  hr_corporate_customer: "Korporativ müştəri",
   hr_employee: "Əməkdaş",
   lead: "Müraciət",
   marketing_campaign: "Marketinq kampaniyası",
@@ -127,11 +135,19 @@ const entityLabels: Record<string, string> = {
 };
 
 const fieldLabels: Record<string, string> = {
+  active: "Aktivlik",
+  allocations: "Bölüşdürülən ödənişlər",
   amount: "Məbləğ",
+  amountPaid: "Ödənilən məbləğ",
   approvedCount: "Təsdiqlənənlərin sayı",
   assignedToId: "Təyin edilən əməkdaşın identifikatoru",
   authUserId: "Giriş hesabının identifikatoru",
   campaignId: "Kampaniyanın identifikatoru",
+  cancelReason: "Ləğv səbəbi",
+  cancelledAt: "Ləğv vaxtı",
+  capacity: "Tutum",
+  catalog: "Siyahı",
+  category: "Kateqoriya",
   code: "Kod",
   copiedFrom: "Köçürüldüyü rol",
   createdAt: "Yaradılma vaxtı",
@@ -139,63 +155,110 @@ const fieldLabels: Record<string, string> = {
   decision: "Qərar",
   department: "Şöbə",
   description: "Təsvir",
+  device: "Cihaz",
+  deviceName: "Cihazın adı",
+  discountAmount: "Endirim məbləği",
   email: "E-poçt",
   employeeId: "Əməkdaşın identifikatoru",
   endedAt: "Bitmə vaxtı",
+  entryPrice: "Giriş qiyməti",
+  eventDate: "Tədbirin tarixi",
+  eventType: "Tədbirin növü",
+  expenseDate: "Xərc tarixi",
   fullName: "Ad və soyad",
   groupId: "Qrupun identifikatoru",
   hrEmployeeCreated: "Əməkdaş profili yaradılıb",
   id: "İdentifikator",
   intent: "Məqsəd",
   isActive: "Aktivdir",
+  isGift: "Hədiyyədir",
   key: "Açar",
+  label: "Görünən ad",
   leadId: "Müraciətin identifikatoru",
   loginCreated: "Giriş hesabı yaradılıb",
+  listPrice: "Siyahı qiyməti",
+  method: "Ödəniş üsulu",
   name: "Ad",
   note: "Qeyd",
   notes: "Qeydlər",
   outcome: "Nəticə",
+  paidAt: "Ödəniş vaxtı",
+  payerName: "Ödəyən şəxs",
   paymentMethod: "Ödəniş üsulu",
   permissionId: "İcazənin identifikatoru",
   position: "Vəzifə",
   postedCount: "Göndərilənlərin sayı",
+  posterUrl: "Tədbir posteri",
+  preservedRoles: "Saxlanılan rollar",
   profilePhotoUrl: "Profil şəklinin keçidi",
   reason: "Səbəb",
+  receiptReference: "Qəbz qeydi",
   reportId: "Hesabatın identifikatoru",
   roleId: "Rolun identifikatoru",
   roleIds: "Rol identifikatorları",
   roles: "Rollar",
+  salaryAmount: "Maaş məbləği",
+  salaryMode: "Maaş növü",
   salaryPercent: "Maaş faizi",
   scope: "Əhatə dairəsi",
+  source: "Mənbə",
   stageId: "Mərhələnin identifikatoru",
+  stage: "Mərhələ",
   staffType: "Əməkdaş növü",
+  startTime: "Başlama vaxtı",
   status: "Status",
   studentId: "Tələbənin identifikatoru",
   teacherId: "Müəllimin identifikatoru",
+  teacherIndicatorRemoved: "Müəllim statusu silinib",
   title: "Başlıq",
+  trialLessonCount: "Sınaq dərsi sayı",
+  unallocatedAmount: "Bölüşdürülməmiş məbləğ",
   updatedAt: "Yenilənmə vaxtı",
   userId: "İstifadəçinin identifikatoru",
+  value: "Dəyər",
+  vendor: "Təchizatçı",
+  voidedAt: "Ləğv vaxtı",
 };
 
 const valueLabels: Record<string, string> = {
+  ABSENT: "İştirak etməyib",
   ACTIVE: "Aktiv",
   ALL: "Hamısı",
   APPROVED: "Təsdiqlənib",
   ASSIGNED: "Təyin edilənlər",
   CANCELLED: "Ləğv edilib",
+  CARD: "Kart",
+  CASH: "Nağd",
   COMPLETED: "Tamamlanıb",
+  CONTACTED: "Xatırlatma",
+  CRITICAL: "Təcili",
   DRAFT: "Qaralama",
   FINANCE: "Maliyyə",
   INACTIVE: "Passiv",
+  LOST: "İtirilib",
+  MASTERCLASS: "Ustad dərsi",
+  MEDIUM: "Orta",
+  NEW: "Zəng gözləyir",
+  NORMAL: "Normal",
+  NURTURE: "İzləmədə",
   OWNER: "Sahib",
   PENDING: "Gözləmədə",
   PENDING_HR: "İnsan resurslarının təsdiqini gözləyir",
+  PERCENT: "Faizlə",
+  PRESENT: "İştirak edib",
+  QUALIFIED: "Konsultasiya təyin olundu",
   REJECTED: "Rədd edilib",
+  REGISTERED: "Qeydiyyata alınıb",
   SALES: "Satış",
   SUBMITTED: "Təsdiqə göndərilib",
   SUPER_ADMIN: "Baş inzibatçı",
+  STATIC: "Sabit məbləğ",
   TEACHER: "Müəllim",
+  TRIAL_LESSON: "Sınaq dərsi",
+  TRIAL_LESSON_REMINDER: "Sınaq dərsini xatırlat",
+  TRIAL_CONSULTATION: "Ödəniş gözlənilir",
   VOIDED: "Ləğv edilib",
+  WORKSHOP: "Tədbir",
 };
 
 const identifierTokens: Record<string, string> = {
@@ -328,6 +391,140 @@ export function localizeAuditReason(reason: string | null) {
 export function formatAuditSnapshot(value: unknown) {
   if (value == null) return "Məlumat yoxdur";
   return JSON.stringify(localizeSnapshotValue(value), null, 2);
+}
+
+export type AuditDisplayChange = {
+  id: string;
+  label: string;
+  previous: string | null;
+  current: string | null;
+  type: "added" | "removed" | "changed";
+};
+
+/**
+ * Audit qeydlərini xam JSON göstərmədən, istifadəçi üçün mənalı dəyişikliklərə çevirir.
+ * Texniki identifikatorlar və həssas sahələr bu təqdimat qatında məqsədli şəkildə gizlədilir.
+ */
+export function getAuditDisplayChanges(before: unknown, after: unknown): AuditDisplayChange[] {
+  const previousFields = collectAuditFields(before);
+  const currentFields = collectAuditFields(after);
+  const isCreated = before == null && after != null;
+  const isRemoved = before != null && after == null;
+  // Yeniləmə qeydlərində `after` çox vaxt yalnız dəyişdirilən sahələri saxlayır.
+  // Buna görə `after`-da olmayan əvvəlki sahələri silinmiş kimi təqdim etmirik.
+  const fieldIds = isRemoved ? [...previousFields.keys()] : [...currentFields.keys()];
+
+  return fieldIds.flatMap((id) => {
+    const previous = previousFields.get(id);
+    const current = currentFields.get(id);
+
+    if (isCreated && (!current || !hasMeaningfulValue(current.value))) return [];
+    if (isRemoved && (!previous || !hasMeaningfulValue(previous.value))) return [];
+    if (!isCreated && !isRemoved && auditValuesEqual(previous?.value, current?.value)) return [];
+
+    const type = !previous ? "added" : !current ? "removed" : "changed";
+    return [{
+      id,
+      label: current?.label ?? previous?.label ?? "Məlumat",
+      previous: previous ? formatDisplayValue(previous.value, previous.key) : null,
+      current: current ? formatDisplayValue(current.value, current.key) : null,
+      type,
+    } satisfies AuditDisplayChange];
+  });
+}
+
+type CollectedAuditField = { key: string; label: string; value: unknown };
+
+function collectAuditFields(value: unknown) {
+  const fields = new Map<string, CollectedAuditField>();
+  collectAuditObject(value, fields, [], 0);
+  return fields;
+}
+
+function collectAuditObject(
+  value: unknown,
+  fields: Map<string, CollectedAuditField>,
+  path: string[],
+  depth: number,
+) {
+  if (!isPlainRecord(value)) return;
+
+  Object.entries(value).forEach(([key, entryValue], index) => {
+    const nextPath = [...path, key];
+    if (isHiddenAuditField(key) || containsOnlyTechnicalIdentifiers(entryValue)) return;
+
+    if (isPlainRecord(entryValue) && depth < 2) {
+      collectAuditObject(entryValue, fields, nextPath, depth + 1);
+      return;
+    }
+
+    fields.set(nextPath.join("."), {
+      key,
+      label: fieldLabels[key] ?? localizeField(key, index),
+      value: entryValue,
+    });
+  });
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isHiddenAuditField(key: string) {
+  const tokens = key.replace(/([a-z\d])([A-Z])/g, "$1 $2").split(/[._\s-]+/).map((token) => token.toLowerCase());
+  const lastToken = tokens.at(-1);
+  if (lastToken === "id" || lastToken === "ids") return true;
+  return tokens.some((token) => ["password", "secret", "token", "credential"].includes(token))
+    || ["createdAt", "updatedAt", "ipAddress", "key"].includes(key);
+}
+
+function containsOnlyTechnicalIdentifiers(value: unknown) {
+  if (typeof value === "string") return isUuid(value);
+  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string" && isUuid(item));
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
+}
+
+function hasMeaningfulValue(value: unknown) {
+  if (value == null || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (isPlainRecord(value)) return Object.keys(value).length > 0;
+  return true;
+}
+
+function auditValuesEqual(previous: unknown, current: unknown) {
+  return JSON.stringify(previous) === JSON.stringify(current);
+}
+
+function formatDisplayValue(value: unknown, key: string): string {
+  if (value == null || value === "") return "Yoxdur";
+  if (typeof value === "boolean") return value ? "Bəli" : "Xeyr";
+  if (typeof value === "number") return new Intl.NumberFormat("az-AZ", { maximumFractionDigits: 2 }).format(value);
+  if (Array.isArray(value)) return formatDisplayArray(value, key);
+  if (isPlainRecord(value)) return `${Object.keys(value).length} məlumat`;
+
+  const stringValue = String(localizeSnapshotString(String(value), key));
+  if (/url$/iu.test(key)) return "Əlavə edilib";
+  return stringValue.length > 180 ? `${stringValue.slice(0, 177)}…` : stringValue;
+}
+
+function formatDisplayArray(value: unknown[], key: string): string {
+  if (!value.length) return "Yoxdur";
+  const readableItems: string[] = value.flatMap((item): string[] => {
+    if (["string", "number", "boolean"].includes(typeof item)) {
+      return [formatDisplayValue(item, key)];
+    }
+    if (isPlainRecord(item)) {
+      const name = item.name ?? item.label ?? item.fullName ?? item.title;
+      return name == null ? [] : [String(name)];
+    }
+    return [];
+  });
+  if (!readableItems.length) return `${value.length} qeyd`;
+  const visibleItems = readableItems.slice(0, 5).join(", ");
+  return readableItems.length > 5 ? `${visibleItems} və daha ${readableItems.length - 5}` : visibleItems;
 }
 
 function localizeSnapshotValue(value: unknown, key?: string): unknown {

@@ -3,7 +3,9 @@
 import { useSyncExternalStore } from "react";
 import {
   AlertTriangle,
+  ArrowUpRight,
   BellRing,
+  BookOpen,
   CalendarCheck2,
   CheckCircle2,
   CircleDollarSign,
@@ -41,6 +43,7 @@ const stageIcons = [
   PhoneCall,
   BellRing,
   CalendarCheck2,
+  BookOpen,
   CircleDollarSign,
   CheckCircle2,
   XCircle,
@@ -156,7 +159,11 @@ export function CrmOverview({
         />
         <div className="crm-conversion-layout">
           <div className="crm-conversion-chart">
-            <ChartContainer config={conversionConfig} className="crm-donut-chart">
+            <ChartContainer
+              config={conversionConfig}
+              className="crm-donut-chart"
+              initialDimension={{ width: 150, height: 150 }}
+            >
               <PieChart accessibilityLayer>
                 <Pie
                   data={conversionData}
@@ -193,6 +200,10 @@ export function CrmOverview({
               <dd>{data.dashboardStats.salesCount}</dd>
             </div>
             <div>
+              <dt>Sınaq dərsi</dt>
+              <dd>{data.dashboardStats.trialLessonLeads} müraciət · {data.dashboardStats.trialLessonCount} dərs</dd>
+            </div>
+            <div>
               <dt>Bugünkü follow-up</dt>
               <dd>{data.metrics[2]?.value ?? "0"}</dd>
             </div>
@@ -207,8 +218,8 @@ export function CrmOverview({
       <article className="crm-panel crm-attention-panel crm-enter" style={{ animationDelay: "190ms" }}>
         <PanelHeading
           icon={AlertTriangle}
-          title="Bugünkü və kritik diqqət"
-          description="İndi hərəkət tələb edən müraciətlər"
+          title="Əlaqə gözləyən müraciətlər"
+          description="Bu tələbələrlə əlaqə saxlayın və növbəti addımı gecikdirmədən tamamlayın"
           meta={`${data.attentionFocus.length} müraciət`}
           tone="coral"
         />
@@ -217,9 +228,10 @@ export function CrmOverview({
             data.attentionFocus.map((item) => (
               <button
                 type="button"
-                className="crm-attention-row"
+                className={cx("crm-attention-row", `is-${item.priorityTone}`)}
                 onClick={() => onLeadSelect(item.name)}
                 key={item.id}
+                aria-label={`${item.name} ilə əlaqə saxlanılmalıdır. ${item.nextActionTypeLabel}, ${item.nextFollowUpAt}`}
               >
                 <span className="crm-person-avatar" aria-hidden="true">
                   {item.name.slice(0, 2).toUpperCase()}
@@ -228,16 +240,30 @@ export function CrmOverview({
                   <strong>{item.name}</strong>
                   <small>{item.phone} · {item.manager}</small>
                 </span>
-                <span className="crm-attention-reasons">
-                  {item.reasonLabels.filter((reason) => reason !== item.priorityLabel).map((reason) => (
-                    <span key={reason}>{reason}</span>
-                  ))}
+                <span className="crm-attention-status">
+                  <span className="crm-attention-priority">
+                    <small>Prioritet</small>
+                    <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
+                  </span>
+                  <span className="crm-attention-reasons">
+                    {item.reasonLabels.filter((reason) => reason !== item.priorityLabel).map((reason) => (
+                      <span key={reason}>{reason}</span>
+                    ))}
+                  </span>
                 </span>
-                <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
                 <span className="crm-attention-action">
-                  <Clock3 aria-hidden="true" />
-                  <span>{item.nextActionTypeLabel}</span>
-                  <small>{item.nextFollowUpAt}</small>
+                  <span className="crm-attention-action-icon" aria-hidden="true">
+                    <PhoneCall />
+                  </span>
+                  <span className="crm-attention-action-copy">
+                    <small>Əlaqə saxlanılmalıdır</small>
+                    <strong>{item.nextActionTypeLabel}</strong>
+                    <span>
+                      <Clock3 aria-hidden="true" />
+                      {item.nextFollowUpAt}
+                    </span>
+                  </span>
+                  <ArrowUpRight className="crm-attention-open-icon" aria-hidden="true" />
                 </span>
               </button>
             ))

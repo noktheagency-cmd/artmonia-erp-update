@@ -63,6 +63,7 @@ export type TeacherDirectoryData = {
     canReadTeachers: boolean;
     canManageTeacherAccounts: boolean;
     canManageTeacherRules: boolean;
+    canExport: boolean;
   };
   accountOptions: Array<{ id: string; name: string; email: string }>;
   teachers: TeacherDirectoryTeacher[];
@@ -131,6 +132,7 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
         canReadTeachers: false,
         canManageTeacherAccounts: false,
         canManageTeacherRules: false,
+        canExport: false,
       },
       accountOptions: [],
       teachers: [],
@@ -138,7 +140,9 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
   }
 
   const prisma = getPrisma();
-  const teacherScope = canReadTeachers ? Prisma.empty : Prisma.sql`where t.id = ${ownTeacher!.id}::uuid`;
+  const teacherScope = canReadTeachers
+    ? Prisma.sql`where not (t.is_active = false and he.id is null and t.user_id is null)`
+    : Prisma.sql`where not (t.is_active = false and he.id is null and t.user_id is null) and t.id = ${ownTeacher!.id}::uuid`;
   const rows = await prisma.$queryRaw<TeacherRawRow[]>(Prisma.sql`
     select
       t.id::text as "id",
@@ -338,6 +342,7 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
       canReadTeachers,
       canManageTeacherAccounts,
       canManageTeacherRules: actor.permissions.has("teacher.rule.manage"),
+      canExport: actor.permissions.has("report.export"),
     },
     accountOptions: accountOptions.map((user) => ({ id: user.id, name: user.fullName, email: user.email })),
     teachers: rows.map((row) => mapTeacherRow(row, payrollPreviews.get(row.id))),

@@ -1,0 +1,224 @@
+import "server-only";
+
+import { AppRole, Prisma } from "@/generated/prisma/client";
+import { parseSessionDevice } from "@/modules/audit/session-device";
+import type {
+  AuthSessionDto,
+  SessionActivityDto,
+  SessionAuditData,
+  SessionDeviceTypeDto,
+  SessionUserDto,
+} from "@/modules/audit/session-types";
+import { requireErpActor } from "@/server/auth/actor";
+import { getPrisma } from "@/server/db/prisma";
+
+type AuthSessionRow = {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  roleNames: unknown;
+  department: string | null;
+  position: string | null;
+  authUserAgent: string | null;
+  authIpAddress: string | null;
+  authStartedAt: Date;
+  authLastSeenAt: Date;
+  expiresAt: Date | null;
+  recordUserAgent: string | null;
+  recordIpAddress: string | null;
+  recordCity: string | null;
+  recordCountry: string | null;
+  recordDeviceType: string | null;
+  recordDeviceName: string | null;
+  recordBrowserName: string | null;
+  recordBrowserVersion: string | null;
+  recordOsName: string | null;
+  recordOsVersion: string | null;
+};
+
+export async function getSessionAuditData(): Promise<SessionAuditData> {
+  const actor = await requireErpActor();
+  const canViewAll = actor.roles.includes(AppRole.SUPER_ADMIN);
+  const sessionsPromise = getPrisma().$queryRaw<AuthSessionRow[]>(Prisma.sql`
+    select
+      s.id::text as "id",
+      u.id::text as "userId",
+      u.full_name as "userName",
+      u.email as "userEmail",
+      coalesce(
+        array_agg(distinct r.name order by r.name) filter (where r.name is not null),
+        array[]::text[]
+      ) as "roleNames",
+      he.department,
+      he.position,
+      s.user_agent as "authUserAgent",
+      host(s.ip) as "authIpAddress",
+      coalesce(s.created_at, now()) as "authStartedAt",
+      greatest(
+        coalesce(s.refreshed_at at time zone 'UTC', '-infinity'::timestamptz),
+        coalesce(s.updated_at, '-infinity'::timestamptz),
+        coalesce(sr.last_seen_at, '-infinity'::timestamptz),
+        coalesce(s.created_at, '-infinity'::timestamptz)
+      ) as "authLastSeenAt",
+      s.not_after as "expiresAt",
+      sr.user_agent as "recordUserAgent",
+      sr.ip_address as "recordIpAddress",
+      sr.city as "recordCity",
+      sr.country as "recordCountry",
+      sr.device_type as "recordDeviceType",
+      sr.device_name as "recordDeviceName",
+      sr.browser_name as "recordBrowserName",
+      sr.browser_version as "recordBrowserVersion",
+      sr.os_name as "recordOsName",
+      sr.os_version as "recordOsVersion"
+    from auth.sessions s
+    join erp.users u on u.auth_user_id = s.user_id
+    left join erp.hr_employees he on he.user_id = u.id
+    left join erp.user_roles ur on ur.user_id = u.id
+    left join erp.roles r on r.id = ur.role_id
+    left join erp.auth_session_records sr on sr.id = s.id
+    where u.is_active = true
+      and (${canViewAll} or u.id = ${actor.id}::uuid)
+      and (s.not_after is null or s.not_after > now())
+      and sr.revoked_at is null
+    group by
+      s.id,
+      u.id,
+      he.department,
+      he.position,
+      s.user_agent,
+      s.ip,
+      s.created_at,
+      s.refreshed_at,
+      s.updated_at,
+      s.not_after,
+      sr.user_agent,
+      sr.ip_address,
+      sr.city,
+      sr.country,
+      sr.device_type,
+      sr.device_name,
+      sr.browser_name,
+      sr.browser_version,
+      sr.os_name,
+      sr.os_version,
+      sr.last_seen_at
+    order by "authLastSeenAt" desc
+    limit 1001
+  `);
+  const activityPromise = getPrisma().auditLog.findMany({
+    where: canViewAll
+      ? undefined
+      : { actorUserId: actor.id, entityType: "auth_session" },
+    take: 150,
+    orderBy: { createdAt: "desc" },
+    include: { actor: { select: { fullName: true, email: true } } },
+  });
+  const [sessionRows, activityLogs] = await Promise.all([sessionsPromise, activityPromise]);
+  const generatedAt = new Date();
+  const truncated = sessionRows.length > 1_000;
+  const sessions = sessionRows
+    .slice(0, 1_000)
+    .map((row) => mapSession(row, actor.currentSessionId));
+  const users = buildUsers(sessions);
+  const recentThreshold = generatedAt.getTime() - 15 * 60_000;
+
+  return {
+    generatedAt: generatedAt.toISOString(),
+    truncated,
+    canViewAll,
+    currentUserId: actor.id,
+    currentSessionId: actor.currentSessionId,
+    sessions,
+    users,
+    activity: activityLogs.map<SessionActivityDto>((log) => ({
+      id: log.id,
+      actorName: log.actor?.fullName ?? "Sistem",
+      actorEmail: log.actor?.email ?? null,
+      action: log.action,
+      reason: log.reason,
+      ipAddress: log.ipAddress,
+      createdAt: log.createdAt.toISOString(),
+    })),
+    summary: {
+      activeSessions: sessions.length,
+      activeUsers: new Set(sessions.map((session) => session.userId)).size,
+      mobileDevices: sessions.filter(
+        (session) => session.deviceType === "MOBILE" || session.deviceType === "TABLET",
+      ).length,
+      recentlyActive: sessions.filter(
+        (session) => new Date(session.lastSeenAt).getTime() >= recentThreshold,
+      ).length,
+    },
+  };
+}
+
+function mapSession(row: AuthSessionRow, currentSessionId: string | null): AuthSessionDto {
+  const parsed = parseSessionDevice(row.recordUserAgent ?? row.authUserAgent);
+  const deviceType = isDeviceType(row.recordDeviceType)
+    ? row.recordDeviceType
+    : parsed.deviceType;
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    userName: row.userName,
+    userEmail: row.userEmail,
+    userRole: normalizeRoleNames(row.roleNames)[0] ?? "İstifadəçi",
+    department: row.department,
+    position: row.position,
+    deviceType,
+    deviceName: row.recordDeviceName ?? parsed.deviceName,
+    browserName: row.recordBrowserName ?? parsed.browserName,
+    browserVersion: row.recordBrowserVersion ?? parsed.browserVersion,
+    osName: row.recordOsName ?? parsed.osName,
+    osVersion: row.recordOsVersion ?? parsed.osVersion,
+    ipAddress: row.recordIpAddress ?? row.authIpAddress,
+    city: row.recordCity,
+    country: row.recordCountry,
+    startedAt: row.authStartedAt.toISOString(),
+    lastSeenAt: row.authLastSeenAt.toISOString(),
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    isCurrent: row.id === currentSessionId,
+  };
+}
+
+function buildUsers(sessions: AuthSessionDto[]): SessionUserDto[] {
+  const byUser = new Map<string, SessionUserDto>();
+  for (const session of sessions) {
+    const current = byUser.get(session.userId);
+    if (current) {
+      current.activeSessionCount += 1;
+      if (!current.lastSeenAt || session.lastSeenAt > current.lastSeenAt) {
+        current.lastSeenAt = session.lastSeenAt;
+      }
+      continue;
+    }
+    byUser.set(session.userId, {
+      id: session.userId,
+      fullName: session.userName,
+      email: session.userEmail,
+      role: session.userRole,
+      department: session.department,
+      position: session.position,
+      activeSessionCount: 1,
+      lastSeenAt: session.lastSeenAt,
+    });
+  }
+  return [...byUser.values()].toSorted(
+    (left, right) =>
+      (right.lastSeenAt ?? "").localeCompare(left.lastSeenAt ?? "") ||
+      left.fullName.localeCompare(right.fullName, "az"),
+  );
+}
+
+function normalizeRoleNames(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function isDeviceType(value: string | null): value is SessionDeviceTypeDto {
+  return value === "DESKTOP" || value === "MOBILE" || value === "TABLET" || value === "UNKNOWN";
+}

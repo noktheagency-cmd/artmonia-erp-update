@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { exportRequestSchema } from "@/modules/exports/export-config";
 import { auditExport, prepareExport } from "@/modules/exports/export-service";
-import { createCsvFile, createPdfFile } from "@/modules/exports/export-files";
+import { createCsvFile, createExcelFile, createPdfFile } from "@/modules/exports/export-files";
 import { requireErpActor } from "@/server/auth/actor";
 import { toActionFailure } from "@/server/actions/safe-action";
 
@@ -19,6 +19,17 @@ export async function POST(request: Request) {
     const exportData = await prepareExport(parsed.data);
     await auditExport(actor, parsed.data, exportData.rows.length);
     const filename = `${slugify(exportData.title)}-${new Date().toISOString().slice(0, 10)}.${parsed.data.format}`;
+
+    if (parsed.data.format === "xlsx") {
+      const excel = await createExcelFile(exportData);
+      return new Response(excel.slice().buffer, {
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
 
     if (parsed.data.format === "csv") {
       return new Response(createCsvFile(exportData), {

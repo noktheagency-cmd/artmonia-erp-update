@@ -126,11 +126,19 @@ type DeleteTarget =
   | { type: "department"; department: PlaybookDepartment }
   | { type: "document"; document: PlaybookDocument };
 
-export function PlaybookWorkspace({ initialData, canManage }: { initialData: PlaybookData; canManage: boolean }) {
+export function PlaybookWorkspace({
+  initialData,
+  canManage,
+  canViewGuideline,
+}: {
+  initialData: PlaybookData;
+  canManage: boolean;
+  canViewGuideline: boolean;
+}) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [departments, setDepartments] = useState(initialData.departments);
   const [documents, setDocuments] = useState(initialData.documents);
-  const [activeSection, setActiveSection] = useState<PlaybookSection>("GUIDELINE");
+  const [activeSection, setActiveSection] = useState<PlaybookSection>(canViewGuideline ? "GUIDELINE" : "ARCHIVE");
   const [activeDepartment, setActiveDepartment] = useState("all");
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -151,6 +159,8 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
   const [toast, setToast] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const visibleSectionOptions = (Object.entries(sectionOptions) as [PlaybookSection, (typeof sectionOptions)[PlaybookSection]][])
+    .filter(([section]) => section !== "GUIDELINE" || canViewGuideline);
 
   const departmentById = useMemo(
     () => new Map(departments.map((department) => [department.id, department])),
@@ -581,8 +591,8 @@ export function PlaybookWorkspace({ initialData, canManage }: { initialData: Pla
         </div> : null}
       </header>
 
-      <nav className="playbook-section-switcher" aria-label="Playbook bölməsi">
-        {(Object.entries(sectionOptions) as [PlaybookSection, (typeof sectionOptions)[PlaybookSection]][]).map(([section, option]) => {
+      <nav className={cx("playbook-section-switcher", visibleSectionOptions.length === 1 && "is-single")} aria-label="Playbook bölməsi">
+        {visibleSectionOptions.map(([section, option]) => {
           const SectionIcon = option.icon;
           const departmentCount = departments.filter((department) => department.section === section).length;
           return (

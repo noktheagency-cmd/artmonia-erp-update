@@ -15,6 +15,7 @@ export type PermissionDefinitionShape = {
   actionLabel: string;
   description: string;
   sensitive?: boolean;
+  superAdminManaged?: boolean;
   supportsScope?: boolean;
   dependsOn?: string;
 };
@@ -65,6 +66,8 @@ export const permissionDefinitions = define([
 
   { code: "hr.employee.read", module: "hr", moduleLabel: "HR", tab: "employees", tabLabel: "İcmal və işçilər", action: "read", actionLabel: "Görə bilər", description: "İşçi profillərini görmək", sensitive: true },
   { code: "hr.employee.manage", module: "hr", moduleLabel: "HR", tab: "employees", tabLabel: "İşçilər", action: "special", actionLabel: "İşçiləri idarə edə bilər", description: "İşçi profillərini yaratmaq, dəyişmək və silmək", sensitive: true, dependsOn: "hr.employee.read" },
+  { code: "hr.corporate.read", module: "hr", moduleLabel: "HR", tab: "corporate", tabLabel: "Korporativ müştərilər", action: "read", actionLabel: "Görə bilər", description: "Korporativ müştəri şirkətlərini, büdcələri və əlaqəli şəxsləri görmək", sensitive: true },
+  { code: "hr.corporate.manage", module: "hr", moduleLabel: "HR", tab: "corporate", tabLabel: "Korporativ müştərilər", action: "special", actionLabel: "İdarə edə bilər", description: "Korporativ müştəriləri və əlaqəli şəxsləri yaratmaq, dəyişmək və silmək", sensitive: true, dependsOn: "hr.corporate.read" },
   { code: "hr.bonus.read", module: "hr", moduleLabel: "HR", tab: "bonus", tabLabel: "Bonus", action: "read", actionLabel: "Görə bilər", description: "Departament bonus kampaniyasını görmək", supportsScope: true },
   { code: "hr.bonus.manage", module: "hr", moduleLabel: "HR", tab: "bonus", tabLabel: "Bonus", action: "special", actionLabel: "Kampaniyanı idarə edə bilər", description: "Bonus kampaniyalarını yaratmaq, yeniləmək və ləğv etmək", sensitive: true, dependsOn: "hr.bonus.read" },
   { code: "hr.bonus.approve", module: "hr", moduleLabel: "HR", tab: "bonus", tabLabel: "Bonus", action: "special", actionLabel: "Bonusları təsdiqləyə bilər", description: "Açılmış əməkdaş bonus paylarını təsdiqləmək", sensitive: true, dependsOn: "hr.bonus.read" },
@@ -81,6 +84,7 @@ export const permissionDefinitions = define([
   { code: "marketing.manage", module: "marketing", moduleLabel: "Marketing", tab: "campaigns", tabLabel: "Kampaniyalar", action: "special", actionLabel: "Kampaniyaları idarə edə bilər", description: "Kampaniyaları yaratmaq, dəyişmək və silmək", dependsOn: "marketing.read" },
   { code: "marketing.content.approve", module: "marketing", moduleLabel: "Marketing", tab: "content", tabLabel: "Content plan", action: "special", actionLabel: "Slide təsdiqləyə bilər", description: "Founder təsdiqi gözləyən slide-ı calendar üçün aktiv etmək və ya düzəlişə qaytarmaq", sensitive: true, dependsOn: "marketing.read" },
   { code: "playbook.read", module: "playbook", moduleLabel: "Playbook", tab: "library", tabLabel: "Sənədlər", action: "read", actionLabel: "Görə bilər", description: "Playbook sənədlərini görmək" },
+  { code: "playbook.guideline.read", module: "playbook", moduleLabel: "Playbook", tab: "guideline", tabLabel: "Guideline", action: "read", actionLabel: "Görə bilər", description: "Guideline bölməsini və sənədlərini görmək", sensitive: true, superAdminManaged: true, dependsOn: "playbook.read" },
   { code: "playbook.manage", module: "playbook", moduleLabel: "Playbook", tab: "library", tabLabel: "Sənədlər", action: "special", actionLabel: "Sənədləri idarə edə bilər", description: "Sənəd və departamentləri idarə etmək", dependsOn: "playbook.read" },
   { code: "report.read", module: "reports", moduleLabel: "Hesabatlar", tab: "reports", tabLabel: "Hesabatlar", action: "read", actionLabel: "Görə bilər", description: "Hesabat ekranını görmək" },
   { code: "report.export", module: "reports", moduleLabel: "Hesabatlar", tab: "reports", tabLabel: "Hesabatlar", action: "export", actionLabel: "İxrac edə bilər", description: "Excel/PDF ixrac etmək", sensitive: true, dependsOn: "report.read" },
@@ -115,6 +119,10 @@ legacyRolePermissionMap[AppRole.OWNER].unshift("hr.bonus.read", "hr.bonus.manage
 legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.bonus.read", "hr.bonus.manage", "hr.bonus.approve");
 legacyRolePermissionMap[AppRole.FINANCE].unshift("hr.bonus.read");
 legacyRolePermissionMap[AppRole.AUDITOR].unshift("hr.bonus.read");
+legacyRolePermissionMap[AppRole.OWNER].unshift("hr.corporate.read", "hr.corporate.manage");
+legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.corporate.read", "hr.corporate.manage");
+legacyRolePermissionMap[AppRole.FINANCE].unshift("hr.corporate.read");
+legacyRolePermissionMap[AppRole.AUDITOR].unshift("hr.corporate.read");
 
 export const rolePermissionMap = legacyRolePermissionMap;
 
@@ -158,8 +166,18 @@ export async function loadPermissionsForUser(userId: string, roles: AppRole[]): 
 }
 
 const permissionCodeSet = new Set<string>(permissionDefinitions.map(({ code }) => code));
+const superAdminManagedPermissionCodeSet = new Set<PermissionCode>(
+  permissionDefinitions.flatMap((definition) =>
+    "superAdminManaged" in definition && definition.superAdminManaged ? [definition.code] : [],
+  ),
+);
+
 export function isPermissionCode(value: string): value is PermissionCode {
   return permissionCodeSet.has(value);
+}
+
+export function isSuperAdminManagedPermission(code: PermissionCode) {
+  return superAdminManagedPermissionCodeSet.has(code);
 }
 
 export function scopeFor(permissions: EffectivePermissions, permission: PermissionCode) {

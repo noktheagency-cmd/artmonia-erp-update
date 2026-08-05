@@ -1,14 +1,24 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
-import { Activity, Clock3, Eye, Search, UserRound } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  FileText,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-  formatAuditSnapshot,
   getAuditActionLabel,
+  getAuditDisplayChanges,
   getAuditEntityLabel,
   localizeAuditReason,
 } from "@/modules/roles/audit-log-localization";
@@ -28,6 +38,10 @@ export function AuditLogPanel({ logs }: { logs: AuditLogDto[] }) {
     return logs.filter((log) => (actor === "ALL" || log.actorName === actor) && new Date(log.createdAt).getTime() >= threshold && (!deferredQuery || `${log.actorName} ${log.actorEmail ?? ""} ${getAuditActionLabel(log.action)} ${getAuditEntityLabel(log.entityType)} ${localizeAuditReason(log.reason)}`.toLocaleLowerCase("az").includes(deferredQuery)));
   }, [actor, deferredQuery, logs, period, referenceTime]);
   const today = logs.filter((log) => isTodayBaku(log.createdAt)).length;
+  const selectedChanges = useMemo(
+    () => selected ? getAuditDisplayChanges(selected.before, selected.after) : [],
+    [selected],
+  );
 
   return <section className={styles.auditPanel}>
     <div className={styles.auditStats}>
@@ -55,18 +69,147 @@ export function AuditLogPanel({ logs }: { logs: AuditLogDto[] }) {
       </table>
       {!filtered.length ? <div className={styles.empty}>Seçilmiş filtrlərə uyğun jurnal qeydi yoxdur.</div> : null}
     </div>
-    <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}><DialogContent className={styles.auditDialog}>
-      <DialogHeader><DialogTitle>{selected ? getAuditActionLabel(selected.action) : "Jurnal qeydinin detalları"}</DialogTitle><DialogDescription>{selected ? `${selected.actorName} · ${formatDateTime(selected.createdAt)} · ${getAuditEntityLabel(selected.entityType)}` : "Əməliyyatın tam məlumatı"}</DialogDescription></DialogHeader>
-      {selected ? <div className={styles.auditDetail}>
-        <dl><div><dt>Obyekt</dt><dd>{getAuditEntityLabel(selected.entityType)} · {selected.entityId ?? "—"}</dd></div><div><dt>Səbəb</dt><dd>{localizeAuditReason(selected.reason)}</dd></div><div><dt>IP ünvanı</dt><dd>{selected.ipAddress ?? "Qeyd edilməyib"}</dd></div></dl>
-        <div className={styles.jsonGrid}><section><h4>Əvvəlki məlumat</h4><pre>{formatAuditSnapshot(selected.before)}</pre></section><section><h4>Yeni məlumat</h4><pre>{formatAuditSnapshot(selected.after)}</pre></section></div>
-      </div> : null}
-    </DialogContent></Dialog>
+    <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
+      <DialogContent className={styles.auditDialog}>
+        <DialogHeader className={styles.auditDialogHeader}>
+          <span className={styles.auditDialogEyebrow}><Activity /> Fəaliyyət qeydi</span>
+          <DialogTitle>{selected ? getAuditActionLabel(selected.action) : "Jurnal qeydinin detalları"}</DialogTitle>
+          <DialogDescription>
+            {selected
+              ? `${getAuditEntityLabel(selected.entityType)} üzrə edilən əməliyyatın aydın xülasəsi`
+              : "Əməliyyat haqqında məlumat"}
+          </DialogDescription>
+        </DialogHeader>
+
+        {selected ? <AuditLogDetail log={selected} changes={selectedChanges} /> : null}
+      </DialogContent>
+    </Dialog>
   </section>;
 }
 
+function AuditLogDetail({
+  log,
+  changes,
+}: {
+  log: AuditLogDto;
+  changes: ReturnType<typeof getAuditDisplayChanges>;
+}) {
+  const changeCopy = getChangeCopy(log, changes.length);
+
+  return <div className={styles.auditDetail} data-dialog-scroll-body="">
+    <section className={styles.auditOverview} aria-label="Əməliyyat xülasəsi">
+      <div className={styles.auditActorCard}>
+        <span className={styles.auditActorAvatar} aria-hidden="true">{getInitials(log.actorName)}</span>
+        <div>
+          <span>İcra edən</span>
+          <strong>{log.actorName}</strong>
+          <small>{log.actorEmail ?? "Sistem əməliyyatı"}</small>
+        </div>
+      </div>
+
+      <div className={styles.auditFacts}>
+        <div>
+          <CalendarClock aria-hidden="true" />
+          <span>Tarix və saat</span>
+          <strong>{formatDateTime(log.createdAt)}</strong>
+        </div>
+        <div>
+          <FileText aria-hidden="true" />
+          <span>Əlaqəli bölmə</span>
+          <strong>{getAuditEntityLabel(log.entityType)}</strong>
+        </div>
+      </div>
+    </section>
+
+    {log.reason ? <section className={styles.auditReason} aria-label="Əməliyyat qeydi">
+      <span><FileText aria-hidden="true" /> Əməliyyat qeydi</span>
+      <p>{localizeAuditReason(log.reason)}</p>
+    </section> : null}
+
+    <section className={styles.auditChanges} aria-labelledby="audit-change-heading">
+      <header>
+        <div>
+          <span className={styles.auditSectionEyebrow}>Məlumatlar</span>
+          <h3 id="audit-change-heading">{changeCopy.title}</h3>
+        </div>
+        {changes.length ? <span className={styles.auditChangeCount}>{changes.length} qeyd</span> : null}
+      </header>
+      <p className={styles.auditSectionDescription}>{changeCopy.description}</p>
+
+      {changes.length ? <div className={styles.auditChangeList}>
+        {changes.map((change) => <article
+          key={change.id}
+          className={`${styles.auditChangeRow} ${getChangeClassName(change.type)}`}
+        >
+          <span className={styles.auditChangeIcon} aria-hidden="true"><CheckCircle2 /></span>
+          <div className={styles.auditChangeContent}>
+            <div className={styles.auditChangeHeading}>
+              <strong>{change.label}</strong>
+              <span>{getChangeTypeLabel(change.type)}</span>
+            </div>
+            {change.type === "changed" ? <div className={styles.auditValueFlow}>
+              <span>{change.previous}</span>
+              <ArrowRight aria-hidden="true" />
+              <strong>{change.current}</strong>
+            </div> : <div className={styles.auditSingleValue}>
+              <span>{change.type === "added" ? "Qeydə alınan" : "Əvvəlki məlumat"}</span>
+              <strong>{change.current ?? change.previous}</strong>
+            </div>}
+          </div>
+        </article>)}
+      </div> : <div className={styles.auditNoChanges}>
+        <CheckCircle2 aria-hidden="true" />
+        <div><strong>Əlavə dəyişiklik yoxdur</strong><p>Bu əməliyyat üçün ayrıca məlumat saxlanılmayıb.</p></div>
+      </div>}
+    </section>
+  </div>;
+}
+
+function getChangeCopy(log: AuditLogDto, count: number) {
+  if (log.before == null && log.after != null) {
+    return {
+      title: "Qeydə alınan məlumatlar",
+      description: count ? "Əməliyyat zamanı əlavə edilən əsas məlumatlar." : "Əməliyyat uğurla qeydə alınıb.",
+    };
+  }
+  if (log.before != null && log.after == null) {
+    return {
+      title: "Silmədən əvvəlki məlumatlar",
+      description: count ? "Silinən qeyddə olan əsas məlumatlar." : "Qeyd sistemdən silinib.",
+    };
+  }
+  return {
+    title: "Nə dəyişdi?",
+    description: count ? "Yalnız dəyişən məlumatlar aşağıda göstərilir." : "Əməliyyat qeydə alınıb, məlumatlarda görünən fərq yoxdur.",
+  };
+}
+
+function getChangeClassName(type: "added" | "removed" | "changed") {
+  if (type === "added") return styles.auditChangeAdded;
+  if (type === "removed") return styles.auditChangeRemoved;
+  return styles.auditChangeUpdated;
+}
+
+function getChangeTypeLabel(type: "added" | "removed" | "changed") {
+  if (type === "added") return "Əlavə edildi";
+  if (type === "removed") return "Silindi";
+  return "Dəyişdirildi";
+}
+
+function getInitials(name: string) {
+  return name.split(/\s+/u).filter(Boolean).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("az")).join("") || "S";
+}
+
 const bakuOptions = { timeZone: "Asia/Baku" } as const;
+const monthLabels = ["yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avq", "sen", "okt", "noy", "dek"];
 function formatTime(value: string) { return new Intl.DateTimeFormat("az-AZ", { ...bakuOptions, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(value)); }
-function formatDate(value: string) { return new Intl.DateTimeFormat("az-AZ", { ...bakuOptions, day: "2-digit", month: "short", year: "numeric" }).format(new Date(value)); }
+function formatDate(value: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", { ...bakuOptions, day: "2-digit", month: "2-digit", year: "numeric" })
+    .formatToParts(new Date(value));
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? 0);
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  return `${day} ${monthLabels[month - 1] ?? ""} ${year}`.trim();
+}
 function formatDateTime(value: string) { return `${formatDate(value)}, ${formatTime(value)}`; }
 function isTodayBaku(value: string) { return formatDate(value) === formatDate(new Date().toISOString()); }

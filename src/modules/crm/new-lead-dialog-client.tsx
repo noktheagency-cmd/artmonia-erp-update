@@ -35,9 +35,15 @@ import { FormSelect } from "@/components/ui/select";
 import {
   leadPrioritySelectOptions,
   nextActionTypeSelectOptions,
+  type NextActionTypeValue,
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
-import { formatLeadStageLabel, leadStageSelectOptions } from "@/modules/crm/stage";
+import {
+  formatLeadStageLabel,
+  leadStageSelectOptions,
+  type LeadStageValue,
+} from "@/modules/crm/stage";
+import { DEFAULT_TRIAL_LESSON_COUNT } from "@/modules/crm/trial-lesson";
 import type { CreateLeadFormState } from "@/modules/crm/actions";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 
@@ -69,6 +75,9 @@ export function NewLeadDialogClient({
   const [isOpen, setIsOpen] = useState(false);
   const [formVersion, setFormVersion] = useState(0);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [stage, setStage] = useState<LeadStageValue>("NEW");
+  const [nextActionType, setNextActionType] = useState<NextActionTypeValue>("CALL");
+  const [trialLessonCount, setTrialLessonCount] = useState(String(DEFAULT_TRIAL_LESSON_COUNT));
   const [isChecking, startChecking] = useTransition();
   const [isSubmitting, startSubmitting] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -77,7 +86,20 @@ export function NewLeadDialogClient({
     duplicateRequestIdRef.current += 1;
     setDuplicates([]);
     setSubmitError(null);
+    setStage("NEW");
+    setNextActionType("CALL");
+    setTrialLessonCount(String(DEFAULT_TRIAL_LESSON_COUNT));
     setFormVersion((current) => current + 1);
+  }
+
+  function handleStageChange(nextStage: string) {
+    const normalizedStage = nextStage as LeadStageValue;
+    setStage(normalizedStage);
+
+    if (normalizedStage === "TRIAL_LESSON") {
+      setTrialLessonCount((current) => current || String(DEFAULT_TRIAL_LESSON_COUNT));
+      setNextActionType("TRIAL_LESSON_REMINDER");
+    }
   }
 
   function handleOpenChange(open: boolean) {
@@ -309,8 +331,35 @@ export function NewLeadDialogClient({
                 </Field>
                 <Field>
                   <FieldLabel>Status</FieldLabel>
-                  <FormSelect aria-label="Status" name="stage" defaultValue="NEW" options={leadStageSelectOptions} />
+                  <FormSelect
+                    aria-label="Status"
+                    name="stage"
+                    value={stage}
+                    onValueChange={handleStageChange}
+                    options={leadStageSelectOptions}
+                  />
                 </Field>
+                {stage === "TRIAL_LESSON" ? (
+                  <Field>
+                    <FieldLabel htmlFor="new-lead-trial-count">Sınaq dərsi sayı</FieldLabel>
+                    <InputGroup>
+                      <InputGroupAddon aria-hidden="true"><BookOpen /></InputGroupAddon>
+                      <InputGroupInput
+                        id="new-lead-trial-count"
+                        name="trialLessonCount"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={100}
+                        step={1}
+                        value={trialLessonCount}
+                        onChange={(event) => setTrialLessonCount(event.currentTarget.value)}
+                        required
+                      />
+                    </InputGroup>
+                    <FieldDescription>İlk seçimdə avtomatik 1 dərs qeyd olunur.</FieldDescription>
+                  </Field>
+                ) : null}
                 <Field>
                   <FieldLabel>Prioritet</FieldLabel>
                   <FormSelect aria-label="Prioritet" name="priority" defaultValue="NORMAL" options={leadPrioritySelectOptions} />
@@ -329,7 +378,13 @@ export function NewLeadDialogClient({
               <FieldGroup className="crm-dialog-fields">
                 <Field>
                   <FieldLabel>Növbəti addım</FieldLabel>
-                  <FormSelect aria-label="Növbəti addım" name="nextActionType" defaultValue="CALL" options={nextActionTypeSelectOptions} />
+                  <FormSelect
+                    aria-label="Növbəti addım"
+                    name="nextActionType"
+                    value={nextActionType}
+                    onValueChange={(value) => setNextActionType(value as NextActionTypeValue)}
+                    options={nextActionTypeSelectOptions}
+                  />
                 </Field>
                 <Field>
                   <FieldLabel>Növbəti addım tarixi</FieldLabel>

@@ -29,7 +29,10 @@ export function StudentFilterForm({ filterOptions, filters, query }: StudentFilt
 
     if (currentTab) params.set("tab", currentTab);
     appendParam(params, "q", formData.get("q"));
-    appendParam(params, "status", formData.get("status"));
+    const status = cleanValue(formData.get("status"));
+    if (status) params.set("status", status);
+    const churn = searchParams.get("churn");
+    if (churn && !status) params.set("churn", churn);
     appendParam(params, "program", formData.get("program"));
     appendParam(params, "teacher", formData.get("teacher"));
     appendParam(params, "from", formData.get("from"));

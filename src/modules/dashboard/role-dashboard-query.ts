@@ -49,7 +49,7 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
       count(*)::int as "leadCount",
       (select count(*)::int from erp.students student where student.manager_id = ${actorId}::uuid) as "studentCount",
       count(*) filter (
-        where lead.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_CONSULTATION', 'NURTURE')
+        where lead.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_LESSON', 'TRIAL_CONSULTATION', 'NURTURE')
           and (lead.next_follow_up_at is null or lead.next_follow_up_at <= now() + interval '1 day')
       )::int as "followUps",
       count(*) filter (where lead.converted_student_id is not null or lead.stage = 'REGISTERED')::int as converted,
@@ -161,7 +161,7 @@ async function marketingDashboard(actorName: string): Promise<RoleDashboardData>
 }
 
 function emptyTeacher(actorName: string): RoleDashboardData { return { kind: "teacher", actorName, eyebrow: "Müəllim paneli", title: "Profil bağlantısı gözləyir", description: "ERP hesabınızı müəllim profilinə bağladıqdan sonra qrup göstəriciləri burada görünəcək.", primaryHref: "/groups", primaryLabel: "Qrupları aç", kpis: [], breakdown: [], recent: [] }; }
-function stageLabel(stage: LeadStage) { return ({ NEW: "Yeni", CONTACTED: "Əlaqə saxlanıb", QUALIFIED: "Uyğun", TRIAL_CONSULTATION: "Konsultasiya", REGISTERED: "Qeydiyyat", LOST: "İtirilib", NURTURE: "İzləmədə" } as const)[stage]; }
+function stageLabel(stage: LeadStage) { return ({ NEW: "Yeni", CONTACTED: "Əlaqə saxlanıb", QUALIFIED: "Uyğun", TRIAL_LESSON: "Sınaq dərsi", TRIAL_CONSULTATION: "Ödəniş gözlənilir", REGISTERED: "Qeydiyyat", LOST: "İtirilib", NURTURE: "İzləmədə" } as const)[stage]; }
 function campaignStatus(status: MarketingCampaignStatus) { return ({ DRAFT: "Qaralama", ACTIVE: "Aktiv", PAUSED: "Dayandırılıb", COMPLETED: "Tamamlanıb" } as const)[status]; }
 function dateLabel(value: Date) { return `${value.getUTCDate().toString().padStart(2, "0")}.${(value.getUTCMonth() + 1).toString().padStart(2, "0")}.${value.getUTCFullYear()}`; }
 function money(value: number) { return `${value.toFixed(0)} ₼`; }

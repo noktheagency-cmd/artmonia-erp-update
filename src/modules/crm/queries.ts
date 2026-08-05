@@ -104,6 +104,8 @@ export type CrmData = {
     salesCount: string;
     conversionRate: string;
     consultationCount: string;
+    trialLessonLeads: string;
+    trialLessonCount: string;
     directSales: string;
     consultationSales: string;
     lossRate: string;
@@ -134,6 +136,7 @@ export type CrmData = {
     priorityTone: "success" | "warning" | "danger" | "neutral" | "info";
     nextActionType: NextActionTypeValue | "";
     nextActionTypeLabel: string;
+    trialLessonCount: number;
     createdAt: string;
     nextFollowUpAt: string;
     nextFollowUpIso: string | null;
@@ -151,6 +154,7 @@ export type CrmData = {
       stage: LeadStageValue;
       priority: LeadPriorityValue;
       nextActionType: NextActionTypeValue | "";
+      trialLessonCount: number;
       nextFollowUpDate: string;
       createdAt: string;
       convertedStudentCode: string;
@@ -225,6 +229,7 @@ type CrmLeadRawRow = {
   source: string | null;
   priority: string | null;
   nextActionType: string | null;
+  trialLessonCount: number | null;
   createdAt: string;
   nextFollowUpAt: string | null;
   contactId: string;
@@ -242,6 +247,8 @@ type CrmLeadRawRow = {
 type CrmConversionStatsRaw = {
   salesCount: unknown;
   consultationCount: unknown;
+  trialLessonLeads: unknown;
+  trialLessonCount: unknown;
   directSales: unknown;
   consultationSales: unknown;
   lostCount: unknown;
@@ -330,6 +337,8 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const formattedLeads = leadRows.map((lead) => formatLeadRow(lead));
   const salesCount = toNumber(conversionStats?.salesCount);
   const consultationCount = toNumber(conversionStats?.consultationCount);
+  const trialLessonLeads = toNumber(conversionStats?.trialLessonLeads);
+  const trialLessonCount = toNumber(conversionStats?.trialLessonCount);
   const directSales = toNumber(conversionStats?.directSales);
   const consultationSales = toNumber(conversionStats?.consultationSales);
   const lostCount = toNumber(conversionStats?.lostCount);
@@ -421,6 +430,8 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       salesCount: formatCount(salesCount),
       conversionRate: formatPercent(salesCount, totalLeads),
       consultationCount: formatCount(consultationCount),
+      trialLessonLeads: formatCount(trialLessonLeads),
+      trialLessonCount: formatCount(trialLessonCount),
       directSales: formatCount(directSales),
       consultationSales: formatCount(consultationSales),
       lossRate: formatPercent(lostCount, totalLeads),
@@ -454,7 +465,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data-v2"],
+  ["crm-pipeline-data-v3"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -540,6 +551,7 @@ function getCrmRawData(
             'NEW'::"erp"."LeadStage",
             'CONTACTED'::"erp"."LeadStage",
             'QUALIFIED'::"erp"."LeadStage",
+            'TRIAL_LESSON'::"erp"."LeadStage",
             'TRIAL_CONSULTATION'::"erp"."LeadStage",
             'NURTURE'::"erp"."LeadStage"
           )
@@ -551,6 +563,7 @@ function getCrmRawData(
         where ${summarySql}
           and l.stage in (
             'QUALIFIED'::"erp"."LeadStage",
+            'TRIAL_LESSON'::"erp"."LeadStage",
             'TRIAL_CONSULTATION'::"erp"."LeadStage"
           )
       ), 0) as "qualifiedCount",
@@ -564,9 +577,15 @@ function getCrmRawData(
             where stat_leads.had_consultation
               or stat_leads.stage in (
                 'QUALIFIED'::"erp"."LeadStage",
+                'TRIAL_LESSON'::"erp"."LeadStage",
                 'TRIAL_CONSULTATION'::"erp"."LeadStage"
               )
           ),
+          'trialLessonLeads', count(*) filter (
+            where stat_leads.trial_lesson_count is not null
+              or stat_leads.stage = 'TRIAL_LESSON'::"erp"."LeadStage"
+          ),
+          'trialLessonCount', coalesce(sum(stat_leads.trial_lesson_count), 0),
           'directSales', count(*) filter (
             where (
               stat_leads.converted_student_id is not null
@@ -590,12 +609,14 @@ function getCrmRawData(
             l.id,
             l.stage,
             l.converted_student_id,
+            l.trial_lesson_count,
             exists (
               select 1
               from erp.lead_stage_history h
               where h.lead_id = l.id
                 and h.new_stage in (
                   'QUALIFIED'::"erp"."LeadStage",
+                  'TRIAL_LESSON'::"erp"."LeadStage",
                   'TRIAL_CONSULTATION'::"erp"."LeadStage"
                 )
             ) as had_consultation
@@ -671,6 +692,7 @@ function getCrmRawData(
             'source', lead_rows.source,
             'priority', lead_rows.priority::text,
             'nextActionType', lead_rows.next_action_type::text,
+            'trialLessonCount', lead_rows.trial_lesson_count,
             'createdAt', lead_rows.created_at,
             'nextFollowUpAt', lead_rows.next_follow_up_at,
             'contactId', lead_rows.contact_id::text,
@@ -693,6 +715,7 @@ function getCrmRawData(
             l.source,
             l.priority,
             l.next_action_type,
+            l.trial_lesson_count,
             l.created_at,
             l.next_follow_up_at,
             l.contact_id,
@@ -887,6 +910,7 @@ function buildCrmListWhereSql(input: {
         'NEW'::"erp"."LeadStage",
         'CONTACTED'::"erp"."LeadStage",
         'QUALIFIED'::"erp"."LeadStage",
+        'TRIAL_LESSON'::"erp"."LeadStage",
         'TRIAL_CONSULTATION'::"erp"."LeadStage",
         'NURTURE'::"erp"."LeadStage"
       )
@@ -916,6 +940,7 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
   const programId = lead.programId ?? "";
   const managerId = lead.managerId ?? "";
   const convertedStudentCode = lead.convertedStudentCode ?? "";
+  const trialLessonCount = Math.max(0, toNumber(lead.trialLessonCount));
 
   return {
     id: lead.id,
@@ -935,6 +960,7 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
     priorityTone: leadPriorityTones[priority],
     nextActionType,
     nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),
+    trialLessonCount,
     createdAt: formatShortDate(lead.createdAt),
     nextFollowUpAt: lead.nextFollowUpAt
       ? formatShortDate(lead.nextFollowUpAt)
@@ -963,6 +989,7 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
       stage,
       priority,
       nextActionType,
+      trialLessonCount,
       nextFollowUpDate: formatDateInput(lead.nextFollowUpAt),
       createdAt: formatShortDate(lead.createdAt),
       convertedStudentCode,

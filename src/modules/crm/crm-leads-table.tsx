@@ -106,6 +106,9 @@ export function CrmLeadsTable({
                   <div className="crm-status-pair">
                     <StatusChip tone={lead.stageTone}>{lead.stageLabel}</StatusChip>
                     <StatusChip tone={lead.priorityTone}>{lead.priorityLabel}</StatusChip>
+                    {lead.trialLessonCount > 0 ? (
+                      <small className="crm-trial-count-note">{lead.trialLessonCount} sınaq dərsi</small>
+                    ) : null}
                   </div>
                 </TableCell>
                 <TableCell>
