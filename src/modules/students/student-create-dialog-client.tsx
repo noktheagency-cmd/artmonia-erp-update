@@ -218,8 +218,11 @@ export function StudentCreateDialogClient({
               options={createOptions.leads.map((lead) => ({
                 value: lead.id,
                 label: `${lead.name} - ${lead.phone || lead.source}`,
+                searchText: `${lead.name} ${lead.phone} ${lead.source}`,
               }))}
               disabled={!canConvertLead || createOptions.leads.length === 0}
+              searchable
+              searchPlaceholder="Müraciət axtar..."
             />
           </label>
 
@@ -306,6 +309,8 @@ export function StudentCreateDialogClient({
                     value: program.id,
                     label: program.name,
                   }))}
+                  searchable
+                  searchPlaceholder="Proqram axtar..."
                   required
                 />
               </label>
@@ -325,6 +330,8 @@ export function StudentCreateDialogClient({
                   onValueChange={(value) => updateValue("campaignId", cleanSelectValue(value))}
                   emptyLabel="Kampaniya seçilməyib"
                   options={createOptions.campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))}
+                  searchable
+                  searchPlaceholder="Kampaniya axtar..."
                 />
               </label>
               <label className="form-field">

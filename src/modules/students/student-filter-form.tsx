@@ -59,8 +59,8 @@ export function StudentFilterForm({ filterOptions, filters, query }: StudentFilt
         <Field className="students-date-field"><DatePicker name="from" value={dateFrom} onValueChange={setDateFrom} placeholder="Başlanğıc" aria-label="Başlanğıc tarixi" /></Field>
         <Field className="students-date-field"><DatePicker name="to" value={dateTo} onValueChange={setDateTo} placeholder="Son tarix" aria-label="Son tarix" /></Field>
         <Field className="students-filter-select-field"><FormSelect name="status" defaultValue={filters.status} emptyLabel="Status" options={filterOptions.statuses} icon={Activity} /></Field>
-        <Field className="students-filter-select-field"><FormSelect name="program" defaultValue={filters.program} emptyLabel="Proqram" options={filterOptions.programs} icon={BookOpen} /></Field>
-        <Field className="students-filter-select-field"><FormSelect name="teacher" defaultValue={filters.teacher} emptyLabel="Müəllim" options={filterOptions.teachers} icon={Users} /></Field>
+        <Field className="students-filter-select-field"><FormSelect name="program" defaultValue={filters.program} emptyLabel="Proqram" options={filterOptions.programs} icon={BookOpen} searchable searchPlaceholder="Proqram axtar..." /></Field>
+        <Field className="students-filter-select-field"><FormSelect name="teacher" defaultValue={filters.teacher} emptyLabel="Müəllim" options={filterOptions.teachers} icon={Users} searchable searchPlaceholder="Müəllim axtar..." /></Field>
         <Field className="students-filter-select-field"><FormSelect name="payment" defaultValue={filters.payment} options={filterOptions.payments} icon={CreditCard} /></Field>
         <Button type="submit" size="icon" disabled={isPending} aria-label="Filtrləri göstər" title="Göstər"><Filter /></Button>
         <Button type="button" variant="outline" size="icon" onClick={handleClear} aria-label="Filtrləri təmizlə" title="Təmizlə"><X /></Button>

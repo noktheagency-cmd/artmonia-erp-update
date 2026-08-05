@@ -211,12 +211,14 @@ function FormSelectState({
   const [catalogLoaded, setCatalogLoaded] = React.useState(false);
   const [catalogLoading, setCatalogLoading] = React.useState(false);
   const [catalogCanManage, setCatalogCanManage] = React.useState(false);
+  const [dialogPortalContainer, setDialogPortalContainer] = React.useState<HTMLElement | null>(null);
   const [editor, setEditor] = React.useState<
     { mode: "create"; option?: undefined } | { mode: "edit"; option: SelectOption } | null
   >(null);
   const [editorValue, setEditorValue] = React.useState("");
   const [deleteCandidate, setDeleteCandidate] = React.useState<SelectOption | null>(null);
   const [crudPending, startCrudTransition] = React.useTransition();
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const editorInputRef = React.useRef<HTMLInputElement>(null);
   const isMobileSheet = useMobileSelectSheet();
@@ -332,7 +334,12 @@ function FormSelectState({
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
 
-    if (nextOpen) void loadCatalogOptions();
+    if (nextOpen) {
+      setDialogPortalContainer(
+        triggerRef.current?.closest<HTMLElement>(".ui-dialog-content") ?? null,
+      );
+      void loadCatalogOptions();
+    }
 
     if (!nextOpen) {
       setSearchQuery("");
@@ -685,6 +692,7 @@ function FormSelectState({
         autoHighlight
       >
         <Combobox.Trigger
+          ref={triggerRef}
           className={cx("ui-select-trigger", "ui-combobox-trigger", className)}
           aria-label={comboboxLabel}
         >
@@ -694,7 +702,7 @@ function FormSelectState({
           </span>
           <ChevronDown className="ui-select-icon" aria-hidden="true" />
         </Combobox.Trigger>
-        <Combobox.Portal>
+        <Combobox.Portal container={dialogPortalContainer ?? undefined}>
           <Combobox.Positioner
             className="ui-combobox-positioner"
             align="start"
