@@ -115,9 +115,12 @@ type DashboardRawRow = {
   activeStudents: unknown;
   activeMrr: unknown;
   previousActiveStudents: unknown;
-  previousActiveMrr: unknown;
   periodRevenue: unknown;
+  periodStudentRevenue: unknown;
+  periodWorkshopRevenue: unknown;
   periodExpenses: unknown;
+  periodOperatingExpenses: unknown;
+  periodWorkshopExpenses: unknown;
   previousPeriodRevenue: unknown;
   previousPeriodExpenses: unknown;
   debtAmount: unknown;
@@ -131,7 +134,6 @@ type DashboardRawRow = {
   programStats: unknown;
   totalLeadsThisMonth: unknown;
   convertedLeadsThisMonth: unknown;
-  previousConvertedLeads: unknown;
   studentStatusCounts: unknown;
   teamPerformance: unknown;
 };
@@ -238,46 +240,71 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "previousActiveStudents",
       coalesce((
-        select sum(e.monthly_fee)
-        from erp.enrollments e
-        join erp.students s on s.id = e.student_id
-        where e.start_date < ${previousPeriodEndExclusive}
-          and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-          and coalesce(
-            (
-              select h.new_status
-              from erp.student_status_history h
-              where h.student_id = s.id
-                and h.effective_at < ${previousPeriodEndExclusive}
-              order by h.effective_at desc, h.created_at desc
-              limit 1
-            ),
-            s.lifecycle_status
-          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-      ), 0) as "previousActiveMrr",
+        select sum(p.amount)
+        from erp.payments p
+        where p.paid_at >= ${periodStart}
+          and p.paid_at < ${periodEndExclusive}
+      ), 0) + coalesce((
+        select sum(wp.amount)
+        from erp.workshop_payments wp
+        where wp.paid_at >= ${periodStart}
+          and wp.paid_at < ${periodEndExclusive}
+          and wp.voided_at is null
+      ), 0) as "periodRevenue",
       coalesce((
         select sum(p.amount)
         from erp.payments p
         where p.paid_at >= ${periodStart}
           and p.paid_at < ${periodEndExclusive}
-      ), 0) as "periodRevenue",
+      ), 0) as "periodStudentRevenue",
+      coalesce((
+        select sum(wp.amount)
+        from erp.workshop_payments wp
+        where wp.paid_at >= ${periodStart}
+          and wp.paid_at < ${periodEndExclusive}
+          and wp.voided_at is null
+      ), 0) as "periodWorkshopRevenue",
       coalesce((
         select sum(fe.amount)
         from erp.finance_expenses fe
         where fe.expense_date >= ${periodStart}
           and fe.expense_date < ${periodEndExclusive}
+          and fe.voided_at is null
       ), 0) as "periodExpenses",
+      coalesce((
+        select sum(fe.amount)
+        from erp.finance_expenses fe
+        where fe.expense_date >= ${periodStart}
+          and fe.expense_date < ${periodEndExclusive}
+          and fe.voided_at is null
+          and fe.workshop_event_id is null
+      ), 0) as "periodOperatingExpenses",
+      coalesce((
+        select sum(fe.amount)
+        from erp.finance_expenses fe
+        where fe.expense_date >= ${periodStart}
+          and fe.expense_date < ${periodEndExclusive}
+          and fe.voided_at is null
+          and fe.workshop_event_id is not null
+      ), 0) as "periodWorkshopExpenses",
       coalesce((
         select sum(p.amount)
         from erp.payments p
         where p.paid_at >= ${previousPeriodStart}
           and p.paid_at < ${previousPeriodEndExclusive}
+      ), 0) + coalesce((
+        select sum(wp.amount)
+        from erp.workshop_payments wp
+        where wp.paid_at >= ${previousPeriodStart}
+          and wp.paid_at < ${previousPeriodEndExclusive}
+          and wp.voided_at is null
       ), 0) as "previousPeriodRevenue",
       coalesce((
         select sum(fe.amount)
         from erp.finance_expenses fe
         where fe.expense_date >= ${previousPeriodStart}
           and fe.expense_date < ${previousPeriodEndExclusive}
+          and fe.voided_at is null
       ), 0) as "previousPeriodExpenses",
       coalesce((
         select sum(i.balance_due)
@@ -294,11 +321,20 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           order by revenue.payment_month asc
         )
         from (
-          select p.payment_month, sum(p.amount) as amount
-          from erp.payments p
-          where p.payment_month >= ${firstRevenueMonth}
-            and p.payment_month < ${nextRevenueMonth}
-          group by p.payment_month
+          select income.payment_month, sum(income.amount) as amount
+          from (
+            select date_trunc('month', p.paid_at)::date as payment_month, p.amount
+            from erp.payments p
+            where p.paid_at >= ${firstRevenueMonth}
+              and p.paid_at < ${nextRevenueMonth}
+            union all
+            select date_trunc('month', wp.paid_at)::date as payment_month, wp.amount
+            from erp.workshop_payments wp
+            where wp.paid_at >= ${firstRevenueMonth}
+              and wp.paid_at < ${nextRevenueMonth}
+              and wp.voided_at is null
+          ) income
+          group by income.payment_month
         ) revenue
       ), '[]'::jsonb) as "revenueRows",
       coalesce((
@@ -314,6 +350,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           from erp.finance_expenses fe
           where fe.expense_date >= ${firstRevenueMonth}
             and fe.expense_date < ${nextRevenueMonth}
+            and fe.voided_at is null
           group by date_trunc('month', fe.expense_date)::date
         ) expense
       ), '[]'::jsonb) as "expenseRows",
@@ -459,13 +496,6 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
       ), 0) as "convertedLeadsThisMonth",
       coalesce((
-        select count(*)::int
-        from erp.leads l
-        where l.created_at >= ${previousPeriodStart}
-          and l.created_at < ${previousPeriodEndExclusive}
-          and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
-      ), 0) as "previousConvertedLeads",
-      coalesce((
         select jsonb_agg(
           jsonb_build_object(
             'status', status_counts.status,
@@ -605,9 +635,12 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const activeStudents = toNumber(row?.activeStudents);
   const activeMrr = toNumber(row?.activeMrr);
   const previousActiveStudents = toNumber(row?.previousActiveStudents);
-  const previousActiveMrr = toNumber(row?.previousActiveMrr);
   const periodRevenue = toNumber(row?.periodRevenue);
+  const periodStudentRevenue = toNumber(row?.periodStudentRevenue);
+  const periodWorkshopRevenue = toNumber(row?.periodWorkshopRevenue);
   const periodExpenses = toNumber(row?.periodExpenses);
+  const periodOperatingExpenses = toNumber(row?.periodOperatingExpenses);
+  const periodWorkshopExpenses = toNumber(row?.periodWorkshopExpenses);
   const previousPeriodRevenue = toNumber(row?.previousPeriodRevenue);
   const previousPeriodExpenses = toNumber(row?.previousPeriodExpenses);
   const netProfit = periodRevenue - periodExpenses;
@@ -620,7 +653,6 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
 
   const totalLeadsThisMonth = toNumber(row?.totalLeadsThisMonth);
   const convertedLeadsThisMonth = toNumber(row?.convertedLeadsThisMonth);
-  const previousConvertedLeads = toNumber(row?.previousConvertedLeads);
   const conversionRate = totalLeadsThisMonth > 0 
     ? `${Math.round((convertedLeadsThisMonth / totalLeadsThisMonth) * 100)}%`
     : "0%";
@@ -679,9 +711,9 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   });
 
   const activeStudentsTrend = calculateKpiTrend(activeStudents, previousActiveStudents);
-  const activeMrrTrend = calculateKpiTrend(activeMrr, previousActiveMrr);
+  const revenueTrend = calculateKpiTrend(periodRevenue, previousPeriodRevenue);
+  const expenseTrend = invertKpiTrend(calculateKpiTrend(periodExpenses, previousPeriodExpenses));
   const netProfitTrend = calculateKpiTrend(netProfit, previousNetProfit);
-  const salesTrend = calculateKpiTrend(convertedLeadsThisMonth, previousConvertedLeads);
 
   return {
     filters: {
@@ -694,33 +726,36 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         label: "Aktiv tələbə",
         value: formatCount(activeStudents),
         delta: activeStudentsTrend.delta,
-        helper: "Ötən aya nisbətən",
+        helper: "Əvvəlki dövrə nisbətən",
         trend: activeStudentsTrend.direction,
+        detail: `${formatAmount(activeMrr)} aktiv aylıq abunə dəyəri`,
         tone: "primary",
       },
       {
-        label: "Aylıq dövriyyə (MRR)",
-        value: formatAmount(activeMrr),
-        delta: activeMrrTrend.delta,
-        helper: "Ötən aya nisbətən",
-        trend: activeMrrTrend.direction,
+        label: "Dövriyyə",
+        value: formatAmount(periodRevenue),
+        delta: revenueTrend.delta,
+        helper: "Əvvəlki dövrə nisbətən",
+        trend: revenueTrend.direction,
+        detail: `Təhsil ${formatAmount(periodStudentRevenue)} · Tədbirlər ${formatAmount(periodWorkshopRevenue)}`,
         tone: "light",
       },
       {
-        label: "Net Profit",
+        label: "Xərclər",
+        value: formatAmount(periodExpenses),
+        delta: expenseTrend.delta,
+        helper: "Əvvəlki dövrə nisbətən",
+        trend: expenseTrend.direction,
+        detail: `Əməliyyat ${formatAmount(periodOperatingExpenses)} · Tədbirlər ${formatAmount(periodWorkshopExpenses)}`,
+        tone: "light",
+      },
+      {
+        label: "Xalis mənfəət",
         value: formatAmount(netProfit),
         delta: netProfitTrend.delta,
-        helper: "Ötən aya nisbətən",
+        helper: "Əvvəlki dövrə nisbətən",
         trend: netProfitTrend.direction,
         detail: `${formatPercentage(netProfitMargin)} xalis mənfəət marjası`,
-        tone: "light",
-      },
-      {
-        label: "Satış sayı",
-        value: formatCount(convertedLeadsThisMonth),
-        delta: salesTrend.delta,
-        helper: "Ötən aya nisbətən",
-        trend: salesTrend.direction,
         tone: "light",
       },
     ],
@@ -837,6 +872,13 @@ function calculateKpiTrend(current: number, previous: number) {
   return {
     direction,
     delta: `${prefix}${formatPercentage(change)}`,
+  } as const;
+}
+
+function invertKpiTrend(trend: ReturnType<typeof calculateKpiTrend>) {
+  return {
+    ...trend,
+    direction: trend.direction === "up" ? "down" : trend.direction === "down" ? "up" : "flat",
   } as const;
 }
 

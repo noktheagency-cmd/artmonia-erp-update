@@ -28,14 +28,19 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
       },
     }),
     getPrisma().user.findMany({
-      where: { hrEmployeeProfile: { isNot: null } },
+      where: {
+        isActive: true,
+        roles: { some: {} },
+      },
       orderBy: { fullName: "asc" },
+      take: 500,
       select: {
         id: true,
+        authUserId: true,
         fullName: true,
         email: true,
         isActive: true,
-        roles: { select: { roleId: true } },
+        roles: { select: { roleId: true, role: { select: { code: true } } } },
         hrEmployeeProfile: {
           select: {
             id: true,
@@ -79,16 +84,19 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
                   : []
               ),
       })),
-    users: users.flatMap((user) => user.hrEmployeeProfile ? [{
+    users: users.map((user) => ({
       id: user.id,
-      employeeId: user.hrEmployeeProfile.id,
+      employeeId: user.hrEmployeeProfile?.id ?? null,
+      kind: user.hrEmployeeProfile ? "EMPLOYEE" as const : "PROFILE" as const,
       fullName: user.fullName,
       email: user.email,
-      department: user.hrEmployeeProfile.department,
-      position: user.hrEmployeeProfile.position,
-      isActive: user.isActive && user.hrEmployeeProfile.status !== "INACTIVE",
+      department: user.hrEmployeeProfile?.department ?? "HR xaricində",
+      position: user.hrEmployeeProfile?.position ?? "Giriş profili",
+      isActive: user.isActive && user.hrEmployeeProfile?.status !== "INACTIVE",
+      hasLogin: Boolean(user.authUserId),
+      isProtected: user.roles.some(({ role }) => role.code === AppRole.SUPER_ADMIN),
       roleIds: user.roles.map((role) => role.roleId),
-    }] : []),
+    })),
     auditLogs: auditLogs.map((log) => ({
       id: log.id,
       actorName: log.actor?.fullName ?? "Sistem",

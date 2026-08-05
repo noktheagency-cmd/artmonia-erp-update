@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AppRole } from "@/generated/prisma/client";
 import {
+  buildEffectivePermissions,
   getPermissionsForRoles,
   permissionDefinitions,
   rolePermissionMap,
@@ -33,4 +34,23 @@ test("multiple roles are merged without removing broader grants", () => {
   for (const code of [...rolePermissionMap[AppRole.SALES], ...rolePermissionMap[AppRole.FINANCE]]) {
     assert.equal(permissions.has(code), true, code);
   }
+});
+
+test("database grants authorize custom roles without an AppRole code", () => {
+  const permissions = buildEffectivePermissions([
+    { code: "student.read", scope: "ALL" },
+    { code: "student.create", scope: "ALL" },
+  ]);
+
+  assert.equal(permissions.get("student.read"), "ALL");
+  assert.equal(permissions.get("student.create"), "ALL");
+});
+
+test("broader database grants win when several roles grant the same permission", () => {
+  const permissions = buildEffectivePermissions([
+    { code: "student.read", scope: "ALL" },
+    { code: "student.read", scope: "ASSIGNED" },
+  ]);
+
+  assert.equal(permissions.get("student.read"), "ALL");
 });

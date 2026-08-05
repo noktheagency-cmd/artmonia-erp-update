@@ -68,6 +68,10 @@ import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { FinanceData } from "@/modules/finance/queries";
+import {
+  getIncomeDescription,
+  getIncomeReportingCategory,
+} from "@/modules/finance/reporting";
 
 type FinanceTab = FinanceData["filters"]["type"];
 
@@ -221,7 +225,7 @@ export function FinanceWorkspace({
           <div className="finance-header-main">
             <div className="finance-title-block">
               <h1>Maliyyə paneli</h1>
-              <p>Gəlirlər, xərclər, alacaqlar və qəbzlər bir yerdə aydın görünür.</p>
+              <p>Tələbə və tədbir gəlirləri, xərclər, alacaqlar və qəbzlər vahid mərkəzdə görünür.</p>
             </div>
           </div>
           <div className="finance-header-actions">
@@ -546,7 +550,7 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
             options={[
               { value: "all", label: "Bütün mənbələr" },
               { value: "student", label: "Tələbə ödənişləri" },
-              { value: "workshop", label: "Workshop / Masterclass" },
+              { value: "workshop", label: "Tədbirlər (Workshop / Masterclass)" },
             ]}
           />
         </div>
@@ -1277,21 +1281,14 @@ function formatShortDate(value: string): string {
 
 function CategoryDistributionList({ data }: { data: FinanceData }) {
   const slices = useMemo(() => {
-    const breakdown: Record<string, number> = {};
-    [...data.expenses, ...data.payrollItems].forEach((exp) => {
-      const cat = exp.category || "Digər";
-      const amt = exp.amountValue;
-      breakdown[cat] = (breakdown[cat] || 0) + amt;
-    });
-
-    const list = Object.entries(breakdown).map(([label, value], index) => ({
-      label,
-      value,
+    const list = data.expenseBreakdown.map((item, index) => ({
+      label: item.label,
+      value: item.value,
+      helper: `${item.count} qeyd`,
       color: chartPalette[index % chartPalette.length],
     }));
-    list.sort((a, b) => b.value - a.value);
     return list.slice(0, 5);
-  }, [data.expenses, data.payrollItems]);
+  }, [data.expenseBreakdown]);
 
   if (slices.length === 0) {
     return <div className="finance-overview-empty">Xərc kateqoriyası yoxdur</div>;
@@ -1349,8 +1346,12 @@ function RecentFinanceActivity({ data }: { data: FinanceData }) {
       dateKey: payment.dateKey,
       date: payment.paidAt,
       type: "Gəlir",
-      description: `${payment.studentName} — kurs haqqı`,
-      category: "Təhsil haqqı",
+      description: getIncomeDescription(
+        payment.sourceKind,
+        payment.studentName,
+        payment.sourceLabel,
+      ),
+      category: getIncomeReportingCategory(payment.sourceKind),
       amount: payment.amount,
       method: payment.method,
       tone: "success" as const,
@@ -1364,7 +1365,7 @@ function RecentFinanceActivity({ data }: { data: FinanceData }) {
       description: [expense.vendor, expense.description]
         .filter((value) => value && value !== "-")
         .join(" — ") || expense.category,
-      category: expense.category,
+      category: expense.reportingCategory,
       amount: `-${expense.amount}`,
       method: expense.method,
       tone: "danger" as const,
@@ -1389,8 +1390,8 @@ function RecentFinanceActivity({ data }: { data: FinanceData }) {
         </Link>
       </div>
       {rows.length > 0 ? (
-        <div className="finance-table-wrap">
-          <table className="finance-table finance-activity-table">
+        <div className="finance-table-wrap" data-erp-table-scroll="">
+          <table className="finance-table finance-activity-table" data-erp-table="" data-erp-sticky-first="">
             <thead>
               <tr>
                 <th>Tarix</th>
@@ -1737,8 +1738,8 @@ function PaymentLedger({
         </div>
         <BadgeDollarSign size={18} />
       </div>
-      <div className="finance-table-wrap">
-        <table className="finance-table">
+      <div className="finance-table-wrap" data-erp-table-scroll="">
+        <table className="finance-table" data-erp-table="" data-erp-sticky-first="">
           <thead>
             <tr>
               <th>Tələbə</th>
@@ -1997,8 +1998,8 @@ function DebtLedger({ debtors }: { debtors: FinanceData["debtors"] }) {
         </div>
         <AlertTriangle size={18} />
       </div>
-      <div className="finance-table-wrap">
-        <table className="finance-table finance-debt-table">
+      <div className="finance-table-wrap" data-erp-table-scroll="">
+        <table className="finance-table finance-debt-table" data-erp-table="" data-erp-sticky-first="">
           <thead>
             <tr>
               <th>Tələbə</th>
@@ -2083,9 +2084,9 @@ function ExpenseLedger({
         </div>
         <ReceiptText size={18} />
       </div>
-      <ExpenseCategoryChart expenses={expenses} />
-      <div className="finance-table-wrap">
-        <table className="finance-table">
+      <ExpenseCategoryChart breakdown={data.expenseBreakdown} />
+      <div className="finance-table-wrap" data-erp-table-scroll="">
+        <table className="finance-table" data-erp-table="" data-erp-sticky-first="">
           <thead>
             <tr>
               <th>Kateqoriya</th>
@@ -2103,8 +2104,12 @@ function ExpenseLedger({
                 <tr key={expense.id}>
                   <td>
                     <div className="finance-entity-cell">
-                      <strong>{expense.category}</strong>
-                      <span>{expense.workshopEventTitle || expense.description}</span>
+                      <strong>{expense.reportingCategory}</strong>
+                      <span>
+                        {expense.sourceKind === "EVENT"
+                          ? `${expense.category} · ${expense.workshopEventTitle}`
+                          : expense.description}
+                      </span>
                     </div>
                   </td>
                   <td className="finance-money negative">{expense.amount}</td>
@@ -2144,20 +2149,21 @@ function ExpenseLedger({
   );
 }
 
-function ExpenseCategoryChart({ expenses }: { expenses: FinanceData["expenses"] }) {
+function ExpenseCategoryChart({
+  breakdown,
+}: {
+  breakdown: FinanceData["expenseBreakdown"];
+}) {
   const slices = useMemo<ChartSlice[]>(() => {
-    const totals = new Map<string, number>();
-    expenses.forEach((expense) => {
-      totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.amountValue);
-    });
-    return Array.from(totals, ([label, value]) => ({ label, value }))
-      .sort((left, right) => right.value - left.value)
+    return breakdown
       .slice(0, 6)
       .map((slice, index) => ({
-        ...slice,
+        label: slice.label,
+        value: slice.value,
+        helper: `${slice.count} qeyd`,
         color: chartPalette[index % chartPalette.length],
       }));
-  }, [expenses]);
+  }, [breakdown]);
 
   return (
     <section className="finance-expense-category-chart" aria-label="Xərclərin kateqoriya diaqramı">
@@ -2202,8 +2208,8 @@ function PayrollLedger({
         </div>
         <Calculator size={18} />
       </div>
-      <div className="finance-table-wrap">
-        <table className="finance-table">
+      <div className="finance-table-wrap" data-erp-table-scroll="">
+        <table className="finance-table" data-erp-table="" data-erp-sticky-first="">
           <thead>
             <tr>
               <th>Əməkdaş / müəllim</th>

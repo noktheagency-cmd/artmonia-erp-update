@@ -725,7 +725,11 @@
 
 .confirmDialog { width: min(calc(100vw - 32px), 600px); }
 .accountDialog { width: min(calc(100vw - 32px), 520px); }
-.memberRoleDialog { width: min(calc(100vw - 28px), 610px); }
+.memberRoleDialog {
+  width: min(calc(100vw - 28px), 610px);
+  max-height: min(800px, calc(100dvh - 28px));
+  overflow-y: auto;
+}
 
 .accountForm {
   gap: 17px;
@@ -735,6 +739,31 @@
 .accountForm :global(.ui-field) { gap: 7px; }
 .accountForm :global(.ui-field-label) { color: #4d535e; font-size: 10px; }
 .accountForm input { height: 42px; font-size: 11px; }
+
+.passwordInputWrap { position: relative; }
+.passwordInputWrap input { padding-right: 42px; }
+.passwordInputWrap button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 7px;
+  color: #737a86;
+  background: transparent;
+  cursor: pointer;
+}
+.passwordInputWrap button:hover:not(:disabled) { color: var(--role-accent); background: var(--role-accent-soft); }
+.passwordInputWrap button:disabled { cursor: not-allowed; opacity: .45; }
+.passwordInputWrap svg { width: 15px; height: 15px; }
+.passwordHint { margin: 7px 0 0; color: var(--role-muted); font-size: 9px; line-height: 1.5; }
+.editRolesHeader { color: #4d535e; font-size: 10px; font-weight: 700; }
+.memberRoleDialog .roleChoices { max-height: min(280px, 32vh); }
 
 .accountForm select {
   width: 100%;
@@ -1160,12 +1189,12 @@
 }
 
 .auditTableWrap { overflow-x: auto; }
-.auditTable { width: 100%; min-width: 900px; border-collapse: collapse; }
-.auditTable th { padding: 8px 12px; color: #7c838e; background: #fbfcfd; font-size: 9px; text-align: left; }
-.auditTable td { padding: 9px 12px; border-top: 1px solid #edf0f4; color: #59616e; font-size: 10px; vertical-align: middle; }
+.auditTable { width: 100%; min-width: 860px; border-collapse: collapse; }
+.auditTable th { height: 40px; padding: 0 14px; color: #7c838e; background: #fbfcfd; font-size: 10px; text-align: left; }
+.auditTable td { min-height: 58px; padding: 10px 14px; border-top: 1px solid #edf0f4; color: #59616e; font-size: 11px; vertical-align: middle; }
 .auditTable td strong, .auditTable td small { display: block; }
-.auditTable td strong { color: #363c46; font-size: 10.5px; }
-.auditTable td small { max-width: 210px; margin-top: 2px; overflow: hidden; color: #9298a3; font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+.auditTable td strong { color: #363c46; font-size: 11.5px; }
+.auditTable td small { max-width: 210px; margin-top: 2px; overflow: hidden; color: #9298a3; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
 .auditTable td > span { display: -webkit-box; max-width: 260px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .auditDialog { width: min(calc(100vw - 32px), 850px); }
 .auditDetail dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 12px; }

@@ -93,12 +93,6 @@ export function StudentPaymentDialogClient({
           <form
             action={recordPayment}
             className="student-payment-form"
-            key={[
-              selectedStudent.id,
-              selectedStudent.detail.paymentDefaultAmount,
-              selectedStudent.detail.paymentDefaultDate,
-              selectedStudent.detail.paymentDefaultNextDate,
-            ].join(":")}
           >
             <input name="studentId" type="hidden" value={selectedStudent.id} />
             <input name="returnTo" type="hidden" value={returnTo} />
@@ -123,7 +117,15 @@ export function StudentPaymentDialogClient({
               <strong><CreditCard />{selectedStudent.balance}</strong>
             </div>
 
-            <PaymentScheduleFields student={selectedStudent} />
+            <PaymentScheduleFields
+              key={[
+                selectedStudent.id,
+                selectedStudent.detail.paymentDefaultAmount,
+                selectedStudent.detail.paymentDefaultDate,
+                selectedStudent.detail.paymentDefaultNextDate,
+              ].join(":")}
+              student={selectedStudent}
+            />
             <div className="field-grid">
               <label className="form-field">
                 <span>Metod</span>

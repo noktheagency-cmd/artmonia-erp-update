@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Eye,
+  EyeOff,
   FileText,
   Info,
   LayoutGrid,
@@ -37,8 +38,8 @@ import {
   createStandaloneUserAction,
   createRoleAction,
   deleteRoleAction,
+  updateRoleUserAction,
   updateRolePermissionsAction,
-  updateUserRolesAction,
 } from "@/modules/roles/actions";
 import type {
   PermissionDefinitionDto,
@@ -83,7 +84,11 @@ export function RolePermissionsWorkspace({
   const [createQuery, setCreateQuery] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
+  const [showAccountPassword, setShowAccountPassword] = useState(false);
   const [accountRoleId, setAccountRoleId] = useState("");
+  const [editingEmail, setEditingEmail] = useState("");
+  const [editingPassword, setEditingPassword] = useState("");
+  const [showEditingPassword, setShowEditingPassword] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("az"));
@@ -183,6 +188,7 @@ export function RolePermissionsWorkspace({
   function openAccountDialog() {
     setAccountEmail("");
     setAccountPassword("");
+    setShowAccountPassword(false);
     setAccountRoleId(selectedRole.code === "SUPER_ADMIN"
       ? roles.find((role) => role.code !== "SUPER_ADMIN")?.id ?? ""
       : selectedRole.id);
@@ -193,6 +199,7 @@ export function RolePermissionsWorkspace({
   function resetAccountForm() {
     setAccountEmail("");
     setAccountPassword("");
+    setShowAccountPassword(false);
     setAccountRoleId("");
   }
 
@@ -210,11 +217,12 @@ export function RolePermissionsWorkspace({
       setRoles((current) => current.map((role) => role.id === result.data.roleId
         ? { ...role, userCount: role.userCount + 1 }
         : role));
+      setUsers((current) => [...current, result.data.user]);
       setAccountOpen(false);
       resetAccountForm();
       setFeedback({
         tone: "success",
-        text: `${result.data.email} üçün ${result.data.roleName} rolu ilə giriş profili yaradıldı.`,
+        text: `${result.data.user.email} üçün ${result.data.roleName} rolu ilə giriş profili yaradıldı.`,
       });
     });
   }
@@ -283,15 +291,29 @@ export function RolePermissionsWorkspace({
         return;
       }
       const remaining = roles.filter((role) => role.id !== result.roleId);
-      setRoles(remaining);
+      const deletedUserIds = new Set(result.deletedUserIds);
+      const nextUsers = users.filter((user) => !deletedUserIds.has(user.id));
+      setUsers(nextUsers);
+      setRoles(remaining.map((role) => ({
+        ...role,
+        userCount: result.roleUserCounts[role.id] ?? role.userCount,
+      })));
       setSelectedRoleId(remaining[0]?.id ?? "");
       setDeleteOpen(false);
-      setFeedback({ tone: "success", text: "Rol silindi." });
+      setFeedback({
+        tone: result.authCleanupFailed > 0 ? "error" : "success",
+        text: result.authCleanupFailed > 0
+          ? `Rol və ${result.deletedUserCount} profil silindi. ${result.authCleanupFailed} giriş hesabının Auth təmizlənməsi tamamlanmadı.`
+          : `Rol, ${result.deletedUserCount} profil və ${result.deletedEmployeeCount} əməkdaş qeydi silindi.`,
+      });
     });
   }
 
-  function openUserRoles(user: RoleUserDto) {
+  function openUserProfile(user: RoleUserDto) {
     setEditingUserId(user.id);
+    setEditingEmail(user.email);
+    setEditingPassword("");
+    setShowEditingPassword(false);
     setEditingRoleIds(user.roleIds);
     setFeedback(null);
   }
@@ -302,19 +324,21 @@ export function RolePermissionsWorkspace({
       : current.filter((id) => id !== roleId));
   }
 
-  function saveUserRoles() {
+  function saveUserProfile() {
     if (!editingUser) return;
     const data = new FormData();
     data.set("userId", editingUser.id);
+    data.set("email", editingEmail);
+    data.set("password", editingPassword);
     data.set("roleIds", JSON.stringify(editingRoleIds));
     startTransition(async () => {
-      const result = await updateUserRolesAction(data);
+      const result = await updateRoleUserAction(data);
       if (!result.ok) {
         setFeedback({ tone: "error", text: result.message });
         return;
       }
       const nextUsers = users.map((user) =>
-        user.id === result.userId ? { ...user, roleIds: result.roleIds } : user,
+        user.id === result.user.id ? result.user : user,
       );
       setUsers(nextUsers);
       setRoles((current) => current.map((role) => ({
@@ -323,7 +347,10 @@ export function RolePermissionsWorkspace({
       })));
       setEditingUserId(null);
       setEditingRoleIds([]);
-      setFeedback({ tone: "success", text: "Əməkdaşın rolları yeniləndi." });
+      setEditingEmail("");
+      setEditingPassword("");
+      setShowEditingPassword(false);
+      setFeedback({ tone: "success", text: "Profilin login məlumatları və rolları yeniləndi." });
     });
   }
 
@@ -366,7 +393,7 @@ export function RolePermissionsWorkspace({
           <TabsTrigger value="roles">Rollar</TabsTrigger>
           {initialData.canViewAudit ? (
             <TabsTrigger value="audit">
-              Audit jurnalı <span>{initialData.auditLogs.length}</span>
+              Fəaliyyət jurnalı <span>{initialData.auditLogs.length}</span>
             </TabsTrigger>
           ) : null}
         </TabsList>
@@ -465,8 +492,8 @@ export function RolePermissionsWorkspace({
                   <div>
                     <Users />
                     <span>
-                      <strong>Bu roldakı əməkdaşlar</strong>
-                      <small>{selectedRoleUsers.length} əməkdaş</small>
+                      <strong>Bu roldakı profil və əməkdaşlar</strong>
+                      <small>{selectedRoleUsers.length} istifadəçi</small>
                     </span>
                   </div>
                 </div>
@@ -479,9 +506,11 @@ export function RolePermissionsWorkspace({
                           <strong>{user.fullName}</strong>
                           <small>{user.position} · {user.department}</small>
                         </div>
-                        <span className={styles.roleCount}>{user.roleIds.length} rol</span>
-                        {initialData.canManage && selectedRole.code !== "SUPER_ADMIN" ? (
-                          <Button type="button" variant="ghost" size="icon-sm" aria-label="Əməkdaşın rollarını dəyiş" onClick={() => openUserRoles(user)}>
+                        <span className={styles.roleCount}>
+                          {user.isProtected ? "Qorunan profil" : user.kind === "EMPLOYEE" ? "Əməkdaş" : "Profil"} · {user.roleIds.length} rol
+                        </span>
+                        {(initialData.canManageUsers || initialData.canManage) && selectedRole.code !== "SUPER_ADMIN" && !user.isProtected ? (
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label="Profil məlumatlarını dəyiş" onClick={() => openUserProfile(user)}>
                             <Pencil />
                           </Button>
                         ) : null}
@@ -489,7 +518,7 @@ export function RolePermissionsWorkspace({
                     ))}
                   </div>
                 ) : (
-                  <p className={styles.roleMembersEmpty}>Bu rola təyin edilmiş əməkdaş yoxdur.</p>
+                  <p className={styles.roleMembersEmpty}>Bu rola təyin edilmiş profil və ya əməkdaş yoxdur.</p>
                 )}
               </section>
 
@@ -642,17 +671,27 @@ export function RolePermissionsWorkspace({
             </Field>
             <Field>
               <FieldLabel htmlFor="account-password">Parol</FieldLabel>
-              <Input
-                id="account-password"
-                type="password"
-                value={accountPassword}
-                onChange={(event) => setAccountPassword(event.target.value)}
-                placeholder="Ən az 8 simvol"
-                minLength={8}
-                maxLength={72}
-                autoComplete="new-password"
-                required
-              />
+              <div className={styles.passwordInputWrap}>
+                <Input
+                  id="account-password"
+                  type={showAccountPassword ? "text" : "password"}
+                  value={accountPassword}
+                  onChange={(event) => setAccountPassword(event.target.value)}
+                  placeholder="Ən az 8 simvol"
+                  minLength={8}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  aria-label={showAccountPassword ? "Parolu gizlət" : "Parolu göstər"}
+                  aria-pressed={showAccountPassword}
+                  onClick={() => setShowAccountPassword((current) => !current)}
+                >
+                  {showAccountPassword ? <EyeOff /> : <Eye />}
+                </button>
+              </div>
             </Field>
             <Field>
               <FieldLabel htmlFor="account-role">Rol</FieldLabel>
@@ -687,23 +726,70 @@ export function RolePermissionsWorkspace({
         onOpenChange={(open) => {
           if (!open) {
             setEditingUserId(null);
+            setEditingEmail("");
+            setEditingPassword("");
+            setShowEditingPassword(false);
             setEditingRoleIds([]);
           }
         }}
       >
         <DialogContent className={styles.memberRoleDialog}>
           <DialogHeader>
-            <DialogTitle>Əməkdaş rollarını redaktə et</DialogTitle>
+            <DialogTitle>Profil və giriş məlumatlarını redaktə et</DialogTitle>
             <DialogDescription>
-              {editingUser?.fullName} üçün bir və ya bir neçə rol seçin.
+              {editingUser?.fullName} üçün login məlumatlarını və rolları idarə edin.
             </DialogDescription>
           </DialogHeader>
+          <FieldGroup className={styles.accountForm}>
+            <Field>
+              <FieldLabel htmlFor="editing-login-email">Login e-poçtu</FieldLabel>
+              <Input
+                id="editing-login-email"
+                type="email"
+                value={editingEmail}
+                onChange={(event) => setEditingEmail(event.target.value)}
+                autoComplete="off"
+                disabled={!initialData.canManageUsers}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="editing-login-password">Yeni parol</FieldLabel>
+              <div className={styles.passwordInputWrap}>
+                <Input
+                  id="editing-login-password"
+                  type={showEditingPassword ? "text" : "password"}
+                  value={editingPassword}
+                  onChange={(event) => setEditingPassword(event.target.value)}
+                  placeholder="Dəyişmirsə boş saxlayın"
+                  minLength={8}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  disabled={!initialData.canManageUsers || !editingUser?.hasLogin}
+                />
+                <button
+                  type="button"
+                  aria-label={showEditingPassword ? "Yeni parolu gizlət" : "Yeni parolu göstər"}
+                  aria-pressed={showEditingPassword}
+                  disabled={!initialData.canManageUsers || !editingUser?.hasLogin}
+                  onClick={() => setShowEditingPassword((current) => !current)}
+                >
+                  {showEditingPassword ? <EyeOff /> : <Eye />}
+                </button>
+              </div>
+              <p className={styles.passwordHint}>
+                Mövcud parol təhlükəsizlik səbəbindən oxunmur. Yeni parol təyin etdikdə yazdığınız dəyəri göz işarəsi ilə görə bilərsiniz.
+              </p>
+            </Field>
+          </FieldGroup>
+          <div className={styles.editRolesHeader}>Təyin edilmiş rollar</div>
           <div className={styles.roleChoices}>
             {roles.filter((role) => role.code !== "SUPER_ADMIN").map((role) => (
               <label className={styles.roleChoice} key={role.id}>
                 <input
                   type="checkbox"
                   checked={editingRoleIds.includes(role.id)}
+                  disabled={!initialData.canManage}
                   onChange={(event) => toggleUserRole(role.id, event.target.checked)}
                 />
                 <span className={styles.roleAvatar}>{initials(role.name)}</span>
@@ -716,8 +802,17 @@ export function RolePermissionsWorkspace({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingUserId(null)}>Ləğv et</Button>
-            <Button className={styles.primaryAction} disabled={editingRoleIds.length === 0 || isPending} onClick={saveUserRoles}>
-              {isPending ? "Saxlanılır..." : "Rolları saxla"}
+            <Button
+              className={styles.primaryAction}
+              disabled={
+                editingRoleIds.length === 0
+                || !editingEmail.trim()
+                || (editingPassword.length > 0 && editingPassword.length < 8)
+                || isPending
+              }
+              onClick={saveUserProfile}
+            >
+              {isPending ? "Saxlanılır..." : "Məlumatları saxla"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -967,7 +1062,7 @@ export function RolePermissionsWorkspace({
           <DialogHeader>
             <DialogTitle>“{selectedRole.name}” rolunu sil?</DialogTitle>
             <DialogDescription>
-              Rol yalnız heç bir istifadəçiyə təyin edilməyibsə silinəcək. Bu əməliyyat audit jurnalında qalacaq.
+              Bu rol və ona bağlı profillər silinəcək. Bağlı HR əməkdaşları da əməkdaş siyahısından çıxarılacaq və giriş hesabları deaktiv ediləcək. Qorunan Super Admin hesabları silinməyəcək. Bu əməliyyat geri qaytarılmır və fəaliyyət jurnalında qalır.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   BadgeDollarSign,
   GraduationCap,
+  ReceiptText,
   TrendingDown,
   TrendingUp,
   WalletCards,
@@ -18,16 +19,15 @@ import { DashboardInsights } from "@/modules/dashboard/dashboard-insights";
 import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashboard-visuals";
 
 type KpiPresentation = {
-  href: Route;
   icon: LucideIcon;
   tone: "blue" | "cyan" | "orange" | "violet";
 };
 
 const kpiPresentation: readonly KpiPresentation[] = [
-  { href: "/students?status=ACTIVE&tab=list", icon: GraduationCap, tone: "blue" },
-  { href: "/finance?type=payments", icon: WalletCards, tone: "cyan" },
-  { href: "/finance", icon: BadgeDollarSign, tone: "orange" },
-  { href: "/crm", icon: TrendingUp, tone: "violet" },
+  { icon: GraduationCap, tone: "blue" },
+  { icon: WalletCards, tone: "cyan" },
+  { icon: ReceiptText, tone: "orange" },
+  { icon: BadgeDollarSign, tone: "violet" },
 ];
 
 export function OwnerDashboard({ data }: { data: DashboardData }) {
@@ -44,7 +44,7 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
         {data.kpis.map((item, index) => {
           const presentation = kpiPresentation[index] ?? kpiPresentation[0];
 
-          return <DashboardKpiLink item={item} presentation={presentation} index={index} key={item.label} />;
+          return <DashboardKpiLink data={data} item={item} presentation={presentation} index={index} key={item.label} />;
         })}
       </div>
 
@@ -54,8 +54,8 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
           style={sequenceStyle(4)}
         >
           <DashboardPanelHeader
-            title="Gəlir dinamikası"
-            description="Son 12 ay üzrə dövriyyə, mənfəət və xərc görünüşü"
+            title="Mərkəzi maliyyə dinamikası"
+            description="Tələbə və tədbir gəlirləri, mənfəət və xərclər · son 12 ay"
             href="/finance?type=payments"
             actionLabel="Gəlir hesabatını aç"
           />
@@ -80,21 +80,24 @@ export function OwnerDashboard({ data }: { data: DashboardData }) {
 }
 
 function DashboardKpiLink({
+  data,
   item,
   presentation,
   index,
 }: {
+  data: DashboardData;
   item: DashboardData["kpis"][number];
   presentation: KpiPresentation;
   index: number;
 }) {
   const Icon = presentation.icon;
   const TrendIcon = item.trend === "up" ? TrendingUp : item.trend === "down" ? TrendingDown : Minus;
+  const href = getKpiHref(index, data.filters);
 
   return (
     <Link
       className={`owner-dashboard-kpi owner-dashboard-kpi-${presentation.tone} owner-dashboard-entrance`}
-      href={presentation.href}
+      href={href}
       style={sequenceStyle(index)}
     >
       <div className="owner-dashboard-kpi-head">
@@ -117,6 +120,18 @@ function DashboardKpiLink({
       </div>
     </Link>
   );
+}
+
+function getKpiHref(index: number, filters: DashboardData["filters"]): Route {
+  if (index === 0) {
+    return "/students?status=ACTIVE&tab=list";
+  }
+
+  const params = new URLSearchParams({ from: filters.from, to: filters.to });
+  if (index === 1) params.set("type", "payments");
+  if (index === 2) params.set("type", "expenses");
+
+  return `/finance?${params.toString()}` as Route;
 }
 
 function DashboardPanelHeader({

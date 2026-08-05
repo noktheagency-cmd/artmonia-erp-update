@@ -675,8 +675,8 @@ function EmployeeTable({
         compact ? "hr-table-section is-compact" : "hr-surface hr-table-section"
       }
     >
-      <div className="hr-table-scroll">
-        <table>
+      <div className="hr-table-scroll" data-erp-table-scroll="">
+        <table data-erp-table="" data-erp-sticky-first="">
           <thead>
             <tr>
               <th>Əməkdaş</th>
@@ -806,8 +806,8 @@ function TeacherTable({
 }) {
   return (
     <section className="hr-surface hr-table-section">
-      <div className="hr-table-scroll">
-        <table>
+      <div className="hr-table-scroll" data-erp-table-scroll="">
+        <table data-erp-table="" data-erp-sticky-first="">
           <thead>
             <tr>
               <th>Müəllim</th>

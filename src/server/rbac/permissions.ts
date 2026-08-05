@@ -84,7 +84,7 @@ export const permissionDefinitions = define([
   { code: "playbook.manage", module: "playbook", moduleLabel: "Playbook", tab: "library", tabLabel: "Sənədlər", action: "special", actionLabel: "Sənədləri idarə edə bilər", description: "Sənəd və departamentləri idarə etmək", dependsOn: "playbook.read" },
   { code: "report.read", module: "reports", moduleLabel: "Hesabatlar", tab: "reports", tabLabel: "Hesabatlar", action: "read", actionLabel: "Görə bilər", description: "Hesabat ekranını görmək" },
   { code: "report.export", module: "reports", moduleLabel: "Hesabatlar", tab: "reports", tabLabel: "Hesabatlar", action: "export", actionLabel: "İxrac edə bilər", description: "Excel/PDF ixrac etmək", sensitive: true, dependsOn: "report.read" },
-  { code: "audit.read", module: "audit", moduleLabel: "Audit", tab: "logs", tabLabel: "Audit jurnalı", action: "read", actionLabel: "Görə bilər", description: "Audit loglarını görmək", sensitive: true },
+  { code: "audit.read", module: "audit", moduleLabel: "Fəaliyyət jurnalı", tab: "logs", tabLabel: "Jurnal qeydləri", action: "read", actionLabel: "Görə bilər", description: "Fəaliyyət qeydlərini görmək", sensitive: true },
 
   { code: "auth.user.read", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "read", actionLabel: "Görə bilər", description: "ERP istifadəçilərini görmək", sensitive: true },
   { code: "auth.user.manage", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "special", actionLabel: "İstifadəçiləri idarə edə bilər", description: "ERP istifadəçilərini idarə etmək", sensitive: true, dependsOn: "auth.user.read" },
@@ -128,6 +128,20 @@ export function getPermissionsForRoles(roles: AppRole[]): EffectivePermissions {
 
 type PermissionGrantRow = { code: string; scope: string };
 
+export function buildEffectivePermissions(rows: readonly PermissionGrantRow[]): EffectivePermissions {
+  const permissions: EffectivePermissions = new Map();
+
+  for (const row of rows) {
+    if (!isPermissionCode(row.code)) continue;
+
+    const nextScope = row.scope === "ALL" ? "ALL" : "ASSIGNED";
+    const currentScope = permissions.get(row.code);
+    permissions.set(row.code, currentScope === "ALL" ? "ALL" : nextScope);
+  }
+
+  return permissions;
+}
+
 export async function loadPermissionsForUser(userId: string, roles: AppRole[]): Promise<EffectivePermissions> {
   if (roles.includes(AppRole.SUPER_ADMIN)) return getPermissionsForRoles([AppRole.SUPER_ADMIN]);
 
@@ -140,11 +154,7 @@ export async function loadPermissionsForUser(userId: string, roles: AppRole[]): 
     where ur.user_id = ${userId}::uuid
     group by p.code
   `);
-  const permissions: EffectivePermissions = new Map();
-  for (const row of rows) {
-    if (isPermissionCode(row.code)) permissions.set(row.code, row.scope === "ALL" ? "ALL" : "ASSIGNED");
-  }
-  return permissions;
+  return buildEffectivePermissions(rows);
 }
 
 const permissionCodeSet = new Set<string>(permissionDefinitions.map(({ code }) => code));

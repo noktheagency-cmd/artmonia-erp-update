@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
+import { Combobox } from "@base-ui/react/combobox";
 import {
   Check,
   ChevronDown,
@@ -651,6 +652,99 @@ function FormSelectState({
     );
   }
 
+  if (searchable) {
+    const createItem = canCreate
+      ? {
+          value: createValue,
+          label: `${createLabel}: “${createValue}”`,
+          searchText: createValue,
+        }
+      : null;
+    const visibleItems = createItem ? [...filteredItems, createItem] : filteredItems;
+    const selectedItem = items.find((item) => item.value === currentValue) ?? null;
+    const comboboxLabel = ariaLabel ?? searchPlaceholder;
+
+    return (
+      <Combobox.Root<SelectOption>
+        name={name}
+        open={open}
+        onOpenChange={(nextOpen) => handleOpenChange(nextOpen)}
+        value={selectedItem}
+        onValueChange={(item) => {
+          if (item) handleValueChange(item.value);
+        }}
+        inputValue={searchQuery}
+        onInputValueChange={(query) => setSearchQuery(query)}
+        items={visibleItems}
+        filter={null}
+        itemToStringLabel={(item) => item.label}
+        itemToStringValue={(item) => item.value}
+        isItemEqualToValue={(item, selected) => item.value === selected.value}
+        disabled={disabled}
+        required={required}
+        autoHighlight
+      >
+        <Combobox.Trigger
+          className={cx("ui-select-trigger", "ui-combobox-trigger", className)}
+          aria-label={comboboxLabel}
+        >
+          <span className="ui-select-trigger-content">
+            {Icon && <Icon className="ui-select-trigger-inline-icon" size={14} />}
+            <span className="ui-select-display-value">{displayLabel}</span>
+          </span>
+          <ChevronDown className="ui-select-icon" aria-hidden="true" />
+        </Combobox.Trigger>
+        <Combobox.Portal>
+          <Combobox.Positioner
+            className="ui-combobox-positioner"
+            align="start"
+            sideOffset={8}
+          >
+            <Combobox.Popup
+              className={cx("ui-select-content", "ui-combobox-popup", contentClassName)}
+              aria-label={comboboxLabel}
+            >
+              <div className="ui-select-search">
+                <Search aria-hidden="true" size={14} />
+                <Combobox.Input
+                  ref={searchInputRef}
+                  placeholder={searchPlaceholder}
+                  aria-label={searchPlaceholder}
+                  maxLength={creatable ? 80 : undefined}
+                />
+              </div>
+              <div className="ui-select-viewport ui-combobox-viewport">
+                <Combobox.Empty className="ui-select-empty-state">
+                  Nəticə tapılmadı
+                </Combobox.Empty>
+                <Combobox.List className="ui-combobox-list">
+                  {(item: SelectOption) => (
+                    <Combobox.Row className="ui-select-managed-row" key={item.value}>
+                      <Combobox.Item
+                        className="ui-select-item"
+                        value={item}
+                        disabled={item.disabled}
+                      >
+                        <span className="ui-select-item-indicator">
+                          <Combobox.ItemIndicator>
+                            <Check />
+                          </Combobox.ItemIndicator>
+                        </span>
+                        <span className="ui-select-item-text">{item.label}</span>
+                      </Combobox.Item>
+                      {item === createItem ? null : managedActions(item)}
+                    </Combobox.Row>
+                  )}
+                </Combobox.List>
+              </div>
+              <div className="ui-select-crud-panel">{crudPanel()}</div>
+            </Combobox.Popup>
+          </Combobox.Positioner>
+        </Combobox.Portal>
+      </Combobox.Root>
+    );
+  }
+
   return (
     <Select
       name={name}
@@ -668,32 +762,12 @@ function FormSelectState({
         </span>
       </SelectTrigger>
       <SelectContent className={contentClassName}>
-        {searchable ? (
-          <div
-            className="ui-select-search"
-            onKeyDown={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <Search aria-hidden="true" size={14} />
-            <input
-              ref={searchInputRef}
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={searchPlaceholder}
-              aria-label={searchPlaceholder}
-              maxLength={creatable ? 80 : undefined}
-            />
-          </div>
-        ) : null}
         {filteredItems.length > 0 || canCreate ? (
           <SelectGroup>
             {filteredItems.map((item) => (
-              <div className="ui-select-managed-row" key={item.value}>
-                <SelectItem value={item.value} disabled={item.disabled}>
-                  {item.label}
-                </SelectItem>
-                {managedActions(item)}
-              </div>
+              <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                {item.label}
+              </SelectItem>
             ))}
             {canCreate ? (
               <SelectItem key={`create-${createValue}`} value={createValue}>

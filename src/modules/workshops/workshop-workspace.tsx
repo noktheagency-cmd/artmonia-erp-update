@@ -114,8 +114,18 @@ export function WorkshopWorkspace({
             </span>
           </div>
 
-          <div className="workshop-table-scroll">
-            <table className="workshop-data-table">
+          <div className="workshop-table-scroll" data-erp-table-scroll="">
+            <table className="workshop-data-table is-event-list" data-erp-table="" data-erp-sticky-first="">
+              <colgroup>
+                <col className="workshop-event-column" />
+                <col className="workshop-type-column" />
+                <col className="workshop-date-column" />
+                <col className="workshop-venue-column" />
+                <col className="workshop-capacity-column" />
+                {data.permissions.canViewFinance ? <col className="workshop-money-column" /> : null}
+                {data.permissions.canViewFinance ? <col className="workshop-money-column" /> : null}
+                {data.permissions.canViewFinance ? <col className="workshop-profit-column" /> : null}
+              </colgroup>
               <thead>
                 <tr>
                   <th>Tədbir</th>

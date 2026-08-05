@@ -24,12 +24,15 @@ export type RoleSummaryDto = {
 
 export type RoleUserDto = {
   id: string;
-  employeeId: string;
+  employeeId: string | null;
+  kind: "EMPLOYEE" | "PROFILE";
   fullName: string;
   email: string;
   department: string;
   position: string;
   isActive: boolean;
+  hasLogin: boolean;
+  isProtected: boolean;
   roleIds: string[];
 };
 
@@ -80,9 +83,13 @@ export type CreateRoleResult =
   | { ok: false; code: "VALIDATION" | "FORBIDDEN" | "NOT_FOUND" | "UNKNOWN"; message: string };
 
 export type DeleteRoleResult =
-  | { ok: true; roleId: string }
-  | { ok: false; code: "VALIDATION" | "FORBIDDEN" | "NOT_FOUND" | "IN_USE" | "UNKNOWN"; message: string };
-
-export type UpdateUserRolesResult =
-  | { ok: true; userId: string; roleIds: string[] }
+  | {
+      ok: true;
+      roleId: string;
+      deletedUserIds: string[];
+      deletedUserCount: number;
+      deletedEmployeeCount: number;
+      authCleanupFailed: number;
+      roleUserCounts: Record<string, number>;
+    }
   | { ok: false; code: "VALIDATION" | "FORBIDDEN" | "NOT_FOUND" | "UNKNOWN"; message: string };

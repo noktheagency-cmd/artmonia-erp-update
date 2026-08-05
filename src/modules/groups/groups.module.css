@@ -207,9 +207,9 @@
 .headerActions { gap: 10px; }
 
 .tableWrap { width: 100%; overflow-x: auto; }
-.rosterTable { width: 100%; border-collapse: collapse; }
-.rosterTable th { padding: 15px 18px; border-bottom: 1px solid var(--line); color: #69758b; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .025em; text-transform: uppercase; }
-.rosterTable td { padding: 15px 18px; border-bottom: 1px solid #edf0f5; color: #4f5e76; font-size: 13px; vertical-align: middle; }
+.rosterTable { width: 100%; min-width: 820px; border-collapse: collapse; }
+.rosterTable th { height: 42px; padding: 0 14px; border-bottom: 1px solid var(--line); color: #69758b; text-align: left; font-size: 10px; font-weight: 700; letter-spacing: .025em; text-transform: uppercase; }
+.rosterTable td { height: 60px; padding: 10px 14px; border-bottom: 1px solid #edf0f5; color: #4f5e76; font-size: 12px; vertical-align: middle; }
 .rosterTable tbody tr { transition: 130ms ease; }
 .rosterTable tbody tr:hover { background: #fbfcff; }
 .personCell { gap: 11px; min-width: 190px; }

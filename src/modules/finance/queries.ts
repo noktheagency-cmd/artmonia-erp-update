@@ -11,6 +11,7 @@ import {
 } from "@/modules/shared/format";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
+import { getExpenseReportingCategory } from "@/modules/finance/reporting";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info";
 type MovementType = "overview" | "payments" | "debts" | "expenses" | "payroll";
@@ -49,7 +50,11 @@ export type FinanceData = {
   };
   summary: {
     income: string;
+    studentIncome: string;
+    eventIncome: string;
     expense: string;
+    operatingExpense: string;
+    eventExpense: string;
     net: string;
     payroll: string;
     debt: string;
@@ -62,6 +67,13 @@ export type FinanceData = {
     value: string;
     helper: string;
     tone: StatusTone;
+  }>;
+  expenseBreakdown: Array<{
+    label: string;
+    value: number;
+    amount: string;
+    count: number;
+    sourceKind: "OPERATIONS" | "EVENT";
   }>;
   categories: Array<{
     id: string;
@@ -125,6 +137,8 @@ export type FinanceData = {
     id: string;
     categoryId: string;
     category: string;
+    reportingCategory: string;
+    sourceKind: "OPERATIONS" | "EVENT";
     amount: string;
     amountValue: number;
     amountInput: string;
@@ -162,6 +176,8 @@ export type FinanceData = {
     id: string;
     categoryId: string;
     category: string;
+    reportingCategory: string;
+    sourceKind: "OPERATIONS" | "EVENT";
     amount: string;
     amountValue: number;
     amountInput: string;
@@ -189,8 +205,12 @@ export type FinanceData = {
 
 type FinanceSummaryRow = {
   income: unknown;
+  studentIncome: unknown;
+  workshopIncome: unknown;
   paymentCount: unknown;
   expense: unknown;
+  operatingExpense: unknown;
+  workshopExpense: unknown;
   expenseCount: unknown;
   payroll: unknown;
   debt: unknown;
@@ -202,6 +222,13 @@ type CategoryRow = {
   name: string;
   description: string | null;
   isSystem: boolean;
+};
+
+type ExpenseBreakdownRow = {
+  label: string;
+  value: unknown;
+  count: unknown;
+  sourceKind: "OPERATIONS" | "EVENT";
 };
 
 type StudentOptionRow = {
@@ -361,9 +388,15 @@ export async function getFinanceData(
   const needsExpenses = normalizedFilters.type === "overview" || normalizedFilters.type === "expenses";
   const needsPayroll = normalizedFilters.type === "overview" || normalizedFilters.type === "payroll";
   const needsDebts = normalizedFilters.type === "overview" || normalizedFilters.type === "debts";
+  const expenseModeSql = normalizedFilters.type === "expenses"
+    ? Prisma.sql`and fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode"`
+    : normalizedFilters.type === "payroll"
+      ? Prisma.sql`and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"`
+      : Prisma.empty;
 
   const [
     summaryRows,
+    expenseBreakdownRows,
     categoryRows,
     studentRows,
     staffRows,
@@ -397,6 +430,27 @@ export async function getFinanceData(
             ${searchSql.workshopPayments}
         ), 0) as "income",
         coalesce((
+          select sum(p.amount)
+          from erp.payments p
+          join erp.students s on s.id = p.student_id
+          join erp.contacts c on c.id = s.contact_id
+          where p.paid_at >= ${fromDate}
+            and p.paid_at < ${endDateExclusive}
+            ${studentSourceSql}
+            ${searchSql.payments}
+        ), 0) as "studentIncome",
+        coalesce((
+          select sum(wp.amount)
+          from erp.workshop_payments wp
+          join erp.workshop_events we on we.id = wp.event_id
+          join erp.workshop_participants participant on participant.id = wp.participant_id
+          where wp.paid_at >= ${fromDate}
+            and wp.paid_at < ${endDateExclusive}
+            and wp.voided_at is null
+            ${workshopSourceSql}
+            ${searchSql.workshopPayments}
+        ), 0) as "workshopIncome",
+        coalesce((
           select count(*)::int
           from erp.payments p
           join erp.students s on s.id = p.student_id
@@ -429,6 +483,34 @@ export async function getFinanceData(
             ${categorySql}
             ${searchSql.expenses}
         ), 0) as "expense",
+        coalesce((
+          select sum(fe.amount)
+          from erp.finance_expenses fe
+          join erp.finance_expense_categories fec on fec.id = fe.category_id
+          left join erp.users eu on eu.id = fe.employee_user_id
+          left join erp.teachers t on t.id = fe.teacher_id
+          where fe.expense_date >= ${fromDate}
+            and fe.expense_date < ${endDateExclusive}
+            and fe.voided_at is null
+            and fe.workshop_event_id is null
+            ${expenseSourceSql}
+            ${categorySql}
+            ${searchSql.expenses}
+        ), 0) as "operatingExpense",
+        coalesce((
+          select sum(fe.amount)
+          from erp.finance_expenses fe
+          join erp.finance_expense_categories fec on fec.id = fe.category_id
+          left join erp.users eu on eu.id = fe.employee_user_id
+          left join erp.teachers t on t.id = fe.teacher_id
+          where fe.expense_date >= ${fromDate}
+            and fe.expense_date < ${endDateExclusive}
+            and fe.voided_at is null
+            and fe.workshop_event_id is not null
+            ${expenseSourceSql}
+            ${categorySql}
+            ${searchSql.expenses}
+        ), 0) as "workshopExpense",
         coalesce((
           select count(*)::int
           from erp.finance_expenses fe
@@ -498,6 +580,34 @@ export async function getFinanceData(
             ${searchSql.workshopDebts}
         ), 0) as "debtors"
     `),
+    needsExpenses || needsPayroll ? prisma.$queryRaw<ExpenseBreakdownRow[]>(Prisma.sql`
+      select
+        case
+          when fe.workshop_event_id is not null then 'Tədbirlər'
+          else fec.name
+        end as "label",
+        sum(fe.amount) as "value",
+        count(*)::int as "count",
+        case
+          when fe.workshop_event_id is not null then 'EVENT'
+          else 'OPERATIONS'
+        end as "sourceKind"
+      from erp.finance_expenses fe
+      join erp.finance_expense_categories fec on fec.id = fe.category_id
+      left join erp.users eu on eu.id = fe.employee_user_id
+      left join erp.teachers t on t.id = fe.teacher_id
+      where fe.expense_date >= ${fromDate}
+        and fe.expense_date < ${endDateExclusive}
+        and fe.voided_at is null
+        ${expenseSourceSql}
+        ${expenseModeSql}
+        ${categorySql}
+        ${searchSql.expenses}
+      group by
+        case when fe.workshop_event_id is not null then 'Tədbirlər' else fec.name end,
+        case when fe.workshop_event_id is not null then 'EVENT' else 'OPERATIONS' end
+      order by sum(fe.amount) desc
+    `) : Promise.resolve([] as ExpenseBreakdownRow[]),
     prisma.$queryRaw<CategoryRow[]>(Prisma.sql`
       select
         fec.id::text as "id",
@@ -820,15 +930,23 @@ export async function getFinanceData(
 
   const summary = summaryRows[0] ?? {
     income: 0,
+    studentIncome: 0,
+    workshopIncome: 0,
     paymentCount: 0,
     expense: 0,
+    operatingExpense: 0,
+    workshopExpense: 0,
     expenseCount: 0,
     payroll: 0,
     debt: 0,
     debtors: 0,
   };
   const income = toNumber(summary.income);
+  const studentIncome = toNumber(summary.studentIncome);
+  const eventIncome = toNumber(summary.workshopIncome);
   const expense = toNumber(summary.expense);
+  const operatingExpense = toNumber(summary.operatingExpense);
+  const eventExpense = toNumber(summary.workshopExpense);
   const payroll = toNumber(summary.payroll);
   const debt = toNumber(summary.debt);
   const net = income - expense;
@@ -868,12 +986,16 @@ export async function getFinanceData(
         normalizedFilters.source === "student"
           ? "Tələbə ödənişləri"
           : normalizedFilters.source === "workshop"
-            ? "Workshop / Masterclass"
+            ? "Tədbirlər (Workshop / Masterclass)"
             : "Bütün mənbələr",
     },
     summary: {
       income: formatAmount(income),
+      studentIncome: formatAmount(studentIncome),
+      eventIncome: formatAmount(eventIncome),
       expense: formatAmount(expense),
+      operatingExpense: formatAmount(operatingExpense),
+      eventExpense: formatAmount(eventExpense),
       net: formatAmount(net),
       payroll: formatAmount(payroll),
       debt: formatAmount(debt),
@@ -885,13 +1007,13 @@ export async function getFinanceData(
       {
         label: "Daxil olan ödəniş",
         value: formatAmount(income),
-        helper: `${formatCount(toNumber(summary.paymentCount))} qəbul əməliyyatı`,
+        helper: `Təhsil ${formatAmount(studentIncome)} · Tədbirlər ${formatAmount(eventIncome)}`,
         tone: "success",
       },
       {
         label: "Xərclər",
         value: formatAmount(expense),
-        helper: `${formatCount(toNumber(summary.expenseCount))} xərc qeydi`,
+        helper: `Əməliyyat ${formatAmount(operatingExpense)} · Tədbirlər ${formatAmount(eventExpense)}`,
         tone: expense > income ? "danger" : "neutral",
       },
       {
@@ -913,6 +1035,16 @@ export async function getFinanceData(
         tone: debt > 0 ? "warning" : "success",
       },
     ],
+    expenseBreakdown: expenseBreakdownRows.map((item) => {
+      const value = toNumber(item.value);
+      return {
+        label: item.sourceKind === "EVENT" ? "Tədbirlər" : formatFinanceCategoryName(item.label),
+        value,
+        amount: formatAmount(value),
+        count: toNumber(item.count),
+        sourceKind: item.sourceKind,
+      };
+    }),
     categories: categoryRows.map((category) => ({
       id: category.id,
       name: formatFinanceCategoryName(category.name),
@@ -993,7 +1125,7 @@ export async function getFinanceData(
         paidAt: payment.paidAt,
         dateKey: payment.dateKey,
         paidDateValue: payment.paidDateValue,
-        paymentMonth: "Workshop / Masterclass",
+        paymentMonth: "Tədbirlər (Workshop / Masterclass)",
         paymentMonthValue: payment.paidDateValue,
         methodValue: payment.method,
         method: getStudentPaymentMethodLabel(payment.method),
@@ -1033,7 +1165,7 @@ export async function getFinanceData(
           studentName: debtRow.participantName,
           studentCode: debtRow.eventTitle,
           phone: debtRow.phone ?? "-",
-          program: "Workshop / Masterclass",
+          program: "Tədbirlər (Workshop / Masterclass)",
           teacher: debtRow.instructor ?? "Təlimçi təyin edilməyib",
           balance: formatAmount(debtRow.balanceDue),
           balanceValue: toNumber(debtRow.balanceDue),
@@ -1255,6 +1387,8 @@ function formatSalaryFormula(expense: ExpenseRow) {
 }
 
 function mapExpenseRow(expenseRow: ExpenseRow) {
+  const category = formatFinanceCategoryName(expenseRow.category);
+
   return {
     workshopEventId: expenseRow.workshopEventId ?? "",
     workshopEventTitle: expenseRow.workshopEventTitle ?? "",
@@ -1263,7 +1397,9 @@ function mapExpenseRow(expenseRow: ExpenseRow) {
       : "",
     id: expenseRow.id,
     categoryId: expenseRow.categoryId,
-    category: formatFinanceCategoryName(expenseRow.category),
+    category,
+    reportingCategory: getExpenseReportingCategory(expenseRow.workshopEventId, category),
+    sourceKind: expenseRow.workshopEventId ? "EVENT" as const : "OPERATIONS" as const,
     amount: formatAmount(expenseRow.amount),
     amountValue: toNumber(expenseRow.amount),
     amountInput: formatDecimalInput(expenseRow.amount),

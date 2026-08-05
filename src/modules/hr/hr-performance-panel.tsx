@@ -541,8 +541,8 @@ function DailyTab({
       </HrToolbar>
 
       <div className="hr-employee-layout">
-        <div className="data-table-wrap hr-excel-table-wrap">
-          <table className="data-table hr-excel-table hr-daily-compact-table">
+        <div className="data-table-wrap hr-excel-table-wrap" data-erp-table-scroll="">
+          <table className="data-table hr-excel-table hr-daily-compact-table" data-erp-table="" data-erp-sticky-first="">
             <thead>
               <tr>
                 <th>Tarix</th>

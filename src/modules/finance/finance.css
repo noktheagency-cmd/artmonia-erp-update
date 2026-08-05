@@ -541,6 +541,10 @@
   min-width: 820px;
 }
 
+.finance-command-page .finance-table:not(.finance-activity-table) :is(th, td):first-child {
+  min-width: 140px;
+}
+
 .finance-activity-description {
   display: block;
   max-width: 280px;

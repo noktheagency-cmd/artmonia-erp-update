@@ -790,13 +790,32 @@
 .workshop-sort-label svg { width: 14px; height: 14px; }
 
 /* Table Redesign */
-.workshop-table-scroll { min-width: 0; overflow: auto; }
-.workshop-data-table { width: 100%; min-width: 920px; border-collapse: collapse; table-layout: fixed; }
+.workshop-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.workshop-data-table {
+  --erp-table-mobile-min-width: 900px;
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.workshop-data-table.is-event-list {
+  --erp-table-mobile-min-width: 1000px;
+  min-width: 1000px;
+}
+
+.workshop-event-column { width: 25%; }
+.workshop-type-column { width: 10%; }
+.workshop-date-column { width: 11%; }
+.workshop-venue-column { width: 18%; }
+.workshop-capacity-column { width: 7%; }
+.workshop-money-column { width: 9%; }
+.workshop-profit-column { width: 11%; }
 
 .workshop-data-table th {
-  height: 44px;
+  height: 42px;
   overflow: hidden;
-  padding: 0 16px;
+  padding: 0 14px;
   color: var(--ws-muted);
   background: var(--ws-surface-soft);
   border-bottom: 1px solid var(--ws-line);
@@ -810,9 +829,9 @@
 }
 
 .workshop-data-table td {
-  height: 76px;
+  height: 68px;
   overflow: hidden;
-  padding: 12px 16px;
+  padding: 10px 14px;
   color: var(--ws-muted);
   border-bottom: 1px solid var(--ws-line);
   font-size: 12px;
@@ -822,12 +841,6 @@
   white-space: nowrap;
   transition: all 180ms ease;
 }
-
-.workshop-data-table th:first-child { width: 290px; }
-.workshop-data-table th:nth-child(2) { width: 90px; }
-.workshop-data-table th:nth-child(3) { width: 100px; }
-.workshop-data-table th:nth-child(4) { width: 110px; }
-.workshop-data-table th:nth-child(5) { width: 70px; }
 
 .workshop-data-table tbody tr {
   transition: all 150ms ease;
@@ -884,14 +897,14 @@
   display: flex;
   min-width: 220px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: inherit;
 }
 
 .workshop-event-poster {
   display: grid;
-  width: 48px;
-  height: 60px;
+  width: 44px;
+  height: 54px;
   flex: 0 0 auto;
   overflow: hidden;
   place-items: center;
@@ -956,12 +969,17 @@
 
 .workshop-inline-meta {
   display: inline-flex;
-  max-width: 150px;
+  max-width: 100%;
   align-items: center;
   gap: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.workshop-data-table.is-event-list :is(th, td):nth-child(4) {
+  overflow: visible;
+  white-space: normal;
 }
 
 .workshop-inline-meta svg {

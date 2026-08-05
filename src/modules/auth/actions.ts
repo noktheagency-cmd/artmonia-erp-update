@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { z } from "zod";
@@ -54,11 +55,13 @@ export async function signInAction(
       ? input.data.next
       : "/dashboard";
 
+  revalidatePath("/", "layout");
   redirect(next as Route);
 }
 
 export async function signOutAction() {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
+  revalidatePath("/", "layout");
   redirect("/login");
 }

@@ -663,6 +663,13 @@ html.dark .ui-mobile-select-option {
   border-color: transparent !important;
 }
 
+html.dark .ui-select-item[data-highlighted],
+html.dark .ui-select-item[data-selected],
+html.dark .ui-select-item[data-state="checked"] {
+  color: #dce8ff !important;
+  background: rgb(79 116 214 / 18%) !important;
+}
+
 html.dark .ui-select-crud-panel,
 html.dark .ui-mobile-select-crud-panel,
 html.dark .ui-mobile-select-option-row {

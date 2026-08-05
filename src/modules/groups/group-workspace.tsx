@@ -340,8 +340,8 @@ function GroupRoster({
   onEndMembership: (member: GroupMemberView) => void;
 }) {
   return (
-    <div className={styles.tableWrap}>
-      <table className={styles.rosterTable}>
+    <div className={styles.tableWrap} data-erp-table-scroll="">
+      <table className={cx(styles.rosterTable, "erp-group-table")} data-erp-table="" data-erp-sticky-first="">
         <thead><tr><th>Tələbə</th><th>Proqram</th><th>Müəllim</th><th>Status</th><th>Qoşulma tarixi</th>{canManage ? <th aria-label="Əməliyyatlar" /> : null}</tr></thead>
         <tbody>
           {group.members.length ? group.members.map((member) => (
@@ -445,8 +445,8 @@ function JournalView({
           <div className={styles.attendanceIcon}><UsersRound size={22} /></div>
           <div><h2>Davamiyyət</h2><p><strong>{data.journal.members.length}</strong> tələbə · <em>{data.journal.presentCount} gəldi</em> · <b>{data.journal.absentCount} gəlmədi</b> · {data.journal.unmarkedCount} qeyd olunmayıb</p></div>
         </div>
-        <div className={styles.tableWrap}>
-          <table className={cx(styles.rosterTable, styles.attendanceTable)}>
+        <div className={styles.tableWrap} data-erp-table-scroll="">
+          <table className={cx(styles.rosterTable, styles.attendanceTable, "erp-group-table")} data-erp-table="" data-erp-sticky-first="">
             <thead><tr><th>#</th><th>Tələbə</th><th>Proqram</th><th>Müəllim</th><th>Davamiyyət</th><th>Qeyd</th></tr></thead>
             <tbody>
               {data.journal.members.length ? data.journal.members.map((member, index) => {

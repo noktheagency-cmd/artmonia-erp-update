@@ -264,32 +264,32 @@ button.students-kpi { cursor: pointer; }
 .students-list-metric.is-expected { --metric-accent: var(--students-amber); }
 .students-list-metric.is-overdue { --metric-accent: var(--students-coral); background: linear-gradient(135deg, #fff9fa, #fff0f2); border-color: #f4dbe0; }
 
-.ui-table-container { width: 100%; overflow: auto; }
-.ui-table { width: 100%; min-width: 1040px; border-collapse: collapse; }
-.ui-table-header { background: #e9eff5; }
-.ui-table-head { height: 38px; padding: 0 13px; color: var(--students-muted); font-size: 8.5px; font-weight: 650 !important; letter-spacing: .025em; text-align: left; text-transform: uppercase; white-space: nowrap; }
-.ui-table-body .ui-table-row { content-visibility: auto; contain-intrinsic-size: 62px; transition: background 160ms ease; }
-.ui-table-body .ui-table-row:hover { background: #f1f5f9; }
-.ui-table-body .ui-table-row[data-debt="true"] { box-shadow: inset 2px 0 0 var(--students-coral); }
-.ui-table-cell { height: 62px; padding: 8px 13px; color: var(--students-ink); border-top: 1px solid var(--students-line); font-size: 10px; vertical-align: middle; }
+.students-table-panel .ui-table-container { width: 100%; overflow-x: auto; }
+.students-data-table { --erp-table-mobile-min-width: 920px; width: 100%; min-width: 980px; border-collapse: collapse; }
+.students-data-table .ui-table-header { background: #e9eff5; }
+.students-data-table .ui-table-head { height: 40px; padding: 0 13px; color: var(--students-muted); font-size: 9.5px; font-weight: 650 !important; letter-spacing: .025em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.students-data-table .ui-table-body .ui-table-row { content-visibility: auto; contain-intrinsic-size: 60px; transition: background 160ms ease; }
+.students-data-table .ui-table-body .ui-table-row:hover { background: #f1f5f9; }
+.students-data-table .ui-table-body .ui-table-row[data-debt="true"] { box-shadow: inset 2px 0 0 var(--students-coral); }
+.students-data-table .ui-table-cell { height: 60px; padding: 8px 13px; color: var(--students-ink); border-top: 1px solid var(--students-line); font-size: 11.5px; vertical-align: middle; }
 .students-identity-link { display: flex; gap: 10px; align-items: center; min-width: 195px; color: var(--students-ink); }
 .students-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; color: var(--students-blue); background: #e8edfd; border-radius: 11px; font-size: 9px; font-weight: 700; }
 .students-identity-link > span:last-child,
 .students-table-stack,
 .students-payment-cell { display: grid; gap: 3px; min-width: 0; }
 .students-identity-link strong,
-.students-table-stack strong { overflow: hidden; color: var(--students-ink); font-size: 10px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.students-table-stack strong { overflow: hidden; color: var(--students-ink); font-size: 11.5px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 .students-identity-link small,
-.students-table-stack small { overflow: hidden; color: var(--students-muted); font-size: 8.75px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.students-table-stack small { overflow: hidden; color: var(--students-muted); font-size: 9.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .students-payment-cell { justify-items: start; }
 .students-payment-cell small { color: #16805f; font-size: 9px; font-weight: 650; }
 .students-payment-cell small[data-debt="true"] { color: #c94759; }
 .students-date-cell { display: flex; gap: 7px; align-items: center; min-width: 125px; }
 .students-date-cell > svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--students-muted); }
 .students-date-cell > span { display: grid; gap: 3px; }
-.students-date-cell strong { color: var(--students-ink); font-size: 9.5px; font-weight: 600; }
-.students-date-cell small { color: var(--students-muted); font-size: 8.5px; }
-.students-data-table .status-chip { min-height: 22px; padding-inline: 8px; font-size: 8.5px; }
+.students-date-cell strong { color: var(--students-ink); font-size: 11px; font-weight: 600; }
+.students-date-cell small { color: var(--students-muted); font-size: 9.5px; }
+.students-data-table .status-chip { min-height: 24px; padding-inline: 8px; font-size: 9.5px; }
 .students-row-action { display: grid; place-items: center; width: 30px; height: 30px; color: var(--students-muted); background: var(--students-soft); border: 1px solid var(--students-line); border-radius: 9px; transition: color 160ms ease, transform 160ms ease, border-color 160ms ease; }
 .students-row-action svg { width: 14px; height: 14px; }
 .students-row-action:hover { color: var(--students-blue); border-color: rgb(70 103 232 / 28%); transform: translateX(2px); }

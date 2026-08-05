@@ -250,8 +250,8 @@ function PaymentsTab({ data, actions }: { data: WorkshopDetailData; actions: Act
           <SectionHeader title="Ödəniş tarixçəsi" subtitle={`${data.payments.length} əməliyyat`} />
           {data.permissions.canManageFinance ? <PaymentDialog data={data} action={actions.recordPayment} /> : null}
         </div>
-        <div className="workshop-table-scroll">
-          <table className="workshop-data-table is-detail-table">
+        <div className="workshop-table-scroll" data-erp-table-scroll="">
+          <table className="workshop-data-table is-detail-table" data-erp-table="" data-erp-sticky-first="">
             <thead><tr><th>İştirakçı</th><th>Tarix</th><th>Metod</th><th>Məbləğ</th><th>Ödəyən</th><th>Status</th><th /></tr></thead>
             <tbody>{data.payments.length ? data.payments.map((payment) => (
               <tr key={payment.id} className={payment.statusLabel === "Ləğv edilib" ? "is-voided" : undefined}>
@@ -277,8 +277,8 @@ function ExpensesTab({ data, actions, autoOpen }: { data: WorkshopDetailData; ac
           <SectionHeader title="Xərc tarixçəsi" subtitle={`${data.expenses.length} əməliyyat`} />
           {data.permissions.canManageFinance ? <ExpenseDialog data={data} action={actions.createExpense} autoOpen={autoOpen} /> : null}
         </div>
-        <div className="workshop-table-scroll">
-          <table className="workshop-data-table is-detail-table">
+        <div className="workshop-table-scroll" data-erp-table-scroll="">
+          <table className="workshop-data-table is-detail-table" data-erp-table="" data-erp-sticky-first="">
             <thead><tr><th>Kateqoriya</th><th>Tarix</th><th>Metod</th><th>Məbləğ</th><th>Status</th><th /></tr></thead>
             <tbody>{data.expenses.length ? data.expenses.map((expense) => (
               <tr key={expense.id} className={expense.statusLabel === "Ləğv edilib" ? "is-voided" : undefined}>
@@ -336,8 +336,8 @@ function FinanceRail({ data, actions }: { data: WorkshopDetailData; actions: Act
 
 function ParticipantTable({ rows, actions, canManage }: { rows: WorkshopParticipantRow[]; actions: Actions; canManage: boolean }) {
   return (
-    <div className="workshop-table-scroll">
-      <table className="workshop-data-table is-detail-table">
+    <div className="workshop-table-scroll" data-erp-table-scroll="">
+      <table className="workshop-data-table is-detail-table" data-erp-table="" data-erp-sticky-first="">
         <thead><tr><th>İştirakçı</th><th>Telefon</th><th>Qiymət</th><th>Ödənilib</th><th>Qalıq</th><th>Status</th><th>Qeydiyyat</th><th /></tr></thead>
         <tbody>{rows.length ? rows.map((row) => (
           <tr key={row.id} className={row.paymentState === "CANCELLED" ? "is-voided" : undefined}>

@@ -15,8 +15,32 @@
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Shared contract for every tabular list in the ERP. Module CSS still owns
+ * column semantics and colors; this layer only guarantees predictable sizing
+ * and scrolling across routes. */
+[data-erp-table-scroll] {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-erp-table] {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+[data-erp-table] :is(th, td) {
+  vertical-align: middle;
+}
+
+[data-erp-table] tbody tr:last-child > td {
+  border-bottom: 0;
 }
 
 .ui-table-container:focus {
@@ -219,6 +243,7 @@
   }
 
   .erp-frame :is(
+    [data-erp-table-scroll],
     .data-table-wrap,
     .ui-table-container,
     .students-table-scroll,
@@ -227,6 +252,7 @@
     .hr-table-scroll,
     .hr-excel-table-wrap,
     .marketing-table-wrap,
+    .workshop-table-scroll,
     .workshop-data-table-wrap,
     .table-scroll,
     .audit-table-wrap,
@@ -242,6 +268,7 @@
   }
 
   .erp-frame :is(
+    [data-erp-table],
     .data-table,
     .ui-table,
     .students-data-table,
@@ -253,11 +280,16 @@
     .marketing-table,
     .workshop-data-table
   ) {
-    width: max-content;
-    min-width: max(100%, 720px);
+    width: 100%;
+    min-width: max(100%, var(--erp-table-mobile-min-width, 720px));
+  }
+
+  .erp-frame :is(.students-data-table, .crm-leads-table, .workshop-data-table) {
+    table-layout: fixed;
   }
 
   .erp-frame :is(
+    [data-erp-table],
     .data-table,
     .ui-table,
     .students-data-table,
@@ -270,6 +302,30 @@
     .workshop-data-table
   ) :is(th, td) {
     white-space: nowrap;
+  }
+
+  .erp-frame :is(.students-data-table, .crm-leads-table) {
+    --erp-table-mobile-min-width: 920px;
+  }
+
+  .erp-frame .finance-table {
+    --erp-table-mobile-min-width: 880px;
+  }
+
+  .erp-frame .workshop-data-table {
+    --erp-table-mobile-min-width: 900px;
+  }
+
+  .erp-frame .workshop-data-table.is-event-list {
+    --erp-table-mobile-min-width: 1000px;
+  }
+
+  .erp-frame :is(.hr-table-section, .hr-excel-table-wrap) [data-erp-table] {
+    --erp-table-mobile-min-width: 880px;
+  }
+
+  .erp-frame :is(.erp-group-table, .erp-audit-table) {
+    --erp-table-mobile-min-width: 860px;
   }
 
   .erp-frame :is(
@@ -1070,7 +1126,7 @@
     min-width: 720px;
   }
 
-  .ui-table :is(th:first-child, td:first-child) {
+  :is(.ui-table, [data-erp-table][data-erp-sticky-first]) :is(th:first-child, td:first-child) {
     position: sticky;
     left: 0;
     z-index: 2;
@@ -1078,8 +1134,9 @@
     box-shadow: 8px 0 12px -12px rgb(20 31 52 / 30%);
   }
 
-  .ui-table thead th:first-child {
+  :is(.ui-table, [data-erp-table][data-erp-sticky-first]) thead th:first-child {
     z-index: 3;
+    background: #f7f9fc;
   }
 
   .playbook-drawer,
