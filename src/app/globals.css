@@ -23582,3 +23582,29 @@ html:not(.dark) .mobile-bottom-nav {
   border-color: rgb(196 105 30 / 15%) !important;
   box-shadow: 0 -12px 32px rgb(91 48 14 / 9%) !important;
 }
+
+/* Light-mode dialog actions must never resolve to white text on a transparent surface. */
+html:not(.dark) .ui-dialog-content [data-slot="button"] {
+  color: #263146;
+}
+
+html:not(.dark) .ui-dialog-content [data-slot="button"][class*="bg-primary"],
+html:not(.dark) .erp-frame[data-section="groups"] [class*="planner-module"][class*="__primaryButton"] {
+  color: #fff !important;
+  background-color: #d96a08 !important;
+  background-image: none !important;
+  border-color: #d96a08 !important;
+  box-shadow: 0 9px 20px rgb(217 106 8 / 20%) !important;
+}
+
+html:not(.dark) .ui-dialog-content [data-slot="button"][class*="border-border"] {
+  color: #263146 !important;
+  background-color: #fff !important;
+  border-color: #d8dee8 !important;
+}
+
+html:not(.dark) .ui-dialog-content [data-slot="button"][class*="text-destructive"] {
+  color: #c63f4f !important;
+  background-color: #fff1f2 !important;
+  border-color: #f1c9ce !important;
+}

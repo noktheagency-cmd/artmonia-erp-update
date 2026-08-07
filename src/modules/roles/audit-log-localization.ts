@@ -2,6 +2,7 @@ const actionLabels: Record<string, string> = {
   "attendance.batch.update": "Davamiyyət qeydləri yeniləndi",
   "auth.user.create": "İstifadəçi hesabı yaradıldı",
   "class_slot.create": "Dərs vaxtı yaradıldı",
+  "class_slot.delete": "Dərs vaxtı silindi",
   "class_slot.update": "Dərs vaxtı yeniləndi",
   "class_slot.version.create": "Dərs vaxtının yeni versiyası yaradıldı",
   "dropdown_option.create": "Siyahı seçimi yaradıldı",

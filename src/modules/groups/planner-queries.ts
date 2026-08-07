@@ -24,6 +24,7 @@ export type PlannerSlot = {
   teacherName: string;
   room: string;
   capacity: number;
+  validFrom: string;
   assignedCount: number;
   members: PlannerMember[];
 };
@@ -75,6 +76,7 @@ export async function getPlannerWorkspaceData(): Promise<PlannerWorkspaceData> {
         endTime: true,
         room: true,
         capacity: true,
+        validFrom: true,
         group: { select: { id: true, code: true } },
         teacher: { select: { id: true, fullName: true } },
         _count: {
@@ -175,6 +177,7 @@ export async function getPlannerWorkspaceData(): Promise<PlannerWorkspaceData> {
       teacherName: slot.teacher.fullName,
       room: slot.room ?? "Otaq seçilməyib",
       capacity: slot.capacity,
+      validFrom: toDateInput(slot.validFrom),
       assignedCount: slot._count.assignments,
       members: slot.assignments.map((assignment) => ({
         assignmentId: assignment.id,

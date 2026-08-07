@@ -13,6 +13,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Trash2,
   UserPlus,
   UserRound,
   UsersRound,
@@ -43,6 +44,7 @@ import styles from "./planner.module.css";
 type PlannerActions = {
   createSlot: (formData: FormData) => Promise<unknown>;
   updateSlot: (formData: FormData) => Promise<unknown>;
+  deleteSlot: (formData: FormData) => Promise<unknown>;
   replaceSchedule: (formData: FormData) => Promise<unknown>;
 };
 
@@ -84,11 +86,7 @@ export function PlannerWorkspace({
   const selectedSlot = data.slots.find((slot) => slot.id === selectedSlotId)
     ?? filteredSlots[0]
     ?? data.slots[0];
-  const weekdays = useMemo(() => {
-    const base = orderedWeekdays.filter((day) => weekdayMeta[day].index >= 1 && weekdayMeta[day].index <= 5);
-    const weekend = orderedWeekdays.filter((day) => weekdayMeta[day].index === 0 || weekdayMeta[day].index === 6);
-    return [...base, ...weekend.filter((day) => filteredSlots.some((slot) => slot.weekday === day))];
-  }, [filteredSlots]);
+  const weekdays = orderedWeekdays;
   const times = [...new Set(filteredSlots.map((slot) => slot.startTime))].toSorted();
   const plannedCount = data.slots.reduce((sum, slot) => sum + slot.assignedCount, 0);
   const openSeats = data.slots.reduce((sum, slot) => sum + Math.max(slot.capacity - slot.assignedCount, 0), 0);
@@ -120,7 +118,7 @@ export function PlannerWorkspace({
           <Metric icon={UsersRound} value={plannedCount} label="planlaşdırılmış iştirak" />
           <Metric icon={UserPlus} value={openSeats} label="boş yer" />
           {data.canManage ? (
-            <Button className={styles.primaryButton} type="button" onClick={() => setSlotDialogMode("create")}>
+            <Button type="button" onClick={() => setSlotDialogMode("create")}>
               <Plus data-icon="inline-start" /> Yeni slot
             </Button>
           ) : null}
@@ -173,7 +171,7 @@ export function PlannerWorkspace({
               <span><CalendarDays size={28} /></span>
               <h2>Uyğun slot tapılmadı</h2>
               <p>Filtrləri sıfırlayın və ya ilk həftəlik dərs slotunu yaradın.</p>
-              {data.canManage ? <Button className={styles.primaryButton} type="button" onClick={() => setSlotDialogMode("create")}><Plus data-icon="inline-start" /> Yeni slot</Button> : null}
+              {data.canManage ? <Button type="button" onClick={() => setSlotDialogMode("create")}><Plus data-icon="inline-start" /> Yeni slot</Button> : null}
             </div>
           )}
         </main>
@@ -207,7 +205,7 @@ export function PlannerWorkspace({
               </div>
               {data.canManage ? (
                 <div className={styles.inspectorActions}>
-                  <Button className={styles.primaryButton} type="button" onClick={() => setAssignmentOpen(true)} disabled={selectedSlot.assignedCount >= selectedSlot.capacity}>
+                  <Button type="button" onClick={() => setAssignmentOpen(true)} disabled={selectedSlot.assignedCount >= selectedSlot.capacity}>
                     <UserPlus data-icon="inline-start" /> Tələbə əlavə et
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setSlotDialogMode("edit")}>
@@ -240,6 +238,19 @@ export function PlannerWorkspace({
             slotDialogMode === "edit" ? "Slot uğurla yeniləndi." : "Yeni dərs slotu yaradıldı.",
             () => setSlotDialogMode(null)
           )}
+          onDelete={slotDialogMode === "edit" && selectedSlot ? () => {
+            if (!window.confirm(`${selectedSlot.groupCode} qrupunun bu dərs slotu silinsin?`)) return;
+            const formData = new FormData();
+            formData.set("slotId", selectedSlot.id);
+            runAction(
+              () => actions.deleteSlot(formData),
+              "Dərs slotu silindi.",
+              () => {
+                setSelectedSlotId("");
+                setSlotDialogMode(null);
+              },
+            );
+          } : undefined}
         />
       ) : null}
       {assignmentOpen && selectedSlot ? (
@@ -303,6 +314,7 @@ function SlotDialog({
   pending,
   onClose,
   onSubmit,
+  onDelete,
 }: {
   data: PlannerWorkspaceData;
   mode: "create" | "edit";
@@ -310,6 +322,7 @@ function SlotDialog({
   pending: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
+  onDelete?: () => void;
 }) {
   const firstGroup = data.groups[0];
   const editing = mode === "edit" && Boolean(slot);
@@ -336,9 +349,19 @@ function SlotDialog({
         <label><span>Bitmə</span><input name="endTime" type="time" defaultValue={slot?.endTime ?? "10:30"} required /></label>
         <label><span>Otaq</span><input name="room" defaultValue={room} placeholder="Məsələn: Rəsm otağı 1" maxLength={80} /></label>
         <label><span>Tutum</span><input name="capacity" type="number" min={1} max={100} defaultValue={slot?.capacity ?? firstGroup?.capacity ?? 10} required /></label>
-        <label className={styles.fullField}><span>{editing ? "Dəyişiklik tarixi" : "Başlama tarixi"}</span><input name="validFrom" type="date" min={data.today} defaultValue={data.today} required /></label>
+        <label className={styles.fullField}>
+          <span>{editing ? "Dəyişiklik tarixi" : "Başlama tarixi"}</span>
+          <input name="validFrom" type="date" defaultValue={slot?.validFrom ?? data.today} required />
+          <small className={styles.dateHint}>Keçmiş tarix də seçilə bilər.</small>
+        </label>
       </div>
-      <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button className={styles.primaryButton} type="submit" disabled={pending || !data.groups.length || !data.teachers.length}>{pending ? "Yadda saxlanılır..." : editing ? "Dəyişiklikləri saxla" : "Slot yarat"}</Button></DialogFooter>
+      <DialogFooter className={styles.slotDialogFooter}>
+        {onDelete ? <Button type="button" variant="destructive" onClick={onDelete} disabled={pending}><Trash2 data-icon="inline-start" /> Slotu sil</Button> : <span />}
+        <div className={styles.slotDialogActions}>
+          <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
+          <Button type="submit" disabled={pending || !data.groups.length || !data.teachers.length}>{pending ? "Yadda saxlanılır..." : editing ? "Dəyişiklikləri saxla" : "Slot yarat"}</Button>
+        </div>
+      </DialogFooter>
     </form>
   </DialogContent></Dialog>;
 }
@@ -375,10 +398,7 @@ function AssignmentDialog({ data, initialSlot, pending, onClose, onSubmit }: { d
     formData.set("slotIds", JSON.stringify(selected));
     onSubmit(formData);
   }
-  const availableDays = useMemo(
-    () => orderedWeekdays.filter((day) => slots.some((slot) => slot.weekday === day)),
-    [slots],
-  );
+  const availableDays = orderedWeekdays;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -448,6 +468,9 @@ function AssignmentDialog({ data, initialSlot, pending, onClose, onSubmit }: { d
                           </button>
                         );
                       })}
+                    {slots.some((slot) => slot.weekday === day) ? null : (
+                      <span className={styles.emptySlotDay}>Slot yoxdur</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -494,7 +517,6 @@ function AssignmentDialog({ data, initialSlot, pending, onClose, onSubmit }: { d
           <DialogFooter className={styles.assignmentFooter}>
             <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
             <Button
-              className={styles.primaryButton}
               type="submit"
               disabled={pending || !membershipId || !selected.length}
             >

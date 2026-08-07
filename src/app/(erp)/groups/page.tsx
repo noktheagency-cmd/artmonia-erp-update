@@ -13,6 +13,7 @@ import { getPlannerWorkspaceData } from "@/modules/groups/planner-queries";
 import { PlannerWorkspace } from "@/modules/groups/planner-workspace";
 import {
   createClassSlotAction,
+  deleteClassSlotAction,
   replaceStudentScheduleAction,
   updateClassSlotAction,
 } from "@/modules/groups/planner-actions";
@@ -31,6 +32,7 @@ export default async function GroupsPage({
         actions={{
           createSlot: createClassSlotAction,
           updateSlot: updateClassSlotAction,
+          deleteSlot: deleteClassSlotAction,
           replaceSchedule: replaceStudentScheduleAction,
         }}
       />

@@ -516,3 +516,125 @@
     transition: none;
   }
 }
+
+/* Planner overflow and action visibility */
+.workspace {
+  height: clamp(430px, calc(100dvh - 310px), 720px);
+  min-height: 430px;
+}
+
+.canvas {
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+.timetable {
+  align-content: start;
+}
+
+.inspector {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.memberList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.inspectorActions {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
+  flex: 0 0 auto;
+  background: inherit;
+}
+
+.slotDialogFooter {
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.slotDialogActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.dateHint {
+  color: var(--p-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.emptySlotDay {
+  display: grid;
+  min-height: 72px;
+  place-items: center;
+  padding: 10px;
+  color: var(--assignment-muted);
+  background: #f8fafc;
+  border: 1px dashed var(--assignment-line);
+  border-radius: 12px;
+  font-size: 10px;
+  text-align: center;
+}
+
+:global(html.dark) .emptySlotDay {
+  color: var(--dm-muted);
+  background: var(--dm-surface-2);
+  border-color: var(--dm-line-strong);
+}
+
+.assignmentFooter :global([data-slot="button"]) {
+  min-height: 44px;
+  padding-inline: 18px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+@media(max-width:860px) {
+  .workspace {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .canvas {
+    max-height: min(68dvh, 620px);
+  }
+
+  .inspector {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .memberList {
+    max-height: 260px;
+  }
+}
+
+@media(max-width:640px) {
+  .slotDialogFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .slotDialogFooter > span,
+  .slotDialogActions,
+  .slotDialogFooter :global([data-slot="button"]) {
+    width: 100%;
+  }
+
+  .slotDialogActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}

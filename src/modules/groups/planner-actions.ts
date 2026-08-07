@@ -7,7 +7,7 @@ import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
-import { dateFromInput, todayInBaku } from "@/modules/groups/shared";
+import { dateFromInput } from "@/modules/groups/shared";
 import { safeServerAction } from "@/server/actions/safe-action";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -79,11 +79,6 @@ async function createClassSlotActionImpl(formData: FormData) {
 async function updateClassSlotActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = updateSlotSchema.parse(Object.fromEntries(formData));
-  const today = todayInBaku();
-  if (input.validFrom < today) {
-    throw new Error("Keçmiş tarixdən başlayan slot dəyişikliyi edilə bilməz");
-  }
-
   const prisma = getPrisma();
   const effectiveAt = dateFromInput(input.validFrom);
   const previousDay = new Date(effectiveAt);
@@ -249,6 +244,47 @@ async function updateClassSlotActionImpl(formData: FormData) {
   return { id: updatedSlot.id };
 }
 
+async function deleteClassSlotActionImpl(formData: FormData) {
+  const actor = await requirePlannerManager();
+  const { slotId } = z.object({ slotId: z.string().uuid() }).parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "erp"."class_slots" WHERE id = ${slotId}::uuid FOR UPDATE`;
+    const current = await tx.classSlot.findUnique({
+      where: { id: slotId },
+      select: {
+        id: true,
+        groupId: true,
+        teacherId: true,
+        weekday: true,
+        startTime: true,
+        endTime: true,
+        validFrom: true,
+        validTo: true,
+        isActive: true,
+      },
+    });
+    if (!current?.isActive) throw new Error("Aktiv slot tapılmadı");
+
+    await tx.classSlot.update({
+      where: { id: slotId },
+      data: { isActive: false },
+    });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "class_slot.delete",
+      entityType: "class_slot",
+      entityId: slotId,
+      before: current as unknown as Prisma.InputJsonValue,
+      after: { isActive: false },
+      reason: "Dərs slotu silindi",
+    });
+  });
+
+  revalidatePlanner();
+}
+
 async function replaceStudentScheduleActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = assignmentSchema.parse(Object.fromEntries(formData));
@@ -375,6 +411,10 @@ export const createClassSlotAction = safeServerAction(
 export const updateClassSlotAction = safeServerAction(
   updateClassSlotActionImpl,
   "Dərs slotu yenilənmədi.",
+);
+export const deleteClassSlotAction = safeServerAction(
+  deleteClassSlotActionImpl,
+  "Dərs slotu silinmədi.",
 );
 export const replaceStudentScheduleAction = safeServerAction(
   replaceStudentScheduleActionImpl,

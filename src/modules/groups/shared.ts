@@ -24,7 +24,11 @@ export const weekdayMeta: Record<
 };
 
 export const orderedWeekdays = Object.values(groupWeekdays).toSorted(
-  (left, right) => weekdayMeta[left].index - weekdayMeta[right].index
+  (left, right) => {
+    const leftOrder = weekdayMeta[left].index === 0 ? 7 : weekdayMeta[left].index;
+    const rightOrder = weekdayMeta[right].index === 0 ? 7 : weekdayMeta[right].index;
+    return leftOrder - rightOrder;
+  }
 );
 
 export function normalizeGroupCode(value: string) {

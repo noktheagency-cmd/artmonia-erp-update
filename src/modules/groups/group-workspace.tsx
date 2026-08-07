@@ -4,7 +4,6 @@ import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import {
-  Archive,
   ArrowLeft,
   ArrowRight,
   CalendarDays,
@@ -20,6 +19,7 @@ import {
   RotateCcw,
   Save,
   Search,
+  Trash2,
   UserRound,
   UsersRound,
   X,
@@ -286,10 +286,10 @@ export function GroupWorkspace({
             });
           }}
           onArchive={selectedGroup ? () => {
-            if (!window.confirm(`${selectedGroup.code} qrupu arxivlənsin?`)) return;
+            if (!window.confirm(`${selectedGroup.code} qrupu silinsin? Qrup aktiv siyahıdan çıxarılacaq.`)) return;
             const formData = new FormData();
             formData.set("groupId", selectedGroup.id);
-            runAction(() => actions.archiveGroup(formData), "Qrup arxivləndi.");
+            runAction(() => actions.archiveGroup(formData), "Qrup silindi.");
             setGroupDialog(null);
           } : undefined}
         />
@@ -509,7 +509,7 @@ function GroupFormDialog({ mode, group, pending, onClose, onSubmit, onArchive }:
     <label className={styles.switchRow}><input type="checkbox" checked={sameTime} onChange={(event) => setSameTime(event.target.checked)} /><span><strong>Bütün günlərə eyni saat</strong><small>Söndürdükdə hər gün üçün ayrıca interval verə bilərsiniz.</small></span></label>
     {sameTime ? <div className={styles.twoColumns}><label><span>Başlama</span><input type="time" value={commonStart} onChange={(event) => setCommonStart(event.target.value)} /></label><label><span>Bitmə</span><input type="time" value={commonEnd} onChange={(event) => setCommonEnd(event.target.value)} /></label></div> : null}
     <div className={styles.scheduleEditor}>{orderedWeekdays.map((weekday) => { const value = days[weekday]; return <div className={cx(styles.scheduleRow, value.selected && styles.scheduleSelected)} key={weekday}><button type="button" onClick={() => setDays((state) => ({ ...state, [weekday]: { ...value, selected: !value.selected } }))}>{value.selected ? <Check size={16} /> : null}{weekdayMeta[weekday].label}</button>{!sameTime && value.selected ? <><input type="time" value={value.startTime} onChange={(event) => setDays((state) => ({ ...state, [weekday]: { ...value, startTime: event.target.value } }))} /><span>–</span><input type="time" value={value.endTime} onChange={(event) => setDays((state) => ({ ...state, [weekday]: { ...value, endTime: event.target.value } }))} /></> : null}</div>; })}</div>
-    <DialogFooter className={styles.dialogFooter}>{onArchive ? <Button type="button" variant="outline" onClick={onArchive}><Archive data-icon="inline-start" /> Arxivlə</Button> : <span />}<div><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>{mode === "create" ? "Qrup yarat" : "Yadda saxla"}</Button></div></DialogFooter>
+    <DialogFooter className={styles.dialogFooter}>{onArchive ? <Button type="button" variant="destructive" onClick={onArchive}><Trash2 data-icon="inline-start" /> Qrupu sil</Button> : <span />}<div><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>{mode === "create" ? "Qrup yarat" : "Yadda saxla"}</Button></div></DialogFooter>
   </form></DialogContent></Dialog>;
 }
 
