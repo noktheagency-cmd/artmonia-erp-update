@@ -203,7 +203,7 @@ export function CorporateCustomerWorkspace({
                 <th>Ödəniş tarixi</th>
                 <th>Status</th>
                 <th>Son yenilənmə</th>
-                {data.permissions.canManage ? <th><span className="sr-only">Əməliyyatlar</span></th> : null}
+                {data.permissions.canManage ? <th className="corporate-action-cell"><span className="sr-only">Əməliyyatlar</span></th> : null}
               </tr>
             </thead>
             <tbody>

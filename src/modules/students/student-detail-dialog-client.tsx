@@ -169,16 +169,6 @@ export function StudentDetailDialogClient({
                     required
                   />
                 </label>
-                <label className="form-field">
-                  <span>Növbəti ödəniş tarixi</span>
-                  <DatePicker
-                    name="nextPaymentDate"
-                    defaultValue={student.detail.paymentDefaultNextDate}
-                    allowClear={false}
-                    popoverPlacement="floating"
-                    required
-                  />
-                </label>
               </div>
 
               <label className="form-field">

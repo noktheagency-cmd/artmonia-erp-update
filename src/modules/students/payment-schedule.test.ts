@@ -11,8 +11,7 @@ test("anchors the next payment to one month after the group join month", () => {
     resolveNextPaymentAt({
       groupJoinedAt: utcDate("2026-07-08"),
       paymentMonth: utcDate("2026-07-01"),
-      paidAt: utcDate("2026-07-05"),
-    }).toISOString().slice(0, 10),
+    })?.toISOString().slice(0, 10),
     "2026-08-08",
   );
 });
@@ -38,9 +37,9 @@ test("clamps group days that do not exist in the target month", () => {
   );
 });
 
-test("falls back to the payment day when the student has no group", () => {
+test("does not schedule a next payment when the student has no active group", () => {
   assert.equal(
     resolveNextPaymentDateInput({ groupJoinedAt: null, paidAt: "2026-07-05" }),
-    "2026-08-05",
+    "",
   );
 });

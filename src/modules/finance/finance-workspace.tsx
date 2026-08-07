@@ -65,7 +65,6 @@ import { FormSelect, type SelectOptionCrudConfig } from "@/components/ui/select"
 import { StatusChip } from "@/components/ui/status-chip";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
-import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { FinanceData } from "@/modules/finance/queries";
 import {
@@ -613,7 +612,6 @@ function PaymentDialog({
   const [values, setValues] = useState({
     amount: "",
     paidDate: data.students[0]?.defaultPaymentDate ?? "",
-    paymentMonth: data.students[0]?.defaultPaymentMonth ?? "",
     payerName: "",
   });
 
@@ -627,7 +625,6 @@ function PaymentDialog({
         ...current,
         amount: student.defaultAmount,
         paidDate: student.defaultPaymentDate,
-        paymentMonth: student.defaultPaymentMonth,
         payerName: student.name,
       }));
     }
@@ -637,10 +634,6 @@ function PaymentDialog({
     setValues((current) => ({
       ...current,
       paidDate: value,
-      paymentMonth: resolveNextPaymentDateInput({
-        groupJoinedAt: selectedStudent?.groupJoinedAt,
-        paidAt: value,
-      }),
     }));
   }
 
@@ -766,17 +759,6 @@ function PaymentDialog({
                   name="paidDate"
                   value={values.paidDate}
                   onValueChange={handlePaidDateChange}
-                  allowClear={false}
-                  popoverPlacement="floating"
-                  required
-                />
-              </label>
-              <label className="form-field">
-                <span>Növbəti ödəniş tarixi</span>
-                <DatePicker
-                  name="paymentMonth"
-                  value={values.paymentMonth}
-                  onValueChange={(value) => setValues((current) => ({ ...current, paymentMonth: value }))}
                   allowClear={false}
                   popoverPlacement="floating"
                   required
@@ -1910,10 +1892,6 @@ function PaymentCrudActions({
               <label className="form-field">
                 <span>Ödəniş tarixi</span>
                 <DatePicker name="paidDate" defaultValue={payment.paidDateValue} allowClear={false} popoverPlacement="floating" required />
-              </label>
-              <label className="form-field">
-                <span>Növbəti ödəniş tarixi</span>
-                <DatePicker name="paymentMonth" defaultValue={payment.paymentMonthValue} allowClear={false} popoverPlacement="floating" required />
               </label>
             </div>
             <div className="field-grid">

@@ -23,7 +23,11 @@ import {
   isGiftDiscount,
   resolveStudentMonthlyFee,
 } from "@/modules/students/student-create-rules";
-import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
+import {
+  clearStudentPaymentSchedules,
+  resolveStudentNextPaymentAt,
+  restartStudentPaymentScheduleForActiveGroup,
+} from "@/modules/students/payment-schedule-service";
 import {
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
   getStatusChangeReason as getSharedStatusChangeReason,
@@ -93,8 +97,6 @@ const createStudentSchema = z.object({
   ),
   paymentAmount: optionalAmount,
   paymentDate: optionalText(20),
-  paymentMonth: optionalText(20),
-  nextPaymentDate: optionalText(20),
   paymentMethod: z.enum(studentPaymentMethodValues).default("CASH"),
   paymentNote: optionalText(240),
   returnTo: optionalText(260),
@@ -113,8 +115,6 @@ const recordPaymentSchema = z.object({
   studentId: z.string().uuid(),
   amount: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
   paidDate: z.string().trim().min(1).max(20),
-  paymentMonth: optionalText(20),
-  nextPaymentDate: optionalText(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
   note: optionalText(240),
   returnTo: optionalText(260),
@@ -492,6 +492,12 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         studentCode: current.code,
         effectiveAt,
       });
+      await restartStudentPaymentScheduleForActiveGroup(tx, {
+        studentId: current.id,
+        activatedAt: effectiveAt,
+      });
+    } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
+      await clearStudentPaymentSchedules(tx, [current.id]);
     }
 
     await writeAuditLog(tx, {
@@ -891,19 +897,10 @@ async function createPaymentAndAllocate(
     throw new Error("Tələbə tapılmadı");
   }
 
-  const groupMembership = await tx.groupMembership.findFirst({
-    where: {
-      endedAt: null,
-      enrollment: { studentId: student.id },
-    },
-    orderBy: [{ joinedAt: "desc" }, { createdAt: "desc" }],
-    select: { joinedAt: true },
-  });
   const monthlyFee = toNumber(student.enrollments[0]?.monthlyFee);
-  const nextPaymentAt = resolveNextPaymentAt({
-    groupJoinedAt: groupMembership?.joinedAt ?? null,
+  const nextPaymentAt = await resolveStudentNextPaymentAt(tx, {
+    studentId: student.id,
     paymentMonth: input.paymentMonth,
-    paidAt: input.paidAt,
   });
   let invoices = student.invoices;
   const periodMonth = startOfMonth(input.paidAt);

@@ -22,7 +22,6 @@ import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
-import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -122,7 +121,6 @@ export function StudentPaymentDialogClient({
                 selectedStudent.id,
                 selectedStudent.detail.paymentDefaultAmount,
                 selectedStudent.detail.paymentDefaultDate,
-                selectedStudent.detail.paymentDefaultNextDate,
               ].join(":")}
               student={selectedStudent}
             />
@@ -161,16 +159,6 @@ export function StudentPaymentDialogClient({
 function PaymentScheduleFields({ student }: { student: StudentRow }) {
   const [amount, setAmount] = useState(student.detail.paymentDefaultAmount);
   const [paidDate, setPaidDate] = useState(student.detail.paymentDefaultDate);
-  const [nextPaymentDate, setNextPaymentDate] = useState(student.detail.paymentDefaultNextDate);
-
-  function updateAutomaticDate(nextAmount: string, nextPaidDate: string) {
-    if (toAmount(nextAmount) >= toAmount(student.detail.monthlyFee)) {
-      setNextPaymentDate(resolveNextPaymentDateInput({
-        groupJoinedAt: student.detail.paymentGroupJoinedAt,
-        paidAt: nextPaidDate,
-      }));
-    }
-  }
 
   return (
     <div className="student-payment-schedule-grid">
@@ -181,10 +169,7 @@ function PaymentScheduleFields({ student }: { student: StudentRow }) {
           inputMode="decimal"
           placeholder="0.00"
           value={amount}
-          onChange={(event) => {
-            setAmount(event.target.value);
-            updateAutomaticDate(event.target.value, paidDate);
-          }}
+          onChange={(event) => setAmount(event.target.value)}
           required
         />
       </label>
@@ -193,21 +178,7 @@ function PaymentScheduleFields({ student }: { student: StudentRow }) {
         <DatePicker
           name="paidDate"
           value={paidDate}
-          onValueChange={(value) => {
-            setPaidDate(value);
-            updateAutomaticDate(amount, value);
-          }}
-          allowClear={false}
-          popoverPlacement="floating"
-          required
-        />
-      </label>
-      <label className="form-field">
-        <span>Növbəti ödəniş tarixi</span>
-        <DatePicker
-          name="nextPaymentDate"
-          value={nextPaymentDate}
-          onValueChange={setNextPaymentDate}
+          onValueChange={setPaidDate}
           allowClear={false}
           popoverPlacement="floating"
           required
@@ -215,8 +186,4 @@ function PaymentScheduleFields({ student }: { student: StudentRow }) {
       </label>
     </div>
   );
-}
-
-function toAmount(value: string) {
-  return Number(value.replace(",", ".")) || 0;
 }

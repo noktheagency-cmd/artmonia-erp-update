@@ -50,6 +50,7 @@ import type {
   PlannerSlot,
   PlannerWorkspaceData,
 } from "@/modules/groups/planner-queries";
+import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
 import styles from "./planner.module.css";
 
 type PlannerActions = {
@@ -102,7 +103,7 @@ export function PlannerWorkspace({
     ?? filteredSlots[0]
     ?? data.slots.find((slot) => slot.id === selectedSlotId)
     ?? data.slots[0];
-  const times = [...new Set(filteredSlots.map((slot) => slot.startTime))].toSorted();
+  const times = useMemo(() => buildPlannerTimeAxis(filteredSlots), [filteredSlots]);
   const plannedCount = data.slots.reduce((sum, slot) => sum + slot.assignedCount, 0);
   const openSeats = data.slots.reduce(
     (sum, slot) => sum + Math.max(slot.capacity - slot.assignedCount, 0),
@@ -208,7 +209,9 @@ export function PlannerWorkspace({
               className={styles.timetable}
               style={{ "--planner-days": orderedWeekdays.length } as CSSProperties}
             >
-              <div className={styles.corner}><Clock3 size={16} /><span>Saat</span></div>
+              <div className={styles.corner} aria-label="Bakı vaxtı, 24-saat formatı">
+                <Clock3 size={16} /><span>Bakı · 24s</span>
+              </div>
               {orderedWeekdays.map((day) => (
                 <div className={styles.dayHead} key={day}>{weekdayMeta[day].label}</div>
               ))}
@@ -435,13 +438,14 @@ function TimeRow({
   selectedId?: string;
   onSelect: (id: string) => void;
 }) {
+  const rowHasSlots = slots.some((slot) => slot.startTime === time);
   return (
     <>
-      <div className={styles.timeLabel}>{time}</div>
+      <div className={cx(styles.timeLabel, !rowHasSlots && styles.emptyTimeLabel)}>{time}</div>
       {weekdays.map((day) => {
         const daySlots = slots.filter((slot) => slot.weekday === day && slot.startTime === time);
         return (
-          <div className={styles.cell} key={`${time}-${day}`}>
+          <div className={cx(styles.cell, !rowHasSlots && styles.emptyTimeCell)} key={`${time}-${day}`}>
             {daySlots.map((slot) => (
               <SlotCard
                 slot={slot}
@@ -581,8 +585,8 @@ function SlotDialog({
                 ))}
               </select>
             </label>
-            <label><span>Başlama</span><input name="startTime" type="time" defaultValue={slot?.startTime ?? "09:00"} required /></label>
-            <label><span>Bitmə</span><input name="endTime" type="time" defaultValue={slot?.endTime ?? "10:30"} required /></label>
+            <TimeSelect label="Başlama · Bakı vaxtı" name="startTime" defaultValue={slot?.startTime ?? "09:00"} />
+            <TimeSelect label="Bitmə · Bakı vaxtı" name="endTime" defaultValue={slot?.endTime ?? "10:30"} />
             <label><span>Otaq</span><input name="room" defaultValue={room} placeholder="Məsələn: Rəsm otağı 1" maxLength={80} /></label>
             <label><span>Tutum</span><input name="capacity" type="number" min={1} max={100} defaultValue={slot?.capacity ?? 10} required /></label>
             <label className={styles.fullField}>
@@ -607,6 +611,30 @@ function SlotDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TimeSelect({
+  label,
+  name,
+  defaultValue,
+}: {
+  label: string;
+  name: "startTime" | "endTime";
+  defaultValue: string;
+}) {
+  const options = bakuTimeOptions.includes(defaultValue)
+    ? bakuTimeOptions
+    : [...bakuTimeOptions, defaultValue].toSorted();
+
+  return (
+    <label className={styles.timeField}>
+      <span>{label}</span>
+      <select name={name} defaultValue={defaultValue} required>
+        {options.map((time) => <option value={time} key={time}>{time}</option>)}
+      </select>
+      <small>24-saat formatı · AM/PM yoxdur</small>
+    </label>
   );
 }
 

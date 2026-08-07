@@ -249,7 +249,21 @@
 .corporate-status.is-paused { color: #a9660d; background: #fff6e7; border-color: #f4ddb8; }
 .corporate-status.is-inactive { color: #707887; background: #f3f5f7; border-color: #dde1e7; }
 
-.corporate-action-cell { width: 46px; padding-inline: 8px !important; }
+.corporate-action-cell {
+  position: sticky;
+  z-index: 3;
+  right: 0;
+  width: 46px;
+  min-width: 46px;
+  padding-inline: 8px !important;
+  background: #fff;
+  box-shadow: -12px 0 18px -18px rgba(34, 43, 68, 0.42);
+}
+.corporate-table-surface th.corporate-action-cell {
+  z-index: 4;
+  background: #fafbfc;
+}
+.corporate-table-surface tbody tr:hover .corporate-action-cell { background: #fbfbfe; }
 .corporate-row-menu { position: relative; }
 .corporate-row-menu summary {
   display: grid;
@@ -482,6 +496,9 @@ html.dark .corporate-row-menu > div {
 html.dark .corporate-company-fields { border-color: var(--dm-line); }
 html.dark :is(.corporate-company-button strong, .corporate-contacts-cell strong, .corporate-money strong) { color: var(--dm-text); }
 html.dark .corporate-contact-avatars i { border-color: var(--dm-surface); }
+html.dark .corporate-action-cell,
+html.dark .corporate-table-surface th.corporate-action-cell,
+html.dark .corporate-table-surface tbody tr:hover .corporate-action-cell { background: var(--dm-surface) !important; }
 html.dark .corporate-row-menu > div button { color: var(--dm-text-soft); }
 html.dark .corporate-row-menu > div button:hover { background: var(--dm-surface-2); }
 
@@ -491,9 +508,13 @@ html.dark .corporate-row-menu > div button:hover { background: var(--dm-surface-
   .corporate-search { min-width: min(100%, 340px); }
 }
 
-@media (max-width: 1350px) and (min-width: 801px) {
-  .corporate-table-surface table { min-width: 960px; }
+@media (max-width: 1440px) and (min-width: 801px) {
+  .corporate-table-surface table { min-width: 920px; }
   .corporate-table-surface :is(th, td):nth-child(7) { display: none; }
+}
+
+@media (min-width: 1280px) {
+  .corporate-table-scroll:has(.corporate-row-menu[open]) { overflow: visible; }
 }
 
 @media (max-width: 800px) {

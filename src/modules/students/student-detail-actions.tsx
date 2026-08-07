@@ -21,7 +21,6 @@ import {
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
-import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
 import { StudentReminderDialog } from "@/modules/students/student-reminders-client";
 
 const studentStatusOptions = [
@@ -44,10 +43,6 @@ interface StudentDetail {
     notes: string;
     paymentDefaultAmount: string;
     paymentDefaultDate: string;
-    paymentDefaultMonth: string;
-    paymentDefaultNextDate: string;
-    paymentGroupJoinedAt: string;
-    monthlyFee: string;
     reminderDefaultDate: string;
   };
 }
@@ -86,7 +81,6 @@ export function StudentDetailActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
-  const [nextPaymentDate, setNextPaymentDate] = useState(student.detail.paymentDefaultNextDate);
 
   async function updateStatus(formData: FormData) {
     try {
@@ -199,7 +193,6 @@ export function StudentDetailActions({
           if (nextOpen) {
             setPaymentAmount(student.detail.paymentDefaultAmount);
             setPaymentDate(student.detail.paymentDefaultDate);
-            setNextPaymentDate(student.detail.paymentDefaultNextDate);
           }
         }}
       >
@@ -246,16 +239,7 @@ export function StudentDetailActions({
                   inputMode="decimal"
                   placeholder="0.00"
                   value={paymentAmount}
-                  onChange={(event) => {
-                    const amount = event.target.value;
-                    setPaymentAmount(amount);
-                    if (toAmount(amount) >= toAmount(student.detail.monthlyFee)) {
-                      setNextPaymentDate(resolveNextPaymentDateInput({
-                        groupJoinedAt: student.detail.paymentGroupJoinedAt,
-                        paidAt: paymentDate,
-                      }));
-                    }
-                  }}
+                  onChange={(event) => setPaymentAmount(event.target.value)}
                   required
                 />
               </label>
@@ -275,26 +259,7 @@ export function StudentDetailActions({
                 <DatePicker
                   name="paidDate"
                   value={paymentDate}
-                  onValueChange={(value) => {
-                    setPaymentDate(value);
-                    if (toAmount(paymentAmount) >= toAmount(student.detail.monthlyFee)) {
-                      setNextPaymentDate(resolveNextPaymentDateInput({
-                        groupJoinedAt: student.detail.paymentGroupJoinedAt,
-                        paidAt: value,
-                      }));
-                    }
-                  }}
-                  allowClear={false}
-                  popoverPlacement="floating"
-                  required
-                />
-              </label>
-              <label className="form-field">
-                <span>Növbəti ödəniş tarixi</span>
-                <DatePicker
-                  name="nextPaymentDate"
-                  value={nextPaymentDate}
-                  onValueChange={setNextPaymentDate}
+                  onValueChange={setPaymentDate}
                   allowClear={false}
                   popoverPlacement="floating"
                   required
@@ -448,8 +413,4 @@ export function StudentDetailActions({
       </Dialog>
     </div>
   );
-}
-
-function toAmount(value: string) {
-  return Number(value.replace(",", ".")) || 0;
 }

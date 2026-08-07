@@ -10,7 +10,6 @@ import {
   toNumber,
 } from "@/modules/shared/format";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
-import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 import { getExpenseReportingCategory } from "@/modules/finance/reporting";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info";
@@ -92,8 +91,6 @@ export type FinanceData = {
     balance: string;
     defaultAmount: string;
     defaultPaymentDate: string;
-    defaultPaymentMonth: string;
-    groupJoinedAt: string;
   }>;
   staff: Array<{
     id: string;
@@ -122,7 +119,6 @@ export type FinanceData = {
     dateKey: string;
     paidDateValue: string;
     paymentMonth: string;
-    paymentMonthValue: string;
     methodValue: string;
     method: string;
     receipt: string;
@@ -241,7 +237,6 @@ type StudentOptionRow = {
   monthlyFee: unknown;
   programName: string | null;
   teacherName: string | null;
-  groupJoinedAt: Date | string | null;
 };
 
 type StaffOptionRow = {
@@ -267,7 +262,6 @@ type PaymentRow = {
   dateKey: string;
   paidDateValue: string;
   paymentMonth: string;
-  paymentMonthValue: string;
   method: string;
   receiptFileName: string | null;
   receiptFilePath: string | null;
@@ -627,15 +621,7 @@ export async function getFinanceData(
         inv.next_due_date as "nextDueDate",
         ae.monthly_fee as "monthlyFee",
         ae.program_name as "programName",
-        ae.teacher_name as "teacherName",
-        (
-          select gm.joined_at
-          from erp.group_memberships gm
-          join erp.enrollments ge on ge.id = gm.enrollment_id
-          where ge.student_id = s.id and gm.ended_at is null
-          order by gm.joined_at desc, gm.created_at desc
-          limit 1
-        ) as "groupJoinedAt"
+        ae.teacher_name as "teacherName"
       from erp.students s
       join erp.contacts c on c.id = s.contact_id
       left join lateral (
@@ -740,8 +726,7 @@ export async function getFinanceData(
         to_char(p.paid_at, 'DD.MM.YYYY') as "paidAt",
         to_char(p.paid_at, 'YYYY-MM-DD') as "dateKey",
         to_char(p.paid_at, 'YYYY-MM-DD') as "paidDateValue",
-        to_char(coalesce(p.next_payment_at, p.payment_month), 'DD.MM.YYYY') as "paymentMonth",
-        to_char(coalesce(p.next_payment_at, p.payment_month), 'YYYY-MM-DD') as "paymentMonthValue",
+        coalesce(to_char(p.next_payment_at, 'DD.MM.YYYY'), '—') as "paymentMonth",
         p.method::text as "method",
         p.receipt_file_name as "receiptFileName",
         p.receipt_file_path as "receiptFilePath",
@@ -1066,12 +1051,6 @@ export async function getFinanceData(
         balance: formatAmount(balance),
         defaultAmount: formatDecimalInput(fallbackAmount),
         defaultPaymentDate: formatDateInput(today),
-        defaultPaymentMonth: formatDateInput(resolveNextPaymentAt({
-          groupJoinedAt: student.groupJoinedAt ? new Date(student.groupJoinedAt) : null,
-          paymentMonth: startOfMonth(today),
-          paidAt: today,
-        })),
-        groupJoinedAt: student.groupJoinedAt ? formatDateInput(new Date(student.groupJoinedAt)) : "",
       };
     }),
     staff: staffRows.map((staff) => ({
@@ -1102,7 +1081,6 @@ export async function getFinanceData(
       dateKey: payment.dateKey,
       paidDateValue: payment.paidDateValue,
       paymentMonth: payment.paymentMonth,
-      paymentMonthValue: payment.paymentMonthValue,
       methodValue: payment.method,
       method: getStudentPaymentMethodLabel(payment.method),
       receipt: payment.receiptReference ?? payment.receiptFileName ?? "-",
@@ -1126,7 +1104,6 @@ export async function getFinanceData(
         dateKey: payment.dateKey,
         paidDateValue: payment.paidDateValue,
         paymentMonth: "Tədbirlər (Workshop / Masterclass)",
-        paymentMonthValue: payment.paidDateValue,
         methodValue: payment.method,
         method: getStudentPaymentMethodLabel(payment.method),
         receipt: payment.receiptReference ?? payment.receiptFileName ?? "-",

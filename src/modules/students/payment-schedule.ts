@@ -2,20 +2,18 @@ const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const AZ_DATE_PATTERN = /^(\d{2})[./](\d{2})[./](\d{4})$/;
 
 /**
- * Returns the next monthly payment date. Once a student joins a group, the
- * group's join day is the billing anchor; otherwise the payment day is used.
+ * Returns the next monthly payment date anchored to an active group start.
+ * Students without an active group do not have a next-payment schedule.
  */
 export function resolveNextPaymentAt({
   groupJoinedAt,
   paymentMonth,
-  paidAt,
 }: {
   groupJoinedAt: Date | null;
   paymentMonth: Date;
-  paidAt: Date;
 }) {
   if (!groupJoinedAt) {
-    return addUtcMonthsClamped(paidAt, 1);
+    return null;
   }
 
   const joinedMonthIndex = monthIndex(groupJoinedAt);
@@ -39,16 +37,12 @@ export function resolveNextPaymentDateInput({
   }
 
   const joinedDate = groupJoinedAt ? parseDateInput(groupJoinedAt) : null;
-  return formatDateInput(resolveNextPaymentAt({
+  const nextPaymentAt = resolveNextPaymentAt({
     groupJoinedAt: joinedDate,
     paymentMonth: new Date(Date.UTC(paidDate.getUTCFullYear(), paidDate.getUTCMonth(), 1)),
-    paidAt: paidDate,
-  }));
-}
+  });
 
-function addUtcMonthsClamped(value: Date, months: number) {
-  const targetMonthIndex = monthIndex(value) + months;
-  return utcDateInMonth(targetMonthIndex, value.getUTCDate());
+  return nextPaymentAt ? formatDateInput(nextPaymentAt) : "";
 }
 
 function monthIndex(value: Date) {

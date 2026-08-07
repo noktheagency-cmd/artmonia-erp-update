@@ -18,7 +18,7 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { startOfMonth, toNumber } from "@/modules/shared/format";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
-import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
+import { resolveStudentNextPaymentAt } from "@/modules/students/payment-schedule-service";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
@@ -143,7 +143,6 @@ const recordFinancePaymentSchema = z.object({
   studentId: z.string().uuid(),
   amount: requiredAmount,
   paidDate: z.string().trim().min(1).max(20),
-  paymentMonth: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
   payerName: optionalText(120),
   receiptReference: optionalText(120),
@@ -373,7 +372,10 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: input.amount,
         paidAt,
         paymentMonth,
-        nextPaymentAt: await resolveStudentNextPaymentAt(tx, existing.studentId, paidAt, paymentMonth),
+        nextPaymentAt: await resolveStudentNextPaymentAt(tx, {
+          studentId: existing.studentId,
+          paymentMonth,
+        }),
         method: input.method as PaymentMethod,
         payerName: input.payerName ?? null,
         receiptFileName: receipt?.fileName ?? existing.receiptFileName,
@@ -823,12 +825,10 @@ async function createPaymentAndAllocate(
     throw new Error("Telebe tapilmadi");
   }
 
-  const nextPaymentAt = await resolveStudentNextPaymentAt(
-    tx,
-    student.id,
-    input.paidAt,
-    input.paymentMonth,
-  );
+  const nextPaymentAt = await resolveStudentNextPaymentAt(tx, {
+    studentId: student.id,
+    paymentMonth: input.paymentMonth,
+  });
 
   const payment = await tx.payment.create({
     data: {
@@ -1157,28 +1157,6 @@ function parseDateInput(value: string, fieldName: string) {
   }
 
   return date;
-}
-
-async function resolveStudentNextPaymentAt(
-  tx: Prisma.TransactionClient,
-  studentId: string,
-  paidAt: Date,
-  paymentMonth: Date,
-) {
-  const membership = await tx.groupMembership.findFirst({
-    where: {
-      endedAt: null,
-      enrollment: { studentId },
-    },
-    orderBy: [{ joinedAt: "desc" }, { createdAt: "desc" }],
-    select: { joinedAt: true },
-  });
-
-  return resolveNextPaymentAt({
-    groupJoinedAt: membership?.joinedAt ?? null,
-    paymentMonth,
-    paidAt,
-  });
 }
 
 function normalizeDateValue(value: string) {

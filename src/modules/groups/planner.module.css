@@ -918,3 +918,25 @@
     flex: 0 0 auto;
   }
 }
+
+.emptyTimeLabel,
+.emptyTimeCell {
+  min-height: 56px;
+}
+
+.emptyTimeLabel {
+  color: #8793a6;
+  background: #fbfcfe;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.emptyTimeCell {
+  background: #fcfdff;
+}
+
+.timeField small {
+  color: var(--p-muted);
+  font-size: 9px;
+  font-weight: 520;
+}

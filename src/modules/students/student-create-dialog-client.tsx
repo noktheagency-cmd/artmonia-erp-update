@@ -33,7 +33,6 @@ type StudentFormValues = {
   paymentDate: string;
   paymentMethod: string;
   paymentNote: string;
-  nextPaymentDate: string;
 };
 
 function buildInitialStudentValues(createOptions: CreateOptions) {
@@ -55,7 +54,6 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
     paymentDate: createOptions.defaultPaymentDate,
     paymentMethod: "CASH",
     paymentNote: "",
-    nextPaymentDate: addOneMonth(createOptions.defaultPaymentDate),
   };
 }
 
@@ -223,10 +221,8 @@ export function StudentCreateDialogClient({
           <input name="discountType" type="hidden" value={values.discountType} />
           <input name="paymentAmount" type="hidden" value={values.paymentAmount} />
           <input name="paymentDate" type="hidden" value={values.paymentDate} />
-          <input name="paymentMonth" type="hidden" value={getPaymentMonth(values.paymentDate)} />
           <input name="paymentMethod" type="hidden" value={values.paymentMethod} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
-          <input name="nextPaymentDate" type="hidden" value={values.nextPaymentDate} />
 
           <label className="form-field student-create-lead-field">
             <span>Müraciət</span>
@@ -531,13 +527,7 @@ function InitialPaymentDialog({
               <Input
                 name="paymentAmount"
                 value={values.paymentAmount}
-                onChange={(event) => {
-                  const amount = event.target.value;
-                  onChange("paymentAmount", amount);
-                  if (toAmount(amount) >= toAmount(values.monthlyFee)) {
-                    onChange("nextPaymentDate", addOneMonth(values.paymentDate));
-                  }
-                }}
+                onChange={(event) => onChange("paymentAmount", event.target.value)}
                 inputMode="decimal"
                 required
               />
@@ -557,23 +547,7 @@ function InitialPaymentDialog({
             <DatePicker
               name="paymentDate"
               value={values.paymentDate}
-              onValueChange={(value) => {
-                onChange("paymentDate", value);
-                if (toAmount(values.paymentAmount) >= toAmount(values.monthlyFee)) {
-                  onChange("nextPaymentDate", addOneMonth(value));
-                }
-              }}
-              allowClear={false}
-              popoverPlacement="floating"
-              required={open}
-            />
-          </label>
-          <label className="form-field">
-            <span>Növbəti ödəniş tarixi</span>
-            <DatePicker
-              name="nextPaymentDate"
-              value={values.nextPaymentDate}
-              onValueChange={(value) => onChange("nextPaymentDate", value)}
+              onValueChange={(value) => onChange("paymentDate", value)}
               allowClear={false}
               popoverPlacement="floating"
               required={open}
@@ -612,27 +586,4 @@ function InitialPaymentDialog({
 
 function cleanSelectValue(value: string) {
   return value === EMPTY_SELECT_VALUE ? "" : value;
-}
-
-function getPaymentMonth(paymentDate: string) {
-  const isoMatch = paymentDate.match(/^(\d{4})-(\d{2})-\d{2}$/);
-  const localMatch = paymentDate.match(/^\d{2}\.(\d{2})\.(\d{4})$/);
-
-  if (isoMatch) {
-    return `${isoMatch[1]}-${isoMatch[2]}`;
-  }
-
-  return localMatch ? `${localMatch[2]}-${localMatch[1]}` : "";
-}
-
-function toAmount(value: string) {
-  return Number(value.replace(",", ".")) || 0;
-}
-
-function addOneMonth(value: string) {
-  const normalized = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!normalized) return value;
-  const date = new Date(Date.UTC(Number(normalized[1]), Number(normalized[2]) - 1, Number(normalized[3])));
-  date.setUTCMonth(date.getUTCMonth() + 1);
-  return date.toISOString().slice(0, 10);
 }

@@ -16,9 +16,13 @@ import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll"
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import {
   buildStudentStatusUpdateData,
+  isBillingPausedStatus,
   syncActivationBilling,
 } from "@/modules/students/lifecycle-service";
-import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
+import {
+  clearStudentPaymentSchedules,
+  startStudentPaymentSchedule,
+} from "@/modules/students/payment-schedule-service";
 import { dateFromInput, todayInBaku, weekdayFromDate } from "@/modules/groups/shared";
 import { safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
@@ -314,6 +318,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
           where: {
             id: { in: uniqueSlotIds },
             isActive: true,
+            group: { isActive: true },
             validFrom: { lte: validFrom },
             OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
           },
@@ -394,6 +399,19 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
     }
     if (assignments.length) await tx.studentScheduleAssignment.createMany({ data: assignments });
 
+    const selectedMembershipIds = new Set(assignments.map((assignment) => assignment.membershipId));
+    const obsoleteMembershipIds = [...new Set(
+      before
+        .map((assignment) => assignment.membershipId)
+        .filter((membershipId) => !selectedMembershipIds.has(membershipId)),
+    )];
+    if (obsoleteMembershipIds.length) {
+      await tx.groupMembership.updateMany({
+        where: { id: { in: obsoleteMembershipIds }, endedAt: null },
+        data: { endedAt: validFrom },
+      });
+    }
+
     const teacherIds = [...new Set(slots.map((slot) => slot.teacherId))];
     if (teacherIds.length === 1 && enrollment.teacherId !== teacherIds[0]) {
       await tx.enrollment.update({ where: { id: enrollment.id }, data: { teacherId: teacherIds[0] } });
@@ -414,6 +432,8 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
         enrollment,
         joinedAt: validFrom,
       });
+    } else {
+      await clearStudentPaymentSchedules(tx, [enrollment.studentId]);
     }
 
     await writeAuditLog(tx, {
@@ -567,54 +587,49 @@ async function syncStudentActivationAndPayment(
     };
   },
 ) {
-  const latestPayment = await tx.payment.findFirst({
-    where: { studentId: input.enrollment.student.id },
-    orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
-    select: { id: true, paidAt: true, paymentMonth: true },
-  });
-  if (latestPayment) {
-    await tx.payment.update({
-      where: { id: latestPayment.id },
+  const student = input.enrollment.student;
+  if (student.lifecycleStatus === StudentLifecycleStatus.GROUP_WAITING) {
+    await tx.student.update({
+      where: { id: student.id },
+      data: buildStudentStatusUpdateData(StudentLifecycleStatus.ACTIVE, input.joinedAt),
+    });
+    await tx.studentStatusHistory.create({
       data: {
-        nextPaymentAt: resolveNextPaymentAt({
-          groupJoinedAt: input.joinedAt,
-          paymentMonth: latestPayment.paymentMonth,
-          paidAt: latestPayment.paidAt,
-        }),
+        studentId: student.id,
+        oldStatus: student.lifecycleStatus,
+        newStatus: StudentLifecycleStatus.ACTIVE,
+        reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
+        effectiveAt: input.joinedAt,
+        changedById: input.actorId,
       },
+    });
+    await syncActivationBilling(tx, {
+      studentId: student.id,
+      studentCode: student.code,
+      effectiveAt: input.joinedAt,
+    });
+    await writeAuditLog(tx, {
+      actorUserId: input.actorId,
+      action: "student.status.change",
+      entityType: "student",
+      entityId: student.id,
+      before: { lifecycleStatus: student.lifecycleStatus, billingPaused: student.billingPaused },
+      after: { lifecycleStatus: StudentLifecycleStatus.ACTIVE, billingPaused: false },
+      reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
     });
   }
 
-  const student = input.enrollment.student;
-  if (student.lifecycleStatus !== StudentLifecycleStatus.GROUP_WAITING) return;
-  await tx.student.update({
-    where: { id: student.id },
-    data: buildStudentStatusUpdateData(StudentLifecycleStatus.ACTIVE, input.joinedAt),
-  });
-  await tx.studentStatusHistory.create({
-    data: {
+  if (
+    student.lifecycleStatus === StudentLifecycleStatus.GROUP_WAITING
+    || !isBillingPausedStatus(student.lifecycleStatus)
+  ) {
+    await startStudentPaymentSchedule(tx, {
       studentId: student.id,
-      oldStatus: student.lifecycleStatus,
-      newStatus: StudentLifecycleStatus.ACTIVE,
-      reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
-      effectiveAt: input.joinedAt,
-      changedById: input.actorId,
-    },
-  });
-  await syncActivationBilling(tx, {
-    studentId: student.id,
-    studentCode: student.code,
-    effectiveAt: input.joinedAt,
-  });
-  await writeAuditLog(tx, {
-    actorUserId: input.actorId,
-    action: "student.status.change",
-    entityType: "student",
-    entityId: student.id,
-    before: { lifecycleStatus: student.lifecycleStatus, billingPaused: student.billingPaused },
-    after: { lifecycleStatus: StudentLifecycleStatus.ACTIVE, billingPaused: false },
-    reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
-  });
+      groupStartedAt: input.joinedAt,
+    });
+  } else {
+    await clearStudentPaymentSchedules(tx, [student.id]);
+  }
 }
 
 async function assertTeacherAvailability(

@@ -16,8 +16,13 @@ import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll"
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import {
   buildStudentStatusUpdateData,
+  isBillingPausedStatus,
   syncActivationBilling,
 } from "@/modules/students/lifecycle-service";
+import {
+  clearStudentPaymentSchedules,
+  startStudentPaymentSchedule,
+} from "@/modules/students/payment-schedule-service";
 import {
   dateFromInput,
   normalizeGroupCode,
@@ -25,7 +30,6 @@ import {
   weekdayFromDate,
 } from "@/modules/groups/shared";
 import { safeServerAction } from "@/server/actions/safe-action";
-import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const scheduleSchema = z
@@ -179,9 +183,39 @@ async function archiveGroupActionImpl(formData: FormData) {
   const { groupId } = z.object({ groupId: z.string().uuid() }).parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   await prisma.$transaction(async (tx) => {
-    const current = await tx.studentGroup.findUnique({ where: { id: groupId } });
+    const current = await tx.studentGroup.findUnique({
+      where: { id: groupId },
+      select: {
+        id: true,
+        isActive: true,
+        memberships: {
+          where: { endedAt: null },
+          select: { enrollment: { select: { studentId: true } } },
+        },
+      },
+    });
     if (!current) throw new Error("Qrup tapılmadı");
     await tx.studentGroup.update({ where: { id: groupId }, data: { isActive: false, archivedAt: new Date() } });
+
+    const affectedStudentIds = [...new Set(current.memberships.map((item) => item.enrollment.studentId))];
+    if (affectedStudentIds.length > 0) {
+      const membershipsInOtherActiveGroups = await tx.groupMembership.findMany({
+        where: {
+          groupId: { not: groupId },
+          endedAt: null,
+          group: { isActive: true },
+          enrollment: { studentId: { in: affectedStudentIds } },
+        },
+        select: { enrollment: { select: { studentId: true } } },
+      });
+      const stillActiveStudentIds = new Set(
+        membershipsInOtherActiveGroups.map((item) => item.enrollment.studentId),
+      );
+      await clearStudentPaymentSchedules(
+        tx,
+        affectedStudentIds.filter((studentId) => !stillActiveStudentIds.has(studentId)),
+      );
+    }
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "group.archive",
@@ -241,25 +275,6 @@ async function addGroupMemberActionImpl(formData: FormData) {
       },
     });
 
-    const latestPayment = await tx.payment.findFirst({
-      where: { studentId: enrollment.student.id },
-      orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
-      select: { id: true, paidAt: true, paymentMonth: true },
-    });
-
-    if (latestPayment) {
-      await tx.payment.update({
-        where: { id: latestPayment.id },
-        data: {
-          nextPaymentAt: resolveNextPaymentAt({
-            groupJoinedAt: membership.joinedAt,
-            paymentMonth: latestPayment.paymentMonth,
-            paidAt: latestPayment.paidAt,
-          }),
-        },
-      });
-    }
-
     if (enrollment.student.lifecycleStatus === StudentLifecycleStatus.GROUP_WAITING) {
       await activateStudent(tx, {
         actorId: actor.id,
@@ -269,6 +284,18 @@ async function addGroupMemberActionImpl(formData: FormData) {
         oldBillingPaused: enrollment.student.billingPaused,
         effectiveAt: dateFromInput(todayInBaku()),
       });
+    }
+
+    if (
+      enrollment.student.lifecycleStatus === StudentLifecycleStatus.GROUP_WAITING
+      || !isBillingPausedStatus(enrollment.student.lifecycleStatus)
+    ) {
+      await startStudentPaymentSchedule(tx, {
+        studentId: enrollment.student.id,
+        groupStartedAt: membership.joinedAt,
+      });
+    } else {
+      await clearStudentPaymentSchedules(tx, [enrollment.student.id]);
     }
 
     await writeAuditLog(tx, {
@@ -333,10 +360,30 @@ async function endGroupMembershipActionImpl(formData: FormData) {
   const input = membershipIdSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const membership = await prisma.$transaction(async (tx) => {
-    const current = await tx.groupMembership.findUnique({ where: { id: input.membershipId } });
+    const current = await tx.groupMembership.findUnique({
+      where: { id: input.membershipId },
+      select: {
+        id: true,
+        groupId: true,
+        endedAt: true,
+        enrollment: { select: { studentId: true } },
+      },
+    });
     if (!current || current.endedAt) throw new Error("Aktiv qrup üzvlüyü tapılmadı");
     const endedAt = dateFromInput(todayInBaku());
     const updated = await tx.groupMembership.update({ where: { id: current.id }, data: { endedAt } });
+    const otherActiveMembership = await tx.groupMembership.findFirst({
+      where: {
+        id: { not: current.id },
+        endedAt: null,
+        group: { isActive: true },
+        enrollment: { studentId: current.enrollment.studentId },
+      },
+      select: { id: true },
+    });
+    if (!otherActiveMembership) {
+      await clearStudentPaymentSchedules(tx, [current.enrollment.studentId]);
+    }
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "group.membership.end",
@@ -346,9 +393,9 @@ async function endGroupMembershipActionImpl(formData: FormData) {
       after: { endedAt: endedAt.toISOString() },
       reason: "Tələbənin qrup üzvlüyü bitirildi",
     });
-    return updated;
+    return { ...updated, studentId: current.enrollment.studentId };
   });
-  revalidateGroupSurfaces(undefined, membership.groupId);
+  revalidateGroupSurfaces(membership.studentId, membership.groupId);
 }
 
 async function saveAttendanceActionImpl(formData: FormData) {
