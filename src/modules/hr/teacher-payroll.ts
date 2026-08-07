@@ -86,10 +86,10 @@ export async function recalculateTeacherPayoutsForMonth(period: Date, actorId: s
 
 async function queryPayrollLines(db: Pick<Prisma.TransactionClient, "$queryRaw">, periodMonth: Date, teacherIds?: string[]) {
   const nextMonth = new Date(Date.UTC(periodMonth.getUTCFullYear(), periodMonth.getUTCMonth() + 1, 1));
-  const teacherFilter = teacherIds?.length ? Prisma.sql`and membership.teacher_id in (${Prisma.join(teacherIds)})` : Prisma.empty;
+  const teacherFilter = teacherIds?.length ? Prisma.sql`and slot_owner.teacher_id in (${Prisma.join(teacherIds)})` : Prisma.empty;
   return db.$queryRaw<PayrollLineRow[]>(Prisma.sql`
     select
-      membership.teacher_id::text as "teacherId",
+      slot_owner.teacher_id::text as "teacherId",
       i.enrollment_id::text as "enrollmentId",
       pa.payment_id::text as "paymentId",
       sum(pa.amount_allocated) as "paidAmount",
@@ -107,29 +107,29 @@ async function queryPayrollLines(db: Pick<Prisma.TransactionClient, "$queryRaw">
     join erp.programs p on p.id = e.program_id
     join erp.payment_allocations pa on pa.invoice_id = i.id
     join lateral (
-      select gm.teacher_id
-      from erp.group_memberships gm
-      where gm.enrollment_id = e.id
-        and gm.joined_at < ${nextMonth}
-        and (gm.ended_at is null or gm.ended_at >= ${periodMonth})
-      order by gm.joined_at desc, gm.created_at desc
+      select cs.teacher_id
+      from erp.student_schedule_assignments ssa
+      join erp.class_slots cs on cs.id = ssa.slot_id
+      where ssa.enrollment_id = e.id
+        and ssa.valid_from < ${nextMonth}
+        and (ssa.valid_to is null or ssa.valid_to >= ${periodMonth})
+      order by ssa.valid_from desc, ssa.created_at desc
       limit 1
-    ) membership on true
+    ) slot_owner on true
     left join lateral (
       select count(*)::int as attended_lessons
       from erp.attendance_records ar
-      join erp.group_sessions gs on gs.id = ar.session_id
-      join erp.group_memberships gm on gm.id = ar.membership_id
-      where gm.enrollment_id = e.id
-        and ar.teacher_id = membership.teacher_id
+      join erp.slot_sessions ss on ss.id = ar.session_id
+      where ar.enrollment_id = e.id
+        and ar.teacher_id = slot_owner.teacher_id
         and ar.status = 'PRESENT'::"erp"."AttendanceMark"
-        and gs.session_date >= ${periodMonth}
-        and gs.session_date < ${nextMonth}
+        and ss.session_date >= ${periodMonth}
+        and ss.session_date < ${nextMonth}
     ) attendance on true
     where i.period_month = ${periodMonth}
       and i.status <> 'VOID'::"erp"."InvoiceStatus"
       ${teacherFilter}
-    group by membership.teacher_id, i.enrollment_id, pa.payment_id, e.lessons_per_month,
+    group by slot_owner.teacher_id, i.enrollment_id, pa.payment_id, e.lessons_per_month,
       p.default_lessons_per_month, attendance.attended_lessons
   `);
 }

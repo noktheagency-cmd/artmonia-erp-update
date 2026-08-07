@@ -2,32 +2,32 @@ const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const AZ_DATE_PATTERN = /^(\d{2})[./](\d{2})[./](\d{4})$/;
 
 /**
- * Returns the next monthly payment date anchored to an active group start.
- * Students without an active group do not have a next-payment schedule.
+ * Returns the next monthly payment date anchored to an active slot assignment.
+ * Students without an active slot do not have a next-payment schedule.
  */
 export function resolveNextPaymentAt({
-  groupJoinedAt,
+  slotStartedAt,
   paymentMonth,
 }: {
-  groupJoinedAt: Date | null;
+  slotStartedAt: Date | null;
   paymentMonth: Date;
 }) {
-  if (!groupJoinedAt) {
+  if (!slotStartedAt) {
     return null;
   }
 
-  const joinedMonthIndex = monthIndex(groupJoinedAt);
+  const joinedMonthIndex = monthIndex(slotStartedAt);
   const paymentMonthIndex = monthIndex(paymentMonth);
   const targetMonthIndex = Math.max(joinedMonthIndex + 1, paymentMonthIndex + 1);
 
-  return utcDateInMonth(targetMonthIndex, groupJoinedAt.getUTCDate());
+  return utcDateInMonth(targetMonthIndex, slotStartedAt.getUTCDate());
 }
 
 export function resolveNextPaymentDateInput({
-  groupJoinedAt,
+  slotStartedAt,
   paidAt,
 }: {
-  groupJoinedAt: string | null | undefined;
+  slotStartedAt: string | null | undefined;
   paidAt: string;
 }) {
   const paidDate = parseDateInput(paidAt);
@@ -36,9 +36,9 @@ export function resolveNextPaymentDateInput({
     return "";
   }
 
-  const joinedDate = groupJoinedAt ? parseDateInput(groupJoinedAt) : null;
+  const startedDate = slotStartedAt ? parseDateInput(slotStartedAt) : null;
   const nextPaymentAt = resolveNextPaymentAt({
-    groupJoinedAt: joinedDate,
+    slotStartedAt: startedDate,
     paymentMonth: new Date(Date.UTC(paidDate.getUTCFullYear(), paidDate.getUTCMonth(), 1)),
   });
 

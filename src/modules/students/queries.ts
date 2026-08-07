@@ -246,8 +246,8 @@ const lifecycleMeta: Record<
 > = {
   [StudentLifecycleStatus.ACTIVE]: { label: "Aktiv", tone: "success" },
   [StudentLifecycleStatus.DEBT]: { label: "Borclu", tone: "danger" },
-  [StudentLifecycleStatus.GROUP_WAITING]: {
-    label: "Qrup gözləyir",
+  [StudentLifecycleStatus.SLOT_WAITING]: {
+    label: "Slot gözləyir",
     tone: "warning",
   },
   [StudentLifecycleStatus.FROZEN]: { label: "Dondurulub", tone: "info" },
@@ -270,10 +270,10 @@ const summaryMeta: Record<
     tone: "coral",
     delta: "Ödəniş izləməsi",
   },
-  [StudentLifecycleStatus.GROUP_WAITING]: {
-    label: "Qrup gözləyir",
+  [StudentLifecycleStatus.SLOT_WAITING]: {
+    label: "Slot gözləyir",
     tone: "yellow",
-    delta: "Qrup təyinatı",
+    delta: "Slot təyinatı",
   },
   [StudentLifecycleStatus.FROZEN]: {
     label: "Dondurulmuş",
@@ -358,7 +358,7 @@ export async function getStudentListData(
   const visibleStatuses = [
     StudentLifecycleStatus.ACTIVE,
     StudentLifecycleStatus.DEBT,
-    StudentLifecycleStatus.GROUP_WAITING,
+    StudentLifecycleStatus.SLOT_WAITING,
     StudentLifecycleStatus.FROZEN,
     StudentLifecycleStatus.STOPPED,
     StudentLifecycleStatus.DECLINED,
@@ -463,7 +463,7 @@ export async function getStudentListData(
       const outstandingBalance = formatAmount(summaryBalances.get(status) ?? 0);
       const isOutstandingStatus =
         status === StudentLifecycleStatus.DEBT ||
-        status === StudentLifecycleStatus.GROUP_WAITING;
+        status === StudentLifecycleStatus.SLOT_WAITING;
 
       return {
         label: summaryMeta[status].label,
@@ -471,7 +471,7 @@ export async function getStudentListData(
         delta:
           status === StudentLifecycleStatus.DEBT
             ? `Qalan borc: ${outstandingBalance}`
-            : status === StudentLifecycleStatus.GROUP_WAITING
+            : status === StudentLifecycleStatus.SLOT_WAITING
               ? `Qalan ödəniş: ${outstandingBalance}`
               : summaryMeta[status].delta,
         amount: isOutstandingStatus ? outstandingBalance : undefined,
@@ -517,7 +517,7 @@ export async function getStudentListData(
         phone: student.phone ?? "-",
         program: student.programName ?? "Proqram yoxdur",
         teacher: student.teacherName ?? "Təyin edilməyib",
-        group: student.groupCode ?? "Qrupa təyin edilməyib",
+        group: student.slotLabel ?? "Slota təyin edilməyib",
         dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate) : "—",
         overdueDays,
         balance: formatAmount(balance),
@@ -590,7 +590,7 @@ type StudentListQueryRow = {
   monthlyFee: unknown;
   programName: string | null;
   teacherName: string | null;
-  groupCode: string | null;
+  slotLabel: string | null;
   balanceDue: unknown;
   currentMonthPaid: unknown;
   nextDueDate: Date | string | null;
@@ -878,7 +878,7 @@ async function getStudentRows(
       ae.monthly_fee as "monthlyFee",
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
-      (select g.code from erp.group_memberships gm join erp.groups g on g.id = gm.group_id join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null and g.is_active = true order by gm.joined_at desc, gm.created_at desc limit 1) as "groupCode",
+      (select concat(t.full_name, ' · ', cs.start_time, '–', cs.end_time) from erp.student_schedule_assignments ssa join erp.class_slots cs on cs.id = ssa.slot_id join erp.teachers t on t.id = cs.teacher_id join erp.enrollments se on se.id = ssa.enrollment_id where se.student_id = ps.id and ssa.valid_to is null order by ssa.valid_from desc, ssa.created_at desc limit 1) as "slotLabel",
       inv.balance_due as "balanceDue",
       coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', current_date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
@@ -1683,7 +1683,7 @@ export async function getStudentDetailData(studentId: string) {
       ae.monthly_fee as "monthlyFee",
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
-      (select g.code from erp.group_memberships gm join erp.groups g on g.id = gm.group_id join erp.enrollments ge on ge.id = gm.enrollment_id where ge.student_id = ps.id and gm.ended_at is null and g.is_active = true order by gm.joined_at desc, gm.created_at desc limit 1) as "groupCode",
+      (select concat(t.full_name, ' · ', cs.start_time, '–', cs.end_time) from erp.student_schedule_assignments ssa join erp.class_slots cs on cs.id = ssa.slot_id join erp.teachers t on t.id = cs.teacher_id join erp.enrollments se on se.id = ssa.enrollment_id where se.student_id = ps.id and ssa.valid_to is null order by ssa.valid_from desc, ssa.created_at desc limit 1) as "slotLabel",
       inv.balance_due as "balanceDue",
       coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', current_date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
@@ -1883,7 +1883,7 @@ export async function getStudentDetailData(studentId: string) {
       phone: student.phone ?? "-",
       program: student.programName ?? "Proqram yoxdur",
       teacher: student.teacherName ?? "Təyin edilməyib",
-      group: student.groupCode ?? "Qrupa təyin edilməyib",
+      group: student.slotLabel ?? "Slota təyin edilməyib",
       dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate as Date) : "—",
       overdueDays,
       balance: formatAmount(balance),

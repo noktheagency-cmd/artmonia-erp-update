@@ -41,7 +41,7 @@ export function RoleDashboard({ data, taskData, createTaskAction }: { data: Role
         <CardContent><RolePerformanceChart items={data.breakdown} /></CardContent>
       </Card>
       <Card className="role-dashboard-panel">
-        <CardHeader><div><CardTitle>{data.kind === "sales" ? "Növbəti follow-up-lar" : data.kind === "teacher" ? "Mənim qruplarım" : "Son kampaniyalar"}</CardTitle><CardDescription>Prioritet iş axını</CardDescription></div><CardAction><Link href={data.primaryHref}>Hamısına bax</Link></CardAction></CardHeader>
+        <CardHeader><div><CardTitle>{data.kind === "sales" ? "Növbəti follow-up-lar" : data.kind === "teacher" ? "Mənim slotlarım" : "Son kampaniyalar"}</CardTitle><CardDescription>Prioritet iş axını</CardDescription></div><CardAction><Link href={data.primaryHref}>Hamısına bax</Link></CardAction></CardHeader>
         <CardContent><div className="role-dashboard-recent">{data.recent.length ? data.recent.map((item) => <div key={`${item.title}-${item.meta}`}><span>{initials(item.title)}</span><div><strong>{item.title}</strong><small>{item.meta}</small></div><Badge variant="secondary">{item.status}</Badge></div>) : <p>Hələ məlumat yoxdur.</p>}</div></CardContent>
       </Card>
     </div>

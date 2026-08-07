@@ -148,7 +148,7 @@ export function PlannerWorkspace({
           <p>Dərs vaxtlarını, müəllimləri, tutumu, tələbə planını və davamiyyəti bir yerdən idarə edin.</p>
         </div>
         <div className={styles.headerRight}>
-          <Metric icon={CalendarDays} value={data.slots.length} label="aktiv slot" />
+          <Metric icon={CalendarDays} value={data.slots.length} label="slot" />
           <Metric icon={UsersRound} value={plannedCount} label="tələbə təyinatı" />
           <Metric icon={UserPlus} value={openSeats} label="boş yer" />
           {data.canManage ? (
@@ -253,6 +253,7 @@ export function PlannerWorkspace({
               <dl className={styles.slotFacts}>
                 <div><dt><UserRound size={17} /> Müəllim</dt><dd>{selectedSlot.teacherName}</dd></div>
                 <div><dt><DoorOpen size={17} /> Otaq</dt><dd>{selectedSlot.room}</dd></div>
+                <div><dt><CalendarDays size={17} /> Başlanğıc</dt><dd>{formatInputDate(selectedSlot.validFrom)}</dd></div>
                 <div><dt><UsersRound size={17} /> Tutum</dt><dd>{selectedSlot.assignedCount} / {selectedSlot.capacity}</dd></div>
               </dl>
               <CapacityBar count={selectedSlot.assignedCount} capacity={selectedSlot.capacity} />
@@ -280,7 +281,12 @@ export function PlannerWorkspace({
               {data.canManage || data.canManageAttendance ? (
                 <div className={styles.inspectorActions}>
                   {data.canManageAttendance ? (
-                    <Button type="button" onClick={() => openAttendance(selectedSlot)}>
+                    <Button
+                      type="button"
+                      onClick={() => openAttendance(selectedSlot)}
+                      disabled={selectedSlot.validFrom > data.today}
+                      title={selectedSlot.validFrom > data.today ? "Slot hələ başlamayıb" : undefined}
+                    >
                       <BookOpenCheck data-icon="inline-start" /> Davamiyyət
                     </Button>
                   ) : null}
@@ -324,13 +330,13 @@ export function PlannerWorkspace({
           )}
           onDelete={slotDialogMode === "edit" && selectedSlot ? () => {
             if (!window.confirm(
-              `${weekdayMeta[selectedSlot.weekday].label} ${selectedSlot.startTime} slotu silinsin?`,
+              `${weekdayMeta[selectedSlot.weekday].label} ${selectedSlot.startTime} slotu və ona bağlı tələbə planı/davamiyyət tam silinsin?`,
             )) return;
             const formData = new FormData();
             formData.set("slotId", selectedSlot.id);
             runAction(
               () => actions.deleteSlot(formData),
-              "Dərs slotu silindi.",
+              "Dərs slotu tam silindi.",
               () => {
                 setSelectedSlotId("");
                 setSlotDialogMode(null);
@@ -483,6 +489,7 @@ function SlotCard({
       </span>
       <span className={styles.slotTime}>{slot.startTime}–{slot.endTime}</span>
       <span className={styles.slotTeacher}>{slot.teacherName}</span>
+      <span className={styles.slotTeacher}>Başlanğıc: {formatInputDate(slot.validFrom)}</span>
       <span className={styles.slotBottom}>
         <b>{slot.assignedCount} / {slot.capacity}</b>
         <i>
@@ -505,6 +512,22 @@ function CapacityBar({ count, capacity }: { count: number; capacity: number }) {
     >
       <i style={{ width: `${Math.min(ratio * 100, 100)}%` }} />
     </span>
+  );
+}
+
+function formatInputDate(value: string) {
+  const [year, month, day] = value.split("-");
+  return `${day}.${month}.${year}`;
+}
+
+function minimumAssignmentDate(slotIds: string[], slots: PlannerSlot[], today: string) {
+  const slotById = new Map(slots.map((slot) => [slot.id, slot]));
+  return slotIds.reduce(
+    (latest, slotId) => {
+      const slotStart = slotById.get(slotId)?.validFrom;
+      return slotStart && slotStart > latest ? slotStart : latest;
+    },
+    today,
   );
 }
 
@@ -548,7 +571,7 @@ function SlotDialog({
           <DialogTitle>{editing ? "Dərs slotunu redaktə et" : "Yeni dərs slotu"}</DialogTitle>
           <DialogDescription>
             {editing
-              ? "Dəyişiklik seçilən tarixdən tətbiq olunur və əvvəlki versiya tarixçədə saxlanılır."
+              ? "Slot birbaşa yenilənir; ayrıca gizli konteyner və ya slot versiyası yaradılmır."
               : "Günü, vaxtı, müəllimi, otağı və tutumu müəyyən edin."}
           </DialogDescription>
         </DialogHeader>
@@ -655,11 +678,14 @@ function AssignmentDialog({
 }) {
   const firstEnrollment = data.enrollments.find((item) => item.id === initialEnrollmentId)
     ?? data.enrollments[0];
+  const initialSelection = firstEnrollment?.slotIds.length
+    ? firstEnrollment.slotIds
+    : firstEnrollment ? [initialSlot.id] : [];
   const [enrollmentId, setEnrollmentId] = useState(firstEnrollment?.id ?? "");
-  const [selected, setSelected] = useState<string[]>(() => {
-    if (firstEnrollment?.slotIds.length) return firstEnrollment.slotIds;
-    return firstEnrollment ? [initialSlot.id] : [];
-  });
+  const [selected, setSelected] = useState<string[]>(initialSelection);
+  const [validFrom, setValidFrom] = useState(() => (
+    minimumAssignmentDate(initialSelection, data.slots, data.today)
+  ));
   const enrollment = data.enrollments.find((item) => item.id === enrollmentId);
   const enrollmentOptions = useMemo(
     () => data.enrollments.map((item) => ({
@@ -678,15 +704,20 @@ function AssignmentDialog({
 
   function changeEnrollment(value: string) {
     const next = data.enrollments.find((item) => item.id === value);
+    const nextSelection = next?.slotIds.length ? next.slotIds : [initialSlot.id];
     setEnrollmentId(value);
-    setSelected(next?.slotIds.length ? next.slotIds : [initialSlot.id]);
+    setSelected(nextSelection);
+    setValidFrom(minimumAssignmentDate(nextSelection, data.slots, data.today));
   }
 
   function toggle(slot: PlannerSlot) {
     if (slot.assignedCount >= slot.capacity && !selectedIds.has(slot.id)) return;
-    setSelected((current) => current.includes(slot.id)
-      ? current.filter((id) => id !== slot.id)
-      : [...current, slot.id]);
+    const next = selected.includes(slot.id)
+      ? selected.filter((id) => id !== slot.id)
+      : [...selected, slot.id];
+    const minimum = minimumAssignmentDate(next, data.slots, data.today);
+    setSelected(next);
+    setValidFrom((currentDate) => currentDate < minimum ? minimum : currentDate);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -750,6 +781,7 @@ function AssignmentDialog({
                         >
                           <span>{shiftMeta[slot.shift].label}</span>
                           <small><Clock3 size={13} />{slot.startTime}–{slot.endTime}</small>
+                          <small><CalendarDays size={13} />{formatInputDate(slot.validFrom)}</small>
                           <b><UsersRound size={13} />{full && !active ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>
                           {active ? <Check className={styles.slotChoiceCheck} size={16} /> : null}
                         </button>
@@ -787,7 +819,14 @@ function AssignmentDialog({
               </div>
               <label className={styles.startDateField}>
                 <span>Başlama tarixi</span>
-                <input name="validFrom" type="date" defaultValue={data.today} required />
+                <input
+                  name="validFrom"
+                  type="date"
+                  min={minimumAssignmentDate(selected, data.slots, data.today)}
+                  value={validFrom}
+                  onChange={(event) => setValidFrom(event.target.value)}
+                  required
+                />
               </label>
               {enrollment?.lessonsPerMonth ? (
                 <div className={styles.packageNote}>
@@ -828,11 +867,11 @@ function AttendanceDialog({
   const [rows, setRows] = useState<PlannerJournalMember[]>(journal.members);
 
   function updateRow(
-    membershipId: string,
+    enrollmentId: string,
     patch: Partial<Pick<PlannerJournalMember, "attendanceStatus" | "note">>,
   ) {
     setRows((current) => current.map((row) => (
-      row.membershipId === membershipId ? { ...row, ...patch } : row
+      row.enrollmentId === enrollmentId ? { ...row, ...patch } : row
     )));
   }
 
@@ -840,7 +879,7 @@ function AttendanceDialog({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     formData.set("items", JSON.stringify(rows.map((row) => ({
-      membershipId: row.membershipId,
+      enrollmentId: row.enrollmentId,
       status: row.attendanceStatus,
       note: row.note,
     }))));
@@ -869,6 +908,7 @@ function AttendanceDialog({
                 name="date"
                 type="date"
                 value={journal.date}
+                min={slot.validFrom}
                 max={today}
                 onChange={(event) => onDateChange(event.target.value)}
                 required
@@ -883,7 +923,7 @@ function AttendanceDialog({
 
           <div className={styles.attendanceList}>
             {rows.map((row) => (
-              <div className={styles.attendanceRow} key={row.membershipId}>
+              <div className={styles.attendanceRow} key={row.enrollmentId}>
                 <Avatar name={row.studentName} />
                 <div className={styles.attendanceStudent}>
                   <strong>{row.studentName}</strong>
@@ -894,7 +934,7 @@ function AttendanceDialog({
                     type="button"
                     data-active={row.attendanceStatus === "present" || undefined}
                     data-state="present"
-                    onClick={() => updateRow(row.membershipId, { attendanceStatus: "present" })}
+                    onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "present" })}
                     aria-label={`${row.studentName}: iştirak edir`}
                   >
                     <Check size={15} /> İştirak
@@ -903,7 +943,7 @@ function AttendanceDialog({
                     type="button"
                     data-active={row.attendanceStatus === "absent" || undefined}
                     data-state="absent"
-                    onClick={() => updateRow(row.membershipId, { attendanceStatus: "absent" })}
+                    onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "absent" })}
                     aria-label={`${row.studentName}: qayıb`}
                   >
                     <X size={15} /> Qayıb
@@ -911,7 +951,7 @@ function AttendanceDialog({
                   <button
                     type="button"
                     className={styles.clearMark}
-                    onClick={() => updateRow(row.membershipId, { attendanceStatus: null })}
+                    onClick={() => updateRow(row.enrollmentId, { attendanceStatus: null })}
                     aria-label={`${row.studentName}: qeydi təmizlə`}
                   >
                     <RotateCcw size={14} />
@@ -920,7 +960,7 @@ function AttendanceDialog({
                 <input
                   className={styles.attendanceNote}
                   value={row.note}
-                  onChange={(event) => updateRow(row.membershipId, { note: event.target.value })}
+                  onChange={(event) => updateRow(row.enrollmentId, { note: event.target.value })}
                   placeholder="Qeyd (istəyə bağlı)"
                   maxLength={500}
                   aria-label={`${row.studentName} üçün qeyd`}

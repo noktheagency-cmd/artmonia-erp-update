@@ -56,7 +56,7 @@ export const tasks = [
 export const statusSummary = [
   { label: "Active", value: 134, delta: "+8.2%", tone: "blue" },
   { label: "Debt", value: 59, delta: "-3.1%", tone: "coral" },
-  { label: "Group waiting", value: 23, delta: "+4", tone: "yellow" },
+  { label: "Slot waiting", value: 23, delta: "+4", tone: "yellow" },
   { label: "Frozen", value: 35, delta: "12 return", tone: "mint" },
 ] as const;
 

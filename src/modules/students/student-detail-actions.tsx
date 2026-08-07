@@ -24,7 +24,7 @@ import { unwrapActionResult } from "@/lib/action-result";
 import { StudentReminderDialog } from "@/modules/students/student-reminders-client";
 
 const studentStatusOptions = [
-  { value: "GROUP_WAITING", label: "Qrup gözləyir" },
+  { value: "SLOT_WAITING", label: "Slot gözləyir" },
   { value: "ACTIVE", label: "Aktiv" },
   { value: "DEBT", label: "Borclu" },
   { value: "FROZEN", label: "Dondurulub" },
@@ -162,7 +162,7 @@ export function StudentDetailActions({
               <Input
                 name="note"
                 maxLength={240}
-                placeholder="Məsələn: qrup başladı, imtina etdi"
+                placeholder="Məsələn: slot başladı, imtina etdi"
               />
             </label>
 
@@ -390,7 +390,7 @@ export function StudentDetailActions({
             <DialogTitle>Tələbəni tam silmək istəyirsiniz?</DialogTitle>
             <DialogDescription>
               <strong>{student.name}</strong> ({student.code}) profilinə bağlı ödənişlər,
-              fakturalar, qeydiyyatlar, dərslər, qrup və workshop məlumatları tam silinəcək.
+              fakturalar, qeydiyyatlar, dərslər, slot və workshop məlumatları tam silinəcək.
               Bu əməliyyatı geri qaytarmaq mümkün deyil.
             </DialogDescription>
           </DialogHeader>

@@ -605,14 +605,14 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         contactId: lead.contactId,
         managerId: actor.id,
         campaignId: lead.campaignId,
-        lifecycleStatus: StudentLifecycleStatus.GROUP_WAITING,
+        lifecycleStatus: StudentLifecycleStatus.SLOT_WAITING,
         educationLevel: lead.educationLevel,
-        billingPaused: isBillingPausedStatus(StudentLifecycleStatus.GROUP_WAITING),
+        billingPaused: isBillingPausedStatus(StudentLifecycleStatus.SLOT_WAITING),
         registeredAt: today,
         notes: `CRM müraciətindən tələbəyə çevrildi: ${lead.id}`,
         statusHistory: {
           create: {
-            newStatus: StudentLifecycleStatus.GROUP_WAITING,
+            newStatus: StudentLifecycleStatus.SLOT_WAITING,
             reason: "CRM müraciəti tələbəyə çevrildi",
             changedById: actor.id,
             effectiveAt: today,

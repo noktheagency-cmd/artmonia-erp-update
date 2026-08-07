@@ -26,7 +26,7 @@ import {
 import {
   clearStudentPaymentSchedules,
   resolveStudentNextPaymentAt,
-  restartStudentPaymentScheduleForActiveGroup,
+  restartStudentPaymentScheduleForActiveSlot,
 } from "@/modules/students/payment-schedule-service";
 import {
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
@@ -64,7 +64,7 @@ const optionalAmount = z.preprocess((value) => {
 }, z.number().positive().max(100_000).optional());
 
 const studentLifecycleStatusValues = [
-  StudentLifecycleStatus.GROUP_WAITING,
+  StudentLifecycleStatus.SLOT_WAITING,
   StudentLifecycleStatus.ACTIVE,
   StudentLifecycleStatus.DEBT,
   StudentLifecycleStatus.FROZEN,
@@ -85,7 +85,7 @@ const createStudentSchema = z.object({
   teacherId: optionalUuid("Müəllim"),
   campaignId: optionalUuid("Kampaniya"),
   discountType: optionalText(100),
-  lifecycleStatus: z.enum(studentLifecycleStatusValues).default(StudentLifecycleStatus.GROUP_WAITING),
+  lifecycleStatus: z.enum(studentLifecycleStatusValues).default(StudentLifecycleStatus.SLOT_WAITING),
   registeredDate: z.string().trim().min(1).max(20),
   firstLessonDate: optionalText(20),
   monthlyFee: z.preprocess(parseAmountInput, z.number().nonnegative().max(100_000)),
@@ -142,7 +142,7 @@ const updateStudentProfileSchema = z.object({
 async function createStudentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.create");
   const input = createStudentSchema.parse(Object.fromEntries(formData));
-  const initialLifecycleStatus = StudentLifecycleStatus.GROUP_WAITING;
+  const initialLifecycleStatus = StudentLifecycleStatus.SLOT_WAITING;
   input.lifecycleStatus = initialLifecycleStatus;
 
   if (input.leadId && !actor.permissions.has("crm.lead.convert")) {
@@ -492,7 +492,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         studentCode: current.code,
         effectiveAt,
       });
-      await restartStudentPaymentScheduleForActiveGroup(tx, {
+      await restartStudentPaymentScheduleForActiveSlot(tx, {
         studentId: current.id,
         activatedAt: effectiveAt,
       });

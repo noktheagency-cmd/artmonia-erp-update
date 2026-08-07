@@ -352,7 +352,6 @@ async function ensureTeacherCohort(campaignId: string) {
       campaign_id,
       participant_id,
       teacher_id,
-      membership_id,
       enrollment_id,
       student_id,
       assigned_at
@@ -361,17 +360,17 @@ async function ensureTeacherCohort(campaignId: string) {
       campaign.id,
       participant.id,
       teacher.id,
-      membership.id,
       enrollment.id,
       student.id,
-      membership.joined_at
+      assignment.valid_from
     from erp.hr_bonus_campaigns campaign
     join erp.hr_bonus_participants participant on participant.campaign_id = campaign.id
       and participant.is_eligible = true
     join erp.hr_employees employee on employee.id = participant.employee_id
     join erp.teachers teacher on teacher.id = employee.teacher_id
-    join erp.group_memberships membership on membership.teacher_id = teacher.id
-    join erp.enrollments enrollment on enrollment.id = membership.enrollment_id
+    join erp.class_slots slot on slot.teacher_id = teacher.id
+    join erp.student_schedule_assignments assignment on assignment.slot_id = slot.id
+    join erp.enrollments enrollment on enrollment.id = assignment.enrollment_id
     join erp.students student on student.id = enrollment.student_id
     left join lateral (
       select history.new_status
@@ -391,19 +390,19 @@ async function ensureTeacherCohort(campaignId: string) {
     ) first_status_after_start on true
     where campaign.id = ${campaignId}::uuid
       and campaign.metric_kind = 'TEACHER_RETENTION_RATE'::"erp"."HrBonusMetricKind"
-      and membership.joined_at <= campaign.starts_at
-      and (membership.ended_at is null or membership.ended_at >= campaign.starts_at)
+      and assignment.valid_from <= campaign.starts_at
+      and (assignment.valid_to is null or assignment.valid_to >= campaign.starts_at)
       and enrollment.start_date <= campaign.starts_at
       and coalesce(
         status_before_start.new_status,
         first_status_after_start.old_status,
         student.lifecycle_status
       ) in (
-        'GROUP_WAITING'::"erp"."StudentLifecycleStatus",
+        'SLOT_WAITING'::"erp"."StudentLifecycleStatus",
         'ACTIVE'::"erp"."StudentLifecycleStatus",
         'DEBT'::"erp"."StudentLifecycleStatus"
       )
-    order by student.id, membership.joined_at desc, membership.created_at desc
+    order by student.id, assignment.valid_from desc, assignment.created_at desc
     on conflict (campaign_id, student_id) do nothing
   `);
 }
@@ -421,7 +420,20 @@ async function calculateTeacherPerformance(campaignId: string) {
     join erp.hr_employees employee on employee.id = participant.employee_id
     join erp.teachers teacher on teacher.id = employee.teacher_id
     left join erp.hr_bonus_teacher_cohorts cohort on cohort.participant_id = participant.id
-    left join erp.group_memberships membership on membership.id = cohort.membership_id
+    left join lateral (
+      select
+        count(*)::int as assignment_count,
+        case
+        when count(*) = 0 or bool_or(assignment.valid_to is null) then null
+        else max(assignment.valid_to)
+      end as ended_at
+      from erp.student_schedule_assignments assignment
+      join erp.class_slots slot on slot.id = assignment.slot_id
+      where assignment.enrollment_id = cohort.enrollment_id
+        and slot.teacher_id = cohort.teacher_id
+        and assignment.valid_from <= campaign.starts_at
+        and (assignment.valid_to is null or assignment.valid_to >= campaign.starts_at)
+    ) slot_assignment on cohort.id is not null
     left join lateral (
       select
         exists (
@@ -435,13 +447,15 @@ async function calculateTeacherPerformance(campaignId: string) {
             and history.effective_at >= campaign.starts_at
             and history.effective_at <= least(
               campaign.ends_at,
-              coalesce(membership.ended_at + 7, campaign.ends_at)
+              coalesce(slot_assignment.ended_at + 7, campaign.ends_at)
             )
         ) as did_churn,
         (
-          membership.ended_at is null
-          or membership.ended_at > campaign.ends_at
-          or exists (
+          slot_assignment.assignment_count > 0
+          and (
+            slot_assignment.ended_at is null
+            or slot_assignment.ended_at > campaign.ends_at
+            or exists (
             select 1
             from erp.student_status_history history
             where history.student_id = cohort.student_id
@@ -452,8 +466,9 @@ async function calculateTeacherPerformance(campaignId: string) {
               and history.effective_at >= campaign.starts_at
               and history.effective_at <= least(
                 campaign.ends_at,
-                coalesce(membership.ended_at + 7, campaign.ends_at)
+                coalesce(slot_assignment.ended_at + 7, campaign.ends_at)
               )
+            )
           )
         ) as is_eligible
     ) outcome on cohort.id is not null

@@ -19,7 +19,6 @@ test("audit əməliyyatları və obyektləri Azərbaycan dilində göstərilir",
 test("tanınmayan texniki identifikatorlar Azərbaycan dilində ehtiyat mətnə çevrilir", () => {
   assert.equal(getAuditActionLabel("unknown.action"), "Sistem əməliyyatı icra edildi");
   assert.equal(getAuditEntityLabel("unknown_entity"), "Sistem obyekti");
-  assert.equal(getAuditEntityLabel("group_session"), "Qrup dərsi");
 });
 
 test("dəyişiklik məlumatlarının açarları və sistem dəyərləri lokallaşdırılır", () => {

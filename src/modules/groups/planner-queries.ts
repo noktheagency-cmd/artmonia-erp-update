@@ -1,17 +1,18 @@
 import { AppRole, EnrollmentStatus } from "@/generated/prisma/client";
-import { requireErpActor } from "@/server/auth/actor";
-import { getPrisma } from "@/server/db/prisma";
 import {
+  dateFromInput,
   formatDateAz,
   latestScheduledDate,
   todayInBaku,
   toDateInput,
+  weekdayFromDate,
   type GroupWeekdayCode,
 } from "@/modules/groups/shared";
+import { requireErpActor } from "@/server/auth/actor";
+import { getPrisma } from "@/server/db/prisma";
 
 export type PlannerMember = {
   assignmentId: string;
-  membershipId: string;
   enrollmentId: string;
   studentId: string;
   studentCode: string;
@@ -76,7 +77,6 @@ export async function getPlannerWorkspaceData(input?: {
   const actor = await requireErpActor("group.read");
   const prisma = getPrisma();
   const today = todayInBaku();
-  const todayDate = new Date(`${today}T00:00:00.000Z`);
   const canManage = actor.permissions.has("group.manage");
   const canManageAttendance = actor.permissions.has("attendance.manage");
   const teacherProfile = actor.roles.includes(AppRole.TEACHER) && !canManage
@@ -86,18 +86,11 @@ export async function getPlannerWorkspaceData(input?: {
 
   const [slots, teachers, enrollments] = await Promise.all([
     prisma.classSlot.findMany({
-      where: {
-        isActive: true,
-        group: { isActive: true },
-        validFrom: { lte: todayDate },
-        OR: [{ validTo: null }, { validTo: { gte: todayDate } }],
-        ...(teacherId ? { teacherId } : {}),
-      },
+      where: { ...(teacherId ? { teacherId } : {}) },
       take: 250,
-      orderBy: [{ startTime: "asc" }, { weekday: "asc" }],
+      orderBy: [{ validFrom: "asc" }, { startTime: "asc" }, { weekday: "asc" }],
       select: {
         id: true,
-        groupId: true,
         weekday: true,
         shift: true,
         startTime: true,
@@ -106,39 +99,21 @@ export async function getPlannerWorkspaceData(input?: {
         capacity: true,
         validFrom: true,
         teacher: { select: { id: true, fullName: true } },
-        _count: {
-          select: {
-            assignments: {
-              where: {
-                validFrom: { lte: todayDate },
-                OR: [{ validTo: null }, { validTo: { gte: todayDate } }],
-              },
-            },
-          },
-        },
         assignments: {
-          where: {
-            validFrom: { lte: todayDate },
-            OR: [{ validTo: null }, { validTo: { gte: todayDate } }],
-          },
+          where: { validTo: null },
           take: 100,
           orderBy: { createdAt: "asc" },
           select: {
             id: true,
-            membership: {
+            enrollment: {
               select: {
                 id: true,
-                enrollment: {
+                program: { select: { name: true } },
+                student: {
                   select: {
                     id: true,
-                    program: { select: { name: true } },
-                    student: {
-                      select: {
-                        id: true,
-                        code: true,
-                        contact: { select: { fullName: true } },
-                      },
-                    },
+                    code: true,
+                    contact: { select: { fullName: true } },
                   },
                 },
               },
@@ -171,18 +146,9 @@ export async function getPlannerWorkspaceData(input?: {
                 contact: { select: { fullName: true } },
               },
             },
-            groupMemberships: {
-              where: { endedAt: null },
-              select: {
-                scheduleAssignments: {
-                  where: {
-                    validFrom: { lte: todayDate },
-                    OR: [{ validTo: null }, { validTo: { gte: todayDate } }],
-                    slot: { isActive: true, group: { isActive: true } },
-                  },
-                  select: { slotId: true },
-                },
-              },
+            scheduleAssignments: {
+              where: { validTo: null },
+              select: { slotId: true },
             },
           },
         })
@@ -200,88 +166,80 @@ export async function getPlannerWorkspaceData(input?: {
     room: slot.room ?? "Otaq seçilməyib",
     capacity: slot.capacity,
     validFrom: toDateInput(slot.validFrom),
-    assignedCount: slot._count.assignments,
+    assignedCount: slot.assignments.length,
     members: slot.assignments.map((assignment) => ({
       assignmentId: assignment.id,
-      membershipId: assignment.membership.id,
-      enrollmentId: assignment.membership.enrollment.id,
-      studentId: assignment.membership.enrollment.student.id,
-      studentCode: assignment.membership.enrollment.student.code,
-      studentName: assignment.membership.enrollment.student.contact.fullName,
-      program: assignment.membership.enrollment.program.name,
+      enrollmentId: assignment.enrollment.id,
+      studentId: assignment.enrollment.student.id,
+      studentCode: assignment.enrollment.student.code,
+      studentName: assignment.enrollment.student.contact.fullName,
+      program: assignment.enrollment.program.name,
     })),
   }));
   const selectedSlot = plannerSlots.find((slot) => slot.id === input?.slotId) ?? plannerSlots[0];
-  const selectedSlotRecord = slots.find((slot) => slot.id === selectedSlot?.id);
   const selectedSlotId = selectedSlot?.id ?? "";
   const journalDate = selectedSlot
-    ? latestScheduledDate([selectedSlot.weekday], input?.date, today)
+    ? selectedSlot.validFrom > today
+      ? firstScheduledDate(selectedSlot.validFrom, selectedSlot.weekday)
+      : latestScheduledDate([selectedSlot.weekday], input?.date, today)
     : today;
+  const journalDateValue = dateFromInput(journalDate);
 
-  const [journalAssignments, journalSession] = selectedSlot && selectedSlotRecord
+  const [journalAssignments, journalSession] = selectedSlot
     ? await Promise.all([
         prisma.studentScheduleAssignment.findMany({
           where: {
             slotId: selectedSlot.id,
-            validFrom: { lte: new Date(`${journalDate}T00:00:00.000Z`) },
-            OR: [
-              { validTo: null },
-              { validTo: { gte: new Date(`${journalDate}T00:00:00.000Z`) } },
-            ],
+            validFrom: { lte: journalDateValue },
+            OR: [{ validTo: null }, { validTo: { gte: journalDateValue } }],
           },
           take: 100,
           orderBy: { createdAt: "asc" },
           select: {
             id: true,
-            membership: {
+            enrollment: {
               select: {
                 id: true,
-                enrollment: {
+                program: { select: { name: true } },
+                student: {
                   select: {
                     id: true,
-                    program: { select: { name: true } },
-                    student: {
-                      select: {
-                        id: true,
-                        code: true,
-                        contact: { select: { fullName: true } },
-                      },
-                    },
+                    code: true,
+                    contact: { select: { fullName: true } },
                   },
                 },
               },
             },
           },
         }),
-        prisma.groupSession.findUnique({
+        prisma.slotSession.findUnique({
           where: {
-            groupId_sessionDate: {
-              groupId: selectedSlotRecord.groupId,
-              sessionDate: new Date(`${journalDate}T00:00:00.000Z`),
+            slotId_sessionDate: {
+              slotId: selectedSlot.id,
+              sessionDate: journalDateValue,
             },
           },
           select: {
             attendance: {
-              select: { membershipId: true, status: true, note: true },
+              select: { enrollmentId: true, status: true, note: true },
             },
           },
         }),
       ])
     : [[], null] as const;
 
-  const attendanceByMembership = new Map(
-    journalSession?.attendance.map((item) => [item.membershipId, item]) ?? [],
+  const attendanceByEnrollment = new Map(
+    journalSession?.attendance.map((item) => [item.enrollmentId, item]) ?? [],
   );
   const journalMembers: PlannerJournalMember[] = journalAssignments.map((assignment) => {
-    const attendance = attendanceByMembership.get(assignment.membership.id);
+    const attendance = attendanceByEnrollment.get(assignment.enrollment.id);
     return {
       assignmentId: assignment.id,
-      membershipId: assignment.membership.id,
-      enrollmentId: assignment.membership.enrollment.id,
-      studentId: assignment.membership.enrollment.student.id,
-      studentCode: assignment.membership.enrollment.student.code,
-      studentName: assignment.membership.enrollment.student.contact.fullName,
-      program: assignment.membership.enrollment.program.name,
+      enrollmentId: assignment.enrollment.id,
+      studentId: assignment.enrollment.student.id,
+      studentCode: assignment.enrollment.student.code,
+      studentName: assignment.enrollment.student.contact.fullName,
+      program: assignment.enrollment.program.name,
       attendanceStatus: attendance?.status === "PRESENT"
         ? "present"
         : attendance?.status === "ABSENT"
@@ -306,11 +264,7 @@ export async function getPlannerWorkspaceData(input?: {
       studentName: enrollment.student.contact.fullName,
       program: enrollment.program.name,
       lessonsPerMonth: enrollment.lessonsPerMonth,
-      slotIds: [...new Set(
-        enrollment.groupMemberships.flatMap((membership) =>
-          membership.scheduleAssignments.map((assignment) => assignment.slotId),
-        ),
-      )],
+      slotIds: [...new Set(enrollment.scheduleAssignments.map((assignment) => assignment.slotId))],
     })),
     journal: {
       slotId: selectedSlotId,
@@ -322,6 +276,17 @@ export async function getPlannerWorkspaceData(input?: {
       unmarkedCount: journalMembers.filter((member) => member.attendanceStatus === null).length,
     },
   };
+}
+
+function firstScheduledDate(validFrom: string, weekday: GroupWeekdayCode) {
+  const start = dateFromInput(validFrom);
+  for (let offset = 0; offset < 7; offset += 1) {
+    const candidate = new Date(start);
+    candidate.setUTCDate(start.getUTCDate() + offset);
+    const value = toDateInput(candidate);
+    if (weekdayFromDate(value) === weekday) return value;
+  }
+  return validFrom;
 }
 
 function mapShift(shift: "MORNING" | "AFTERNOON" | "EVENING"): PlannerSlot["shift"] {

@@ -31,10 +31,6 @@ export const orderedWeekdays = Object.values(groupWeekdays).toSorted(
   }
 );
 
-export function normalizeGroupCode(value: string) {
-  return value.trim().replace(/\s+/g, "-").toLocaleUpperCase("az");
-}
-
 export function todayInBaku() {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Baku",
@@ -98,22 +94,4 @@ export function latestScheduledDate(
   }
 
   return today;
-}
-
-export function formatSchedule(
-  schedules: Array<{ weekday: GroupWeekdayCode; startTime: string; endTime: string }>
-) {
-  const sorted = schedules.toSorted(
-    (left, right) => weekdayMeta[left.weekday].index - weekdayMeta[right.weekday].index
-  );
-  const byTime = new Map<string, GroupWeekdayCode[]>();
-
-  for (const schedule of sorted) {
-    const key = `${schedule.startTime}–${schedule.endTime}`;
-    byTime.set(key, [...(byTime.get(key) ?? []), schedule.weekday]);
-  }
-
-  return [...byTime.entries()]
-    .map(([time, days]) => `${days.map((day) => weekdayMeta[day].shortLabel).join(" · ")} ${time}`)
-    .join("  /  ");
 }

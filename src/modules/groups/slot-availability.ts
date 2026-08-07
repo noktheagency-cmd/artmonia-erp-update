@@ -12,20 +12,14 @@ type TeacherAvailabilityInput = {
 
 export function buildTeacherAvailabilityWhere(
   input: TeacherAvailabilityInput,
-  validFrom: Date,
-  validTo: Date | null,
   excludeId?: string,
 ): Prisma.ClassSlotWhereInput {
   return {
     ...(excludeId ? { id: { not: excludeId } } : {}),
     teacherId: input.teacherId,
     weekday: input.weekday,
-    isActive: true,
-    group: { isActive: true },
     startTime: { lt: input.endTime },
     endTime: { gt: input.startTime },
-    ...(validTo ? { validFrom: { lte: validTo } } : {}),
-    OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
   };
 }
 

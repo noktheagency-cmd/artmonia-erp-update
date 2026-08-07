@@ -228,7 +228,7 @@ function TeacherDetail({
                     </span>
                     <div>
                       <strong>{lesson.student}</strong>
-                      <span>{lesson.program} · Qrup {lesson.group}</span>
+                      <span>{lesson.program} · Slot {lesson.slot}</span>
                       <small>{lesson.date} / {lesson.time}{lesson.note ? ` · ${lesson.note}` : ""}</small>
                     </div>
                     <StatusChip tone={lesson.status === "Gəldi" ? "success" : lesson.status === "Gəlmədi" ? "danger" : "info"}>
@@ -286,7 +286,7 @@ function matchesTeacherQuery(teacher: TeacherDirectoryTeacher, query: string) {
     teacher.phone,
     teacher.nextLessonStudent,
     ...teacher.students.flatMap((student) => [student.name, student.code, student.program]),
-    ...teacher.lessons.flatMap((lesson) => [lesson.student, lesson.program, lesson.group]),
+    ...teacher.lessons.flatMap((lesson) => [lesson.student, lesson.program, lesson.slot]),
   ]
     .join(" ")
     .toLocaleLowerCase("az");

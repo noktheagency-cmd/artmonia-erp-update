@@ -95,26 +95,44 @@ async function teacherDashboard(actorId: string, actorName: string): Promise<Rol
   const prisma = getPrisma();
   const teacher = await prisma.teacher.findUnique({ where: { userId: actorId }, select: { id: true } });
   if (!teacher) return emptyTeacher(actorName);
-  const [memberships, attendance, recentGroups] = await Promise.all([
-    prisma.groupMembership.findMany({ where: { teacherId: teacher.id, endedAt: null }, select: { groupId: true, enrollmentId: true } }),
+  const [assignments, attendance, recentSlots] = await Promise.all([
+    prisma.studentScheduleAssignment.findMany({
+      where: { slot: { teacherId: teacher.id }, validTo: null },
+      select: { slotId: true, enrollmentId: true },
+    }),
     prisma.attendanceRecord.groupBy({ by: ["status"], where: { teacherId: teacher.id }, _count: { _all: true } }),
-    prisma.studentGroup.findMany({ where: { memberships: { some: { teacherId: teacher.id, endedAt: null } } }, take: 5, orderBy: { code: "asc" }, include: { schedules: true, _count: { select: { memberships: { where: { teacherId: teacher.id, endedAt: null } } } } } }),
+    prisma.classSlot.findMany({
+      where: { teacherId: teacher.id },
+      take: 5,
+      orderBy: [{ validFrom: "asc" }, { weekday: "asc" }, { startTime: "asc" }],
+      select: {
+        weekday: true,
+        startTime: true,
+        endTime: true,
+        room: true,
+        _count: { select: { assignments: { where: { validTo: null } } } },
+      },
+    }),
   ]);
-  const groupCount = new Set(memberships.map((item) => item.groupId)).size;
-  const studentCount = new Set(memberships.map((item) => item.enrollmentId)).size;
+  const slotCount = new Set(assignments.map((item) => item.slotId)).size;
+  const studentCount = new Set(assignments.map((item) => item.enrollmentId)).size;
   const present = attendance.find((item) => item.status === "PRESENT")?._count._all ?? 0;
   const absent = attendance.find((item) => item.status === "ABSENT")?._count._all ?? 0;
   const total = present + absent;
   return {
-    kind: "teacher", actorName, eyebrow: "Müəllim paneli", title: "Qruplarınız bir baxışda", description: "Yalnız sizə bağlı qruplar, tələbələr, davamiyyət və şəxsi tasklar.", primaryHref: "/groups", primaryLabel: "Qrupları aç",
+    kind: "teacher", actorName, eyebrow: "Müəllim paneli", title: "Slotlarınız bir baxışda", description: "Yalnız sizə bağlı slotlar, tələbələr, davamiyyət və şəxsi tasklar.", primaryHref: "/groups", primaryLabel: "Slotları aç",
     kpis: [
-      { label: "Mənim qruplarım", value: String(groupCount), helper: "Aktiv müəllim təyinatları", tone: "violet" },
-      { label: "Aktiv tələbələr", value: String(studentCount), helper: "Qruplarınızdakı unikal tələbələr", tone: "blue" },
+      { label: "Mənim slotlarım", value: String(slotCount), helper: "Həftəlik dərs vaxtları", tone: "violet" },
+      { label: "Aktiv tələbələr", value: String(studentCount), helper: "Slotlarınızdakı unikal tələbələr", tone: "blue" },
       { label: "Davamiyyət", value: total ? `${Math.round(present / total * 100)}%` : "—", helper: `${present} iştirak · ${absent} qaib`, tone: "green" },
       { label: "Jurnal qeydləri", value: String(total), helper: "Qeyd edilmiş dərs iştirakları", tone: "orange" },
     ],
     breakdown: [{ label: "İştirak", value: present, total: Math.max(total, 1) }, { label: "Qaib", value: absent, total: Math.max(total, 1) }],
-    recent: recentGroups.map((group) => ({ title: group.code, meta: `${group._count.memberships} tələbə · ${group.schedules.length} dərs vaxtı`, status: "Aktiv qrup" })),
+    recent: recentSlots.map((slot) => ({
+      title: `${slot.startTime}–${slot.endTime}`,
+      meta: `${slot._count.assignments} tələbə · ${slot.room ?? "Otaq seçilməyib"}`,
+      status: weekdayLabel(slot.weekday),
+    })),
   };
 }
 
@@ -160,8 +178,9 @@ async function marketingDashboard(actorName: string): Promise<RoleDashboardData>
   };
 }
 
-function emptyTeacher(actorName: string): RoleDashboardData { return { kind: "teacher", actorName, eyebrow: "Müəllim paneli", title: "Profil bağlantısı gözləyir", description: "ERP hesabınızı müəllim profilinə bağladıqdan sonra qrup göstəriciləri burada görünəcək.", primaryHref: "/groups", primaryLabel: "Qrupları aç", kpis: [], breakdown: [], recent: [] }; }
+function emptyTeacher(actorName: string): RoleDashboardData { return { kind: "teacher", actorName, eyebrow: "Müəllim paneli", title: "Profil bağlantısı gözləyir", description: "ERP hesabınızı müəllim profilinə bağladıqdan sonra slot göstəriciləri burada görünəcək.", primaryHref: "/groups", primaryLabel: "Slotları aç", kpis: [], breakdown: [], recent: [] }; }
 function stageLabel(stage: LeadStage) { return ({ NEW: "Yeni", CONTACTED: "Əlaqə saxlanıb", QUALIFIED: "Uyğun", TRIAL_LESSON: "Sınaq dərsi", TRIAL_CONSULTATION: "Ödəniş gözlənilir", REGISTERED: "Qeydiyyat", LOST: "İtirilib", NURTURE: "İzləmədə" } as const)[stage]; }
 function campaignStatus(status: MarketingCampaignStatus) { return ({ DRAFT: "Qaralama", ACTIVE: "Aktiv", PAUSED: "Dayandırılıb", COMPLETED: "Tamamlanıb" } as const)[status]; }
+function weekdayLabel(value: string) { return ({ MONDAY: "Bazar ertəsi", TUESDAY: "Çərşənbə axşamı", WEDNESDAY: "Çərşənbə", THURSDAY: "Cümə axşamı", FRIDAY: "Cümə", SATURDAY: "Şənbə", SUNDAY: "Bazar" } as Record<string, string>)[value] ?? value; }
 function dateLabel(value: Date) { return `${value.getUTCDate().toString().padStart(2, "0")}.${(value.getUTCMonth() + 1).toString().padStart(2, "0")}.${value.getUTCFullYear()}`; }
 function money(value: number) { return `${value.toFixed(0)} ₼`; }

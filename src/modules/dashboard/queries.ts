@@ -843,8 +843,8 @@ function mapLifecycleStatus(status: string): { label: string; tone: "success" | 
   switch (status) {
     case "ACTIVE":
       return { label: "Aktiv", tone: "success" };
-    case "GROUP_WAITING":
-      return { label: "Qrup gözləyir", tone: "info" };
+    case "SLOT_WAITING":
+      return { label: "Slot gözləyir", tone: "info" };
     case "DEBT":
       return { label: "Borclu", tone: "danger" };
     case "FROZEN":

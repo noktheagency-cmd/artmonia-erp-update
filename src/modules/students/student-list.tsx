@@ -51,7 +51,7 @@ type DashboardTab = "overview" | "list" | "programs";
 const visibleStatuses = [
   "ACTIVE",
   "DEBT",
-  "GROUP_WAITING",
+  "SLOT_WAITING",
   "FROZEN",
   "STOPPED",
   "DECLINED",

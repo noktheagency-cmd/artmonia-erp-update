@@ -135,7 +135,7 @@ export function StudentOverviewCharts({
           <div className="students-analytics-list">
             <AnalyticsRow color="green" label="Tam ödəniş edənlər" value={`${paidCount} (${collectionRate}%)`} />
             <AnalyticsRow color="coral" label="Borcu olanlar" value={`${debtCount} (${100 - collectionRate}%)`} />
-            <AnalyticsRow color="amber" label="Qrup gözləyənlər" value={`${waitingCount} tələbə`} />
+            <AnalyticsRow color="amber" label="Slot gözləyənlər" value={`${waitingCount} tələbə`} />
             <AnalyticsRow color="blue" label="Dondurulanlar" value={`${frozenCount} tələbə`} />
           </div>
         </div>

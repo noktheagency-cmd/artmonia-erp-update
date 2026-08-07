@@ -59,7 +59,7 @@ enum LeadNextActionType {
 }
 
 enum StudentLifecycleStatus {
-  GROUP_WAITING
+  SLOT_WAITING
   ACTIVE
   DEBT
   FROZEN
@@ -357,11 +357,9 @@ model User {
   employeeFinanceExpenses          FinanceExpense[]            @relation("FinanceExpenseEmployee")
   createdLessons                   Lesson[]                    @relation("LessonCreator")
   teacherProfile                   Teacher?                    @relation("TeacherUser")
-  createdGroups                    StudentGroup[]              @relation("GroupCreator")
-  assignedGroupMemberships         GroupMembership[]           @relation("GroupMembershipAssigner")
   createdClassSlots                ClassSlot[]                 @relation("ClassSlotCreator")
   assignedStudentSchedules         StudentScheduleAssignment[] @relation("StudentScheduleAssigner")
-  createdGroupSessions             GroupSession[]              @relation("GroupSessionCreator")
+  createdSlotSessions              SlotSession[]               @relation("SlotSessionCreator")
   markedAttendanceRecords          AttendanceRecord[]          @relation("AttendanceMarker")
   createdWorkshopEvents            WorkshopEvent[]             @relation("WorkshopEventCreator")
   assignedWorkshopParticipants     WorkshopParticipant[]       @relation("WorkshopParticipantAssigner")
@@ -603,7 +601,6 @@ model HrBonusTeacherCohort {
   campaignId    String   @map("campaign_id") @db.Uuid
   participantId String   @map("participant_id") @db.Uuid
   teacherId     String   @map("teacher_id") @db.Uuid
-  membershipId  String   @map("membership_id") @db.Uuid
   enrollmentId  String   @map("enrollment_id") @db.Uuid
   studentId     String   @map("student_id") @db.Uuid
   assignedAt    DateTime @map("assigned_at") @db.Date
@@ -612,7 +609,6 @@ model HrBonusTeacherCohort {
   campaign    HrBonusCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   participant HrBonusParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
   teacher     Teacher            @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  membership  GroupMembership    @relation(fields: [membershipId], references: [id], onDelete: Restrict)
   enrollment  Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   student     Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
@@ -1140,7 +1136,6 @@ model Teacher {
   payouts             TeacherPayout[]
   financeExpenses     FinanceExpense[]           @relation("FinanceExpenseTeacher")
   lessons             Lesson[]
-  groupMemberships    GroupMembership[]
   classSlots          ClassSlot[]
   attendanceRecords   AttendanceRecord[]
   bonusTeacherCohorts HrBonusTeacherCohort[]
@@ -1158,7 +1153,7 @@ model Student {
   managerId              String?                @map("manager_id") @db.Uuid
   campaignId             String?                @map("campaign_id") @db.Uuid
   sourceLead             Lead?                  @relation("LeadConvertedStudent")
-  lifecycleStatus        StudentLifecycleStatus @default(GROUP_WAITING) @map("lifecycle_status")
+  lifecycleStatus        StudentLifecycleStatus @default(SLOT_WAITING) @map("lifecycle_status")
   educationLevel         String?                @map("education_level")
   registeredAt           DateTime               @map("registered_at") @db.Date
   stoppedAt              DateTime?              @map("stopped_at") @db.Date
@@ -1244,14 +1239,15 @@ model Enrollment {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  student             Student                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  program             Program                    @relation(fields: [programId], references: [id])
-  teacher             Teacher?                   @relation(fields: [teacherId], references: [id])
+  student             Student                     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program             Program                     @relation(fields: [programId], references: [id])
+  teacher             Teacher?                    @relation(fields: [teacherId], references: [id])
   invoices            Invoice[]
   assignmentHistory   TeacherAssignmentHistory[]
   payoutLines         TeacherPayoutLine[]
   lessons             Lesson[]
-  groupMemberships    GroupMembership[]
+  scheduleAssignments StudentScheduleAssignment[]
+  attendanceRecords   AttendanceRecord[]
   bonusTeacherCohorts HrBonusTeacherCohort[]
 
   @@index([studentId])
@@ -1261,49 +1257,8 @@ model Enrollment {
   @@schema("erp")
 }
 
-model StudentGroup {
-  id          String    @id @default(uuid()) @db.Uuid
-  code        String    @unique
-  capacity    Int
-  isActive    Boolean   @default(true) @map("is_active")
-  archivedAt  DateTime? @map("archived_at")
-  createdById String?   @map("created_by_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  createdBy   User?             @relation("GroupCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  schedules   GroupSchedule[]
-  memberships GroupMembership[]
-  sessions    GroupSession[]
-  classSlots  ClassSlot[]
-
-  @@index([isActive, code])
-  @@index([createdById])
-  @@map("groups")
-  @@schema("erp")
-}
-
-model GroupSchedule {
-  id        String       @id @default(uuid()) @db.Uuid
-  groupId   String       @map("group_id") @db.Uuid
-  weekday   GroupWeekday
-  startTime String       @map("start_time")
-  endTime   String       @map("end_time")
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @updatedAt @map("updated_at")
-
-  group    StudentGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  sessions GroupSession[]
-
-  @@unique([groupId, weekday])
-  @@index([weekday])
-  @@map("group_schedules")
-  @@schema("erp")
-}
-
 model ClassSlot {
   id          String       @id @default(uuid()) @db.Uuid
-  groupId     String       @map("group_id") @db.Uuid
   teacherId   String       @map("teacher_id") @db.Uuid
   weekday     GroupWeekday
   shift       ClassShift
@@ -1312,21 +1267,17 @@ model ClassSlot {
   room        String?
   capacity    Int
   validFrom   DateTime     @map("valid_from") @db.Date
-  validTo     DateTime?    @map("valid_to") @db.Date
-  isActive    Boolean      @default(true) @map("is_active")
   createdById String?      @map("created_by_id") @db.Uuid
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  group       StudentGroup                @relation(fields: [groupId], references: [id], onDelete: Cascade)
   teacher     Teacher                     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
   createdBy   User?                       @relation("ClassSlotCreator", fields: [createdById], references: [id], onDelete: SetNull)
   assignments StudentScheduleAssignment[]
+  sessions    SlotSession[]
 
-  @@unique([groupId, weekday, startTime, teacherId, validFrom])
-  @@index([weekday, startTime, isActive])
-  @@index([teacherId, isActive])
-  @@index([groupId, isActive])
+  @@index([weekday, startTime])
+  @@index([teacherId, validFrom])
   @@index([createdById])
   @@map("class_slots")
   @@schema("erp")
@@ -1335,56 +1286,28 @@ model ClassSlot {
 model StudentScheduleAssignment {
   id           String    @id @default(uuid()) @db.Uuid
   slotId       String    @map("slot_id") @db.Uuid
-  membershipId String    @map("membership_id") @db.Uuid
+  enrollmentId String    @map("enrollment_id") @db.Uuid
   validFrom    DateTime  @map("valid_from") @db.Date
   validTo      DateTime? @map("valid_to") @db.Date
   assignedById String?   @map("assigned_by_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  slot       ClassSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  membership GroupMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  assignedBy User?           @relation("StudentScheduleAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  slot       ClassSlot  @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  assignedBy User?      @relation("StudentScheduleAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
 
-  @@unique([slotId, membershipId, validFrom])
-  @@index([slotId, validFrom, validTo])
-  @@index([membershipId, validFrom, validTo])
-  @@index([assignedById])
+  @@unique([slotId, enrollmentId, validFrom], map: "ssa_slot_enrollment_start_key")
+  @@index([slotId, validFrom, validTo], map: "ssa_slot_period_idx")
+  @@index([enrollmentId, validFrom, validTo], map: "ssa_enrollment_period_idx")
+  @@index([assignedById], map: "ssa_assigned_by_idx")
   @@map("student_schedule_assignments")
   @@schema("erp")
 }
 
-model GroupMembership {
-  id           String    @id @default(uuid()) @db.Uuid
-  groupId      String    @map("group_id") @db.Uuid
-  enrollmentId String    @map("enrollment_id") @db.Uuid
-  teacherId    String    @map("teacher_id") @db.Uuid
-  joinedAt     DateTime  @default(now()) @map("joined_at") @db.Date
-  endedAt      DateTime? @map("ended_at") @db.Date
-  assignedById String?   @map("assigned_by_id") @db.Uuid
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-
-  group               StudentGroup                @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  enrollment          Enrollment                  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  teacher             Teacher                     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  assignedBy          User?                       @relation("GroupMembershipAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
-  attendanceRecords   AttendanceRecord[]
-  scheduleAssignments StudentScheduleAssignment[]
-  bonusTeacherCohorts HrBonusTeacherCohort[]
-
-  @@index([groupId, endedAt])
-  @@index([enrollmentId, endedAt])
-  @@index([teacherId, endedAt])
-  @@index([assignedById])
-  @@map("group_memberships")
-  @@schema("erp")
-}
-
-model GroupSession {
+model SlotSession {
   id          String   @id @default(uuid()) @db.Uuid
-  groupId     String   @map("group_id") @db.Uuid
-  scheduleId  String?  @map("schedule_id") @db.Uuid
+  slotId      String   @map("slot_id") @db.Uuid
   sessionDate DateTime @map("session_date") @db.Date
   startTime   String   @map("start_time")
   endTime     String   @map("end_time")
@@ -1392,23 +1315,21 @@ model GroupSession {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  group      StudentGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  schedule   GroupSchedule?     @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
-  createdBy  User?              @relation("GroupSessionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  slot       ClassSlot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  createdBy  User?              @relation("SlotSessionCreator", fields: [createdById], references: [id], onDelete: SetNull)
   attendance AttendanceRecord[]
 
-  @@unique([groupId, sessionDate])
+  @@unique([slotId, sessionDate])
   @@index([sessionDate])
-  @@index([scheduleId])
   @@index([createdById])
-  @@map("group_sessions")
+  @@map("slot_sessions")
   @@schema("erp")
 }
 
 model AttendanceRecord {
   id           String         @id @default(uuid()) @db.Uuid
   sessionId    String         @map("session_id") @db.Uuid
-  membershipId String         @map("membership_id") @db.Uuid
+  enrollmentId String         @map("enrollment_id") @db.Uuid
   teacherId    String         @map("teacher_id") @db.Uuid
   status       AttendanceMark
   note         String?
@@ -1416,13 +1337,13 @@ model AttendanceRecord {
   markedAt     DateTime       @default(now()) @map("marked_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  session    GroupSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  membership GroupMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  teacher    Teacher         @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  markedBy   User?           @relation("AttendanceMarker", fields: [markedById], references: [id], onDelete: SetNull)
+  session    SlotSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrollment Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  teacher    Teacher     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  markedBy   User?       @relation("AttendanceMarker", fields: [markedById], references: [id], onDelete: SetNull)
 
-  @@unique([sessionId, membershipId])
-  @@index([membershipId])
+  @@unique([sessionId, enrollmentId])
+  @@index([enrollmentId])
   @@index([teacherId, status])
   @@index([markedById])
   @@map("attendance_records")

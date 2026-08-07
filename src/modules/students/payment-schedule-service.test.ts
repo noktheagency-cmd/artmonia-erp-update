@@ -10,10 +10,10 @@ function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-test("requires an active group and unpaused billing before scheduling", async () => {
+test("requires an active slot and unpaused billing before scheduling", async () => {
   let receivedWhere: unknown;
   const tx = {
-    groupMembership: {
+    studentScheduleAssignment: {
       findFirst: async (args: { where: unknown }) => {
         receivedWhere = args.where;
         return null;
@@ -28,8 +28,7 @@ test("requires an active group and unpaused billing before scheduling", async ()
 
   assert.equal(result, null);
   assert.deepEqual(receivedWhere, {
-    endedAt: null,
-    group: { isActive: true },
+    validTo: null,
     enrollment: {
       studentId: "student-1",
       student: { billingPaused: false },
@@ -56,7 +55,7 @@ test("replaces legacy dates with one schedule on the latest payment", async () =
 
   await startStudentPaymentSchedule(tx, {
     studentId: "student-1",
-    groupStartedAt: utcDate("2026-08-08"),
+    slotStartedAt: utcDate("2026-08-08"),
   });
 
   assert.deepEqual(updates, [

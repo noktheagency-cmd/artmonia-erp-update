@@ -8,7 +8,7 @@ import { toNumber } from "@/modules/shared/format";
 
 export function isBillingPausedStatus(status: StudentLifecycleStatus) {
   switch (status) {
-    case StudentLifecycleStatus.GROUP_WAITING:
+    case StudentLifecycleStatus.SLOT_WAITING:
     case StudentLifecycleStatus.FROZEN:
     case StudentLifecycleStatus.STOPPED:
     case StudentLifecycleStatus.DECLINED:
@@ -50,8 +50,8 @@ export function getStatusChangeReason(status: StudentLifecycleStatus) {
     return "Tələbə aktiv edildi";
   }
 
-  if (status === StudentLifecycleStatus.GROUP_WAITING) {
-    return "Tələbə qrup gözləyir statusuna keçirildi";
+  if (status === StudentLifecycleStatus.SLOT_WAITING) {
+    return "Tələbə slot gözləyir statusuna keçirildi";
   }
 
   if (status === StudentLifecycleStatus.DECLINED) {

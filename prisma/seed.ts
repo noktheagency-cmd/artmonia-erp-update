@@ -4,6 +4,7 @@ import {
   AppRole,
   ApprovalStatus,
   AttendanceMark,
+  ClassShift,
   EnrollmentStatus,
   FinanceSalaryMode,
   GroupWeekday,
@@ -45,10 +46,9 @@ function month(value: string) {
 
 async function resetDemoData() {
   await prisma.attendanceRecord.deleteMany();
-  await prisma.groupSession.deleteMany();
-  await prisma.groupMembership.deleteMany();
-  await prisma.groupSchedule.deleteMany();
-  await prisma.studentGroup.deleteMany();
+  await prisma.slotSession.deleteMany();
+  await prisma.studentScheduleAssignment.deleteMany();
+  await prisma.classSlot.deleteMany();
   await prisma.financeExpense.deleteMany();
   await prisma.financeExpenseCategory.deleteMany();
   await prisma.paymentAllocation.deleteMany();
@@ -328,7 +328,7 @@ async function seedStudentsAndFinance(input: {
       phone: "+994 77 621 44 10",
       program: kids,
       teacher: null,
-      status: StudentLifecycleStatus.GROUP_WAITING,
+      status: StudentLifecycleStatus.SLOT_WAITING,
       registeredAt: "2026-06-18",
       monthlyFee: "180.00",
       invoice: { amount: "180.00", balanceDue: "130.00", status: InvoiceStatus.PARTIAL, dueDate: "2026-06-18" },
@@ -413,7 +413,7 @@ async function seedStudentsAndFinance(input: {
         teacherId: seed.teacher?.id,
         status: seed.status === StudentLifecycleStatus.FROZEN ? EnrollmentStatus.PAUSED : EnrollmentStatus.ACTIVE,
         startDate: date(seed.registeredAt),
-        firstLessonAt: seed.status === StudentLifecycleStatus.GROUP_WAITING ? undefined : date(seed.registeredAt),
+        firstLessonAt: seed.status === StudentLifecycleStatus.SLOT_WAITING ? undefined : date(seed.registeredAt),
         monthlyFee: seed.monthlyFee,
         lessonsPerMonth: seed.program.defaultLessonsPerMonth,
       },
@@ -451,7 +451,7 @@ async function seedStudentsAndFinance(input: {
         invoiceId: invoice.id,
         amountAllocated: seed.payment.amount,
         mode:
-          seed.status === StudentLifecycleStatus.GROUP_WAITING
+          seed.status === StudentLifecycleStatus.SLOT_WAITING
             ? PaymentAllocationMode.MANUAL
             : PaymentAllocationMode.SELECTED_INVOICE,
       },
@@ -569,92 +569,74 @@ async function seedStudentsAndFinance(input: {
   return students;
 }
 
-async function seedGroupsAndJournal(input: {
+async function seedSlotsAndJournal(input: {
   ownerId: string;
   students: Awaited<ReturnType<typeof seedStudentsAndFinance>>;
 }) {
-  const h1 = await prisma.studentGroup.create({
+  const firstTeacherId = input.students[0].enrollment.teacherId;
+  const secondTeacherId = input.students[3].enrollment.teacherId;
+  if (!firstTeacherId || !secondTeacherId) return;
+
+  const daytimeSlot = await prisma.classSlot.create({
     data: {
-      code: "H1",
+      teacherId: firstTeacherId,
+      weekday: GroupWeekday.TUESDAY,
+      shift: ClassShift.MORNING,
+      startTime: "11:00",
+      endTime: "14:00",
+      room: "H1",
       capacity: 12,
+      validFrom: date("2026-07-01"),
       createdById: input.ownerId,
-      schedules: {
-        create: [
-          { weekday: GroupWeekday.TUESDAY, startTime: "11:00", endTime: "14:00" },
-          { weekday: GroupWeekday.WEDNESDAY, startTime: "11:00", endTime: "14:00" },
-          { weekday: GroupWeekday.THURSDAY, startTime: "11:00", endTime: "14:00" },
-        ],
-      },
     },
   });
 
-  const h2 = await prisma.studentGroup.create({
+  const afternoonSlot = await prisma.classSlot.create({
     data: {
-      code: "H2",
+      teacherId: secondTeacherId,
+      weekday: GroupWeekday.MONDAY,
+      shift: ClassShift.AFTERNOON,
+      startTime: "15:00",
+      endTime: "18:00",
+      room: "H2",
       capacity: 10,
+      validFrom: date("2026-07-01"),
       createdById: input.ownerId,
-      schedules: {
-        create: [
-          { weekday: GroupWeekday.MONDAY, startTime: "15:00", endTime: "18:00" },
-          { weekday: GroupWeekday.WEDNESDAY, startTime: "15:00", endTime: "18:00" },
-          { weekday: GroupWeekday.FRIDAY, startTime: "15:00", endTime: "18:00" },
-        ],
-      },
     },
   });
 
-  const membershipSeeds = [
-    { groupId: h1.id, row: input.students[0] },
-    { groupId: h1.id, row: input.students[1] },
-    { groupId: h1.id, row: input.students[4] },
-    { groupId: h2.id, row: input.students[3] },
-    { groupId: h2.id, row: input.students[5] },
+  const assignmentSeeds = [
+    { slotId: daytimeSlot.id, row: input.students[0] },
+    { slotId: daytimeSlot.id, row: input.students[1] },
+    { slotId: daytimeSlot.id, row: input.students[4] },
+    { slotId: afternoonSlot.id, row: input.students[3] },
+    { slotId: afternoonSlot.id, row: input.students[5] },
   ];
-  const memberships = [];
-
-  for (const seed of membershipSeeds) {
-    if (!seed.row.enrollment.teacherId) {
-      continue;
-    }
-
-    memberships.push(
-      await prisma.groupMembership.create({
-        data: {
-          groupId: seed.groupId,
-          enrollmentId: seed.row.enrollment.id,
-          teacherId: seed.row.enrollment.teacherId,
-          joinedAt: date("2026-07-01"),
-          assignedById: input.ownerId,
-        },
-      })
-    );
-  }
-
-  const fridaySchedule = await prisma.groupSchedule.findUniqueOrThrow({
-    where: {
-      groupId_weekday: {
-        groupId: h2.id,
-        weekday: GroupWeekday.FRIDAY,
-      },
-    },
+  await prisma.studentScheduleAssignment.createMany({
+    data: assignmentSeeds.map((seed) => ({
+      slotId: seed.slotId,
+      enrollmentId: seed.row.enrollment.id,
+      validFrom: date("2026-07-01"),
+      assignedById: input.ownerId,
+    })),
   });
-  const session = await prisma.groupSession.create({
+
+  const session = await prisma.slotSession.create({
     data: {
-      groupId: h2.id,
-      scheduleId: fridaySchedule.id,
-      sessionDate: date("2026-07-10"),
-      startTime: fridaySchedule.startTime,
-      endTime: fridaySchedule.endTime,
+      slotId: afternoonSlot.id,
+      sessionDate: date("2026-07-13"),
+      startTime: afternoonSlot.startTime,
+      endTime: afternoonSlot.endTime,
       createdById: input.ownerId,
     },
   });
-  const h2Memberships = memberships.filter((membership) => membership.groupId === h2.id);
+  const afternoonAssignments = assignmentSeeds.filter((assignment) => assignment.slotId === afternoonSlot.id);
 
   await prisma.attendanceRecord.createMany({
-    data: h2Memberships.map((membership, index) => ({
+    data: afternoonAssignments.map((assignment, index) => ({
       sessionId: session.id,
-      membershipId: membership.id,
-      teacherId: membership.teacherId,
+      enrollmentId: assignment.row.enrollment.id,
+      teacherId: secondTeacherId,
       status: index === 0 ? AttendanceMark.PRESENT : AttendanceMark.ABSENT,
       markedById: input.ownerId,
     })),
@@ -825,7 +807,7 @@ async function main() {
     teachers: catalog.teachers,
     programs: catalog.programs,
   });
-  await seedGroupsAndJournal({
+  await seedSlotsAndJournal({
     ownerId: users.owner.id,
     students,
   });

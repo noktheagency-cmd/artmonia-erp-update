@@ -402,14 +402,13 @@ async function syncTeacherSalaryRule(
 }
 
 async function assertTeacherCanBeRemoved(tx: Prisma.TransactionClient, teacherId: string) {
-  const [activeMemberships, activeClassSlots, activeEnrollments] = await Promise.all([
-    tx.groupMembership.count({ where: { teacherId, endedAt: null } }),
-    tx.classSlot.count({ where: { teacherId, isActive: true } }),
+  const [activeClassSlots, activeEnrollments] = await Promise.all([
+    tx.classSlot.count({ where: { teacherId } }),
     tx.enrollment.count({ where: { teacherId, status: "ACTIVE" } }),
   ]);
-  if (activeMemberships || activeClassSlots || activeEnrollments) {
+  if (activeClassSlots || activeEnrollments) {
     throw new PublicActionError(
-      "Müəllimlik statusunu silməzdən əvvəl aktiv qrup, dərs və tələbə təyinatlarını başqa müəllimə keçirin",
+      "Müəllimlik statusunu silməzdən əvvəl slot və tələbə təyinatlarını başqa müəllimə keçirin",
       "CONFLICT",
     );
   }

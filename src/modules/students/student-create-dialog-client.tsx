@@ -45,7 +45,7 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
     teacherId: "",
     campaignId: "",
     discountType: "",
-    lifecycleStatus: "GROUP_WAITING",
+    lifecycleStatus: "SLOT_WAITING",
     registeredDate: createOptions.defaultRegisteredDate,
     monthlyFee: "",
     lessonsPerMonth: "",
@@ -336,10 +336,10 @@ export function StudentCreateDialogClient({
               </label>
               <label className="form-field">
                 <span>Status</span>
-                <input name="lifecycleStatus" type="hidden" value="GROUP_WAITING" />
-                <div className="student-readonly-status" aria-label="Qrup gözləyir">
+                <input name="lifecycleStatus" type="hidden" value="SLOT_WAITING" />
+                <div className="student-readonly-status" aria-label="Slot gözləyir">
                   <span />
-                  <strong>Qrup gözləyir</strong>
+                  <strong>Slot gözləyir</strong>
                 </div>
               </label>
               <label className="form-field">

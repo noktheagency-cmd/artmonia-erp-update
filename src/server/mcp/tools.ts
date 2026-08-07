@@ -117,7 +117,7 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
     {
       title: "ERP system overview",
       description:
-        "Artmonia ERP üzrə tələbə, satış, müəllim, qrup, maliyyə, tapşırıq və workshop göstəricilərinin cari icmalı.",
+        "Artmonia ERP üzrə tələbə, satış, müəllim, slot, maliyyə, tapşırıq və workshop göstəricilərinin cari icmalı.",
       inputSchema: z.object({}),
       annotations: readOnlyAnnotations,
     },
@@ -129,7 +129,7 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
           leads,
           teachers,
           employees,
-          groups,
+          slots,
           workshops,
           openTasks,
           overdueTasks,
@@ -141,7 +141,7 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
           prisma.lead.groupBy({ by: ["stage"], _count: true }),
           prisma.teacher.count({ where: { isActive: true } }),
           prisma.hrEmployee.count({ where: { status: "ACTIVE" } }),
-          prisma.studentGroup.count({ where: { isActive: true } }),
+          prisma.classSlot.count(),
           prisma.workshopEvent.count({
             where: { eventDate: { gte: now }, status: "SCHEDULED" },
           }),
@@ -183,7 +183,7 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
           operations: {
             activeTeachers: teachers,
             activeEmployees: employees,
-            activeGroups: groups,
+            activeSlots: slots,
             upcomingWorkshops: workshops,
             openTasks,
             overdueTasks,
@@ -571,53 +571,47 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
   );
 
   server.registerTool(
-    "erp_groups_search",
+    "erp_slots_search",
     {
-      title: "Search student groups",
+      title: "Search class slots",
       description:
-        "Aktiv və arxiv qruplarını, tutumu, dərs cədvəlini, müəllimləri və cari üzv sayını göstərir.",
+        "Dərs slotlarını müəllim və otaq üzrə axtarır; gün, saat, başlanğıc, tutum və tələbə sayını göstərir.",
       inputSchema: z.object({
         query: z.string().trim().max(100).optional(),
-        activeOnly: z.boolean().default(true),
         ...pageSchema,
       }),
       annotations: readOnlyAnnotations,
     },
-    async ({ query, activeOnly, page, limit }) =>
-      audited(actor, "erp_groups_search", async () => {
-        const where: Prisma.StudentGroupWhereInput = {
-          ...(activeOnly ? { isActive: true } : {}),
+    async ({ query, page, limit }) =>
+      audited(actor, "erp_slots_search", async () => {
+        const where: Prisma.ClassSlotWhereInput = {
           ...(query
-            ? { code: { contains: query, mode: "insensitive" } }
+            ? {
+                OR: [
+                  { room: { contains: query, mode: "insensitive" } },
+                  { teacher: { fullName: { contains: query, mode: "insensitive" } } },
+                ],
+              }
             : {}),
         };
         const [total, items] = await Promise.all([
-          prisma.studentGroup.count({ where }),
-          prisma.studentGroup.findMany({
+          prisma.classSlot.count({ where }),
+          prisma.classSlot.findMany({
             where,
             skip: (page - 1) * limit,
             take: limit,
-            orderBy: { code: "asc" },
+            orderBy: [{ validFrom: "asc" }, { weekday: "asc" }, { startTime: "asc" }],
             select: {
               id: true,
-              code: true,
+              weekday: true,
+              shift: true,
+              startTime: true,
+              endTime: true,
+              room: true,
               capacity: true,
-              isActive: true,
-              archivedAt: true,
-              schedules: {
-                select: {
-                  weekday: true,
-                  startTime: true,
-                  endTime: true,
-                },
-                orderBy: { weekday: "asc" },
-              },
-              memberships: {
-                where: { endedAt: null },
-                select: {
-                  teacher: { select: { fullName: true } },
-                },
-              },
+              validFrom: true,
+              teacher: { select: { id: true, fullName: true } },
+              _count: { select: { assignments: { where: { validTo: null } } } },
             },
           }),
         ]);
@@ -628,19 +622,15 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
           total,
           items: items.map((item) => ({
             id: item.id,
-            code: item.code,
+            weekday: item.weekday,
+            shift: item.shift,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            room: item.room,
             capacity: item.capacity,
-            isActive: item.isActive,
-            archivedAt: item.archivedAt,
-            schedules: item.schedules,
-            activeMemberCount: item.memberships.length,
-            teachers: [
-              ...new Set(
-                item.memberships.map(
-                  (membership) => membership.teacher.fullName,
-                ),
-              ),
-            ],
+            validFrom: item.validFrom,
+            assignedStudentCount: item._count.assignments,
+            teacher: item.teacher,
           })),
         });
       }),

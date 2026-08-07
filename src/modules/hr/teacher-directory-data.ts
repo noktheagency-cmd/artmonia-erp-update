@@ -19,7 +19,7 @@ export type TeacherDirectoryLesson = {
   program: string;
   date: string;
   time: string;
-  group: string;
+  slot: string;
   status: string;
   note: string;
 };
@@ -105,7 +105,7 @@ type TeacherLessonRaw = {
   program: string | null;
   lessonDate: Date | string;
   startTime: string;
-  group: string;
+  slot: string;
   status: string;
   note: string | null;
 };
@@ -169,30 +169,30 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
     left join erp.contacts tc on tc.id = t.contact_id
     left join lateral (
       select count(distinct s.id)::int as active_student_count
-      from erp.group_memberships gm
-      join erp.enrollments e on e.id = gm.enrollment_id
+      from erp.student_schedule_assignments ssa
+      join erp.class_slots cs on cs.id = ssa.slot_id
+      join erp.enrollments e on e.id = ssa.enrollment_id
       join erp.students s on s.id = e.student_id
-      where gm.teacher_id = t.id
-        and gm.ended_at is null
+      where cs.teacher_id = t.id
+        and ssa.valid_to is null
         and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
         and s.lifecycle_status in (
           'ACTIVE'::"erp"."StudentLifecycleStatus",
           'DEBT'::"erp"."StudentLifecycleStatus",
-          'GROUP_WAITING'::"erp"."StudentLifecycleStatus"
+          'SLOT_WAITING'::"erp"."StudentLifecycleStatus"
         )
     ) active_counts on true
     left join lateral (
       select
         d.lesson_date,
-        gs.start_time,
-        g.code as student_name
-      from erp.group_memberships gm
-      join erp.groups g on g.id = gm.group_id and g.is_active = true
-      join erp.group_schedules gs on gs.group_id = g.id
+        cs.start_time,
+        coalesce(cs.room, 'Slot') as student_name
+      from erp.class_slots cs
       cross join lateral (
         select day::date as lesson_date
         from generate_series(current_date, current_date + interval '14 days', interval '1 day') day
-        where gs.weekday::text = case extract(isodow from day)::int
+        where day::date >= cs.valid_from
+          and cs.weekday::text = case extract(isodow from day)::int
           when 1 then 'MONDAY'
           when 2 then 'TUESDAY'
           when 3 then 'WEDNESDAY'
@@ -204,9 +204,8 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
         order by day asc
         limit 1
       ) d
-      where gm.teacher_id = t.id
-        and gm.ended_at is null
-      order by d.lesson_date asc, gs.start_time asc
+      where cs.teacher_id = t.id
+      order by d.lesson_date asc, cs.start_time asc
       limit 1
     ) next_lesson on true
     left join lateral (
@@ -229,8 +228,9 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
           p.name as program_name,
           s.lifecycle_status,
           coalesce(invoice_balance.balance_due, 0) as balance_due
-        from erp.group_memberships gm
-        join erp.enrollments e on e.id = gm.enrollment_id
+        from erp.student_schedule_assignments ssa
+        join erp.class_slots cs on cs.id = ssa.slot_id
+        join erp.enrollments e on e.id = ssa.enrollment_id
         join erp.students s on s.id = e.student_id
         join erp.contacts c on c.id = s.contact_id
         join erp.programs p on p.id = e.program_id
@@ -240,13 +240,13 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
           where i.student_id = s.id
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
         ) invoice_balance on true
-        where gm.teacher_id = t.id
-          and gm.ended_at is null
+        where cs.teacher_id = t.id
+          and ssa.valid_to is null
           and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
           and s.lifecycle_status in (
             'ACTIVE'::"erp"."StudentLifecycleStatus",
             'DEBT'::"erp"."StudentLifecycleStatus",
-            'GROUP_WAITING'::"erp"."StudentLifecycleStatus"
+            'SLOT_WAITING'::"erp"."StudentLifecycleStatus"
           )
         order by s.id, e.start_date desc, e.created_at desc
       ) student_rows
@@ -259,7 +259,7 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
           'program', lesson_rows.program_name,
           'lessonDate', lesson_rows.lesson_date,
           'startTime', lesson_rows.start_time,
-          'group', lesson_rows.group_code,
+          'slot', lesson_rows.slot_label,
           'status', lesson_rows.status::text,
           'note', lesson_rows.note
         )
@@ -270,21 +270,20 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
           ar.id,
           c.full_name as student_name,
           p.name as program_name,
-          gs.session_date as lesson_date,
-          gs.start_time,
-          g.code as group_code,
+          ss.session_date as lesson_date,
+          ss.start_time,
+          coalesce(cs.room, 'Slot') as slot_label,
           ar.status,
           ar.note
         from erp.attendance_records ar
-        join erp.group_sessions gs on gs.id = ar.session_id
-        join erp.groups g on g.id = gs.group_id
-        join erp.group_memberships gm on gm.id = ar.membership_id
-        join erp.enrollments e on e.id = gm.enrollment_id
+        join erp.slot_sessions ss on ss.id = ar.session_id
+        join erp.class_slots cs on cs.id = ss.slot_id
+        join erp.enrollments e on e.id = ar.enrollment_id
         join erp.students s on s.id = e.student_id
         join erp.contacts c on c.id = s.contact_id
         join erp.programs p on p.id = e.program_id
         where ar.teacher_id = t.id
-        order by gs.session_date desc, gs.start_time desc
+        order by ss.session_date desc, ss.start_time desc
         limit 18
       ) lesson_rows
     ) lessons on true
@@ -396,7 +395,7 @@ function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teache
       program: lesson.program ?? "Proqram seçilməyib",
       date: formatDate(lesson.lessonDate),
       time: lesson.startTime,
-      group: lesson.group,
+      slot: lesson.slot,
       status: formatLessonStatus(lesson.status),
       note: lesson.note ?? "",
     })),
@@ -413,8 +412,8 @@ function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teache
 
 function formatStudentStatus(value: string) {
   switch (value) {
-    case "GROUP_WAITING":
-      return "Qrup gözləyir";
+    case "SLOT_WAITING":
+      return "Slot gözləyir";
     case "ACTIVE":
       return "Aktiv";
     case "DEBT":

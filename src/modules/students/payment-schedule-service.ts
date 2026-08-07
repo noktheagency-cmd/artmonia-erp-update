@@ -8,21 +8,20 @@ export async function resolveStudentNextPaymentAt(
     paymentMonth: Date;
   },
 ) {
-  const membership = await tx.groupMembership.findFirst({
+  const assignment = await tx.studentScheduleAssignment.findFirst({
     where: {
-      endedAt: null,
-      group: { isActive: true },
+      validTo: null,
       enrollment: {
         studentId: input.studentId,
         student: { billingPaused: false },
       },
     },
-    orderBy: [{ joinedAt: "desc" }, { createdAt: "desc" }],
-    select: { joinedAt: true },
+    orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }],
+    select: { validFrom: true },
   });
 
   return resolveNextPaymentAt({
-    groupJoinedAt: membership?.joinedAt ?? null,
+    slotStartedAt: assignment?.validFrom ?? null,
     paymentMonth: input.paymentMonth,
   });
 }
@@ -47,7 +46,7 @@ export async function startStudentPaymentSchedule(
   tx: Prisma.TransactionClient,
   input: {
     studentId: string;
-    groupStartedAt: Date;
+    slotStartedAt: Date;
   },
 ) {
   const latestPayment = await tx.payment.findFirst({
@@ -63,36 +62,35 @@ export async function startStudentPaymentSchedule(
     where: { id: latestPayment.id },
     data: {
       nextPaymentAt: resolveNextPaymentAt({
-        groupJoinedAt: input.groupStartedAt,
+        slotStartedAt: input.slotStartedAt,
         paymentMonth: latestPayment.paymentMonth,
       }),
     },
   });
 }
 
-export async function restartStudentPaymentScheduleForActiveGroup(
+export async function restartStudentPaymentScheduleForActiveSlot(
   tx: Prisma.TransactionClient,
   input: {
     studentId: string;
     activatedAt: Date;
   },
 ) {
-  const activeMembership = await tx.groupMembership.findFirst({
+  const activeAssignment = await tx.studentScheduleAssignment.findFirst({
     where: {
-      endedAt: null,
-      group: { isActive: true },
+      validTo: null,
       enrollment: { studentId: input.studentId },
     },
     select: { id: true },
   });
 
-  if (!activeMembership) {
+  if (!activeAssignment) {
     await clearStudentPaymentSchedules(tx, [input.studentId]);
     return;
   }
 
   await startStudentPaymentSchedule(tx, {
     studentId: input.studentId,
-    groupStartedAt: input.activatedAt,
+    slotStartedAt: input.activatedAt,
   });
 }

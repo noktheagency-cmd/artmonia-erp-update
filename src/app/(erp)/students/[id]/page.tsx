@@ -76,7 +76,7 @@ export default async function StudentDetailPage({
         </div>
         <div className="student-profile-quick-item">
           <Users />
-          <span><small>Qrup</small><strong>{student.group}</strong></span>
+          <span><small>Slot</small><strong>{student.group}</strong></span>
         </div>
         <div className="student-profile-quick-item is-balance">
           <Banknote />

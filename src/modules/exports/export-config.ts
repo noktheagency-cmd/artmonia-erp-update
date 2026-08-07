@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const exportModules = ["crm", "students", "finance", "groups"] as const;
+export const exportModules = ["crm", "students", "finance"] as const;
 export type ExportModule = (typeof exportModules)[number];
 
 export const exportFormats = ["xlsx", "csv", "pdf"] as const;
@@ -119,38 +119,6 @@ export const exportDatasetRegistry: Record<ExportModule, ExportDataset[]> = {
         { key: "salaryFormula", label: "Hesablanma formulu", defaultSelected: true },
         { key: "receipt", label: "Qəbz referansı", detail: true },
         { key: "description", label: "Açıqlama", detail: true },
-      ],
-    },
-  ],
-  groups: [
-    {
-      key: "roster",
-      label: "Qruplar və üzvlər",
-      fields: [
-        { key: "group", label: "Qrup", defaultSelected: true },
-        { key: "capacity", label: "Tutum", defaultSelected: true },
-        { key: "schedule", label: "Cədvəl", defaultSelected: true },
-        { key: "studentCode", label: "Tələbə kodu", defaultSelected: true },
-        { key: "student", label: "Tələbə", defaultSelected: true },
-        { key: "program", label: "Proqram", defaultSelected: true },
-        { key: "teacher", label: "Müəllim", defaultSelected: true },
-        { key: "joinedAt", label: "Qoşulma tarixi", defaultSelected: true },
-        { key: "status", label: "Tələbə statusu", detail: true },
-      ],
-    },
-    {
-      key: "journal",
-      label: "Davamiyyət jurnalı",
-      fields: [
-        { key: "group", label: "Qrup", defaultSelected: true },
-        { key: "date", label: "Tarix", defaultSelected: true },
-        { key: "schedule", label: "Dərs vaxtı", defaultSelected: true },
-        { key: "studentCode", label: "Tələbə kodu", defaultSelected: true },
-        { key: "student", label: "Tələbə", defaultSelected: true },
-        { key: "program", label: "Proqram", defaultSelected: true },
-        { key: "teacher", label: "Müəllim", defaultSelected: true },
-        { key: "attendance", label: "Davamiyyət", defaultSelected: true },
-        { key: "note", label: "Qeyd", detail: true },
       ],
     },
   ],

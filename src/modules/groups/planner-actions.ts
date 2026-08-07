@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import {
@@ -12,6 +11,17 @@ import {
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
+import {
+  buildTeacherAvailabilityWhere,
+  isTeacherScheduleOverlapError,
+} from "@/modules/groups/slot-availability";
+import {
+  dateFromInput,
+  formatDateAz,
+  todayInBaku,
+  weekdayFromDate,
+  weekdayMeta,
+} from "@/modules/groups/shared";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import {
@@ -23,17 +33,6 @@ import {
   clearStudentPaymentSchedules,
   startStudentPaymentSchedule,
 } from "@/modules/students/payment-schedule-service";
-import {
-  dateFromInput,
-  formatDateAz,
-  todayInBaku,
-  weekdayFromDate,
-  weekdayMeta,
-} from "@/modules/groups/shared";
-import {
-  buildTeacherAvailabilityWhere,
-  isTeacherScheduleOverlapError,
-} from "@/modules/groups/slot-availability";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -68,7 +67,7 @@ const assignmentSchema = z.object({
 });
 
 const attendanceItemSchema = z.object({
-  membershipId: z.string().uuid(),
+  enrollmentId: z.string().uuid(),
   status: z.enum(["present", "absent"]).nullable(),
   note: z.string().trim().max(500).default(""),
 });
@@ -94,30 +93,11 @@ async function createClassSlotActionImpl(formData: FormData) {
   const validFrom = dateFromInput(input.validFrom);
 
   const slot = await withTeacherScheduleConflictHandling(() => prisma.$transaction(async (tx) => {
-    const teacher = await tx.teacher.findUnique({
-      where: { id: input.teacherId },
-      select: { id: true, isActive: true },
-    });
-    if (!teacher?.isActive) throw new Error("Aktiv müəllim tapılmadı");
-    await assertTeacherAvailability(tx, input, validFrom, null);
+    await assertActiveTeacher(tx, input.teacherId);
+    await assertTeacherAvailability(tx, input, validFrom);
 
-    const group = await tx.studentGroup.create({
-      data: {
-        code: `SL-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`,
-        capacity: input.capacity,
-        createdById: actor.id,
-        schedules: {
-          create: {
-            weekday: input.weekday,
-            startTime: input.startTime,
-            endTime: input.endTime,
-          },
-        },
-      },
-    });
     const created = await tx.classSlot.create({
       data: {
-        groupId: group.id,
         teacherId: input.teacherId,
         weekday: input.weekday,
         shift: input.shift,
@@ -148,20 +128,14 @@ async function updateClassSlotActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = updateSlotSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
-  const effectiveAt = dateFromInput(input.validFrom);
-  const previousDay = previousDate(effectiveAt);
+  const validFrom = dateFromInput(input.validFrom);
 
   const updatedSlot = await withTeacherScheduleConflictHandling(() => prisma.$transaction(async (tx) => {
     await lockSlots(tx, [input.slotId]);
-    const current = await tx.classSlot.findFirst({
-      where: {
-        id: input.slotId,
-        isActive: true,
-        group: { isActive: true },
-      },
+    const current = await tx.classSlot.findUnique({
+      where: { id: input.slotId },
       select: {
         id: true,
-        groupId: true,
         teacherId: true,
         weekday: true,
         shift: true,
@@ -170,112 +144,55 @@ async function updateClassSlotActionImpl(formData: FormData) {
         room: true,
         capacity: true,
         validFrom: true,
-        validTo: true,
-        isActive: true,
       },
     });
-    if (!current?.isActive) throw new Error("Aktiv slot tapılmadı");
-    if (effectiveAt < current.validFrom) {
-      throw new Error("Dəyişiklik tarixi slotun başlanğıc tarixindən əvvəl ola bilməz");
-    }
-    if (current.validTo && effectiveAt > current.validTo) {
-      throw new Error("Dəyişiklik tarixi slotun bitmə tarixindən sonra ola bilməz");
-    }
+    if (!current) throw new Error("Slot tapılmadı");
 
-    const teacher = await tx.teacher.findUnique({
-      where: { id: input.teacherId },
-      select: { id: true, isActive: true },
-    });
-    if (!teacher?.isActive) throw new Error("Aktiv müəllim tapılmadı");
-    await assertTeacherAvailability(tx, input, effectiveAt, current.validTo, current.id);
+    await assertActiveTeacher(tx, input.teacherId);
+    await assertTeacherAvailability(tx, input, validFrom, current.id);
 
     const assignments = await tx.studentScheduleAssignment.findMany({
       where: {
         slotId: current.id,
-        OR: [{ validTo: null }, { validTo: { gte: effectiveAt } }],
+        OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
       },
-      select: { id: true, membershipId: true, validFrom: true, validTo: true },
+      select: { id: true, validFrom: true, validTo: true },
     });
-    if (maxConcurrentAssignments(assignments, effectiveAt) > input.capacity) {
+    if (maxConcurrentAssignments(assignments, validFrom) > input.capacity) {
       throw new Error("Yeni tutum bu tarixdən sonrakı tələbə sayından az ola bilməz");
     }
 
-    const changes = {
-      teacherId: input.teacherId,
-      weekday: input.weekday,
-      shift: input.shift,
-      startTime: input.startTime,
-      endTime: input.endTime,
-      room: input.room || null,
-      capacity: input.capacity,
-    };
-
-    if (current.validFrom.getTime() === effectiveAt.getTime()) {
-      const updated = await tx.classSlot.update({ where: { id: current.id }, data: changes });
-      await tx.studentGroup.update({
-        where: { id: current.groupId },
-        data: { capacity: input.capacity },
-      });
-      await writeAuditLog(tx, {
-        actorUserId: actor.id,
-        action: "class_slot.update",
-        entityType: "class_slot",
-        entityId: updated.id,
-        before: current as unknown as Prisma.InputJsonValue,
-        after: { ...input, mode: "in_place" } as Prisma.InputJsonValue,
-        reason: "Dərs slotu başlanğıc tarixindən yeniləndi",
-      });
-      return updated;
-    }
-
-    await tx.classSlot.update({ where: { id: current.id }, data: { validTo: previousDay } });
-    const replacement = await tx.classSlot.create({
+    const updated = await tx.classSlot.update({
+      where: { id: current.id },
       data: {
-        groupId: current.groupId,
-        ...changes,
-        validFrom: effectiveAt,
-        validTo: current.validTo,
-        createdById: actor.id,
+        teacherId: input.teacherId,
+        weekday: input.weekday,
+        shift: input.shift,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        room: input.room || null,
+        capacity: input.capacity,
+        validFrom,
       },
     });
 
-    const futureAssignmentIds = assignments
-      .filter((assignment) => assignment.validFrom >= effectiveAt)
-      .map((assignment) => assignment.id);
-    const activeAssignmentIds = assignments
-      .filter((assignment) => assignment.validFrom < effectiveAt)
-      .map((assignment) => assignment.id);
-    if (futureAssignmentIds.length) {
-      await tx.studentScheduleAssignment.deleteMany({ where: { id: { in: futureAssignmentIds } } });
-    }
-    if (activeAssignmentIds.length) {
+    if (validFrom > current.validFrom) {
       await tx.studentScheduleAssignment.updateMany({
-        where: { id: { in: activeAssignmentIds } },
-        data: { validTo: previousDay },
-      });
-    }
-    if (assignments.length) {
-      await tx.studentScheduleAssignment.createMany({
-        data: assignments.map((assignment) => ({
-          slotId: replacement.id,
-          membershipId: assignment.membershipId,
-          validFrom: assignment.validFrom < effectiveAt ? effectiveAt : assignment.validFrom,
-          validTo: assignment.validTo,
-          assignedById: actor.id,
-        })),
+        where: { slotId: current.id, validTo: null, validFrom: { lt: validFrom } },
+        data: { validFrom },
       });
     }
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
-      action: "class_slot.version.create",
+      action: "class_slot.update",
       entityType: "class_slot",
-      entityId: replacement.id,
+      entityId: updated.id,
       before: current as unknown as Prisma.InputJsonValue,
-      after: { ...input, replacesSlotId: current.id, migratedAssignments: assignments.length } as Prisma.InputJsonValue,
-      reason: "Dərs slotunun tarixçəli yeni versiyası yaradıldı",
+      after: input as Prisma.InputJsonValue,
+      reason: "Dərs slotu yeniləndi",
     });
-    return replacement;
+    return updated;
   }));
 
   revalidatePlanner();
@@ -287,22 +204,54 @@ async function deleteClassSlotActionImpl(formData: FormData) {
   const { slotId } = z.object({ slotId: z.string().uuid() }).parse(Object.fromEntries(formData));
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx) => {
+  const affectedStudentIds = await prisma.$transaction(async (tx) => {
     await lockSlots(tx, [slotId]);
-    const current = await tx.classSlot.findUnique({ where: { id: slotId } });
-    if (!current?.isActive) throw new Error("Aktiv slot tapılmadı");
-    await tx.classSlot.update({ where: { id: slotId }, data: { isActive: false } });
+    const current = await tx.classSlot.findUnique({
+      where: { id: slotId },
+      include: {
+        assignments: {
+          select: { enrollment: { select: { studentId: true } } },
+        },
+      },
+    });
+    if (!current) throw new Error("Slot tapılmadı");
+
+    const studentIds = [...new Set(
+      current.assignments.map((assignment) => assignment.enrollment.studentId),
+    )];
+    await tx.classSlot.delete({ where: { id: slotId } });
+
+    if (studentIds.length) {
+      const studentsWithAnotherSlot = await tx.studentScheduleAssignment.findMany({
+        where: {
+          enrollment: { studentId: { in: studentIds } },
+          validTo: null,
+        },
+        distinct: ["enrollmentId"],
+        select: { enrollment: { select: { studentId: true } } },
+      });
+      const retained = new Set(
+        studentsWithAnotherSlot.map((assignment) => assignment.enrollment.studentId),
+      );
+      await clearStudentPaymentSchedules(
+        tx,
+        studentIds.filter((studentId) => !retained.has(studentId)),
+      );
+    }
+
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "class_slot.delete",
       entityType: "class_slot",
       entityId: slotId,
       before: current as unknown as Prisma.InputJsonValue,
-      after: { isActive: false },
-      reason: "Dərs slotu silindi",
+      after: null,
+      reason: "Dərs slotu və ona bağlı əməliyyat məlumatları tam silindi",
     });
+    return studentIds;
   });
 
+  for (const studentId of affectedStudentIds) revalidatePath(`/students/${studentId}`);
   revalidatePlanner();
 }
 
@@ -329,18 +278,12 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
     await lockSlots(tx, uniqueSlotIds);
     const slots = uniqueSlotIds.length
       ? await tx.classSlot.findMany({
-          where: {
-            id: { in: uniqueSlotIds },
-            isActive: true,
-            group: { isActive: true },
-            validFrom: { lte: validFrom },
-            OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
-          },
-          select: { id: true, groupId: true, teacherId: true, capacity: true },
+          where: { id: { in: uniqueSlotIds }, validFrom: { lte: validFrom } },
+          select: { id: true, teacherId: true, capacity: true },
         })
       : [];
     if (slots.length !== uniqueSlotIds.length) {
-      throw new Error("Seçilmiş slotlardan biri aktiv deyil");
+      throw new Error("Seçilmiş slotlardan biri mövcud deyil və ya həmin tarixdə başlamayıb");
     }
 
     if (uniqueSlotIds.length) {
@@ -348,7 +291,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
         by: ["slotId"],
         where: {
           slotId: { in: uniqueSlotIds },
-          membership: { enrollmentId: { not: enrollment.id } },
+          enrollmentId: { not: enrollment.id },
           validFrom: { lte: validFrom },
           OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
         },
@@ -361,10 +304,10 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
 
     const before = await tx.studentScheduleAssignment.findMany({
       where: {
-        membership: { enrollmentId: enrollment.id },
+        enrollmentId: enrollment.id,
         OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
       },
-      select: { id: true, slotId: true, membershipId: true, validFrom: true, validTo: true },
+      select: { id: true, slotId: true, enrollmentId: true, validFrom: true, validTo: true },
     });
     const futureIds = before.filter((item) => item.validFrom >= validFrom).map((item) => item.id);
     const activeIds = before.filter((item) => item.validFrom < validFrom).map((item) => item.id);
@@ -378,73 +321,39 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       });
     }
 
-    const assignments: Array<{
-      slotId: string;
-      membershipId: string;
-      validFrom: Date;
-      assignedById: string;
-    }> = [];
-    for (const slot of slots) {
-      let membership = await tx.groupMembership.findFirst({
-        where: {
-          groupId: slot.groupId,
+    if (slots.length) {
+      await tx.studentScheduleAssignment.createMany({
+        data: slots.map((slot) => ({
+          slotId: slot.id,
           enrollmentId: enrollment.id,
-          teacherId: slot.teacherId,
-          endedAt: null,
-        },
-        select: { id: true },
-      });
-      membership ??= await tx.groupMembership.create({
-        data: {
-          groupId: slot.groupId,
-          enrollmentId: enrollment.id,
-          teacherId: slot.teacherId,
-          joinedAt: validFrom,
+          validFrom,
           assignedById: actor.id,
-        },
-        select: { id: true },
-      });
-      assignments.push({
-        slotId: slot.id,
-        membershipId: membership.id,
-        validFrom,
-        assignedById: actor.id,
-      });
-    }
-    if (assignments.length) await tx.studentScheduleAssignment.createMany({ data: assignments });
-
-    const selectedMembershipIds = new Set(assignments.map((assignment) => assignment.membershipId));
-    const obsoleteMembershipIds = [...new Set(
-      before
-        .map((assignment) => assignment.membershipId)
-        .filter((membershipId) => !selectedMembershipIds.has(membershipId)),
-    )];
-    if (obsoleteMembershipIds.length) {
-      await tx.groupMembership.updateMany({
-        where: { id: { in: obsoleteMembershipIds }, endedAt: null },
-        data: { endedAt: validFrom },
+        })),
       });
     }
 
     const teacherIds = [...new Set(slots.map((slot) => slot.teacherId))];
-    if (teacherIds.length === 1 && enrollment.teacherId !== teacherIds[0]) {
-      await tx.enrollment.update({ where: { id: enrollment.id }, data: { teacherId: teacherIds[0] } });
+    const nextTeacherId = teacherIds.length === 1 ? teacherIds[0] : null;
+    if (enrollment.teacherId !== nextTeacherId) {
+      await tx.enrollment.update({ where: { id: enrollment.id }, data: { teacherId: nextTeacherId } });
       await tx.teacherAssignmentHistory.create({
         data: {
           enrollmentId: enrollment.id,
           oldTeacherId: enrollment.teacherId,
-          newTeacherId: teacherIds[0],
-          reason: "Slot planına əsasən müəllim təyin edildi",
+          newTeacherId: nextTeacherId,
+          reason: nextTeacherId
+            ? "Slot planına əsasən müəllim təyin edildi"
+            : "Slot planında vahid müəllim olmadığı üçün əsas müəllim təyinatı silindi",
           changedById: actor.id,
         },
       });
     }
 
-    if (assignments.length) {
+    if (slots.length) {
       await syncStudentActivationAndPayment(tx, {
         actorId: actor.id,
         enrollment,
-        joinedAt: validFrom,
+        slotStartedAt: validFrom,
       });
     } else {
       await clearStudentPaymentSchedules(tx, [enrollment.studentId]);
@@ -470,6 +379,9 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
 async function saveSlotAttendanceActionImpl(formData: FormData) {
   const actor = await requireMutationActor("attendance.manage");
   const input = attendanceSchema.parse(Object.fromEntries(formData));
+  if (new Set(input.items.map((item) => item.enrollmentId)).size !== input.items.length) {
+    throw new Error("Davamiyyət siyahısında eyni tələbə təkrar olunub");
+  }
   const today = todayInBaku();
   if (input.date > today) throw new Error("Gələcək tarix üçün davamiyyət yazmaq olmaz");
   const date = dateFromInput(input.date);
@@ -486,49 +398,45 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       where: { id: input.slotId },
       select: {
         id: true,
-        groupId: true,
         teacherId: true,
         weekday: true,
         startTime: true,
         endTime: true,
         validFrom: true,
-        validTo: true,
-        isActive: true,
-        group: { select: { isActive: true } },
       },
     });
-    if (!slot?.isActive || !slot.group.isActive) throw new Error("Aktiv slot tapılmadı");
+    if (!slot) throw new Error("Slot tapılmadı");
     if (slot.weekday !== weekdayFromDate(input.date)) {
       throw new Error("Seçilən tarix slotun dərs gününə uyğun deyil");
     }
-    if (date < slot.validFrom || (slot.validTo && date > slot.validTo)) {
-      throw new Error("Seçilən tarix slotun aktiv dövrünə daxil deyil");
+    if (date < slot.validFrom) {
+      throw new Error("Seçilən tarix slotun başlanğıc tarixindən əvvəldir");
     }
     if (teacherProfile && slot.teacherId !== teacherProfile.id) {
       throw new Error("Bu slotun davamiyyətini dəyişmək icazəniz yoxdur");
     }
 
-    const memberships = await tx.studentScheduleAssignment.findMany({
+    const assignments = await tx.studentScheduleAssignment.findMany({
       where: {
         slotId: slot.id,
-        membershipId: { in: input.items.map((item) => item.membershipId) },
+        enrollmentId: { in: input.items.map((item) => item.enrollmentId) },
         validFrom: { lte: date },
         OR: [{ validTo: null }, { validTo: { gte: date } }],
       },
-      select: { membershipId: true },
+      select: { enrollmentId: true },
     });
-    if (memberships.length !== input.items.length) {
+    if (assignments.length !== input.items.length) {
       throw new Error("Davamiyyət siyahısında etibarsız tələbə var");
     }
 
     const hasMarkedItem = input.items.some((item) => item.status !== null);
-    let session = await tx.groupSession.findUnique({
-      where: { groupId_sessionDate: { groupId: slot.groupId, sessionDate: date } },
+    let session = await tx.slotSession.findUnique({
+      where: { slotId_sessionDate: { slotId: slot.id, sessionDate: date } },
     });
     if (!session && hasMarkedItem) {
-      session = await tx.groupSession.create({
+      session = await tx.slotSession.create({
         data: {
-          groupId: slot.groupId,
+          slotId: slot.id,
           sessionDate: date,
           startTime: slot.startTime,
           endTime: slot.endTime,
@@ -541,7 +449,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       if (!item.status) {
         if (session) {
           await tx.attendanceRecord.deleteMany({
-            where: { sessionId: session.id, membershipId: item.membershipId },
+            where: { sessionId: session.id, enrollmentId: item.enrollmentId },
           });
         }
         continue;
@@ -549,14 +457,14 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       if (!session) throw new Error("Davamiyyət sessiyası yaradıla bilmədi");
       await tx.attendanceRecord.upsert({
         where: {
-          sessionId_membershipId: {
+          sessionId_enrollmentId: {
             sessionId: session.id,
-            membershipId: item.membershipId,
+            enrollmentId: item.enrollmentId,
           },
         },
         create: {
           sessionId: session.id,
-          membershipId: item.membershipId,
+          enrollmentId: item.enrollmentId,
           teacherId: slot.teacherId,
           status: item.status === "present" ? AttendanceMark.PRESENT : AttendanceMark.ABSENT,
           note: item.note || null,
@@ -570,6 +478,10 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
           markedAt: new Date(),
         },
       });
+    }
+
+    if (session && !hasMarkedItem) {
+      await tx.slotSession.delete({ where: { id: session.id } });
     }
 
     await writeAuditLog(tx, {
@@ -591,7 +503,7 @@ async function syncStudentActivationAndPayment(
   tx: Prisma.TransactionClient,
   input: {
     actorId: string;
-    joinedAt: Date;
+    slotStartedAt: Date;
     enrollment: {
       student: {
         id: string;
@@ -603,10 +515,10 @@ async function syncStudentActivationAndPayment(
   },
 ) {
   const student = input.enrollment.student;
-  if (student.lifecycleStatus === StudentLifecycleStatus.GROUP_WAITING) {
+  if (student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING) {
     await tx.student.update({
       where: { id: student.id },
-      data: buildStudentStatusUpdateData(StudentLifecycleStatus.ACTIVE, input.joinedAt),
+      data: buildStudentStatusUpdateData(StudentLifecycleStatus.ACTIVE, input.slotStartedAt),
     });
     await tx.studentStatusHistory.create({
       data: {
@@ -614,14 +526,14 @@ async function syncStudentActivationAndPayment(
         oldStatus: student.lifecycleStatus,
         newStatus: StudentLifecycleStatus.ACTIVE,
         reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
-        effectiveAt: input.joinedAt,
+        effectiveAt: input.slotStartedAt,
         changedById: input.actorId,
       },
     });
     await syncActivationBilling(tx, {
       studentId: student.id,
       studentCode: student.code,
-      effectiveAt: input.joinedAt,
+      effectiveAt: input.slotStartedAt,
     });
     await writeAuditLog(tx, {
       actorUserId: input.actorId,
@@ -635,43 +547,42 @@ async function syncStudentActivationAndPayment(
   }
 
   if (
-    student.lifecycleStatus === StudentLifecycleStatus.GROUP_WAITING
+    student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
     || !isBillingPausedStatus(student.lifecycleStatus)
   ) {
     await startStudentPaymentSchedule(tx, {
       studentId: student.id,
-      groupStartedAt: input.joinedAt,
+      slotStartedAt: input.slotStartedAt,
     });
   } else {
     await clearStudentPaymentSchedules(tx, [student.id]);
   }
 }
 
+async function assertActiveTeacher(tx: Prisma.TransactionClient, teacherId: string) {
+  const teacher = await tx.teacher.findUnique({
+    where: { id: teacherId },
+    select: { isActive: true },
+  });
+  if (!teacher?.isActive) throw new Error("Aktiv müəllim tapılmadı");
+}
+
 async function assertTeacherAvailability(
   tx: Prisma.TransactionClient,
   input: Pick<z.infer<typeof slotSchema>, "teacherId" | "weekday" | "startTime" | "endTime">,
-  effectiveAt: Date,
-  validTo: Date | null,
+  validFrom: Date,
   excludeId?: string,
 ) {
   const conflict = await tx.classSlot.findFirst({
-    where: buildTeacherAvailabilityWhere(input, effectiveAt, validTo, excludeId),
+    where: buildTeacherAvailabilityWhere(input, excludeId),
     orderBy: [{ validFrom: "asc" }, { startTime: "asc" }],
-    select: {
-      startTime: true,
-      endTime: true,
-      validFrom: true,
-      validTo: true,
-      group: { select: { code: true } },
-    },
+    select: { startTime: true, endTime: true, validFrom: true, room: true },
   });
   if (!conflict) return;
 
-  const activePeriod = conflict.validTo
-    ? `${formatDateAz(conflict.validFrom)}–${formatDateAz(conflict.validTo)}`
-    : `${formatDateAz(conflict.validFrom)} tarixindən`;
+  const location = conflict.room ? `, otaq: ${conflict.room}` : "";
   throw new PublicActionError(
-    `Müəllimin ${weekdayMeta[input.weekday].label} günü ${conflict.startTime}–${conflict.endTime} slotu seçilən vaxtla üst-üstə düşür (qrup: ${conflict.group.code}, dövr: ${activePeriod}).`,
+    `Müəllimin ${weekdayMeta[input.weekday].label} günü ${conflict.startTime}–${conflict.endTime} slotu seçilən vaxtla üst-üstə düşür (başlanğıc: ${formatDateAz(conflict.validFrom)}${location}).`,
     "CONFLICT",
   );
 }
@@ -682,7 +593,7 @@ async function withTeacherScheduleConflictHandling<T>(operation: () => Promise<T
   } catch (error) {
     if (isTeacherScheduleOverlapError(error)) {
       throw new PublicActionError(
-        "Bu müəllim üçün seçilən gün, saat və tarix dövründə artıq başqa aktiv slot var. Səhifəni yeniləyib yenidən yoxlayın.",
+        "Bu müəllim üçün seçilən gün və saatda artıq başqa slot var. Slot siyahısını yeniləyib mövcud slotu yoxlayın.",
         "CONFLICT",
       );
     }
@@ -736,7 +647,7 @@ function revalidatePlanner(studentId?: string) {
   revalidatePath("/finance");
   revalidatePath("/hr");
   if (studentId) revalidatePath(`/students/${studentId}`);
-  updateTag(erpCacheTags.groups);
+  updateTag(erpCacheTags.slots);
   updateTag(erpCacheTags.attendance);
   updateTag(erpCacheTags.students);
   updateTag(erpCacheTags.dashboard);
