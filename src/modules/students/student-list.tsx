@@ -9,7 +9,9 @@ import {
   Activity,
   AlertCircle,
   ArrowRight,
+  Banknote,
   BarChart3,
+  BellRing,
   CalendarClock,
   CirclePause,
   CircleX,
@@ -40,6 +42,8 @@ import { deleteProgramAction, saveProgramAction } from "@/modules/students/progr
 import { StudentPaymentDialogClient } from "@/modules/students/student-payment-dialog-client";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { StudentListData } from "@/modules/students/queries";
+import { completeStudentReminderAction } from "@/modules/students/reminder-actions";
+import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
 
 type StudentRow = StudentListData["students"][number];
 type DashboardTab = "overview" | "list" | "programs";
@@ -168,6 +172,10 @@ export function StudentList({ data }: { data: StudentListData }) {
         />
       </section>
 
+      {activeTab === "overview" && data.todayReminders.items.length > 0 ? (
+        <TodayStudentReminders data={data.todayReminders} />
+      ) : null}
+
       <section className="students-kpi-grid" aria-label="Tələbə statistika kartları">
         <article className="students-kpi students-kpi-clv students-enter" style={sequenceStyle(0)}>
           <div className="students-kpi-head">
@@ -280,6 +288,57 @@ export function StudentList({ data }: { data: StudentListData }) {
         onShowAll={() => handleTabChange("list")}
         onClearFilters={handleClearFilters}
       />
+    </section>
+  );
+}
+
+function TodayStudentReminders({
+  data,
+}: {
+  data: StudentListData["todayReminders"];
+}) {
+  return (
+    <section className="students-today-reminders students-enter" aria-labelledby="students-today-reminders-title">
+      <header className="students-today-reminders-head">
+        <span className="students-today-reminders-icon" aria-hidden="true">
+          <BellRing />
+        </span>
+        <div>
+          <span>Bugünkü işlər</span>
+          <h2 id="students-today-reminders-title">{data.dateLabel} üçün bildirişlər</h2>
+        </div>
+        <strong>{data.items.length}</strong>
+      </header>
+
+      <div className="students-today-reminders-row">
+        {data.items.map((reminder) => (
+          <article
+            className="students-today-reminder-card"
+            data-kind={reminder.kind.toLowerCase()}
+            key={reminder.id}
+          >
+            <span className="students-today-reminder-kind" aria-hidden="true">
+              {reminder.kind === "PAYMENT" ? <Banknote /> : <BellRing />}
+            </span>
+            <div className="students-today-reminder-copy">
+              <span>{reminder.kindLabel}</span>
+              <Link href={`/students/${reminder.studentId}` as Route}>
+                {reminder.studentName}
+                <small>{reminder.studentCode}</small>
+              </Link>
+              <p>{reminder.note}</p>
+            </div>
+            {reminder.canComplete ? (
+              <CompleteStudentReminderButton
+                reminderId={reminder.id}
+                studentId={reminder.studentId}
+                action={completeStudentReminderAction}
+                compact
+              />
+            ) : null}
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import "@/modules/students/students.css";
-import { ChevronLeft, Banknote, Phone, ReceiptText, UserRound, Users, CalendarDays, History, Clock3, TrendingUp } from "lucide-react";
+import { ChevronLeft, Banknote, BellRing, Phone, ReceiptText, UserRound, Users, CalendarDays, History, Clock3, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { getStudentDetailData } from "@/modules/students/queries";
 import {
@@ -10,6 +10,11 @@ import {
 } from "@/modules/students/actions";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StudentDetailActions } from "@/modules/students/student-detail-actions";
+import {
+  completeStudentReminderAction,
+  createStudentReminderAction,
+} from "@/modules/students/reminder-actions";
+import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +57,7 @@ export default async function StudentDetailPage({
           updateStudentProfileAction={updateStudentProfileAction}
           updateStudentStatusAction={updateStudentStatusAction}
           deleteStudentAction={deleteStudentAction}
+          createStudentReminderAction={createStudentReminderAction}
         />
       </div>
 
@@ -77,6 +83,59 @@ export default async function StudentDetailPage({
           <span><small>Açıq balans</small><strong>{student.balance}</strong></span>
         </div>
       </div>
+
+      <section className="student-reminder-section" aria-labelledby="student-reminder-title">
+        <div className="student-reminder-section-head">
+          <div>
+            <span className="student-reminder-section-icon" aria-hidden="true">
+              <BellRing />
+            </span>
+            <div>
+              <h2 id="student-reminder-title">Xatırlatma və qeydlər</h2>
+              <p>Ödəniş və digər geri dönüş bildirişləri</p>
+            </div>
+          </div>
+          <span className="student-reminder-count">{student.detail.reminders.length}</span>
+        </div>
+
+        {student.detail.reminders.length > 0 ? (
+          <div className="student-reminder-history">
+            {student.detail.reminders.map((reminder) => (
+              <article
+                className="student-reminder-history-item"
+                data-kind={reminder.kind.toLowerCase()}
+                data-complete={reminder.status === "DONE"}
+                key={reminder.id}
+              >
+                <span className="student-reminder-kind-icon" aria-hidden="true">
+                  {reminder.kind === "PAYMENT" ? <Banknote /> : <BellRing />}
+                </span>
+                <div className="student-reminder-history-copy">
+                  <div>
+                    <strong>{reminder.kindLabel}</strong>
+                    <StatusChip tone={reminder.status === "DONE" ? "success" : "warning"}>
+                      {reminder.statusLabel}
+                    </StatusChip>
+                  </div>
+                  <p>{reminder.note}</p>
+                  <small>{reminder.dueDate} · Məsul: {reminder.ownerName}</small>
+                </div>
+                {reminder.canComplete ? (
+                  <CompleteStudentReminderButton
+                    reminderId={reminder.id}
+                    studentId={student.id}
+                    action={completeStudentReminderAction}
+                  />
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="student-reminder-empty">
+            Bu tələbə üçün aktiv xatırlatma və ya əvvəlki qeyd yoxdur.
+          </div>
+        )}
+      </section>
 
       <section className="student-clv-profile" aria-labelledby="student-clv-title">
         <div className="student-detail-section-title">

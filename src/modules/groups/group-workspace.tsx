@@ -42,6 +42,7 @@ import type {
   JournalMemberView,
 } from "@/modules/groups/queries";
 import { groupWeekdays, orderedWeekdays, weekdayMeta, type GroupWeekdayCode } from "@/modules/groups/shared";
+import { calculateGroupCapacity } from "@/modules/groups/capacity";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import styles from "./groups.module.css";
 import { notifyCaughtError } from "@/lib/app-notifications";
@@ -91,7 +92,7 @@ export function GroupWorkspace({
     });
   }, [data.groups, occupancyFilter, query, teacherFilter]);
   const totalStudents = data.groups.reduce((sum, group) => sum + group.memberCount, 0);
-  const totalCapacity = data.groups.reduce((sum, group) => sum + group.capacity, 0);
+  const { maximumStudentCapacity, weeklyClassPlaces } = calculateGroupCapacity(data.groups);
 
   function navigate(tab: GroupsTab, groupId = selectedGroup?.id, date = data.journal.date) {
     const params = new URLSearchParams({ tab });
@@ -178,8 +179,14 @@ export function GroupWorkspace({
         <div className={styles.kpiGrid}>
           <GroupKpi icon={Layers3} label="Qruplar" value={data.groups.length} helper="Aktiv qrup" tone="blue" />
           <GroupKpi icon={UsersRound} label="Tələbələr" value={totalStudents} helper="Qruplara bölünüb" tone="green" />
-          <GroupKpi icon={GraduationCap} label="Ümumi tutum" value={totalCapacity} helper={`${Math.max(totalCapacity - totalStudents, 0)} boş yer`} tone="violet" />
-          <GroupKpi icon={Gauge} label="Doluluq" value={`${totalCapacity ? Math.round(totalStudents / totalCapacity * 100) : 0}%`} helper="Orta istifadə" tone="amber" />
+          <GroupKpi
+            icon={GraduationCap}
+            label="Ümumi tutum"
+            value={maximumStudentCapacity}
+            helper={`${Math.max(maximumStudentCapacity - totalStudents, 0)} boş yer · ${weeklyClassPlaces} həftəlik dərs yeri`}
+            tone="violet"
+          />
+          <GroupKpi icon={Gauge} label="Doluluq" value={`${maximumStudentCapacity ? Math.round(totalStudents / maximumStudentCapacity * 100) : 0}%`} helper="Orta istifadə" tone="amber" />
         </div>
       </> : null}
 

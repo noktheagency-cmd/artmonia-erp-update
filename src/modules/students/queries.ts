@@ -2,10 +2,12 @@ import {
   InvoiceStatus,
   Prisma,
   StudentLifecycleStatus,
+  TaskStatus,
 } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
-import { requireErpActor } from "@/server/auth/actor";
+import { requireErpActor, type ErpActor } from "@/server/auth/actor";
+import { scopeFor } from "@/server/rbac/permissions";
 import { formFilterString } from "@/modules/shared/form-values";
 import {
   formatAmount,
@@ -16,6 +18,14 @@ import {
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
+import {
+  getBakuDateInput,
+  getReminderDayRange,
+  getStudentReminderKind,
+  STUDENT_REMINDER_ENTITY_TYPE,
+  studentReminderMeta,
+  type StudentReminderKind,
+} from "@/modules/students/student-reminders";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 
 type SummaryTone = "blue" | "coral" | "yellow" | "mint";
@@ -38,6 +48,10 @@ export type StudentListData = {
   query: string;
   returnTo: string;
   total: number;
+  todayReminders: {
+    dateLabel: string;
+    items: StudentReminderItem[];
+  };
   permissions: {
     canCreateStudent: boolean;
     canUpdateStudent: boolean;
@@ -184,6 +198,21 @@ export type StudentListData = {
   }>;
 };
 
+export type StudentReminderItem = {
+  id: string;
+  studentId: string;
+  studentCode: string;
+  studentName: string;
+  kind: StudentReminderKind;
+  kindLabel: string;
+  note: string;
+  dueDate: string;
+  status: "OPEN" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+  statusLabel: string;
+  ownerName: string;
+  canComplete: boolean;
+};
+
 const UNASSIGNED_TEACHER = "unassigned";
 
 type StudentListCacheInput = {
@@ -302,17 +331,21 @@ export async function getStudentListData(
   const dateFromFilter = normalizeDateFilter(input.from);
   const dateToFilter = normalizeDateFilter(input.to);
   const today = startOfToday();
-  const { rows, options, clv, paymentSummary } = await readStudentListRawData({
-    search,
-    statusFilter,
-    churnOnly,
-    programFilter,
-    teacherFilter,
-    paymentFilter,
-    today: today.toISOString(),
-    dateFrom: dateFromFilter.input,
-    dateTo: dateToFilter.input,
-  });
+  const [rawData, todayReminders] = await Promise.all([
+    readStudentListRawData({
+      search,
+      statusFilter,
+      churnOnly,
+      programFilter,
+      teacherFilter,
+      paymentFilter,
+      today: today.toISOString(),
+      dateFrom: dateFromFilter.input,
+      dateTo: dateToFilter.input,
+    }),
+    getTodayStudentReminders(getPrisma(), actor),
+  ]);
+  const { rows, options, clv, paymentSummary } = rawData;
   const { programs, teachers, leads: convertibleLeads, sources, campaigns, discountTypes } = options;
 
   const summaryCounts = new Map(
@@ -371,6 +404,7 @@ export async function getStudentListData(
       to: dateToFilter.input,
     }),
     total: rows[0]?.totalCount ?? 0,
+    todayReminders,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
       canUpdateStudent: actor.permissions.has("student.update"),
@@ -628,6 +662,178 @@ type StudentTimelineRecord = {
   effectiveAt: Date | string;
   changedByName: string | null;
 };
+
+type StudentReminderRawRow = {
+  id: string;
+  studentId: string;
+  studentCode: string;
+  studentName: string;
+  taskType: string;
+  note: string;
+  dueAt: Date | string;
+  status: string;
+  ownerUserId: string | null;
+  ownerName: string | null;
+};
+
+const studentReminderStatusLabels: Record<StudentReminderItem["status"], string> = {
+  OPEN: "Gözləyir",
+  IN_PROGRESS: "İcradadır",
+  DONE: "Tamamlanıb",
+  CANCELLED: "Ləğv edilib",
+};
+
+async function getTodayStudentReminders(
+  prisma: ReturnType<typeof getPrisma>,
+  actor: ErpActor,
+): Promise<StudentListData["todayReminders"]> {
+  const dateInput = getBakuDateInput();
+  const dateLabel = new Intl.DateTimeFormat("az-AZ", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Baku",
+  }).format(new Date(`${dateInput}T12:00:00.000Z`));
+
+  if (!actor.permissions.has("task.read")) {
+    return { dateLabel, items: [] };
+  }
+
+  const { start, end } = getReminderDayRange(dateInput);
+  const readScope = scopeFor(actor.permissions, "task.read");
+  const ownerFilter =
+    readScope === "ALL"
+      ? Prisma.sql`true`
+      : Prisma.sql`t.owner_user_id = ${actor.id}::uuid`;
+  const studentReadScope = scopeFor(actor.permissions, "student.read");
+  const studentFilter =
+    studentReadScope === "ALL"
+      ? Prisma.sql`true`
+      : Prisma.sql`s.manager_id = ${actor.id}::uuid`;
+  const rows = await prisma.$queryRaw<StudentReminderRawRow[]>(Prisma.sql`
+    select
+      t.id::text as "id",
+      s.id::text as "studentId",
+      s.code as "studentCode",
+      c.full_name as "studentName",
+      t.type as "taskType",
+      coalesce(t.description, '') as "note",
+      t.due_at as "dueAt",
+      t.status::text as "status",
+      t.owner_user_id::text as "ownerUserId",
+      owner.full_name as "ownerName"
+    from erp.tasks t
+    join erp.students s on s.id = t.entity_id
+    join erp.contacts c on c.id = s.contact_id
+    left join erp.users owner on owner.id = t.owner_user_id
+    where t.entity_type = ${STUDENT_REMINDER_ENTITY_TYPE}
+      and t.type in (
+        ${studentReminderMeta.PAYMENT.taskType},
+        ${studentReminderMeta.GENERAL.taskType}
+      )
+      and t.status in (
+        'OPEN'::"erp"."TaskStatus",
+        'IN_PROGRESS'::"erp"."TaskStatus"
+      )
+      and t.due_at >= ${start}
+      and t.due_at < ${end}
+      and ${ownerFilter}
+      and ${studentFilter}
+    order by
+      case when t.type = ${studentReminderMeta.PAYMENT.taskType} then 0 else 1 end,
+      t.created_at asc
+    limit 20
+  `);
+
+  return { dateLabel, items: mapStudentReminderRows(rows, actor) };
+}
+
+async function getStudentReminderHistory(
+  prisma: ReturnType<typeof getPrisma>,
+  actor: ErpActor,
+  studentId: string,
+) {
+  if (!actor.permissions.has("task.read")) {
+    return [];
+  }
+
+  const readScope = scopeFor(actor.permissions, "task.read");
+  const ownerFilter =
+    readScope === "ALL"
+      ? Prisma.sql`true`
+      : Prisma.sql`t.owner_user_id = ${actor.id}::uuid`;
+  const studentReadScope = scopeFor(actor.permissions, "student.read");
+  const studentFilter =
+    studentReadScope === "ALL"
+      ? Prisma.sql`true`
+      : Prisma.sql`s.manager_id = ${actor.id}::uuid`;
+  const rows = await prisma.$queryRaw<StudentReminderRawRow[]>(Prisma.sql`
+    select
+      t.id::text as "id",
+      s.id::text as "studentId",
+      s.code as "studentCode",
+      c.full_name as "studentName",
+      t.type as "taskType",
+      coalesce(t.description, '') as "note",
+      t.due_at as "dueAt",
+      t.status::text as "status",
+      t.owner_user_id::text as "ownerUserId",
+      owner.full_name as "ownerName"
+    from erp.tasks t
+    join erp.students s on s.id = t.entity_id
+    join erp.contacts c on c.id = s.contact_id
+    left join erp.users owner on owner.id = t.owner_user_id
+    where t.entity_type = ${STUDENT_REMINDER_ENTITY_TYPE}
+      and t.entity_id = ${studentId}::uuid
+      and t.type in (
+        ${studentReminderMeta.PAYMENT.taskType},
+        ${studentReminderMeta.GENERAL.taskType}
+      )
+      and t.status <> 'CANCELLED'::"erp"."TaskStatus"
+      and ${ownerFilter}
+      and ${studentFilter}
+    order by
+      case
+        when t.status in ('OPEN'::"erp"."TaskStatus", 'IN_PROGRESS'::"erp"."TaskStatus") then 0
+        else 1
+      end,
+      t.due_at desc,
+      t.created_at desc
+    limit 12
+  `);
+
+  return mapStudentReminderRows(rows, actor);
+}
+
+function mapStudentReminderRows(rows: StudentReminderRawRow[], actor: ErpActor) {
+  const manageScope = scopeFor(actor.permissions, "task.manage");
+
+  return rows.flatMap((row): StudentReminderItem[] => {
+    const kind = getStudentReminderKind(row.taskType);
+    const status = row.status as StudentReminderItem["status"];
+
+    if (!kind || !(status in studentReminderStatusLabels)) {
+      return [];
+    }
+
+    return [{
+      id: row.id,
+      studentId: row.studentId,
+      studentCode: row.studentCode,
+      studentName: row.studentName,
+      kind,
+      kindLabel: studentReminderMeta[kind].label,
+      note: row.note,
+      dueDate: formatShortDate(row.dueAt),
+      status,
+      statusLabel: studentReminderStatusLabels[status],
+      ownerName: row.ownerName ?? "Təyin edilməyib",
+      canComplete:
+        (status === TaskStatus.OPEN || status === TaskStatus.IN_PROGRESS) &&
+        (manageScope === "ALL" || row.ownerUserId === actor.id),
+    }];
+  });
+}
 
 async function getStudentRows(
   prisma: ReturnType<typeof getPrisma>,
@@ -1660,7 +1866,10 @@ export async function getStudentDetailData(studentId: string) {
         ? formatDecimalInput(student.monthlyFee)
         : "";
 
-  const options = await getStudentCreateOptions(prisma);
+  const [options, reminders] = await Promise.all([
+    getStudentCreateOptions(prisma),
+    getStudentReminderHistory(prisma, actor, studentId),
+  ]);
 
   return {
     returnTo: `/students/${student.id}`,
@@ -1671,6 +1880,7 @@ export async function getStudentDetailData(studentId: string) {
       canRecordPayment: actor.permissions.has("billing.payment.create"),
       canChangeStatus: actor.permissions.has("student.status.change"),
       canDeleteStudent: actor.permissions.has("student.delete"),
+      canManageReminders: actor.permissions.has("task.manage"),
     },
     createOptions: {
       leads: options.leads,
@@ -1715,6 +1925,8 @@ export async function getStudentDetailData(studentId: string) {
         registeredAt: formatShortDate(student.registeredAt as Date),
         notes: student.notes ?? "Qeyd yoxdur",
         billingPaused: student.billingPaused ? "Dayandırılıb" : "Aktivdir",
+        reminderDefaultDate: getBakuDateInput(),
+        reminders,
         paymentDefaultAmount: defaultPaymentAmount,
         paymentDefaultDate: formatDateInput(new Date()),
         paymentDefaultMonth: formatMonthInput(new Date()),

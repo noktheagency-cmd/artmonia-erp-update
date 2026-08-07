@@ -22,6 +22,7 @@ import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import { resolveNextPaymentDateInput } from "@/modules/students/payment-schedule";
+import { StudentReminderDialog } from "@/modules/students/student-reminders-client";
 
 const studentStatusOptions = [
   { value: "GROUP_WAITING", label: "Qrup gözləyir" },
@@ -47,6 +48,7 @@ interface StudentDetail {
     paymentDefaultNextDate: string;
     paymentGroupJoinedAt: string;
     monthlyFee: string;
+    reminderDefaultDate: string;
   };
 }
 
@@ -57,6 +59,7 @@ interface Permissions {
   canRecordPayment: boolean;
   canChangeStatus: boolean;
   canDeleteStudent: boolean;
+  canManageReminders: boolean;
 }
 
 export function StudentDetailActions({
@@ -66,6 +69,7 @@ export function StudentDetailActions({
   updateStudentProfileAction,
   updateStudentStatusAction,
   deleteStudentAction,
+  createStudentReminderAction,
 }: {
   student: StudentDetail;
   permissions: Permissions;
@@ -73,6 +77,7 @@ export function StudentDetailActions({
   updateStudentProfileAction: (formData: FormData) => unknown | Promise<unknown>;
   updateStudentStatusAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteStudentAction: (formData: FormData) => unknown | Promise<unknown>;
+  createStudentReminderAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -113,6 +118,14 @@ export function StudentDetailActions({
 
   return (
     <div className="student-actions-row">
+      <StudentReminderDialog
+        studentId={student.id}
+        studentName={student.name}
+        defaultDate={student.detail.reminderDefaultDate}
+        canManage={permissions.canManageReminders}
+        action={createStudentReminderAction}
+      />
+
       <Dialog open={statusOpen} onOpenChange={setStatusOpen}>
         <DialogTrigger asChild>
           <Button className="student-action-status" variant="outline" type="button" disabled={!permissions.canChangeStatus}>
