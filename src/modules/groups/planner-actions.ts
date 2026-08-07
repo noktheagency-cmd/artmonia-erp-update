@@ -23,8 +23,18 @@ import {
   clearStudentPaymentSchedules,
   startStudentPaymentSchedule,
 } from "@/modules/students/payment-schedule-service";
-import { dateFromInput, todayInBaku, weekdayFromDate } from "@/modules/groups/shared";
-import { safeServerAction } from "@/server/actions/safe-action";
+import {
+  dateFromInput,
+  formatDateAz,
+  todayInBaku,
+  weekdayFromDate,
+  weekdayMeta,
+} from "@/modules/groups/shared";
+import {
+  buildTeacherAvailabilityWhere,
+  isTeacherScheduleOverlapError,
+} from "@/modules/groups/slot-availability";
+import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { scopeFor } from "@/server/rbac/permissions";
@@ -83,13 +93,13 @@ async function createClassSlotActionImpl(formData: FormData) {
   const prisma = getPrisma();
   const validFrom = dateFromInput(input.validFrom);
 
-  const slot = await prisma.$transaction(async (tx) => {
+  const slot = await withTeacherScheduleConflictHandling(() => prisma.$transaction(async (tx) => {
     const teacher = await tx.teacher.findUnique({
       where: { id: input.teacherId },
       select: { id: true, isActive: true },
     });
     if (!teacher?.isActive) throw new Error("Aktiv müəllim tapılmadı");
-    await assertTeacherAvailability(tx, input, validFrom);
+    await assertTeacherAvailability(tx, input, validFrom, null);
 
     const group = await tx.studentGroup.create({
       data: {
@@ -128,7 +138,7 @@ async function createClassSlotActionImpl(formData: FormData) {
       reason: "Həftəlik dərs slotu yaradıldı",
     });
     return created;
-  });
+  }));
 
   revalidatePlanner();
   return { id: slot.id };
@@ -141,10 +151,14 @@ async function updateClassSlotActionImpl(formData: FormData) {
   const effectiveAt = dateFromInput(input.validFrom);
   const previousDay = previousDate(effectiveAt);
 
-  const updatedSlot = await prisma.$transaction(async (tx) => {
+  const updatedSlot = await withTeacherScheduleConflictHandling(() => prisma.$transaction(async (tx) => {
     await lockSlots(tx, [input.slotId]);
-    const current = await tx.classSlot.findUnique({
-      where: { id: input.slotId },
+    const current = await tx.classSlot.findFirst({
+      where: {
+        id: input.slotId,
+        isActive: true,
+        group: { isActive: true },
+      },
       select: {
         id: true,
         groupId: true,
@@ -173,7 +187,7 @@ async function updateClassSlotActionImpl(formData: FormData) {
       select: { id: true, isActive: true },
     });
     if (!teacher?.isActive) throw new Error("Aktiv müəllim tapılmadı");
-    await assertTeacherAvailability(tx, input, effectiveAt, current.id);
+    await assertTeacherAvailability(tx, input, effectiveAt, current.validTo, current.id);
 
     const assignments = await tx.studentScheduleAssignment.findMany({
       where: {
@@ -262,7 +276,7 @@ async function updateClassSlotActionImpl(formData: FormData) {
       reason: "Dərs slotunun tarixçəli yeni versiyası yaradıldı",
     });
     return replacement;
-  });
+  }));
 
   revalidatePlanner();
   return { id: updatedSlot.id };
@@ -480,9 +494,10 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
         validFrom: true,
         validTo: true,
         isActive: true,
+        group: { select: { isActive: true } },
       },
     });
-    if (!slot?.isActive) throw new Error("Aktiv slot tapılmadı");
+    if (!slot?.isActive || !slot.group.isActive) throw new Error("Aktiv slot tapılmadı");
     if (slot.weekday !== weekdayFromDate(input.date)) {
       throw new Error("Seçilən tarix slotun dərs gününə uyğun deyil");
     }
@@ -636,20 +651,42 @@ async function assertTeacherAvailability(
   tx: Prisma.TransactionClient,
   input: Pick<z.infer<typeof slotSchema>, "teacherId" | "weekday" | "startTime" | "endTime">,
   effectiveAt: Date,
+  validTo: Date | null,
   excludeId?: string,
 ) {
-  const candidates = await tx.classSlot.findMany({
-    where: {
-      id: excludeId ? { not: excludeId } : undefined,
-      teacherId: input.teacherId,
-      weekday: input.weekday,
-      isActive: true,
-      OR: [{ validTo: null }, { validTo: { gte: effectiveAt } }],
+  const conflict = await tx.classSlot.findFirst({
+    where: buildTeacherAvailabilityWhere(input, effectiveAt, validTo, excludeId),
+    orderBy: [{ validFrom: "asc" }, { startTime: "asc" }],
+    select: {
+      startTime: true,
+      endTime: true,
+      validFrom: true,
+      validTo: true,
+      group: { select: { code: true } },
     },
-    select: { startTime: true, endTime: true },
   });
-  if (candidates.some((slot) => slot.startTime < input.endTime && slot.endTime > input.startTime)) {
-    throw new Error("Müəllimin bu vaxt aralığında başqa aktiv slotu var");
+  if (!conflict) return;
+
+  const activePeriod = conflict.validTo
+    ? `${formatDateAz(conflict.validFrom)}–${formatDateAz(conflict.validTo)}`
+    : `${formatDateAz(conflict.validFrom)} tarixindən`;
+  throw new PublicActionError(
+    `Müəllimin ${weekdayMeta[input.weekday].label} günü ${conflict.startTime}–${conflict.endTime} slotu seçilən vaxtla üst-üstə düşür (qrup: ${conflict.group.code}, dövr: ${activePeriod}).`,
+    "CONFLICT",
+  );
+}
+
+async function withTeacherScheduleConflictHandling<T>(operation: () => Promise<T>) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isTeacherScheduleOverlapError(error)) {
+      throw new PublicActionError(
+        "Bu müəllim üçün seçilən gün, saat və tarix dövründə artıq başqa aktiv slot var. Səhifəni yeniləyib yenidən yoxlayın.",
+        "CONFLICT",
+      );
+    }
+    throw error;
   }
 }
 

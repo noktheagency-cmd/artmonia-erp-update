@@ -88,6 +88,7 @@ export async function getPlannerWorkspaceData(input?: {
     prisma.classSlot.findMany({
       where: {
         isActive: true,
+        group: { isActive: true },
         validFrom: { lte: todayDate },
         OR: [{ validTo: null }, { validTo: { gte: todayDate } }],
         ...(teacherId ? { teacherId } : {}),
@@ -177,7 +178,7 @@ export async function getPlannerWorkspaceData(input?: {
                   where: {
                     validFrom: { lte: todayDate },
                     OR: [{ validTo: null }, { validTo: { gte: todayDate } }],
-                    slot: { isActive: true },
+                    slot: { isActive: true, group: { isActive: true } },
                   },
                   select: { slotId: true },
                 },

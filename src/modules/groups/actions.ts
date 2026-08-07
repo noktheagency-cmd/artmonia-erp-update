@@ -183,6 +183,7 @@ async function archiveGroupActionImpl(formData: FormData) {
   const { groupId } = z.object({ groupId: z.string().uuid() }).parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   await prisma.$transaction(async (tx) => {
+    await lockGroup(tx, groupId);
     const current = await tx.studentGroup.findUnique({
       where: { id: groupId },
       select: {
@@ -195,7 +196,12 @@ async function archiveGroupActionImpl(formData: FormData) {
       },
     });
     if (!current) throw new Error("Qrup tapılmadı");
+    if (!current.isActive) throw new Error("Qrup artıq arxivlənib");
     await tx.studentGroup.update({ where: { id: groupId }, data: { isActive: false, archivedAt: new Date() } });
+    const deactivatedSlots = await tx.classSlot.updateMany({
+      where: { groupId, isActive: true },
+      data: { isActive: false },
+    });
 
     const affectedStudentIds = [...new Set(current.memberships.map((item) => item.enrollment.studentId))];
     if (affectedStudentIds.length > 0) {
@@ -222,7 +228,7 @@ async function archiveGroupActionImpl(formData: FormData) {
       entityType: "group",
       entityId: groupId,
       before: { isActive: current.isActive },
-      after: { isActive: false },
+      after: { isActive: false, deactivatedClassSlots: deactivatedSlots.count },
       reason: "Qrup arxivləndi",
     });
   });
