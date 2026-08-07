@@ -32,8 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AuditLogPanel } from "@/modules/roles/audit-log-panel";
+import { isProtectedTeamRole } from "@/lib/protected-roles";
 import {
   createStandaloneUserAction,
   createRoleAction,
@@ -95,6 +94,10 @@ export function RolePermissionsWorkspace({
   const deferredCreateQuery = useDeferredValue(createQuery.trim().toLocaleLowerCase("az"));
 
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? roles[0];
+  const assignableRoles = useMemo(
+    () => roles.filter((role) => !isProtectedTeamRole(role.code)),
+    [roles],
+  );
   const selectedRoleUsers = useMemo(
     () => selectedRole ? users.filter((user) => user.roleIds.includes(selectedRole.id)) : [],
     [selectedRole, users],
@@ -163,7 +166,7 @@ export function RolePermissionsWorkspace({
   }
 
   function toggleNewRolePermission(definition: PermissionDefinitionDto, checked: boolean) {
-    if (definition.superAdminManaged && !initialData.canManageSuperAdminPermissions) return;
+    if (definition.superAdminOnly || (definition.superAdminManaged && !initialData.canManageSuperAdminPermissions)) return;
     setNewRoleDraft((draft) =>
       changePermission(draft, definition, checked, initialData.definitions),
     );
@@ -171,7 +174,7 @@ export function RolePermissionsWorkspace({
 
   function setNewRoleModule(definitions: PermissionDefinitionDto[], checked: boolean) {
     const assignableDefinitions = definitions.filter(
-      (definition) => initialData.canManageSuperAdminPermissions || !definition.superAdminManaged,
+      (definition) => !definition.superAdminOnly && (initialData.canManageSuperAdminPermissions || !definition.superAdminManaged),
     );
     setNewRoleDraft((draft) =>
       changePermissionGroup(draft, assignableDefinitions, checked, initialData.definitions),
@@ -182,9 +185,9 @@ export function RolePermissionsWorkspace({
     setCopyFromRoleId(roleId);
     const source = roles.find((role) => role.id === roleId);
     const copiedDraft = source ? grantsToRecord(source.grants) : {};
-    if (!initialData.canManageSuperAdminPermissions) {
-      for (const definition of initialData.definitions) {
-        if (definition.superAdminManaged) delete copiedDraft[definition.code];
+    for (const definition of initialData.definitions) {
+      if (definition.superAdminOnly || (definition.superAdminManaged && !initialData.canManageSuperAdminPermissions)) {
+        delete copiedDraft[definition.code];
       }
     }
     setNewRoleDraft(copiedDraft);
@@ -203,8 +206,8 @@ export function RolePermissionsWorkspace({
     setAccountEmail("");
     setAccountPassword("");
     setShowAccountPassword(false);
-    setAccountRoleId(selectedRole.code === "SUPER_ADMIN"
-      ? roles.find((role) => role.code !== "SUPER_ADMIN")?.id ?? ""
+    setAccountRoleId(isProtectedTeamRole(selectedRole.code)
+      ? assignableRoles[0]?.id ?? ""
       : selectedRole.id);
     setFeedback(null);
     setAccountOpen(true);
@@ -402,18 +405,7 @@ export function RolePermissionsWorkspace({
         </div>
       ) : null}
 
-      <Tabs defaultValue="roles" className={styles.mainTabs}>
-        <TabsList>
-          <TabsTrigger value="roles">Rollar</TabsTrigger>
-          {initialData.canViewAudit ? (
-            <TabsTrigger value="audit">
-              Fəaliyyət jurnalı <span>{initialData.auditLogs.length}</span>
-            </TabsTrigger>
-          ) : null}
-        </TabsList>
-
-        <TabsContent value="roles">
-          <div className={styles.permissionShell}>
+      <div className={styles.permissionShell}>
             <aside className={styles.roleRail} aria-label="Rollar">
               <div className={styles.roleRailHeader}>
                 <div>
@@ -648,15 +640,7 @@ export function RolePermissionsWorkspace({
                 </footer>
               ) : null}
             </div>
-          </div>
-        </TabsContent>
-
-        {initialData.canViewAudit ? (
-          <TabsContent value="audit">
-            <AuditLogPanel logs={initialData.auditLogs} />
-          </TabsContent>
-        ) : null}
-      </Tabs>
+      </div>
 
       <Dialog
         open={accountOpen}
@@ -719,7 +703,7 @@ export function RolePermissionsWorkspace({
                 required
               >
                 <option value="">Rol seçin</option>
-                {roles.filter((role) => role.code !== "SUPER_ADMIN").map((role) => (
+                {assignableRoles.map((role) => (
                   <option value={role.id} key={role.id}>{role.name}</option>
                 ))}
               </select>
@@ -801,7 +785,7 @@ export function RolePermissionsWorkspace({
           </FieldGroup>
           <div className={styles.editRolesHeader}>Təyin edilmiş rollar</div>
           <div className={styles.roleChoices}>
-            {roles.filter((role) => role.code !== "SUPER_ADMIN").map((role) => (
+            {assignableRoles.map((role) => (
               <label className={styles.roleChoice} key={role.id}>
                 <input
                   type="checkbox"
@@ -937,7 +921,7 @@ export function RolePermissionsWorkspace({
                       onChange={(event) => copyRolePermissions(event.target.value)}
                     >
                       <option value="">Boş rol</option>
-                      {roles.map((role) => (
+                      {assignableRoles.map((role) => (
                         <option value={role.id} key={role.id}>{role.name}</option>
                       ))}
                     </select>
@@ -977,7 +961,7 @@ export function RolePermissionsWorkspace({
                 <div className={styles.drawerModuleList}>
                   {createModules.map((module) => {
                     const assignableDefinitions = module.definitions.filter(
-                      (definition) => initialData.canManageSuperAdminPermissions || !definition.superAdminManaged,
+                      (definition) => !definition.superAdminOnly && (initialData.canManageSuperAdminPermissions || !definition.superAdminManaged),
                     );
                     const activeCount = module.definitions.filter((item) => newRoleDraft[item.code]).length;
                     return (
@@ -1005,7 +989,7 @@ export function RolePermissionsWorkspace({
                             checked={Boolean(newRoleDraft[definition.code])}
                             scope={newRoleDraft[definition.code]}
                             changed={false}
-                            readOnly={definition.superAdminManaged && !initialData.canManageSuperAdminPermissions}
+                            readOnly={definition.superAdminOnly || (definition.superAdminManaged && !initialData.canManageSuperAdminPermissions)}
                             onToggle={(checked) => toggleNewRolePermission(definition, checked)}
                             onScope={(scope) =>
                               setNewRoleDraft((draft) => ({ ...draft, [definition.code]: scope }))
@@ -1134,7 +1118,7 @@ function PermissionRow({
         <div>
           <strong>{definition.actionLabel}</strong>
           {definition.sensitive ? <span>Həssas</span> : null}
-          {definition.superAdminManaged ? <span>Yalnız Super Admin</span> : null}
+          {definition.superAdminOnly ? <span>Yalnız Super Admin</span> : definition.superAdminManaged ? <span>Super Admin idarə edir</span> : null}
         </div>
         <p><b>{definition.tabLabel}</b> — {definition.description}</p>
       </div>
@@ -1229,6 +1213,7 @@ function isPermissionLocked(
   definitions: PermissionDefinitionDto[],
   canManageSuperAdminPermissions: boolean,
 ) {
+  if (definition.superAdminOnly) return true;
   if (canManageSuperAdminPermissions) return false;
   if (definition.superAdminManaged) return true;
 

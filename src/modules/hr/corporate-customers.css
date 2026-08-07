@@ -138,7 +138,7 @@
 
 .corporate-table-surface table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1080px;
   border-collapse: collapse;
   text-align: left;
 }
@@ -234,6 +234,7 @@
 
 .corporate-money { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .corporate-money strong { color: #303a4e; font-size: 11.5px; }
+.corporate-payment-date { color: #4f596d !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .corporate-updated { color: #737d8f !important; white-space: nowrap; }
 
 .corporate-status {
@@ -391,10 +392,20 @@
   font-size: 11.5px;
 }
 .corporate-company-fields textarea { min-height: 82px; padding: 10px; resize: vertical; }
+.corporate-company-fields .date-picker-trigger {
+  min-height: 38px;
+  padding-inline: 10px;
+  border-color: #d8dee8;
+  border-radius: 9px;
+  box-shadow: none;
+}
 .corporate-company-fields :is(.ui-input, select, textarea):focus,
-.corporate-contact-grid .ui-input:focus {
+.corporate-contact-grid .ui-input:focus,
+.corporate-company-fields .date-picker-trigger:focus-visible,
+.corporate-company-fields .date-picker-trigger.is-open {
   border-color: #e87932;
   outline: 2px solid rgba(232, 121, 50, 0.12);
+  box-shadow: none;
 }
 
 .corporate-money-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -481,8 +492,8 @@ html.dark .corporate-row-menu > div button:hover { background: var(--dm-surface-
 }
 
 @media (max-width: 1350px) and (min-width: 801px) {
-  .corporate-table-surface table { min-width: 850px; }
-  .corporate-table-surface :is(th, td):nth-child(6) { display: none; }
+  .corporate-table-surface table { min-width: 960px; }
+  .corporate-table-surface :is(th, td):nth-child(7) { display: none; }
 }
 
 @media (max-width: 800px) {

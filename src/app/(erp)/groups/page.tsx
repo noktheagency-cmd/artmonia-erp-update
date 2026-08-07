@@ -1,59 +1,35 @@
-import {
-  addGroupMemberAction,
-  archiveGroupAction,
-  changeGroupMemberTeacherAction,
-  createGroupAction,
-  endGroupMembershipAction,
-  saveAttendanceAction,
-  updateGroupAction,
-} from "@/modules/groups/actions";
-import { GroupWorkspace } from "@/modules/groups/group-workspace";
-import { getGroupWorkspaceData } from "@/modules/groups/queries";
 import { getPlannerWorkspaceData } from "@/modules/groups/planner-queries";
 import { PlannerWorkspace } from "@/modules/groups/planner-workspace";
 import {
   createClassSlotAction,
   deleteClassSlotAction,
   replaceStudentScheduleAction,
+  saveSlotAttendanceAction,
   updateClassSlotAction,
 } from "@/modules/groups/planner-actions";
 
 export default async function GroupsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; group?: string; date?: string }>;
+  searchParams: Promise<{ slot?: string; date?: string; attendance?: string }>;
 }) {
   const params = await searchParams;
-  if (!params.tab || params.tab === "planner") {
-    const plannerData = await getPlannerWorkspaceData();
-    return (
-      <PlannerWorkspace
-        data={plannerData}
-        actions={{
-          createSlot: createClassSlotAction,
-          updateSlot: updateClassSlotAction,
-          deleteSlot: deleteClassSlotAction,
-          replaceSchedule: replaceStudentScheduleAction,
-        }}
-      />
-    );
-  }
-  const data = await getGroupWorkspaceData({ groupId: params.group, date: params.date });
-  const activeTab = params.tab === "journal" ? "journal" : "groups";
+  const plannerData = await getPlannerWorkspaceData({
+    slotId: params.slot,
+    date: params.date,
+  });
 
   return (
-    <GroupWorkspace
-      key={`${activeTab}-${data.selectedGroupId}-${data.journal.date}`}
-      data={data}
-      activeTab={activeTab}
+    <PlannerWorkspace
+      key={`${plannerData.selectedSlotId}-${plannerData.journal.date}-${params.attendance ?? "0"}`}
+      data={plannerData}
+      initialAttendanceOpen={params.attendance === "1"}
       actions={{
-        createGroup: createGroupAction,
-        updateGroup: updateGroupAction,
-        archiveGroup: archiveGroupAction,
-        addMember: addGroupMemberAction,
-        changeTeacher: changeGroupMemberTeacherAction,
-        endMembership: endGroupMembershipAction,
-        saveAttendance: saveAttendanceAction,
+        createSlot: createClassSlotAction,
+        updateSlot: updateClassSlotAction,
+        deleteSlot: deleteClassSlotAction,
+        replaceSchedule: replaceStudentScheduleAction,
+        saveAttendance: saveSlotAttendanceAction,
       }}
     />
   );

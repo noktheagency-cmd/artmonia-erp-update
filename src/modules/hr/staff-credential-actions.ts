@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AppRole, Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
+import { isProtectedTeamRole } from "@/lib/protected-roles";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -41,6 +42,9 @@ async function upsertHrStaffCredentialsActionImpl(formData: FormData) {
     },
   });
   if (!employee) throw new PublicActionError("Əməkdaş profili tapılmadı", "NOT_FOUND");
+  if (employee.user?.roles.some(({ role }) => isProtectedTeamRole(role.code))) {
+    throw new PublicActionError("Rəhbər profilinin giriş məlumatları bu ekrandan dəyişdirilə bilməz", "FORBIDDEN");
+  }
 
   const emailOwner = await prisma.user.findFirst({
     where: {
@@ -58,7 +62,7 @@ async function upsertHrStaffCredentialsActionImpl(formData: FormData) {
   });
   if (
     roles.length !== new Set(input.roleIds).size ||
-    roles.some((role) => role.code === AppRole.SUPER_ADMIN)
+    roles.some((role) => isProtectedTeamRole(role.code))
   )
     throw new PublicActionError(
       "Seçilmiş rollardan biri tapılmadı və ya təyin edilə bilməz",

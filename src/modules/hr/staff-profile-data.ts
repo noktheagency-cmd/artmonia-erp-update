@@ -1,3 +1,5 @@
+import { AppRole } from "@/generated/prisma/client";
+import { isProtectedTeamRole } from "@/lib/protected-roles";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import {
@@ -87,13 +89,14 @@ export async function getHrStaffProfileData(
   const isOwnProfile = employee.userId === actor.id;
   if (!isOwnProfile && !actor.permissions.has("hr.employee.read")) return null;
 
-  const canManageCredentials = actor.permissions.has("auth.user.manage");
+  const hasProtectedRole = employee.user?.roles.some(({ role }) => isProtectedTeamRole(role.code)) ?? false;
+  const canManageCredentials = actor.permissions.has("auth.user.manage") && !hasProtectedRole;
   const [directory, timeline, roleOptions] = await Promise.all([
     employee.teacherId &&
     (actor.permissions.has("teacher.read") || isOwnProfile)
       ? getTeacherDirectoryData(isOwnProfile ? employee.teacherId : undefined)
       : Promise.resolve(null),
-    actor.permissions.has("audit.read")
+    actor.roles.includes(AppRole.SUPER_ADMIN)
       ? getPrisma().auditLog.findMany({
           where: {
             OR: [
@@ -110,7 +113,7 @@ export async function getHrStaffProfileData(
       : Promise.resolve([]),
     canManageCredentials
       ? getPrisma().role.findMany({
-          where: { OR: [{ code: null }, { code: { not: "SUPER_ADMIN" } }] },
+          where: { OR: [{ code: null }, { code: { notIn: [AppRole.SUPER_ADMIN, AppRole.ADMIN] } }] },
           select: { id: true, name: true, code: true },
           orderBy: [{ isSystem: "desc" }, { name: "asc" }],
         })

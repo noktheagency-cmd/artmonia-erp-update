@@ -22,6 +22,7 @@ export type CorporateCustomerRow = {
   status: CorporateCustomerStatus;
   monthlyBudget: number;
   contractValue: number | null;
+  paymentDate: string;
   note: string;
   contacts: CorporateContactRow[];
   updatedAt: string;
@@ -63,6 +64,7 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
         status: true,
         monthlyBudget: true,
         contractValue: true,
+        paymentDate: true,
         note: true,
         updatedAt: true,
         contacts: {
@@ -99,6 +101,7 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
     status: customer.status,
     monthlyBudget: Number(customer.monthlyBudget),
     contractValue: customer.contractValue === null ? null : Number(customer.contractValue),
+    paymentDate: customer.paymentDate?.toISOString().slice(0, 10) ?? "",
     note: customer.note ?? "",
     contacts: customer.contacts.map((contact) => ({
       id: contact.id,

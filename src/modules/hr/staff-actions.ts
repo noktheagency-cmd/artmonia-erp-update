@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppRole, FinanceSalaryMode, HrStaffType, Prisma } from "@/generated/prisma/client";
+import { isProtectedTeamRole } from "@/lib/protected-roles";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { requireMutationActor } from "@/server/auth/actor";
@@ -80,7 +81,7 @@ async function createStaffActionImpl(formData: FormData) {
       ? prisma.role.findUnique({ where: { code: AppRole.TEACHER } })
       : null,
   ]);
-  if (input.createAccount && (roles.length !== input.roleIds.length || roles.some((role) => role.code === AppRole.SUPER_ADMIN))) {
+  if (input.createAccount && (roles.length !== input.roleIds.length || roles.some((role) => isProtectedTeamRole(role.code)))) {
     throw new PublicActionError("Seçilmiş rollardan biri tapılmadı və ya təyin edilə bilməz", "NOT_FOUND");
   }
   if (input.createAccount && input.staffType === "TEACHER" && !teacherRole) {
@@ -177,9 +178,18 @@ async function updateStaffActionImpl(formData: FormData) {
   const selectedRoles = shouldUpdateRoles
     ? await getPrisma().role.findMany({ where: { id: { in: input.roleIds } } })
     : [];
-  if (shouldUpdateRoles && (selectedRoles.length !== input.roleIds.length || selectedRoles.some((role) => role.code === AppRole.SUPER_ADMIN))) {
+  const currentProtectedRoles = before.user?.roles
+    .map(({ role }) => role)
+    .filter((role) => isProtectedTeamRole(role.code)) ?? [];
+  const currentProtectedRoleIds = new Set(currentProtectedRoles.map((role) => role.id));
+  if (
+    shouldUpdateRoles &&
+    (selectedRoles.length !== input.roleIds.length ||
+      selectedRoles.some((role) => isProtectedTeamRole(role.code) && !currentProtectedRoleIds.has(role.id)))
+  ) {
     throw new PublicActionError("Seçilmiş rollardan biri tapılmadı və ya təyin edilə bilməz", "NOT_FOUND");
   }
+  const assignableSelectedRoles = selectedRoles.filter((role) => !isProtectedTeamRole(role.code));
   const teacherRole = before.userId
     ? await getPrisma().role.findUnique({ where: { code: AppRole.TEACHER } })
     : null;
@@ -188,8 +198,8 @@ async function updateStaffActionImpl(formData: FormData) {
   }
   const roles = shouldUpdateRoles
     ? input.staffType === "TEACHER"
-      ? [...selectedRoles.filter((role) => role.code !== AppRole.TEACHER), ...(teacherRole ? [teacherRole] : [])]
-      : selectedRoles.filter((role) => role.code !== AppRole.TEACHER)
+      ? [...currentProtectedRoles, ...assignableSelectedRoles.filter((role) => role.code !== AppRole.TEACHER), ...(teacherRole ? [teacherRole] : [])]
+      : [...currentProtectedRoles, ...assignableSelectedRoles.filter((role) => role.code !== AppRole.TEACHER)]
     : [];
 
   const uploadedProfilePhotoUrl = await persistProfilePhoto(formData.get("profilePhoto"));

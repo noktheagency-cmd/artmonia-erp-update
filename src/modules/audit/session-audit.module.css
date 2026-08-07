@@ -146,31 +146,17 @@
 .spin { animation: audit-spin 800ms linear infinite; }
 @keyframes audit-spin { to { transform: rotate(360deg); } }
 
-.activityPanel { margin-top: 15px; overflow: hidden; border: 1px solid var(--audit-line); border-radius: 12px; background: #fff; }
-.activityPanel > header { display: flex; align-items: center; justify-content: space-between; min-height: 58px; padding: 10px 14px; border-bottom: 1px solid var(--audit-line); }
-.activityPanel > header > div { display: flex; align-items: center; gap: 9px; }
-.activityPanel > header svg { width: 17px; color: var(--audit-blue); }
-.activityPanel > header strong, .activityPanel > header small { display: block; }
-.activityPanel > header strong { font-size: 11.5px; }
-.activityPanel > header small, .activityPanel > header > span { margin-top: 2px; color: #818b99; font-size: 9px; }
-.activityTableWrap { overflow-x: auto; }
-.activityTable { width: 100%; min-width: 760px; border-collapse: collapse; }
-.activityTable th { height: 37px; padding: 0 13px; color: #7e8898; background: #fafbfd; font-size: 8.5px; text-align: left; text-transform: uppercase; letter-spacing: .035em; }
-.activityTable td { min-height: 52px; padding: 10px 13px; border-top: 1px solid #edf0f4; color: #596578; font-size: 9.5px; }
-.activityTable td strong, .activityTable td small { display: block; }
-.activityTable td strong { color: #344055; font-size: 10px; }
-.activityTable td small { margin-top: 2px; color: #9099a6; font-size: 8px; }
-.activityTable code { color: #48566b; font-size: 8.5px; }
-.activityAction { display: inline-flex; padding: 4px 7px; border-radius: 6px; color: #356493; background: #eef5fc; font-size: 8.5px; font-weight: 650; }
+.activityLoading { display: grid; min-height: 220px; margin-top: 15px; place-items: center; border: 1px solid var(--audit-line); border-radius: 12px; color: var(--audit-muted); background: #fff; font-size: 10.5px; }
 
 :global(html.dark) .workspace { --audit-navy: #edf3fb; --audit-muted: #93a1b4; --audit-line: #26354a; --audit-soft: #152236; }
 :global(html.dark) .pageHeader h1, :global(html.dark) .metric strong, :global(html.dark) .listHeader strong, :global(html.dark) .deviceCopy strong, :global(html.dark) .userCopy strong { color: #edf3fb; }
-:global(html.dark) .metric, :global(html.dark) .sessionSurface, :global(html.dark) .activityPanel, :global(html.dark) .sessionDialog { background: #101b2b; }
-:global(html.dark) .metric, :global(html.dark) .sessionSurface, :global(html.dark) .activityPanel { border-color: #26354a; }
+:global(html.dark) .metric, :global(html.dark) .sessionSurface, :global(html.dark) .sessionDialog { background: #101b2b; }
+:global(html.dark) .metric, :global(html.dark) .sessionSurface { border-color: #26354a; }
 :global(html.dark) .userRail, :global(html.dark) .tableHead, :global(html.dark) .selectBox select { color: #c5d0df; background: #142135; }
 :global(html.dark) .activeUser, :global(html.dark) .currentSession { background: #142a45; }
 :global(html.dark) .deviceIcon, :global(html.dark) .detailDeviceIcon { border-color: #33445c; background: #17263a; }
 :global(html.dark) .sessionIdBox, :global(html.dark) .detailOwner, :global(html.dark) .confirmNote { background: #152236; }
+:global(html.dark) .activityLoading { background: #101b2b; }
 
 @media (max-width: 1180px) {
   .toolbar { grid-template-columns: minmax(200px, 1fr) 155px auto; }

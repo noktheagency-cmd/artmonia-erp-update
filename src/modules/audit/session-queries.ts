@@ -4,7 +4,7 @@ import { AppRole, Prisma } from "@/generated/prisma/client";
 import { parseSessionDevice } from "@/modules/audit/session-device";
 import type {
   AuthSessionDto,
-  SessionActivityDto,
+  AuditLogDto,
   SessionAuditData,
   SessionDeviceTypeDto,
   SessionUserDto,
@@ -39,7 +39,12 @@ type AuthSessionRow = {
 
 export async function getSessionAuditData(): Promise<SessionAuditData> {
   const actor = await requireErpActor();
-  const canViewAll = actor.roles.includes(AppRole.SUPER_ADMIN);
+  if (!actor.roles.includes(AppRole.SUPER_ADMIN)) {
+    throw new Error("Forbidden");
+  }
+
+  const canViewAll = true;
+  const canViewAudit = true;
   const sessionsPromise = getPrisma().$queryRaw<AuthSessionRow[]>(Prisma.sql`
     select
       s.id::text as "id",
@@ -79,7 +84,6 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     left join erp.roles r on r.id = ur.role_id
     left join erp.auth_session_records sr on sr.id = s.id
     where u.is_active = true
-      and (${canViewAll} or u.id = ${actor.id}::uuid)
       and (s.not_after is null or s.not_after > now())
       and sr.revoked_at is null
     group by
@@ -108,10 +112,7 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     limit 1001
   `);
   const activityPromise = getPrisma().auditLog.findMany({
-    where: canViewAll
-      ? undefined
-      : { actorUserId: actor.id, entityType: "auth_session" },
-    take: 150,
+    take: 200,
     orderBy: { createdAt: "desc" },
     include: { actor: { select: { fullName: true, email: true } } },
   });
@@ -128,16 +129,21 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     generatedAt: generatedAt.toISOString(),
     truncated,
     canViewAll,
+    canViewAudit,
     currentUserId: actor.id,
     currentSessionId: actor.currentSessionId,
     sessions,
     users,
-    activity: activityLogs.map<SessionActivityDto>((log) => ({
+    activity: activityLogs.map<AuditLogDto>((log) => ({
       id: log.id,
       actorName: log.actor?.fullName ?? "Sistem",
       actorEmail: log.actor?.email ?? null,
       action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId,
       reason: log.reason,
+      before: log.beforeJson,
+      after: log.afterJson,
       ipAddress: log.ipAddress,
       createdAt: log.createdAt.toISOString(),
     })),

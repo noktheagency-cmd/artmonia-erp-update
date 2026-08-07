@@ -36,20 +36,6 @@ export type RoleUserDto = {
   roleIds: string[];
 };
 
-export type AuditLogDto = {
-  id: string;
-  actorName: string;
-  actorEmail: string | null;
-  action: string;
-  entityType: string;
-  entityId: string | null;
-  reason: string | null;
-  before: unknown;
-  after: unknown;
-  ipAddress: string | null;
-  createdAt: string;
-};
-
 export type PermissionDefinitionDto = {
   code: PermissionCode;
   module: string;
@@ -61,6 +47,7 @@ export type PermissionDefinitionDto = {
   description: string;
   sensitive: boolean;
   superAdminManaged: boolean;
+  superAdminOnly: boolean;
   supportsScope: boolean;
   dependsOn: PermissionCode | null;
 };
@@ -69,11 +56,9 @@ export type RolePermissionMatrix = {
   roles: RoleSummaryDto[];
   users: RoleUserDto[];
   definitions: PermissionDefinitionDto[];
-  auditLogs: AuditLogDto[];
   canManage: boolean;
   canManageSuperAdminPermissions: boolean;
   canManageUsers: boolean;
-  canViewAudit: boolean;
 };
 
 export type UpdateRolePermissionsResult =

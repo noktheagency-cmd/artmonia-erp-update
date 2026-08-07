@@ -24,6 +24,7 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -199,6 +200,7 @@ export function CorporateCustomerWorkspace({
                 <th>Əlaqəli şəxslər</th>
                 <th>Aylıq büdcə</th>
                 <th>Müqavilə dəyəri</th>
+                <th>Ödəniş tarixi</th>
                 <th>Status</th>
                 <th>Son yenilənmə</th>
                 {data.permissions.canManage ? <th><span className="sr-only">Əməliyyatlar</span></th> : null}
@@ -216,7 +218,7 @@ export function CorporateCustomerWorkspace({
               ))}
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={data.permissions.canManage ? 7 : 6} className="corporate-empty-cell">
+                  <td colSpan={data.permissions.canManage ? 8 : 7} className="corporate-empty-cell">
                     <Building2 />
                     <strong>{data.customers.length ? "Uyğun şirkət tapılmadı" : "Korporativ müştəri yoxdur"}</strong>
                     <span>{data.customers.length ? "Axtarış və filtrləri dəyişin." : "İlk şirkəti və əlaqəli şəxsləri əlavə edin."}</span>
@@ -330,6 +332,7 @@ function CorporateCustomerTableRow({
       </td>
       <td className="corporate-money"><strong>{formatCurrency(customer.monthlyBudget)}</strong></td>
       <td className="corporate-money">{customer.contractValue === null ? "—" : formatCurrency(customer.contractValue)}</td>
+      <td className="corporate-payment-date">{formatDate(customer.paymentDate)}</td>
       <td><Badge variant="outline" className={`corporate-status ${statusMeta[customer.status].className}`}>{statusMeta[customer.status].label}</Badge></td>
       <td className="corporate-updated">{formatUpdatedAt(customer.updatedAt)}</td>
       {canManage ? (
@@ -442,6 +445,15 @@ export function CorporateCustomerDialog({
                 <span className="corporate-money-input"><Input name="contractValue" type="number" defaultValue={customer?.contractValue ?? ""} min="0" max="1000000000" step="0.01" placeholder="Məsələn: 42 000" /><i>₼</i></span>
               </label>
             </div>
+            <label>
+              <span>Ödəniş tarixi <small>İstəyə bağlı</small></span>
+              <DatePicker
+                name="paymentDate"
+                defaultValue={customer?.paymentDate}
+                aria-label="Ödəniş tarixi"
+                popoverPlacement="floating"
+              />
+            </label>
             <label>
               <span>Qeyd</span>
               <textarea name="note" defaultValue={customer?.note} maxLength={2000} placeholder="Əlavə qeydlər (istəyə bağlı)" />
@@ -571,6 +583,12 @@ function formatUpdatedAt(value: string) {
   const minute = String(bakuTime.getUTCMinutes()).padStart(2, "0");
 
   return `${day} ${month} ${year}, ${hour}:${minute}`;
+}
+
+function formatDate(value: string) {
+  if (!value) return "—";
+  const [year, month, day] = value.split("-");
+  return `${day}.${month}.${year}`;
 }
 
 function initials(value: string) {

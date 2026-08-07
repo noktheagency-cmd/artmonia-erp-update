@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppRole, Prisma } from "@/generated/prisma/client";
+import { isProtectedTeamRole } from "@/lib/protected-roles";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { persistStandaloneUser } from "@/modules/roles/standalone-user-service";
 import type { CreateRoleResult, DeleteRoleResult, RoleSummaryDto, RoleUserDto, UpdateRolePermissionsResult } from "@/modules/roles/types";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
-import { isPermissionCode, isSuperAdminManagedPermission, permissionDefinitions, type PermissionCode, type PermissionScope } from "@/server/rbac/permissions";
+import { isPermissionCode, isSuperAdminManagedPermission, isSuperAdminOnlyPermission, permissionDefinitions, type PermissionCode, type PermissionScope } from "@/server/rbac/permissions";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
 
 type SubmittedGrant = { code?: unknown; scope?: unknown };
@@ -32,7 +33,7 @@ async function createStandaloneUserActionImpl(formData: FormData) {
     prisma.user.findUnique({ where: { email: input.email }, select: { id: true } }),
   ]);
 
-  if (!role || role.code === AppRole.SUPER_ADMIN) {
+  if (!role || isProtectedTeamRole(role.code)) {
     throw new PublicActionError("Seçilmiş rol tapılmadı və ya bu ekrandan təyin edilə bilməz", "NOT_FOUND");
   }
   if (existingUser) {
@@ -114,7 +115,7 @@ export async function updateRolePermissionsAction(formData: FormData): Promise<U
       if (role.updatedAt.toISOString() !== expectedUpdatedAt) return { kind: "CONFLICT" as const };
       if (!canManageSuperAdminPermissions) {
         for (const { permission, scope } of role.permissions) {
-          if (isPermissionCode(permission.code) && isSuperAdminManagedPermission(permission.code)) {
+          if (isPermissionCode(permission.code) && isSuperAdminManagedPermission(permission.code) && !isSuperAdminOnlyPermission(permission.code)) {
             normalized.set(permission.code, scope as PermissionScope);
           }
         }
@@ -167,9 +168,9 @@ export async function createRoleAction(formData: FormData): Promise<CreateRoleRe
       } else if (source?.permissions.length) {
         const copiedPermissions = source.permissions.filter(
           ({ permission }) =>
-            canManageSuperAdminPermissions
-            || !isPermissionCode(permission.code)
-            || !isSuperAdminManagedPermission(permission.code),
+            !isPermissionCode(permission.code)
+            || (!isSuperAdminOnlyPermission(permission.code)
+              && (canManageSuperAdminPermissions || !isSuperAdminManagedPermission(permission.code))),
         );
         if (copiedPermissions.length) {
           await tx.rolePermission.createMany({ data: copiedPermissions.map((grant) => ({ roleId: role.id, permissionId: grant.permissionId, scope: grant.scope })) });
@@ -219,7 +220,7 @@ export async function deleteRoleAction(formData: FormData): Promise<DeleteRoleRe
 
     const assignedUsers = role.users.map(({ user }) => user);
     const members = assignedUsers
-      .filter((user) => !user.roles.some(({ role: assignedRole }) => assignedRole.code === AppRole.SUPER_ADMIN));
+      .filter((user) => !user.roles.some(({ role: assignedRole }) => isProtectedTeamRole(assignedRole.code)));
     const protectedUserCount = assignedUsers.length - members.length;
     if (members.some((user) => user.id === actor.id)) {
       return failure("FORBIDDEN", "Hazırda daxil olduğunuz hesabın rolunu bu ekrandan silə bilməzsiniz.");
@@ -369,8 +370,8 @@ export async function updateRoleUserAction(formData: FormData) {
       },
     });
     if (!user) return failure("NOT_FOUND", "Profil tapılmadı.");
-    if (user.roles.some(({ role }) => role.code === AppRole.SUPER_ADMIN)) {
-      return failure("FORBIDDEN", "Super Admin profili bu ekrandan dəyişdirilə bilməz.");
+    if (user.roles.some(({ role }) => isProtectedTeamRole(role.code))) {
+      return failure("FORBIDDEN", "Rəhbər profili bu ekrandan dəyişdirilə bilməz.");
     }
 
     const [nextRoles, emailOwner] = await Promise.all([
@@ -386,7 +387,7 @@ export async function updateRoleUserAction(formData: FormData) {
         select: { id: true },
       }),
     ]);
-    if (nextRoles.length !== roleIds.length || nextRoles.some((role) => role.code === AppRole.SUPER_ADMIN)) {
+    if (nextRoles.length !== roleIds.length || nextRoles.some((role) => isProtectedTeamRole(role.code))) {
       return failure("VALIDATION", "Seçilmiş rollardan biri etibarlı deyil.");
     }
     if (emailOwner) {
@@ -506,6 +507,7 @@ function normalizeGrants(submitted: SubmittedGrant[], includeSuperAdminManaged: 
   for (const grant of submitted) {
     const code = String(grant.code ?? "");
     if (!isPermissionCode(code)) continue;
+    if (isSuperAdminOnlyPermission(code)) continue;
     if (!includeSuperAdminManaged && isSuperAdminManagedPermission(code)) continue;
     const definition = definitions.get(code);
     const supportsScope = definition && "supportsScope" in definition && definition.supportsScope;

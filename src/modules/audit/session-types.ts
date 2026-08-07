@@ -34,12 +34,16 @@ export type SessionUserDto = {
   lastSeenAt: string | null;
 };
 
-export type SessionActivityDto = {
+export type AuditLogDto = {
   id: string;
   actorName: string;
   actorEmail: string | null;
   action: string;
+  entityType: string;
+  entityId: string | null;
   reason: string | null;
+  before: unknown;
+  after: unknown;
   ipAddress: string | null;
   createdAt: string;
 };
@@ -48,11 +52,12 @@ export type SessionAuditData = {
   generatedAt: string;
   truncated: boolean;
   canViewAll: boolean;
+  canViewAudit: boolean;
   currentUserId: string;
   currentSessionId: string | null;
   sessions: AuthSessionDto[];
   users: SessionUserDto[];
-  activity: SessionActivityDto[];
+  activity: AuditLogDto[];
   summary: {
     activeSessions: number;
     activeUsers: number;

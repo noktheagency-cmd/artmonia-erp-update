@@ -1,3 +1,4 @@
+import { AppRole } from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 
@@ -49,7 +50,7 @@ export async function getHrEmployeeData(): Promise<HrEmployeeData> {
   const [employees, lookups, roles] = await Promise.all([
     getPrisma().hrEmployee.findMany({ include: { teacher: true, user: { include: { roles: { include: { role: true } } } } }, orderBy: [{ status: "asc" }, { updatedAt: "desc" }], take: 500 }),
     getPrisma().hrLookupOption.findMany({ where: { isActive: true }, orderBy: [{ kind: "asc" }, { name: "asc" }] }),
-    canCreateAccount ? getPrisma().role.findMany({ where: { OR: [{ code: null }, { code: { not: "SUPER_ADMIN" } }] }, orderBy: [{ isSystem: "desc" }, { name: "asc" }] }) : Promise.resolve([]),
+    canCreateAccount ? getPrisma().role.findMany({ where: { OR: [{ code: null }, { code: { notIn: [AppRole.SUPER_ADMIN, AppRole.ADMIN] } }] }, orderBy: [{ isSystem: "desc" }, { name: "asc" }] }) : Promise.resolve([]),
   ]);
   const employeeRows: HrEmployeeRow[] = employees.map((employee) => ({
     id: employee.id,

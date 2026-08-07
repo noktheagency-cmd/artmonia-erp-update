@@ -4,6 +4,7 @@ import { AppRole } from "@/generated/prisma/client";
 import {
   buildEffectivePermissions,
   getPermissionsForRoles,
+  isSuperAdminOnlyPermission,
   permissionDefinitions,
   rolePermissionMap,
 } from "@/server/rbac/permissions";
@@ -38,6 +39,14 @@ test("Guideline access defaults to Super Admin only", () => {
   assert.equal(getPermissionsForRoles([AppRole.SUPER_ADMIN]).has("playbook.guideline.read"), true);
   for (const role of Object.values(AppRole).filter((role) => role !== AppRole.SUPER_ADMIN)) {
     assert.equal(getPermissionsForRoles([role]).has("playbook.guideline.read"), false, role);
+  }
+});
+
+test("Audit and security access defaults to Super Admin only", () => {
+  assert.equal(isSuperAdminOnlyPermission("audit.read"), true);
+  assert.equal(getPermissionsForRoles([AppRole.SUPER_ADMIN]).has("audit.read"), true);
+  for (const role of Object.values(AppRole).filter((role) => role !== AppRole.SUPER_ADMIN)) {
+    assert.equal(getPermissionsForRoles([role]).has("audit.read"), false, role);
   }
 });
 

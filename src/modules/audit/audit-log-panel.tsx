@@ -21,9 +21,9 @@ import {
   getAuditDisplayChanges,
   getAuditEntityLabel,
   localizeAuditReason,
-} from "@/modules/roles/audit-log-localization";
-import type { AuditLogDto } from "@/modules/roles/types";
-import styles from "./role-permissions.module.css";
+} from "@/modules/audit/audit-log-localization";
+import type { AuditLogDto } from "@/modules/audit/session-types";
+import styles from "./audit-log.module.css";
 
 export function AuditLogPanel({ logs }: { logs: AuditLogDto[] }) {
   const [query, setQuery] = useState("");

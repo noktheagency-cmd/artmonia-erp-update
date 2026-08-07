@@ -13,6 +13,11 @@ const optionalMoneySchema = z.preprocess(
   z.coerce.number().nonnegative().max(1_000_000_000).nullable(),
 );
 
+const optionalDateSchema = z.string().trim().refine(
+  (value) => value === "" || isValidDateKey(value),
+  "Ödəniş tarixi düzgün deyil",
+);
+
 const contactsSchema = z.preprocess((value) => {
   if (typeof value !== "string") return value;
   try {
@@ -47,6 +52,7 @@ const customerSchema = z.object({
   status: z.nativeEnum(HrCorporateCustomerStatus),
   monthlyBudget: z.coerce.number().positive("Aylıq büdcə sıfırdan böyük olmalıdır").max(1_000_000_000),
   contractValue: optionalMoneySchema,
+  paymentDate: optionalDateSchema,
   note: z.string().trim().max(2000),
   contacts: contactsSchema,
 }).superRefine((value, context) => {
@@ -81,10 +87,19 @@ async function createCorporateCustomerActionImpl(formData: FormData) {
         status: input.status,
         monthlyBudget: input.monthlyBudget,
         contractValue: input.contractValue,
+        paymentDate: parseOptionalDate(input.paymentDate),
         note: input.note || null,
         createdById: actor.id,
       },
-      select: { id: true, name: true, taxId: true, status: true, monthlyBudget: true, contractValue: true },
+      select: {
+        id: true,
+        name: true,
+        taxId: true,
+        status: true,
+        monthlyBudget: true,
+        contractValue: true,
+        paymentDate: true,
+      },
     });
 
     await tx.hrCorporateContact.createMany({
@@ -109,6 +124,7 @@ async function createCorporateCustomerActionImpl(formData: FormData) {
         status: created.status,
         monthlyBudget: String(created.monthlyBudget),
         contractValue: created.contractValue === null ? null : String(created.contractValue),
+        paymentDate: dateKey(created.paymentDate),
         contactCount: input.contacts.length,
       } as Prisma.InputJsonValue,
       reason: "Korporativ müştəri yaradıldı",
@@ -139,6 +155,7 @@ async function updateCorporateCustomerActionImpl(formData: FormData) {
       status: true,
       monthlyBudget: true,
       contractValue: true,
+      paymentDate: true,
       note: true,
       contacts: {
         select: { id: true, fullName: true, position: true, phone: true, email: true, isPrimary: true },
@@ -158,9 +175,18 @@ async function updateCorporateCustomerActionImpl(formData: FormData) {
         status: input.status,
         monthlyBudget: input.monthlyBudget,
         contractValue: input.contractValue,
+        paymentDate: parseOptionalDate(input.paymentDate),
         note: input.note || null,
       },
-      select: { id: true, name: true, taxId: true, status: true, monthlyBudget: true, contractValue: true },
+      select: {
+        id: true,
+        name: true,
+        taxId: true,
+        status: true,
+        monthlyBudget: true,
+        contractValue: true,
+        paymentDate: true,
+      },
     });
 
     await tx.hrCorporateContact.deleteMany({ where: { customerId: input.id } });
@@ -186,6 +212,7 @@ async function updateCorporateCustomerActionImpl(formData: FormData) {
         status: before.status,
         monthlyBudget: String(before.monthlyBudget),
         contractValue: before.contractValue === null ? null : String(before.contractValue),
+        paymentDate: dateKey(before.paymentDate),
         contactCount: before.contacts.length,
       } as Prisma.InputJsonValue,
       after: {
@@ -194,6 +221,7 @@ async function updateCorporateCustomerActionImpl(formData: FormData) {
         status: updated.status,
         monthlyBudget: String(updated.monthlyBudget),
         contractValue: updated.contractValue === null ? null : String(updated.contractValue),
+        paymentDate: dateKey(updated.paymentDate),
         contactCount: input.contacts.length,
       } as Prisma.InputJsonValue,
       reason: "Korporativ müştəri yeniləndi",
@@ -244,6 +272,20 @@ async function ensureTaxIdAvailable(taxId: string, excludedId?: string) {
     select: { id: true },
   });
   if (existing) throw new PublicActionError("Bu VÖEN ilə şirkət artıq mövcuddur", "DUPLICATE");
+}
+
+function isValidDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function parseOptionalDate(value: string) {
+  return value ? new Date(`${value}T00:00:00.000Z`) : null;
+}
+
+function dateKey(value: Date | null) {
+  return value?.toISOString().slice(0, 10) ?? null;
 }
 
 export const createCorporateCustomerAction = safeServerAction(

@@ -432,6 +432,7 @@ model HrCorporateCustomer {
   status        HrCorporateCustomerStatus @default(ACTIVE)
   monthlyBudget Decimal                   @map("monthly_budget") @db.Decimal(14, 2)
   contractValue Decimal?                  @map("contract_value") @db.Decimal(14, 2)
+  paymentDate   DateTime?                 @map("payment_date") @db.Date
   note          String?
   createdById   String?                   @map("created_by_id") @db.Uuid
   createdAt     DateTime                  @default(now()) @map("created_at")
@@ -1888,6 +1889,7 @@ model AuditLog {
 
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
+  @@index([createdAt(sort: Desc)])
   @@map("audit_logs")
   @@schema("erp")
 }

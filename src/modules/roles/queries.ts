@@ -1,4 +1,5 @@
 import { AppRole } from "@/generated/prisma/client";
+import { isProtectedTeamRole } from "@/lib/protected-roles";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import {
@@ -20,7 +21,7 @@ const roleOrder: AppRole[] = [
 
 export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
   const actor = await requireErpActor("auth.role.read");
-  const [roles, users, auditLogs] = await Promise.all([
+  const [roles, users] = await Promise.all([
     getPrisma().role.findMany({
       include: {
         _count: { select: { users: true } },
@@ -51,11 +52,6 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
         },
       },
     }),
-    actor.permissions.has("audit.read") ? getPrisma().auditLog.findMany({
-      take: 200,
-      orderBy: { createdAt: "desc" },
-      include: { actor: { select: { fullName: true, email: true } } },
-    }) : Promise.resolve([]),
   ]);
 
   const roleRank = new Map(roleOrder.map((role, index) => [role, index]));
@@ -94,21 +90,8 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
       position: user.hrEmployeeProfile?.position ?? "Giriş profili",
       isActive: user.isActive && user.hrEmployeeProfile?.status !== "INACTIVE",
       hasLogin: Boolean(user.authUserId),
-      isProtected: user.roles.some(({ role }) => role.code === AppRole.SUPER_ADMIN),
+      isProtected: user.roles.some(({ role }) => isProtectedTeamRole(role.code)),
       roleIds: user.roles.map((role) => role.roleId),
-    })),
-    auditLogs: auditLogs.map((log) => ({
-      id: log.id,
-      actorName: log.actor?.fullName ?? "Sistem",
-      actorEmail: log.actor?.email ?? null,
-      action: log.action,
-      entityType: log.entityType,
-      entityId: log.entityId,
-      reason: log.reason,
-      before: log.beforeJson,
-      after: log.afterJson,
-      ipAddress: log.ipAddress,
-      createdAt: log.createdAt.toISOString(),
     })),
     definitions: permissionDefinitions.map((definition) => ({
       code: definition.code,
@@ -121,6 +104,7 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
       description: definition.description,
       sensitive: "sensitive" in definition ? Boolean(definition.sensitive) : false,
       superAdminManaged: "superAdminManaged" in definition ? Boolean(definition.superAdminManaged) : false,
+      superAdminOnly: "superAdminOnly" in definition ? Boolean(definition.superAdminOnly) : false,
       supportsScope: "supportsScope" in definition ? Boolean(definition.supportsScope) : false,
       dependsOn:
         "dependsOn" in definition && isPermissionCode(definition.dependsOn)
@@ -130,6 +114,5 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
     canManage: actor.permissions.has("auth.role.manage"),
     canManageSuperAdminPermissions: actor.roles.includes(AppRole.SUPER_ADMIN),
     canManageUsers: actor.permissions.has("auth.user.manage"),
-    canViewAudit: actor.permissions.has("audit.read"),
   };
 }

@@ -48,6 +48,7 @@ type NavItem = {
   label: string;
   icon: typeof Gauge;
   requiredPermissions: string[];
+  requiredRoles?: string[];
 };
 
 const primaryNavItems: NavItem[] = [
@@ -55,12 +56,12 @@ const primaryNavItems: NavItem[] = [
   { href: "/crm", label: "Follow-up", icon: UsersRound, requiredPermissions: ["crm.lead.read"] },
   { href: "/finance", label: "Maliyyə", icon: CreditCard, requiredPermissions: ["billing.invoice.read", "billing.payment.read", "billing.expense.read"] },
   { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness, requiredPermissions: ["hr.employee.read", "teacher.read", "hr.corporate.read", "hr.bonus.read"] },
-  { href: "/groups" as Route, label: "Qruplar", icon: CalendarDays, requiredPermissions: ["group.read", "attendance.read"] },
+  { href: "/groups" as Route, label: "Slotlar", icon: CalendarDays, requiredPermissions: ["group.read", "attendance.read"] },
   { href: "/tasks" as Route, label: "Tasklar", icon: ListTodo, requiredPermissions: ["task.read"] },
 ];
 
 const secondaryNavItems: NavItem[] = [
-  { href: "/audit" as Route, label: "Audit və təhlükəsizlik", icon: ShieldCheck, requiredPermissions: [] },
+  { href: "/audit" as Route, label: "Audit və təhlükəsizlik", icon: ShieldCheck, requiredPermissions: [], requiredRoles: ["SUPER_ADMIN"] },
   { href: "/marketing" as Route, label: "Marketing", icon: Megaphone, requiredPermissions: ["marketing.read"] },
   { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText, requiredPermissions: ["playbook.read"] },
   { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation, requiredPermissions: ["workshop.read"] },
@@ -105,9 +106,11 @@ export function AppShell({
   const activePendingHref = pendingHref && pendingHref !== currentHref ? pendingHref : null;
   const isNavigating = Boolean(activePendingHref);
   const permissionSet = new Set(currentUser.permissions);
+  const roleSet = new Set(currentUser.roles);
   const isVisible = (item: NavItem) =>
-    item.requiredPermissions.length === 0 ||
-    item.requiredPermissions.some((permission) => permissionSet.has(permission));
+    (!item.requiredRoles || item.requiredRoles.some((role) => roleSet.has(role))) &&
+    (item.requiredPermissions.length === 0 ||
+      item.requiredPermissions.some((permission) => permissionSet.has(permission)));
   const visiblePrimaryNavItems = primaryNavItems.filter(isVisible);
   const visibleSecondaryNavItems = secondaryNavItems.filter(isVisible);
   const mobileNavCandidates = [

@@ -43,6 +43,9 @@ export async function revokeSessionAction(input: {
 
   try {
     const actor = await requireErpActor();
+    if (!actor.roles.includes(AppRole.SUPER_ADMIN)) {
+      return { ok: false, code: "FORBIDDEN", message: "Bu bölmə yalnız Super Admin üçündür." };
+    }
     if (!actor.currentSessionId) {
       return { ok: false, code: "FORBIDDEN", message: "Təhlükəsiz giriş sessiyası tapılmadı." };
     }
@@ -82,6 +85,9 @@ export async function revokeOtherSessionsAction(input: {
 
   try {
     const actor = await requireErpActor();
+    if (!actor.roles.includes(AppRole.SUPER_ADMIN)) {
+      return { ok: false, code: "FORBIDDEN", message: "Bu bölmə yalnız Super Admin üçündür." };
+    }
     if (!actor.currentSessionId) {
       return { ok: false, code: "FORBIDDEN", message: "Təhlükəsiz giriş sessiyası tapılmadı." };
     }
@@ -231,9 +237,9 @@ async function loadTargetSessionsForUser(userId: string, preserveSessionId: stri
 
 function canManageTarget(
   actor: Awaited<ReturnType<typeof requireErpActor>>,
-  targetUserId: string,
+  _targetUserId: string,
 ) {
-  return actor.id === targetUserId || actor.roles.includes(AppRole.SUPER_ADMIN);
+  return actor.roles.includes(AppRole.SUPER_ADMIN);
 }
 
 function defaultReason(ownSession: boolean) {

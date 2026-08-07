@@ -16,6 +16,7 @@ export type PermissionDefinitionShape = {
   description: string;
   sensitive?: boolean;
   superAdminManaged?: boolean;
+  superAdminOnly?: boolean;
   supportsScope?: boolean;
   dependsOn?: string;
 };
@@ -88,7 +89,7 @@ export const permissionDefinitions = define([
   { code: "playbook.manage", module: "playbook", moduleLabel: "Playbook", tab: "library", tabLabel: "Sənədlər", action: "special", actionLabel: "Sənədləri idarə edə bilər", description: "Sənəd və departamentləri idarə etmək", dependsOn: "playbook.read" },
   { code: "report.read", module: "reports", moduleLabel: "Hesabatlar", tab: "reports", tabLabel: "Hesabatlar", action: "read", actionLabel: "Görə bilər", description: "Hesabat ekranını görmək" },
   { code: "report.export", module: "reports", moduleLabel: "Hesabatlar", tab: "reports", tabLabel: "Hesabatlar", action: "export", actionLabel: "İxrac edə bilər", description: "Excel/PDF ixrac etmək", sensitive: true, dependsOn: "report.read" },
-  { code: "audit.read", module: "audit", moduleLabel: "Fəaliyyət jurnalı", tab: "logs", tabLabel: "Jurnal qeydləri", action: "read", actionLabel: "Görə bilər", description: "Fəaliyyət qeydlərini görmək", sensitive: true },
+  { code: "audit.read", module: "audit", moduleLabel: "Audit və təhlükəsizlik", tab: "logs", tabLabel: "Fəaliyyət jurnalı", action: "read", actionLabel: "Görə bilər", description: "Bütün əməkdaşların fəaliyyət qeydlərini görmək", sensitive: true, superAdminManaged: true, superAdminOnly: true },
 
   { code: "auth.user.read", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "read", actionLabel: "Görə bilər", description: "ERP istifadəçilərini görmək", sensitive: true },
   { code: "auth.user.manage", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "special", actionLabel: "İstifadəçiləri idarə edə bilər", description: "ERP istifadəçilərini idarə etmək", sensitive: true, dependsOn: "auth.user.read" },
@@ -114,6 +115,14 @@ const legacyRolePermissionMap: Record<AppRole, PermissionCode[]> = {
   [AppRole.TEACHER]: ["group.read", "attendance.read", "attendance.manage", "dashboard.teacher.read", "hr.bonus.read", "task.read", "task.manage", "playbook.read"],
   [AppRole.AUDITOR]: ["student.read", "billing.invoice.read", "billing.payment.read", "billing.expense.read", "workshop.read", "workshop.finance.read", "teacher.read", "hr.employee.read", "dashboard.owner.read", "dashboard.sales.read", "dashboard.finance.read", "dashboard.teacher.read", "report.read", "audit.read", "playbook.read"],
 };
+
+for (const role of Object.values(AppRole)) {
+  if (role !== AppRole.SUPER_ADMIN) {
+    legacyRolePermissionMap[role] = legacyRolePermissionMap[role].filter(
+      (code) => code !== "audit.read",
+    );
+  }
+}
 
 legacyRolePermissionMap[AppRole.OWNER].unshift("hr.bonus.read", "hr.bonus.manage", "hr.bonus.approve");
 legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.bonus.read", "hr.bonus.manage", "hr.bonus.approve");
@@ -171,6 +180,11 @@ const superAdminManagedPermissionCodeSet = new Set<PermissionCode>(
     "superAdminManaged" in definition && definition.superAdminManaged ? [definition.code] : [],
   ),
 );
+const superAdminOnlyPermissionCodeSet = new Set<PermissionCode>(
+  permissionDefinitions.flatMap((definition) =>
+    "superAdminOnly" in definition && definition.superAdminOnly ? [definition.code] : [],
+  ),
+);
 
 export function isPermissionCode(value: string): value is PermissionCode {
   return permissionCodeSet.has(value);
@@ -178,6 +192,10 @@ export function isPermissionCode(value: string): value is PermissionCode {
 
 export function isSuperAdminManagedPermission(code: PermissionCode) {
   return superAdminManagedPermissionCodeSet.has(code);
+}
+
+export function isSuperAdminOnlyPermission(code: PermissionCode) {
+  return superAdminOnlyPermissionCodeSet.has(code);
 }
 
 export function scopeFor(permissions: EffectivePermissions, permission: PermissionCode) {

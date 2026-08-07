@@ -511,6 +511,258 @@
   }
 }
 
+/* Slot-only planner refinements */
+.filterBand .search {
+  flex: 1 1 320px;
+}
+
+.member {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.member:hover:not(:disabled) {
+  background: #f7faff;
+}
+
+.member:focus-visible {
+  outline: 2px solid var(--p-blue);
+  outline-offset: -2px;
+}
+
+.member:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.attendanceDialog {
+  width: min(900px, calc(100vw - 28px));
+  max-width: 900px;
+  max-height: min(90dvh, 820px);
+  overflow: hidden;
+}
+
+.attendanceForm {
+  display: grid;
+  min-height: 0;
+}
+
+.attendanceToolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--p-line);
+}
+
+.attendanceToolbar label {
+  display: grid;
+  gap: 6px;
+}
+
+.attendanceToolbar label span {
+  color: var(--p-muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.attendanceToolbar input {
+  height: 40px;
+  padding: 0 10px;
+  color: var(--p-ink);
+  background: #fff;
+  border: 1px solid var(--p-line);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.attendanceStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attendanceStats span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  color: #59677e;
+  background: #f6f8fb;
+  border: 1px solid var(--p-line);
+  border-radius: 9px;
+  font-size: 10px;
+}
+
+.attendanceStats span[data-state="present"] {
+  color: #137552;
+  background: #eff9f5;
+  border-color: #c9e9dc;
+}
+
+.attendanceStats span[data-state="absent"] {
+  color: #b64642;
+  background: #fff4f3;
+  border-color: #f0cfcc;
+}
+
+.attendanceList {
+  display: grid;
+  min-height: 120px;
+  max-height: 480px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.attendanceRow {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) auto minmax(150px, .8fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.attendanceStudent {
+  min-width: 0;
+}
+
+.attendanceStudent strong,
+.attendanceStudent small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendanceStudent strong {
+  font-size: 11px;
+}
+
+.attendanceStudent small {
+  margin-top: 3px;
+  color: var(--p-muted);
+  font-size: 9px;
+}
+
+.attendanceMarks {
+  display: flex;
+  gap: 5px;
+}
+
+.attendanceMarks button {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: #647086;
+  background: #fff;
+  border: 1px solid var(--p-line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.attendanceMarks button[data-state="present"][data-active] {
+  color: #0f7652;
+  background: #eaf8f2;
+  border-color: #76c7aa;
+}
+
+.attendanceMarks button[data-state="absent"][data-active] {
+  color: #b43f3b;
+  background: #fff0ef;
+  border-color: #e8aaa6;
+}
+
+.attendanceMarks .clearMark {
+  width: 34px;
+  padding: 0;
+}
+
+.attendanceNote {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  color: var(--p-ink);
+  background: #fff;
+  border: 1px solid var(--p-line);
+  border-radius: 8px;
+  outline: none;
+  font: inherit;
+  font-size: 10px;
+}
+
+.attendanceNote:focus {
+  border-color: #8bb5f4;
+  box-shadow: 0 0 0 3px rgba(23, 105, 232, .1);
+}
+
+.emptyAttendance {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+  color: var(--p-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.attendanceFooter {
+  padding-top: 16px;
+  border-top: 1px solid var(--p-line);
+}
+
+@media(max-width:760px) {
+  .attendanceDialog {
+    max-height: 92dvh;
+    overflow-y: auto;
+  }
+
+  .attendanceToolbar,
+  .attendanceStats {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .attendanceStats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .attendanceStats span {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .attendanceList {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .attendanceRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .attendanceMarks,
+  .attendanceNote {
+    grid-column: 1 / -1;
+  }
+
+  .attendanceMarks button:not(.clearMark) {
+    flex: 1;
+  }
+}
+
 @media(prefers-reduced-motion:reduce) {
   .slotChoice {
     transition: none;
@@ -636,5 +888,33 @@
   .slotDialogActions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Keep the planning dialog footer visible at laptop and mobile heights. */
+.assignmentDialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.assignmentForm {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.assignmentBody {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media(max-width:640px) {
+  .filterBand .search {
+    min-height: 40px;
+    flex: 0 0 auto;
   }
 }

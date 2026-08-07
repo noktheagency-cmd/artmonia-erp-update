@@ -22,6 +22,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,12 +40,16 @@ import {
 } from "@/modules/audit/session-actions";
 import type {
   AuthSessionDto,
-  SessionActivityDto,
   SessionAuditData,
   SessionDeviceTypeDto,
   SessionUserDto,
 } from "@/modules/audit/session-types";
 import styles from "./session-audit.module.css";
+
+const AuditLogPanel = dynamic(
+  () => import("@/modules/audit/audit-log-panel").then((module) => module.AuditLogPanel),
+  { loading: () => <div className={styles.activityLoading}>Fəaliyyət jurnalı yüklənir...</div> },
+);
 
 type RevokeIntent =
   | { kind: "SESSION"; session: AuthSessionDto }
@@ -174,7 +179,9 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
           <p>Aktiv girişləri izləyin, cihazları yoxlayın və şübhəli sessiyaları dərhal bağlayın.</p>
         </div>
         <span className={styles.scopeLabel}>
-          <ShieldCheck /> {initialData.canViewAll ? "Bütün əməkdaşlar" : "Yalnız mənim sessiyalarım"}
+          <ShieldCheck /> {tab === "ACTIVITY"
+            ? initialData.canViewAudit ? "Bütün əməliyyatlar" : "Mənim təhlükəsizlik qeydlərim"
+            : initialData.canViewAll ? "Bütün əməkdaşlar" : "Yalnız mənim sessiyalarım"}
         </span>
       </header>
 
@@ -336,7 +343,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
           </section>
         </>
       ) : (
-        <ActivityPanel activity={initialData.activity} canViewAll={initialData.canViewAll} />
+        <AuditLogPanel logs={initialData.activity} />
       )}
 
       <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSession(null)}>
@@ -442,27 +449,6 @@ function SessionRow({ session, referenceTime, onSelect, onRevoke }: { session: A
   );
 }
 
-function ActivityPanel({ activity, canViewAll }: { activity: SessionActivityDto[]; canViewAll: boolean }) {
-  return (
-    <section className={styles.activityPanel}>
-      <header><div><History /><span><strong>Fəaliyyət jurnalı</strong><small>{canViewAll ? "Sistemdəki son əməliyyatlar" : "Sizin giriş və sessiya əməliyyatlarınız"}</small></span></div><span>{activity.length} qeyd</span></header>
-      <div className={styles.activityTableWrap}>
-        <table className={styles.activityTable}>
-          <thead><tr><th>Tarix və saat</th><th>İstifadəçi</th><th>Əməliyyat</th><th>Səbəb</th><th>IP ünvanı</th></tr></thead>
-          <tbody>{activity.map((item) => <tr key={item.id}>
-            <td><strong>{formatDateTime(item.createdAt)}</strong></td>
-            <td><strong>{item.actorName}</strong><small>{item.actorEmail ?? "Sistem"}</small></td>
-            <td><span className={styles.activityAction}>{activityLabel(item.action)}</span></td>
-            <td>{item.reason ?? "—"}</td>
-            <td><code>{item.ipAddress ?? "—"}</code></td>
-          </tr>)}</tbody>
-        </table>
-        {!activity.length ? <div className={styles.emptyState}><History /><strong>Jurnal qeydi yoxdur</strong><p>Sessiya əməliyyatları burada görünəcək.</p></div> : null}
-      </div>
-    </section>
-  );
-}
-
 function DeviceIcon({ type }: { type: SessionDeviceTypeDto }) {
   if (type === "MOBILE") return <Smartphone />;
   if (type === "TABLET") return <Tablet />;
@@ -523,12 +509,4 @@ function formatRelative(value: string, referenceTime: string) {
   if (difference < 3_600_000) return `${Math.max(1, Math.floor(difference / 60_000))} dəq əvvəl`;
   if (difference < 86_400_000) return `${Math.floor(difference / 3_600_000)} saat əvvəl`;
   return formatCompactDate(value);
-}
-function activityLabel(action: string) {
-  const labels: Record<string, string> = {
-    SESSION_SIGNED_IN: "Yeni giriş",
-    SESSION_SIGNED_OUT: "Çıxış",
-    SESSION_REVOKED: "Sessiya bağlandı",
-  };
-  return labels[action] ?? action.replaceAll("_", " ").toLocaleLowerCase("az");
 }
