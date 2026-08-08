@@ -6,7 +6,6 @@ import {
   EnrollmentStatus,
   LeadStage,
   StudentLifecycleStatus,
-  TaskStatus,
 } from "@/generated/prisma/client";
 import type { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
@@ -21,7 +20,6 @@ import {
   normalizePhone,
 } from "@/modules/crm/duplicate-phone";
 import {
-  formatNextActionTypeLabel,
   leadPriorityOptions,
   nextActionTypeOptions,
 } from "@/modules/crm/follow-up";
@@ -235,21 +233,6 @@ async function createLead(formData: FormData) {
     });
     createdLeadId = lead.id;
 
-    if (followUpAt) {
-      await tx.task.create({
-        data: {
-          title: buildFollowUpTaskTitle(input.fullName, nextActionType),
-          type: "lead_follow_up",
-          entityType: "lead",
-          entityId: lead.id,
-          ownerUserId: managerId,
-          status: TaskStatus.OPEN,
-          dueAt: followUpAt,
-          createdById: actor.id,
-        },
-      });
-    }
-
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "lead.create",
@@ -378,42 +361,6 @@ async function updateLeadActionImpl(formData: FormData) {
           changedById: actor.id,
         },
       });
-    }
-
-    if (followUpAt) {
-      const existingTask = await tx.task.findFirst({
-        where: {
-          entityType: "lead",
-          entityId: input.leadId,
-          type: "lead_follow_up",
-          status: TaskStatus.OPEN,
-        },
-        select: { id: true },
-      });
-
-      if (existingTask) {
-        await tx.task.update({
-          where: { id: existingTask.id },
-          data: {
-            title: buildFollowUpTaskTitle(input.fullName, nextActionType),
-            ownerUserId: managerId,
-            dueAt: followUpAt,
-          },
-        });
-      } else {
-        await tx.task.create({
-          data: {
-            title: buildFollowUpTaskTitle(input.fullName, nextActionType),
-            type: "lead_follow_up",
-            entityType: "lead",
-            entityId: input.leadId,
-            ownerUserId: managerId,
-            status: TaskStatus.OPEN,
-            dueAt: followUpAt,
-            createdById: actor.id,
-          },
-        });
-      }
     }
 
     await writeAuditLog(tx, {
@@ -792,13 +739,6 @@ function safeCrmRedirect(value: string | undefined) {
 function invalidateCrmCaches() {
   updateTag(erpCacheTags.crm);
   updateTag(erpCacheTags.dashboard);
-}
-
-function buildFollowUpTaskTitle(
-  fullName: string,
-  nextActionType: (typeof nextActionTypeOptions)[number] | undefined
-) {
-  return `${formatNextActionTypeLabel(nextActionType)}: ${fullName}`;
 }
 
 function parseFollowUpAt(value: string | undefined) {

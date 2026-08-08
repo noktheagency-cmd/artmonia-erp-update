@@ -189,7 +189,9 @@
 .assignmentSectionHeading {
   display: flex;
   align-items: center;
-  margin: 28px 0 16px;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 20px 0 10px;
 }
 
 .assignmentSectionHeading h3,
@@ -202,36 +204,103 @@
   letter-spacing: -.015em;
 }
 
+.assignmentSectionHeading p {
+  margin: 4px 0 0;
+  color: var(--assignment-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.assignmentSectionHeading > span {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: #52627b;
+  background: #f5f7fa;
+  border: 1px solid #e1e6ee;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.weekdayTabs {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 12px;
+  padding: 5px;
+  background: #f4f6f9;
+  border: 1px solid #e3e8ef;
+  border-radius: 12px;
+}
+
+.weekdayTab {
+  display: flex;
+  min-width: 0;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 7px;
+  color: #647188;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 720;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+
+.weekdayTab:hover {
+  color: #2e3c53;
+  background: rgba(255, 255, 255, .7);
+}
+
+.weekdayTab b {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: #fff;
+  background: #7891b7;
+  border-radius: 50%;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.activeWeekdayTab {
+  color: #1559bf;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(32, 56, 92, .09), inset 0 0 0 1px #dce5f3;
+}
+
+.activeWeekdayTab b {
+  background: var(--assignment-blue);
+}
+
 .slotChoiceGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(118px, 1fr));
-  gap: 12px;
-}
-
-.slotDay {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-}
-
-.slotDay > strong {
-  padding: 0 4px 2px;
-  color: #354157;
-  font-size: 11px;
-  font-weight: 760;
-  text-align: left;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  max-height: 354px;
+  padding: 2px 5px 4px 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .slotChoice {
   position: relative;
   display: grid;
-  gap: 10px;
-  min-height: 112px;
-  padding: 15px 14px;
+  gap: 7px;
+  min-height: 96px;
+  padding: 11px 12px 10px 14px;
   color: var(--assignment-ink);
   text-align: left;
-  background: #fff;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--slot-surface, #fff) 38%, #fff), #fff 86%);
   border: 1px solid #dce3ed;
+  border-left: 3px solid var(--slot-accent, #8aa4c8);
   border-radius: 13px;
   cursor: pointer;
   box-shadow: 0 2px 7px rgba(27, 42, 68, .025);
@@ -239,48 +308,93 @@
 }
 
 .slotChoice:hover:not(:disabled) {
-  border-color: #a9bddb;
-  box-shadow: 0 9px 22px rgba(27, 55, 98, .08);
-  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--slot-accent, #8aa4c8) 55%, #a9bddb);
+  border-left-color: var(--slot-accent, #8aa4c8);
+  box-shadow: 0 8px 18px var(--slot-shadow, rgba(27, 55, 98, .08));
+  transform: translateY(-1px);
 }
 
-.slotChoice > span {
-  padding-right: 26px;
-  font-size: 13px;
-  font-weight: 760;
-}
-
-.slotChoice small,
-.slotChoice b {
+.slotChoiceTop,
+.slotChoiceTeacher,
+.slotChoiceBottom {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  line-height: 1.3;
 }
 
-.slotChoice small svg,
-.slotChoice b svg {
+.slotChoiceTop {
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 24px;
+}
+
+.slotChoiceTop strong {
+  font-size: 12px;
+  font-weight: 790;
+  letter-spacing: -.02em;
+}
+
+.slotChoiceTop em {
+  color: #708097;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 730;
+}
+
+.slotChoiceTeacher {
+  gap: 6px;
+  color: var(--slot-accent-strong, #405a7e);
+}
+
+.slotChoiceTeacher svg,
+.slotChoiceBottom svg {
   position: static;
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
 }
 
-.slotChoice small {
-  color: #5d6d86;
+.slotChoiceTeacher strong {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.slotChoice b {
+.slotChoiceBottom {
+  justify-content: space-between;
+  gap: 8px;
   margin-top: auto;
+}
+
+.slotChoiceBottom small,
+.slotChoiceBottom b {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.slotChoiceBottom small {
+  overflow: hidden;
+  color: #627087;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotChoiceBottom b {
+  flex: 0 0 auto;
   color: #13845a;
   font-weight: 760;
 }
 
 .slotChoiceCheck {
   position: absolute;
-  top: 13px;
-  right: 13px;
+  top: 9px;
+  right: 9px;
   display: block;
   padding: 3px;
   color: #fff;
@@ -291,16 +405,18 @@
 
 .activeChoice {
   color: var(--assignment-ink);
-  background: #f3f7ff;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--slot-surface, #f3f7ff) 55%, #f3f7ff), #fff 88%);
   border-color: var(--assignment-blue);
+  border-left-color: var(--slot-accent, var(--assignment-blue));
   box-shadow: 0 0 0 1px rgba(23, 105, 232, .08), 0 10px 24px rgba(23, 105, 232, .1);
 }
 
-.activeChoice small {
+.activeChoice .slotChoiceBottom small,
+.activeChoice .slotChoiceTop em {
   color: #48617f;
 }
 
-.activeChoice b {
+.activeChoice .slotChoiceBottom b {
   color: #0f7652;
 }
 
@@ -308,10 +424,11 @@
   color: #8f5b5a;
   background: #fff8f7;
   border-color: #edceca;
+  border-left-color: var(--slot-accent, #d69a96);
   box-shadow: none;
 }
 
-.disabledChoice b {
+.disabledChoice .slotChoiceBottom b {
   color: #c5524d;
 }
 
@@ -502,8 +619,23 @@
     padding: 20px 16px;
   }
 
+  .weekdayTabs {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .weekdayTabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .weekdayTab {
+    flex: 0 0 72px;
+  }
+
   .slotChoiceGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 330px;
   }
 
   .assignmentFooter {
@@ -512,6 +644,104 @@
 }
 
 /* Slot-only planner refinements */
+.slot {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(145deg, var(--slot-surface, #fff) 0%, var(--slot-surface-end, #fff) 88%);
+  border-color: var(--slot-border, #dce4ef);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .84), 0 6px 16px var(--slot-shadow, rgba(28, 48, 86, .06));
+}
+
+.slot::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--slot-accent, #1769e8), color-mix(in srgb, var(--slot-accent, #1769e8) 42%, #fff));
+  content: "";
+}
+
+.slot:hover {
+  border-color: var(--slot-accent, #1769e8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 12px 24px var(--slot-shadow, rgba(28, 48, 86, .12));
+}
+
+.slot.selectedSlot {
+  padding: 9px;
+  background: linear-gradient(145deg, var(--slot-surface, #f7faff) 0%, var(--slot-surface-end, #fff) 84%);
+  border: 2px solid var(--slot-accent-strong, var(--p-blue));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slot-accent, #1769e8) 13%, transparent), 0 14px 28px var(--slot-shadow, rgba(23, 105, 232, .13));
+}
+
+.slot.selectedSlot::before {
+  height: 4px;
+}
+
+.slot.fullSlot:not(.selectedSlot) {
+  border-color: color-mix(in srgb, var(--slot-border, #dce4ef) 58%, #df625d);
+}
+
+.slotTop strong,
+.slotBottom b,
+.slotTeacherName {
+  color: var(--slot-accent-strong, #315b91);
+}
+
+.slotTeacherName,
+.slotMeta {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotTeacherName {
+  font-weight: 780;
+  letter-spacing: -.01em;
+}
+
+.slotMeta {
+  color: #59677e;
+}
+
+.slot .compactAvatar {
+  color: var(--slot-accent-strong, #2b62b6);
+  background: color-mix(in srgb, var(--slot-accent, #1769e8) 13%, #fff);
+  border-color: var(--slot-surface-end, #fff);
+}
+
+.slot > .capacityTrack[data-state="available"] i {
+  background: linear-gradient(90deg, var(--slot-accent, #26a875), color-mix(in srgb, var(--slot-accent, #26a875) 55%, #fff));
+}
+
+:global(html.dark) .slot {
+  color: #f4f7fc;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--slot-accent, #1769e8) 19%, #202a3e), #1b2436 88%);
+  border-color: color-mix(in srgb, var(--slot-accent, #1769e8) 42%, #344057);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 9px 20px rgba(5, 10, 20, .22);
+}
+
+:global(html.dark) .slotMeta,
+:global(html.dark) .slotTime,
+:global(html.dark) .slotTop small {
+  color: #b5c0d2;
+}
+
+:global(html.dark) .slotTeacherName,
+:global(html.dark) .slotTop strong,
+:global(html.dark) .slotBottom b {
+  color: color-mix(in srgb, var(--slot-accent, #70a2f0) 54%, #fff);
+}
+
+:global(html.dark) .slot .compactAvatar {
+  color: color-mix(in srgb, var(--slot-accent, #70a2f0) 52%, #fff);
+  background: color-mix(in srgb, var(--slot-accent, #1769e8) 22%, #222d42);
+  border-color: #1b2436;
+}
+
 .filterBand .search {
   flex: 1 1 320px;
 }

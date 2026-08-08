@@ -68,6 +68,78 @@ const shiftMeta = {
   evening: { label: "Axşam", value: "EVENING" },
 } as const;
 
+type TeacherSlotStyle = CSSProperties & {
+  "--slot-accent": string;
+  "--slot-accent-strong": string;
+  "--slot-surface": string;
+  "--slot-surface-end": string;
+  "--slot-border": string;
+  "--slot-shadow": string;
+};
+
+const teacherSlotPalettes: readonly TeacherSlotStyle[] = [
+  { "--slot-accent": "#2563eb", "--slot-accent-strong": "#1d4ed8", "--slot-surface": "#edf4ff", "--slot-surface-end": "#fbfdff", "--slot-border": "#bfd3f8", "--slot-shadow": "rgba(37, 99, 235, .14)" },
+  { "--slot-accent": "#7c3aed", "--slot-accent-strong": "#6d28d9", "--slot-surface": "#f5f0ff", "--slot-surface-end": "#fdfbff", "--slot-border": "#d9c7f7", "--slot-shadow": "rgba(124, 58, 237, .14)" },
+  { "--slot-accent": "#0f9f77", "--slot-accent-strong": "#087a5b", "--slot-surface": "#ebfaf5", "--slot-surface-end": "#fbfffd", "--slot-border": "#b9e6d6", "--slot-shadow": "rgba(15, 159, 119, .14)" },
+  { "--slot-accent": "#d97706", "--slot-accent-strong": "#b45309", "--slot-surface": "#fff7e8", "--slot-surface-end": "#fffdf8", "--slot-border": "#f0d29d", "--slot-shadow": "rgba(217, 119, 6, .14)" },
+  { "--slot-accent": "#df4f76", "--slot-accent-strong": "#be365d", "--slot-surface": "#fff0f5", "--slot-surface-end": "#fffafd", "--slot-border": "#f3bfd0", "--slot-shadow": "rgba(223, 79, 118, .14)" },
+  { "--slot-accent": "#0d9488", "--slot-accent-strong": "#0f766e", "--slot-surface": "#ebfaf9", "--slot-surface-end": "#fbfffe", "--slot-border": "#b5e4df", "--slot-shadow": "rgba(13, 148, 136, .14)" },
+  { "--slot-accent": "#4f46e5", "--slot-accent-strong": "#4338ca", "--slot-surface": "#f0f1ff", "--slot-surface-end": "#fcfcff", "--slot-border": "#c9caf8", "--slot-shadow": "rgba(79, 70, 229, .14)" },
+  { "--slot-accent": "#e76642", "--slot-accent-strong": "#c94b2c", "--slot-surface": "#fff2ed", "--slot-surface-end": "#fffaf8", "--slot-border": "#f3c4b5", "--slot-shadow": "rgba(231, 102, 66, .14)" },
+  { "--slot-accent": "#0284c7", "--slot-accent-strong": "#0369a1", "--slot-surface": "#edf8ff", "--slot-surface-end": "#fbfeff", "--slot-border": "#b9ddf1", "--slot-shadow": "rgba(2, 132, 199, .14)" },
+  { "--slot-accent": "#c026d3", "--slot-accent-strong": "#a21caf", "--slot-surface": "#fcf0ff", "--slot-surface-end": "#fffaff", "--slot-border": "#e9c1ef", "--slot-shadow": "rgba(192, 38, 211, .14)" },
+  { "--slot-accent": "#6d970f", "--slot-accent-strong": "#52770a", "--slot-surface": "#f5fae9", "--slot-surface-end": "#fdfff9", "--slot-border": "#d5e5ad", "--slot-shadow": "rgba(109, 151, 15, .14)" },
+  { "--slot-accent": "#b33c64", "--slot-accent-strong": "#922f51", "--slot-surface": "#fff0f5", "--slot-surface-end": "#fffbfc", "--slot-border": "#eebdce", "--slot-shadow": "rgba(179, 60, 100, .14)" },
+];
+
+function teacherColorHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function fallbackTeacherSlotStyle(index: number): TeacherSlotStyle {
+  const hue = Math.round((index * 137.508) % 360);
+  return {
+    "--slot-accent": `hsl(${hue} 68% 47%)`,
+    "--slot-accent-strong": `hsl(${hue} 63% 35%)`,
+    "--slot-surface": `hsl(${hue} 72% 96%)`,
+    "--slot-surface-end": `hsl(${hue} 70% 99%)`,
+    "--slot-border": `hsl(${hue} 48% 82%)`,
+    "--slot-shadow": `hsl(${hue} 55% 40% / .14)`,
+  };
+}
+
+function buildTeacherSlotStyles(teacherIds: string[]) {
+  const result = new Map<string, TeacherSlotStyle>();
+  const usedPaletteIndexes = new Set<number>();
+  const uniqueTeacherIds = [...new Set(teacherIds)].sort();
+  let fallbackIndex = teacherSlotPalettes.length;
+
+  uniqueTeacherIds.forEach((teacherId) => {
+    const startingIndex = teacherColorHash(teacherId) % teacherSlotPalettes.length;
+    let paletteIndex = startingIndex;
+
+    while (usedPaletteIndexes.has(paletteIndex) && usedPaletteIndexes.size < teacherSlotPalettes.length) {
+      paletteIndex = (paletteIndex + 1) % teacherSlotPalettes.length;
+    }
+
+    if (usedPaletteIndexes.size < teacherSlotPalettes.length) {
+      usedPaletteIndexes.add(paletteIndex);
+      result.set(teacherId, teacherSlotPalettes[paletteIndex]);
+      return;
+    }
+
+    result.set(teacherId, fallbackTeacherSlotStyle(fallbackIndex));
+    fallbackIndex += 1;
+  });
+
+  return result;
+}
+
 export function PlannerWorkspace({
   data,
   actions,
@@ -91,6 +163,11 @@ export function PlannerWorkspace({
   const [assignmentEnrollmentId, setAssignmentEnrollmentId] = useState<string>();
   const [attendanceOpen, setAttendanceOpen] = useState(initialAttendanceOpen);
   const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
+
+  const teacherSlotStyles = useMemo(
+    () => buildTeacherSlotStyles(data.teachers.map((teacher) => teacher.id)),
+    [data.teachers],
+  );
 
   const filteredSlots = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("az");
@@ -247,6 +324,7 @@ export function PlannerWorkspace({
                   weekdays={orderedWeekdays}
                   slots={filteredSlots}
                   selectedId={selectedSlot?.id}
+                  teacherSlotStyles={teacherSlotStyles}
                   onSelect={openSlotDetails}
                 />
               ))}
@@ -404,6 +482,7 @@ export function PlannerWorkspace({
           data={data}
           initialSlot={selectedSlot}
           initialEnrollmentId={assignmentEnrollmentId}
+          teacherSlotStyles={teacherSlotStyles}
           pending={pending}
           onClose={() => setAssignmentOpen(false)}
           onSubmit={(formData, hasSlots) => runAction(
@@ -488,12 +567,14 @@ function TimeRow({
   weekdays,
   slots,
   selectedId,
+  teacherSlotStyles,
   onSelect,
 }: {
   time: string;
   weekdays: GroupWeekdayCode[];
   slots: PlannerSlot[];
   selectedId?: string;
+  teacherSlotStyles: ReadonlyMap<string, TeacherSlotStyle>;
   onSelect: (slot: PlannerSlot) => void;
 }) {
   const rowHasSlots = slots.some((slot) => slot.startTime === time);
@@ -508,6 +589,7 @@ function TimeRow({
               <SlotCard
                 slot={slot}
                 selected={slot.id === selectedId}
+                style={teacherSlotStyles.get(slot.teacherId)}
                 onSelect={onSelect}
                 key={slot.id}
               />
@@ -522,16 +604,19 @@ function TimeRow({
 function SlotCard({
   slot,
   selected,
+  style,
   onSelect,
 }: {
   slot: PlannerSlot;
   selected: boolean;
+  style?: TeacherSlotStyle;
   onSelect: (slot: PlannerSlot) => void;
 }) {
   const full = slot.assignedCount >= slot.capacity;
   return (
     <button
       className={cx(styles.slot, selected && styles.selectedSlot, full && styles.fullSlot)}
+      style={style}
       type="button"
       onClick={() => onSelect(slot)}
       aria-label={`${slot.teacherName}, ${slot.startTime}–${slot.endTime} slotunun detallarını aç`}
@@ -541,8 +626,8 @@ function SlotCard({
         <small>{slot.room}</small>
       </span>
       <span className={styles.slotTime}>{slot.startTime}–{slot.endTime}</span>
-      <span className={styles.slotTeacher}>{slot.teacherName}</span>
-      <span className={styles.slotTeacher}>Başlanğıc: {formatInputDate(slot.validFrom)}</span>
+      <span className={styles.slotTeacherName}>{slot.teacherName}</span>
+      <span className={styles.slotMeta}>Başlanğıc: {formatInputDate(slot.validFrom)}</span>
       <span className={styles.slotBottom}>
         <b>{slot.assignedCount} / {slot.capacity}</b>
         <i>
@@ -718,6 +803,7 @@ function AssignmentDialog({
   data,
   initialSlot,
   initialEnrollmentId,
+  teacherSlotStyles,
   pending,
   onClose,
   onSubmit,
@@ -725,6 +811,7 @@ function AssignmentDialog({
   data: PlannerWorkspaceData;
   initialSlot: PlannerSlot;
   initialEnrollmentId?: string;
+  teacherSlotStyles: ReadonlyMap<string, TeacherSlotStyle>;
   pending: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData, hasSlots: boolean) => void;
@@ -736,6 +823,7 @@ function AssignmentDialog({
     : firstEnrollment ? [initialSlot.id] : [];
   const [enrollmentId, setEnrollmentId] = useState(firstEnrollment?.id ?? "");
   const [selected, setSelected] = useState<string[]>(initialSelection);
+  const [activeWeekday, setActiveWeekday] = useState<GroupWeekdayCode>(initialSlot.weekday);
   const [validFrom, setValidFrom] = useState(() => (
     minimumAssignmentDate(initialSelection, data.slots, data.today)
   ));
@@ -750,6 +838,18 @@ function AssignmentDialog({
   );
   const selectedIds = useMemo(() => new Set(selected), [selected]);
   const slotsById = useMemo(() => new Map(data.slots.map((slot) => [slot.id, slot])), [data.slots]);
+  const activeDaySlots = useMemo(
+    () => data.slots.filter((slot) => slot.weekday === activeWeekday),
+    [activeWeekday, data.slots],
+  );
+  const selectedCountByDay = useMemo(() => {
+    const counts = new Map<GroupWeekdayCode, number>();
+    selected.forEach((id) => {
+      const weekday = slotsById.get(id)?.weekday;
+      if (weekday) counts.set(weekday, (counts.get(weekday) ?? 0) + 1);
+    });
+    return counts;
+  }, [selected, slotsById]);
   const selectedTeachers = useMemo(
     () => [...new Set(selected.map((id) => slotsById.get(id)?.teacherName).filter(Boolean))],
     [selected, slotsById],
@@ -760,6 +860,9 @@ function AssignmentDialog({
     const nextSelection = next?.slotIds.length ? next.slotIds : [initialSlot.id];
     setEnrollmentId(value);
     setSelected(nextSelection);
+    setActiveWeekday(
+      data.slots.find((slot) => nextSelection.includes(slot.id))?.weekday ?? initialSlot.weekday,
+    );
     setValidFrom(minimumAssignmentDate(nextSelection, data.slots, data.today));
   }
 
@@ -811,40 +914,75 @@ function AssignmentDialog({
                 />
               </div>
 
-              <div className={styles.assignmentSectionHeading}><h3>Həftəlik seçim</h3></div>
-              <div className={styles.slotChoiceGrid}>
-                {orderedWeekdays.map((day) => (
-                  <div className={styles.slotDay} key={day}>
-                    <strong>{weekdayMeta[day].shortLabel}</strong>
-                    {data.slots.filter((slot) => slot.weekday === day).map((slot) => {
-                      const active = selectedIds.has(slot.id);
-                      const full = slot.assignedCount >= slot.capacity;
-                      return (
-                        <button
-                          className={cx(
-                            styles.slotChoice,
-                            active && styles.activeChoice,
-                            full && !active && styles.disabledChoice,
-                          )}
-                          type="button"
-                          onClick={() => toggle(slot)}
-                          key={slot.id}
-                          disabled={full && !active}
-                          aria-pressed={active}
-                        >
-                          <span>{shiftMeta[slot.shift].label}</span>
-                          <small><Clock3 size={13} />{slot.startTime}–{slot.endTime}</small>
-                          <small><CalendarDays size={13} />{formatInputDate(slot.validFrom)}</small>
-                          <b><UsersRound size={13} />{full && !active ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>
-                          {active ? <Check className={styles.slotChoiceCheck} size={16} /> : null}
-                        </button>
-                      );
-                    })}
-                    {data.slots.some((slot) => slot.weekday === day) ? null : (
-                      <span className={styles.emptySlotDay}>Slot yoxdur</span>
-                    )}
-                  </div>
-                ))}
+              <div className={styles.assignmentSectionHeading}>
+                <div>
+                  <h3>Həftəlik seçim</h3>
+                  <p>Günü seçin, sonra uyğun dərs slotlarını əlavə edin.</p>
+                </div>
+                <span>{activeDaySlots.length} slot</span>
+              </div>
+              <div className={styles.weekdayTabs} role="tablist" aria-label="Həftənin günləri">
+                {orderedWeekdays.map((day) => {
+                  const selectedCount = selectedCountByDay.get(day) ?? 0;
+                  return (
+                    <button
+                      className={cx(styles.weekdayTab, activeWeekday === day && styles.activeWeekdayTab)}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeWeekday === day}
+                      aria-controls="weekday-slot-panel"
+                      onClick={() => setActiveWeekday(day)}
+                      key={day}
+                    >
+                      <span>{weekdayMeta[day].shortLabel}</span>
+                      {selectedCount ? <b>{selectedCount}</b> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <div
+                className={styles.slotChoiceGrid}
+                id="weekday-slot-panel"
+                role="tabpanel"
+                aria-label={`${weekdayMeta[activeWeekday].label} slotları`}
+              >
+                {activeDaySlots.map((slot) => {
+                  const active = selectedIds.has(slot.id);
+                  const full = slot.assignedCount >= slot.capacity;
+                  return (
+                    <button
+                      className={cx(
+                        styles.slotChoice,
+                        active && styles.activeChoice,
+                        full && !active && styles.disabledChoice,
+                      )}
+                      style={teacherSlotStyles.get(slot.teacherId)}
+                      type="button"
+                      onClick={() => toggle(slot)}
+                      key={slot.id}
+                      disabled={full && !active}
+                      aria-pressed={active}
+                      aria-label={`${slot.startTime}–${slot.endTime}, ${slot.teacherName}, ${slot.room}`}
+                    >
+                      <span className={styles.slotChoiceTop}>
+                        <strong>{slot.startTime}–{slot.endTime}</strong>
+                        <em>{shiftMeta[slot.shift].label}</em>
+                      </span>
+                      <span className={styles.slotChoiceTeacher}>
+                        <UserRound size={14} />
+                        <strong>{slot.teacherName}</strong>
+                      </span>
+                      <span className={styles.slotChoiceBottom}>
+                        <small><DoorOpen size={13} />{slot.room}</small>
+                        <b><UsersRound size={13} />{full && !active ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>
+                      </span>
+                      {active ? <Check className={styles.slotChoiceCheck} size={16} /> : null}
+                    </button>
+                  );
+                })}
+                {activeDaySlots.length ? null : (
+                  <span className={styles.emptySlotDay}>Bu gün üçün slot yoxdur.</span>
+                )}
               </div>
             </div>
 
