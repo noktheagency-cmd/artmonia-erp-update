@@ -940,3 +940,302 @@
   font-size: 9px;
   font-weight: 520;
 }
+
+/* Detailed slot management */
+.slotDetailDialog {
+  width: min(1120px, calc(100vw - 32px));
+  max-width: 1120px;
+  max-height: min(92dvh, 860px);
+  padding: 0;
+  overflow: hidden;
+  color: var(--p-ink);
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 22px;
+  box-shadow: 0 34px 90px rgba(20, 36, 64, .23);
+}
+
+.slotDetailDialog :global(.ui-dialog-close) {
+  top: 20px;
+  right: 20px;
+}
+
+.slotDetailDialog :global(button:disabled) {
+  cursor: not-allowed;
+  opacity: .52;
+  box-shadow: none;
+}
+
+.slotDetailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 72px 22px 28px;
+  border-bottom: 1px solid var(--p-line);
+}
+
+.slotDetailTitleRow,
+.slotDetailHeaderActions,
+.slotDetailFact,
+.slotDetailFact > span,
+.slotCapacityPanel > div,
+.slotQuickActions button,
+.studentInfoItem,
+.journalSessionStats,
+.slotJournalSession > header > div:first-child {
+  display: flex;
+  align-items: center;
+}
+
+.slotDetailTitleRow {
+  min-width: 0;
+  gap: 14px;
+}
+
+.slotDetailIcon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #1769e8;
+  background: #edf4ff;
+  border-radius: 14px;
+}
+
+.slotDetailIcon svg { width: 21px; height: 21px; }
+.slotDetailTitleRow :global(.ui-dialog-title) { font-size: 21px; letter-spacing: -.025em; }
+.slotDetailTitleRow :global(.ui-dialog-description) { margin-top: 5px; font-size: 11px; }
+.slotDetailHeaderActions { gap: 8px; }
+
+.slotDetailTabs {
+  display: flex;
+  gap: 25px;
+  padding: 0 28px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--p-line);
+}
+
+.slotDetailTabs button {
+  position: relative;
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 1px;
+  color: #657087;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 680;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.slotDetailTabs button span {
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  place-items: center;
+  padding: 0 5px;
+  color: #6b7890;
+  background: #f0f3f8;
+  border-radius: 7px;
+  font-size: 9px;
+}
+
+.slotDetailTabs button[data-active] { color: var(--p-blue); }
+.slotDetailTabs button[data-active]::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--p-blue);
+  border-radius: 2px 2px 0 0;
+  content: "";
+}
+
+.slotDetailBody {
+  min-height: 360px;
+  max-height: calc(min(92dvh, 860px) - 166px);
+  padding: 24px 28px 28px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.slotOverview { display: grid; gap: 20px; }
+.slotOverviewFacts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.slotDetailFact { min-width: 0; gap: 10px; padding: 14px; background: #f8fafc; border: 1px solid #e4e9f1; border-radius: 12px; }
+.slotDetailFact > span { justify-content: center; width: 34px; height: 34px; flex: 0 0 auto; color: #45688f; background: #fff; border: 1px solid #e3e9f2; border-radius: 10px; }
+.slotDetailFact svg { width: 16px; height: 16px; }
+.slotDetailFact small,
+.slotDetailFact strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slotDetailFact small { color: var(--p-muted); font-size: 9px; }
+.slotDetailFact strong { margin-top: 4px; font-size: 11px; }
+
+.slotCapacityPanel { padding: 18px; background: #f3f7ff; border: 1px solid #d8e5fb; border-radius: 14px; }
+.slotCapacityPanel > div { gap: 11px; }
+.slotCapacityPanel > div > span { display: grid; width: 38px; height: 38px; place-items: center; color: #1769e8; background: #fff; border-radius: 11px; }
+.slotCapacityPanel svg { width: 18px; height: 18px; }
+.slotCapacityPanel small,
+.slotCapacityPanel strong { display: block; }
+.slotCapacityPanel small { color: #66758e; font-size: 9px; }
+.slotCapacityPanel strong { margin-top: 3px; font-size: 12px; }
+.slotCapacityPanel b { margin-left: auto; color: #1769e8; font-size: 16px; }
+.slotCapacityTrack { display: block; height: 7px; margin-top: 14px; overflow: hidden; background: #dce7f8; border-radius: 8px; }
+.slotCapacityTrack i { display: block; height: 100%; background: linear-gradient(90deg, #1769e8, #4f91f1); border-radius: inherit; }
+
+.slotQuickActions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.slotQuickActions button { gap: 12px; min-height: 72px; padding: 14px 16px; color: var(--p-ink); text-align: left; background: #fff; border: 1px solid var(--p-line); border-radius: 13px; cursor: pointer; }
+.slotQuickActions button:hover { border-color: #a8c5ef; background: #fbfdff; }
+.slotQuickActions button > svg:first-child { width: 20px; height: 20px; color: #1769e8; }
+.slotQuickActions button > svg:last-child { width: 14px; height: 14px; margin-left: auto; color: #8794a8; }
+.slotQuickActions strong,
+.slotQuickActions small { display: block; }
+.slotQuickActions strong { font-size: 11px; }
+.slotQuickActions small { margin-top: 4px; color: var(--p-muted); font-size: 9px; }
+.slotOverviewActions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 18px; border-top: 1px solid var(--p-line); }
+
+.slotSectionToolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.slotSectionToolbar h3 { margin: 0; font-size: 16px; letter-spacing: -.015em; }
+.slotSectionToolbar p { margin: 5px 0 0; color: var(--p-muted); font-size: 10px; }
+.studentPrivacyNote { margin-bottom: 12px; padding: 11px 13px; color: #795a20; background: #fff9e9; border: 1px solid #f1dfae; border-radius: 10px; font-size: 10px; }
+.slotStudentList { display: grid; gap: 10px; }
+.slotStudentCard { background: #fff; border: 1px solid var(--p-line); border-radius: 14px; }
+.slotStudentCard[open] { border-color: #b9cceb; box-shadow: 0 10px 26px rgba(28, 55, 94, .06); }
+.slotStudentCard > summary { display: grid; grid-template-columns: auto minmax(150px, 1fr) minmax(170px, .8fr) auto; align-items: center; gap: 12px; min-height: 70px; padding: 12px 16px; list-style: none; cursor: pointer; }
+.slotStudentCard > summary::-webkit-details-marker { display: none; }
+.slotStudentIdentity strong,
+.slotStudentIdentity small,
+.slotStudentContact small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slotStudentIdentity strong { font-size: 11px; }
+.slotStudentIdentity small,
+.slotStudentContact small { margin-top: 3px; color: var(--p-muted); font-size: 9px; }
+.slotStudentStatus { padding: 7px 9px; color: #176848; background: #edf8f3; border: 1px solid #cae8db; border-radius: 8px; font-size: 9px; font-weight: 750; }
+.slotStudentStatus[data-status="DEBT"],
+.slotStudentStatus[data-status="DECLINED"] { color: #a8413d; background: #fff1f0; border-color: #efc8c5; }
+.slotStudentStatus[data-status="FROZEN"],
+.slotStudentStatus[data-status="SLOT_WAITING"] { color: #805e20; background: #fff8e7; border-color: #eedba7; }
+.slotStudentCardBody { display: grid; gap: 16px; padding: 17px 18px 18px; border-top: 1px solid var(--p-line); background: #fbfcfe; border-radius: 0 0 14px 14px; }
+.studentInfoGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.studentInfoItem { min-width: 0; gap: 8px; padding: 10px; background: #fff; border: 1px solid #e6ebf2; border-radius: 10px; }
+.studentInfoItem > svg { width: 15px; height: 15px; flex: 0 0 auto; color: #5d7392; }
+.studentInfoItem > span { min-width: 0; }
+.studentInfoItem small,
+.studentInfoItem strong,
+.studentInfoItem a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studentInfoItem small { color: var(--p-muted); font-size: 8px; }
+.studentInfoItem strong,
+.studentInfoItem a { margin-top: 3px; color: var(--p-ink); font-size: 9px; font-weight: 700; text-decoration: none; }
+.studentInfoItem a:hover { color: var(--p-blue); text-decoration: underline; }
+.relatedContacts > strong,
+.studentNotes > strong { font-size: 10px; }
+.relatedContacts > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.relatedContacts > div > span { display: grid; gap: 3px; padding: 10px 12px; background: #fff; border: 1px solid #e6ebf2; border-radius: 10px; }
+.relatedContacts b { font-size: 9px; }
+.relatedContacts small { color: var(--p-muted); font-size: 8px; }
+.relatedContacts a { color: var(--p-blue); font-size: 9px; text-decoration: none; }
+.studentNotes { padding: 11px 12px; background: #fff; border: 1px solid #e6ebf2; border-radius: 10px; }
+.studentNotes p { margin: 5px 0 0; color: #59677d; font-size: 9px; line-height: 1.5; white-space: pre-wrap; }
+.studentCardActions { display: flex; justify-content: flex-end; gap: 8px; }
+.studentProfileLink { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; color: #1769e8; background: #fff; border: 1px solid #bcd0ef; border-radius: 8px; font-size: 10px; font-weight: 680; text-decoration: none; }
+.studentProfileLink:hover { background: #f1f6ff; }
+.studentProfileLink svg { width: 14px; height: 14px; }
+
+.slotJournalList { display: grid; gap: 12px; }
+.slotJournalSession { overflow: hidden; background: #fff; border: 1px solid var(--p-line); border-radius: 14px; }
+.slotJournalSession > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: #f8fafc; border-bottom: 1px solid var(--p-line); }
+.slotJournalSession > header > div:first-child { gap: 9px; }
+.slotJournalSession > header svg { width: 16px; height: 16px; color: #56708f; }
+.slotJournalSession > header strong,
+.slotJournalSession > header small { display: block; }
+.slotJournalSession > header strong { font-size: 10px; }
+.slotJournalSession > header small { margin-top: 3px; color: var(--p-muted); font-size: 8px; }
+.journalSessionStats { gap: 6px; }
+.journalSessionStats span,
+.journalSessionStats button { display: inline-flex; height: 29px; align-items: center; gap: 4px; padding: 0 8px; border-radius: 8px; font: inherit; font-size: 8px; font-weight: 700; }
+.journalSessionStats span[data-state="present"] { color: #177552; background: #eaf8f2; border: 1px solid #c3e6d8; }
+.journalSessionStats span[data-state="absent"] { color: #aa4540; background: #fff0ef; border: 1px solid #ecc4c1; }
+.journalSessionStats span svg { width: 12px; height: 12px; color: currentColor; }
+.journalSessionStats button { color: #1769e8; background: #fff; border: 1px solid #bcd0ef; cursor: pointer; }
+.journalRecords { display: grid; }
+.journalRecords > div { display: grid; grid-template-columns: auto minmax(140px, 1fr) auto minmax(120px, .6fr); align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #edf1f6; }
+.journalRecords > div:last-child { border-bottom: 0; }
+.journalRecords .compactAvatar { margin-left: 0; }
+.journalRecords strong,
+.journalRecords small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journalRecords strong { font-size: 9px; }
+.journalRecords small { margin-top: 3px; color: var(--p-muted); font-size: 8px; }
+.historyStatus { display: inline-flex; min-width: 88px; height: 30px; align-items: center; justify-content: center; gap: 5px; padding: 0 8px; border-radius: 8px; font: inherit; font-size: 8px; font-weight: 750; }
+button.historyStatus { cursor: pointer; }
+.historyStatus svg { width: 12px; height: 12px; }
+.historyStatus_present { color: #14734f; background: #eaf8f2; border: 1px solid #bfe4d4; }
+.historyStatus_absent { color: #a9433f; background: #fff0ef; border: 1px solid #ebc0bd; }
+.historyStatus_unmarked { color: #66738a; background: #f3f5f8; border: 1px solid #dde3ec; }
+.historyNote { text-align: right; }
+.slotDetailEmpty { display: grid; min-height: 260px; place-items: center; align-content: center; padding: 30px; color: var(--p-muted); text-align: center; }
+.slotDetailEmpty > svg { width: 28px; height: 28px; margin-bottom: 12px; color: #7295c5; }
+.slotDetailEmpty strong { color: var(--p-ink); font-size: 12px; }
+.slotDetailEmpty p { max-width: 400px; margin: 6px 0 15px; font-size: 10px; line-height: 1.5; }
+
+.attendanceToolbarRight { display: grid; justify-items: end; gap: 7px; }
+.attendanceBulkActions { display: flex; gap: 5px; }
+.attendanceBulkActions button { display: inline-flex; height: 28px; align-items: center; gap: 4px; padding: 0 7px; color: #5f6d83; background: #fff; border: 1px solid var(--p-line); border-radius: 7px; font: inherit; font-size: 8px; font-weight: 680; cursor: pointer; }
+.attendanceBulkActions button:hover { color: var(--p-blue); border-color: #a9c4ec; }
+.attendanceBulkActions svg { width: 11px; height: 11px; }
+
+:global(html.dark) .slotDetailDialog,
+:global(html.dark) .slotStudentCard,
+:global(html.dark) .slotJournalSession,
+:global(html.dark) .slotQuickActions button,
+:global(html.dark) .studentInfoItem,
+:global(html.dark) .relatedContacts > div > span,
+:global(html.dark) .studentNotes { background: var(--dm-surface-1, #172033); border-color: var(--dm-line-strong, #344057); }
+:global(html.dark) .slotDetailHeader,
+:global(html.dark) .slotDetailTabs,
+:global(html.dark) .slotStudentCardBody,
+:global(html.dark) .slotJournalSession > header { border-color: var(--dm-line-strong, #344057); }
+:global(html.dark) .slotStudentCardBody,
+:global(html.dark) .slotJournalSession > header,
+:global(html.dark) .slotDetailFact { background: var(--dm-surface-2, #202a3e); }
+
+@media(max-width: 900px) {
+  .slotDetailHeader { align-items: flex-start; flex-direction: column; padding-right: 70px; }
+  .slotOverviewFacts,
+  .studentInfoGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .slotDetailHeaderActions { width: 100%; }
+}
+
+@media(max-width: 640px) {
+  .slotDetailDialog { width: calc(100vw - 16px); max-height: 95dvh; border-radius: 16px; }
+  .slotDetailHeader { gap: 14px; padding: 18px 58px 17px 18px; }
+  .slotDetailTitleRow :global(.ui-dialog-title) { font-size: 17px; }
+  .slotDetailHeaderActions { display: grid; grid-template-columns: 1fr 1fr; }
+  .slotDetailHeaderActions :global([data-slot="button"]) { width: 100%; }
+  .slotDetailTabs { gap: 18px; padding: 0 18px; }
+  .slotDetailBody { max-height: calc(95dvh - 216px); padding: 18px; }
+  .slotOverviewFacts,
+  .slotQuickActions,
+  .studentInfoGrid,
+  .relatedContacts > div { grid-template-columns: 1fr; }
+  .slotStudentCard > summary { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .slotStudentContact { display: none; }
+  .slotStudentStatus { grid-column: 2 / -1; justify-self: start; }
+  .slotSectionToolbar { align-items: stretch; flex-direction: column; }
+  .slotSectionToolbar :global([data-slot="button"]) { width: 100%; }
+  .slotJournalSession > header { align-items: flex-start; flex-direction: column; }
+  .journalSessionStats { width: 100%; flex-wrap: wrap; }
+  .journalRecords > div { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .historyNote { display: none !important; }
+  .studentCardActions,
+  .slotOverviewActions { display: grid; grid-template-columns: 1fr; }
+  .studentCardActions > *,
+  .slotOverviewActions > * { width: 100%; }
+  .attendanceToolbarRight { width: 100%; justify-items: stretch; }
+  .attendanceBulkActions { display: grid; grid-template-columns: 1fr 1fr; }
+  .attendanceBulkActions button:last-child { grid-column: 1 / -1; }
+  .attendanceBulkActions button { justify-content: center; }
+}

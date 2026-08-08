@@ -3,13 +3,19 @@ export function calculateAttendanceAdjustedPayout(input: {
   attendedLessons: number;
   plannedLessons: number;
   salaryPercent: number;
+  totalAttendedLessons?: number;
 }) {
-  const attendanceRatio = input.plannedLessons > 0
-    ? Math.min(Math.max(input.attendedLessons, 0) / input.plannedLessons, 1)
-    : 0;
+  const attendedLessons = Math.max(input.attendedLessons, 0);
+  const lessonDenominator = Math.max(
+    input.plannedLessons,
+    input.totalAttendedLessons ?? attendedLessons,
+    1,
+  );
+  const attendanceRatio = Math.min(attendedLessons / lessonDenominator, 1);
   const eligibleRevenue = money(Math.max(input.paidAmount, 0) * attendanceRatio);
   return {
     attendanceRatio,
+    lessonDenominator,
     eligibleRevenue,
     payoutAmount: money(eligibleRevenue * Math.max(input.salaryPercent, 0) / 100),
   };

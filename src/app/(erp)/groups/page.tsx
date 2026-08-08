@@ -11,7 +11,12 @@ import {
 export default async function GroupsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ slot?: string; date?: string; attendance?: string }>;
+  searchParams: Promise<{
+    slot?: string;
+    date?: string;
+    attendance?: string;
+    details?: string;
+  }>;
 }) {
   const params = await searchParams;
   const plannerData = await getPlannerWorkspaceData({
@@ -24,6 +29,7 @@ export default async function GroupsPage({
       key={`${plannerData.selectedSlotId}-${plannerData.journal.date}-${params.attendance ?? "0"}`}
       data={plannerData}
       initialAttendanceOpen={params.attendance === "1"}
+      initialDetailsOpen={params.details === "1"}
       actions={{
         createSlot: createClassSlotAction,
         updateSlot: updateClassSlotAction,

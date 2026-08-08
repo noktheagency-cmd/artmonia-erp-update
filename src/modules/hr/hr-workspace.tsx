@@ -881,7 +881,7 @@ function TeacherTable({
           <thead>
             <tr>
               <th>Müəllim</th>
-              <th>Dərs iştirakı</th>
+              <th>Davamiyyət</th>
               <th>Ödəniş bazası</th>
               <th>Faiz</th>
               <th>Hesablanan maaş</th>
@@ -903,10 +903,10 @@ function TeacherTable({
                     </Link>
                   </td>
                   <td>
-                    <strong>
-                      {teacher.attendedLessons}/{teacher.plannedLessons || 0}
-                    </strong>
-                    <small className="hr-salary-mode">gəldi / plan</small>
+                    <strong>{teacher.attendedLessons} gəldi</strong>
+                    <small className="hr-salary-mode">
+                      {teacher.absentLessons} gəlmədi · {teacher.plannedLessons || 0} plan
+                    </small>
                   </td>
                   <td>
                     <strong>{formatMoney(teacher.eligibleRevenue)}</strong>
@@ -1442,8 +1442,8 @@ function TeacherSalaryDialog({
         <DialogHeader>
           <DialogTitle>{teacher.fullName} · maaş faizi</DialogTitle>
           <DialogDescription>
-            Cari ay üçün maaş ödəniş × davamiyyət nisbəti × faiz formulu ilə
-            yenidən hesablanacaq.
+            Cari ay üçün hər “Gəldi” dərsin ödəniş payı həmin dərsin müəlliminə
+            və onun faizinə görə hesablanacaq. “Gəlmədi” maaş bazasına daxil deyil.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="hr-teacher-salary-form">
@@ -1465,6 +1465,8 @@ function TeacherSalaryDialog({
             <strong>{formatMoney(teacher.paidRevenue)}</strong>
             <span>Davamiyyət bazası</span>
             <strong>{formatMoney(teacher.eligibleRevenue)}</strong>
+            <span>Jurnal</span>
+            <strong>{teacher.attendedLessons} gəldi · {teacher.absentLessons} gəlmədi</strong>
             <span>Cari hesab</span>
             <strong>{formatMoney(teacher.estimatedSalary)}</strong>
           </div>

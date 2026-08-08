@@ -3,7 +3,15 @@
 import { useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { Banknote, Edit, RefreshCcw, Trash2 } from "lucide-react";
+import {
+  Banknote,
+  BookOpen,
+  Edit,
+  GraduationCap,
+  RefreshCcw,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
@@ -19,6 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import { StudentReminderDialog } from "@/modules/students/student-reminders-client";
@@ -40,16 +49,45 @@ interface StudentDetail {
   code: string;
   lifecycleStatusValue: string;
   detail: {
+    email: string;
+    source: string;
+    educationLevel: string;
+    managerId: string;
+    manager: string;
+    campaignId: string;
+    programId: string;
+    teacherId: string;
+    discountType: string;
+    lessonsPerMonth: string;
+    firstLessonDate: string;
+    registeredDate: string;
     notes: string;
     paymentDefaultAmount: string;
     paymentDefaultDate: string;
+    monthlyFee: string;
     reminderDefaultDate: string;
   };
+}
+
+interface StudentEditOptions {
+  programs: Array<{
+    id: string;
+    name: string;
+    monthlyFee: string;
+    lessonsPerMonth: string;
+  }>;
+  teachers: Array<{ id: string; fullName: string }>;
+  managers: Array<{ id: string; fullName: string }>;
+  campaigns: Array<{ id: string; name: string }>;
+  educationLevels: Array<{ value: string; label: string }>;
+  discountTypes: Array<{ value: string; label: string }>;
+  sourceOptions: string[];
 }
 
 interface Permissions {
   canCreateStudent: boolean;
   canUpdateStudent: boolean;
+  canAssignStudentManager: boolean;
   canConvertLead: boolean;
   canRecordPayment: boolean;
   canChangeStatus: boolean;
@@ -59,6 +97,7 @@ interface Permissions {
 
 export function StudentDetailActions({
   student,
+  editOptions,
   permissions,
   recordPaymentAction,
   updateStudentProfileAction,
@@ -67,6 +106,7 @@ export function StudentDetailActions({
   createStudentReminderAction,
 }: {
   student: StudentDetail;
+  editOptions: StudentEditOptions;
   permissions: Permissions;
   recordPaymentAction: (formData: FormData) => unknown | Promise<unknown>;
   updateStudentProfileAction: (formData: FormData) => unknown | Promise<unknown>;
@@ -81,6 +121,20 @@ export function StudentDetailActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
+  const sourceOptions = editOptions.sourceOptions.includes(student.detail.source)
+    ? editOptions.sourceOptions
+    : [student.detail.source, ...editOptions.sourceOptions].filter(Boolean);
+  const currentEducationLevel = student.detail.educationLevel;
+  const selectableEducationLevels = editOptions.educationLevels.some(
+    (option) => option.value === currentEducationLevel,
+  )
+    ? editOptions.educationLevels
+    : [
+        ...(currentEducationLevel
+          ? [{ value: currentEducationLevel, label: currentEducationLevel }]
+          : []),
+        ...editOptions.educationLevels,
+      ];
 
   async function updateStatus(formData: FormData) {
     try {
@@ -303,11 +357,11 @@ export function StudentDetailActions({
             Redaktə et
           </Button>
         </DialogTrigger>
-        <DialogContent className="student-edit-dialog">
+        <DialogContent className="student-create-dialog student-edit-dialog student-profile-edit-dialog">
           <DialogHeader>
             <DialogTitle>Tələbəni redaktə et</DialogTitle>
             <DialogDescription>
-              Tələbə profil məlumatlarını yeniləyin.
+              Şəxsi məlumatları, kampaniyanı, məsul şəxsləri, proqramı və ödəniş planını yeniləyin.
             </DialogDescription>
           </DialogHeader>
 
@@ -315,49 +369,229 @@ export function StudentDetailActions({
             onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
-              formData.set("studentId", student.id);
               try {
                 unwrapActionResult(await updateStudentProfileAction(formData));
-                notifySuccess("Məlumatlar yadda saxlanıldı", "Tələbə profili uğurla yeniləndi.");
+                notifySuccess("Məlumatlar yadda saxlanıldı", "Tələbənin profil və tədris məlumatları yeniləndi.");
                 setEditOpen(false);
                 router.refresh();
               } catch (error) {
                 notifyCaughtError(error, "Tələbə profili yenilənmədi.");
               }
             }}
-            className="student-create-form"
+            className="student-create-form student-profile-edit-form"
           >
-            <div className="field-grid">
-              <label className="form-field">
-                <span>Ad və soyad</span>
-                <Input
-                  name="fullName"
-                  defaultValue={student.name}
-                  required
-                />
-              </label>
-              <label className="form-field">
-                <span>Telefon</span>
-                <Input
-                  name="phone"
-                  defaultValue={student.phone}
-                  required
-                />
-              </label>
-            </div>
+            <input name="studentId" type="hidden" value={student.id} />
 
-            <label className="form-field">
-              <span>Qeyd</span>
-              <Input
-                name="notes"
-                defaultValue={student.detail.notes === "Qeyd yoxdur" ? "" : student.detail.notes}
-                maxLength={500}
-              />
-            </label>
+            <section className="student-create-section">
+              <div className="student-detail-section-title">
+                <UserRound />
+                <span>Şəxsi məlumatlar</span>
+              </div>
+              <div className="student-create-grid student-create-grid-personal">
+                <label className="form-field">
+                  <span>ART kodu</span>
+                  <Input value={student.code} readOnly aria-label="Dəyişdirilməyən ART kodu" />
+                </label>
+                <label className="form-field">
+                  <span>Ad və soyad</span>
+                  <Input name="fullName" defaultValue={student.name} minLength={2} maxLength={120} required />
+                </label>
+                <label className="form-field">
+                  <span>Telefon</span>
+                  <Input name="phone" defaultValue={student.phone} minLength={6} maxLength={40} required />
+                </label>
+                <label className="form-field">
+                  <span>E-poçt</span>
+                  <Input name="email" type="email" defaultValue={student.detail.email} maxLength={320} />
+                </label>
+                <label className="form-field">
+                  <span>Mənbə</span>
+                  <FormSelect
+                    name="source"
+                    defaultValue={student.detail.source}
+                    emptyLabel="Mənbə seçilməyib"
+                    options={buildCrmSourceSelectOptions(sourceOptions)}
+                    searchable
+                    searchPlaceholder="Mənbə axtar..."
+                    catalogKey="CRM_SOURCE"
+                    createLabel="Yeni mənbə əlavə et"
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Təhsil səviyyəsi</span>
+                  <FormSelect
+                    name="educationLevel"
+                    defaultValue={student.detail.educationLevel}
+                    emptyLabel="Təhsil səviyyəsi seçilməyib"
+                    options={selectableEducationLevels}
+                    searchable
+                    catalogKey="STUDENT_EDUCATION_LEVEL"
+                    createLabel="Yeni təhsil səviyyəsi əlavə et"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="student-create-section">
+              <div className="student-detail-section-title">
+                <BookOpen />
+                <span>Tədris və kampaniya məlumatları</span>
+              </div>
+              <div className="student-create-grid">
+                <label className="form-field">
+                  <span>Proqram</span>
+                  <FormSelect
+                    name="programId"
+                    defaultValue={student.detail.programId}
+                    emptyLabel="Proqram seçin"
+                    options={editOptions.programs.map((program) => ({ value: program.id, label: program.name }))}
+                    searchable
+                    searchPlaceholder="Proqram axtar..."
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Müəllim</span>
+                  <FormSelect
+                    name="teacherId"
+                    defaultValue={student.detail.teacherId}
+                    emptyLabel="Müəllim seçilməyib"
+                    options={editOptions.teachers.map((teacher) => ({ value: teacher.id, label: teacher.fullName }))}
+                    searchable
+                    searchPlaceholder="Müəllim axtar..."
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Məsul şəxs</span>
+                  {permissions.canAssignStudentManager ? (
+                    <FormSelect
+                      name="managerId"
+                      defaultValue={student.detail.managerId}
+                      emptyLabel="Məsul şəxs seçilməyib"
+                      options={editOptions.managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
+                      searchable
+                      searchPlaceholder="Məsul şəxs axtar..."
+                    />
+                  ) : (
+                    <>
+                      <input name="managerId" type="hidden" value={student.detail.managerId} />
+                      <Input value={student.detail.manager} readOnly aria-label="Məsul şəxs" />
+                    </>
+                  )}
+                </label>
+                <label className="form-field">
+                  <span>Kampaniya</span>
+                  <FormSelect
+                    name="campaignId"
+                    defaultValue={student.detail.campaignId}
+                    emptyLabel="Kampaniya seçilməyib"
+                    options={editOptions.campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))}
+                    searchable
+                    searchPlaceholder="Kampaniya axtar..."
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Qeydiyyat tarixi</span>
+                  <DatePicker
+                    name="registeredDate"
+                    defaultValue={student.detail.registeredDate}
+                    allowClear={false}
+                    popoverPlacement="floating"
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  <span>İlk dərs tarixi</span>
+                  <DatePicker name="firstLessonDate" defaultValue={student.detail.firstLessonDate} />
+                </label>
+              </div>
+            </section>
+
+            <section className="student-create-section">
+              <div className="student-detail-section-title">
+                <GraduationCap />
+                <span>Status və ödəniş planı</span>
+              </div>
+              <div className="student-create-grid">
+                <label className="form-field">
+                  <span>Status</span>
+                  {permissions.canChangeStatus ? (
+                    <FormSelect
+                      name="lifecycleStatus"
+                      defaultValue={student.lifecycleStatusValue}
+                      options={studentStatusOptions}
+                    />
+                  ) : (
+                    <>
+                      <input name="lifecycleStatus" type="hidden" value={student.lifecycleStatusValue} />
+                      <div className="student-readonly-status"><span /><strong>Status dəyişmə icazəsi yoxdur</strong></div>
+                    </>
+                  )}
+                </label>
+                <label className="form-field">
+                  <span>Status tarixi (status dəyişərsə)</span>
+                  {permissions.canChangeStatus ? (
+                    <DatePicker
+                      name="statusEffectiveDate"
+                      defaultValue={student.detail.paymentDefaultDate}
+                    />
+                  ) : (
+                    <Input
+                      name="statusEffectiveDate"
+                      defaultValue={student.detail.paymentDefaultDate}
+                      readOnly
+                    />
+                  )}
+                </label>
+                <label className="form-field">
+                  <span>Güzəşt növü</span>
+                  <FormSelect
+                    name="discountType"
+                    defaultValue={student.detail.discountType}
+                    emptyLabel="Güzəşt yoxdur"
+                    options={editOptions.discountTypes}
+                    searchable
+                    searchPlaceholder="Güzəşt növü axtar..."
+                    catalogKey="STUDENT_DISCOUNT_TYPE"
+                    createLabel="Yeni güzəşt növü əlavə et"
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Aylıq məbləğ</span>
+                  <Input name="monthlyFee" defaultValue={student.detail.monthlyFee} inputMode="decimal" required />
+                </label>
+                <label className="form-field">
+                  <span>Aylıq dərs sayı</span>
+                  <Input
+                    name="lessonsPerMonth"
+                    defaultValue={student.detail.lessonsPerMonth}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={120}
+                  />
+                </label>
+                {permissions.canChangeStatus ? (
+                  <label className="form-field">
+                    <span>Status dəyişiklik qeydi</span>
+                    <Input name="statusNote" maxLength={240} placeholder="Yalnız status dəyişərsə tarixçəyə yazılır" />
+                  </label>
+                ) : null}
+              </div>
+
+              <label className="form-field student-create-notes">
+                <span>Profil qeydi</span>
+                <Input
+                  name="notes"
+                  defaultValue={student.detail.notes === "Qeyd yoxdur" ? "" : student.detail.notes}
+                  maxLength={500}
+                />
+              </label>
+            </section>
 
             <div className="premium-edit-notice">
               <span className="sparkle">✨</span>
-              <span>ART ERP premium profil redaktəsi. Bu dəyişikliklər tələbənin cədvəl və maliyyə tarixçəsinə təsir edə bilər.</span>
+              <span>Mövcud faktura və ödəniş tarixçəsi qorunur; proqram və qiymət dəyişiklikləri cari tədris planına tətbiq edilir.</span>
             </div>
 
             <DialogFooter>
@@ -366,7 +600,10 @@ export function StudentDetailActions({
                 type="button"
                 variant="ghost"
                 disabled={!permissions.canDeleteStudent}
-                onClick={() => setDeleteOpen(true)}
+                onClick={() => {
+                  setEditOpen(false);
+                  setDeleteOpen(true);
+                }}
               >
                 <Trash2 data-icon="inline-start" />
                 Tələbəni sil

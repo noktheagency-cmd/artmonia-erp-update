@@ -581,6 +581,12 @@ button.students-kpi { cursor: pointer; }
   .student-create-steps > div:not([data-active="true"]) { display: none; }
   .student-create-dialog .field-grid { grid-template-columns: 1fr; }
   .student-create-dialog .ui-dialog-footer { margin-inline: -14px; padding-inline: 14px; }
+  .student-profile-edit-dialog .ui-dialog-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .student-profile-edit-dialog .ui-dialog-footer > :is(.ui-button, [data-slot="button"]) { width: 100%; }
+  .student-profile-edit-dialog .ui-dialog-footer > :is(.ui-button, [data-slot="button"]):last-child { grid-column: 1 / -1; }
 }
 
 /* Container queries keep filter actions inside the page when the sidebar expands. */

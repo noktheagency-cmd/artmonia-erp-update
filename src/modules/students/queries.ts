@@ -1,4 +1,5 @@
 import {
+  AppRole,
   InvoiceStatus,
   Prisma,
   StudentLifecycleStatus,
@@ -83,6 +84,7 @@ export type StudentListData = {
     }>;
     teachers: Array<{ id: string; fullName: string }>;
     campaigns: Array<{ id: string; name: string }>;
+    educationLevels: Array<{ value: string; label: string }>;
     discountTypes: Array<{ value: string; label: string }>;
     sourceOptions: string[];
     currentManagerName: string;
@@ -422,6 +424,7 @@ export async function getStudentListData(
       })),
       teachers,
       campaigns,
+      educationLevels: options.educationLevels,
       discountTypes,
       sourceOptions: buildCrmSourceOptions(sources),
       currentManagerName: actor.fullName,
@@ -613,6 +616,21 @@ type StudentListRawRow = Omit<
   payments: unknown;
   monthlyPayments: unknown;
   timeline: unknown;
+};
+
+type StudentDetailRawRow = StudentListRawRow & {
+  contactEmail: string | null;
+  source: string | null;
+  educationLevel: string | null;
+  managerId: string | null;
+  campaignId: string | null;
+  campaignName: string | null;
+  enrollmentId: string | null;
+  programId: string | null;
+  teacherId: string | null;
+  discountType: string | null;
+  lessonsPerMonth: number | null;
+  firstLessonAt: Date | string | null;
 };
 
 type StudentInvoiceRecord = {
@@ -1025,6 +1043,7 @@ type StudentCreateOptionRows = {
   }>;
   teachers: Array<{ id: string; fullName: string }>;
   campaigns: Array<{ id: string; name: string }>;
+  educationLevels: Array<{ value: string; label: string }>;
   discountTypes: Array<{ value: string; label: string }>;
   sources: string[];
   leads: StudentListData["createOptions"]["leads"];
@@ -1036,6 +1055,7 @@ type StudentCreateOptionsRawRow = {
   programs: unknown;
   teachers: unknown;
   campaigns: unknown;
+  educationLevels: unknown;
   discountTypes: unknown;
   sources: unknown;
   leads: unknown;
@@ -1226,6 +1246,15 @@ async function getStudentCreateOptions(
           order by dco.label asc, dco.created_at asc
         )
         from erp.dropdown_catalog_options dco
+        where dco.catalog = 'STUDENT_EDUCATION_LEVEL'
+          and dco.is_active = true
+      ), '[]'::jsonb) as "educationLevels",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object('value', dco.value, 'label', dco.label)
+          order by dco.label asc, dco.created_at asc
+        )
+        from erp.dropdown_catalog_options dco
         where dco.catalog = 'STUDENT_DISCOUNT_TYPE'
           and dco.is_active = true
       ), '[]'::jsonb) as "discountTypes",
@@ -1284,6 +1313,7 @@ async function getStudentCreateOptions(
       row?.teachers
     ),
     campaigns: asJsonArray<StudentCreateOptionRows["campaigns"][number]>(row?.campaigns),
+    educationLevels: asJsonArray<StudentCreateOptionRows["educationLevels"][number]>(row?.educationLevels),
     discountTypes: asJsonArray<StudentCreateOptionRows["discountTypes"][number]>(row?.discountTypes),
     sources: asJsonArray<string>(row?.sources),
     leads: asJsonArray<StudentCreateOptionRows["leads"][number]>(row?.leads),
@@ -1636,6 +1666,14 @@ function formatDecimalInput(value: unknown) {
   return amount > 0 ? amount.toFixed(2) : "";
 }
 
+function formatNonNegativeDecimalInput(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return toNumber(value).toFixed(2);
+}
+
 function startOfToday() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1649,8 +1687,14 @@ export async function getStudentDetailData(studentId: string) {
   const actor = await requireErpActor("student.read");
   const prisma = getPrisma();
   const today = startOfToday();
+  const studentReadScope = scopeFor(actor.permissions, "student.read");
+  const studentScopeSql = studentReadScope === "ALL"
+    ? Prisma.sql`true`
+    : studentReadScope === "ASSIGNED"
+      ? Prisma.sql`s.manager_id = ${actor.id}::uuid`
+      : Prisma.sql`false`;
 
-  const rows = await prisma.$queryRaw<StudentListRawRow[]>(Prisma.sql`
+  const rows = await prisma.$queryRaw<StudentDetailRawRow[]>(Prisma.sql`
     with paged_students as (
       select
         s.id,
@@ -1660,14 +1704,22 @@ export async function getStudentDetailData(studentId: string) {
         s.created_at as "createdAt",
         s.notes,
         s.billing_paused as "billingPaused",
+        s.education_level as "educationLevel",
+        s.manager_id::text as "managerId",
+        s.campaign_id::text as "campaignId",
         c.full_name as "name",
         c.phone_display as "phone",
+        c.email as "contactEmail",
+        c.source,
         u.full_name as "managerName",
+        mc.name as "campaignName",
         1::int as "totalCount"
       from erp.students s
       join erp.contacts c on c.id = s.contact_id
       left join erp.users u on u.id = s.manager_id
+      left join erp.marketing_campaigns mc on mc.id = s.campaign_id
       where s.id = ${studentId}::uuid
+        and ${studentScopeSql}
     )
     select
       ps.id::text as "id",
@@ -1676,11 +1728,23 @@ export async function getStudentDetailData(studentId: string) {
       ps."registeredAt",
       ps.notes,
       ps."billingPaused",
+      ps."educationLevel",
+      ps."managerId",
+      ps."campaignId",
       ps.name,
       ps.phone,
+      ps."contactEmail",
+      ps.source,
       ps."managerName",
+      ps."campaignName",
       ps."totalCount",
+      ae.id::text as "enrollmentId",
+      ae.program_id::text as "programId",
+      ae.teacher_id::text as "teacherId",
       ae.monthly_fee as "monthlyFee",
+      ae.discount_type as "discountType",
+      ae.lessons_per_month as "lessonsPerMonth",
+      ae.first_lesson_at as "firstLessonAt",
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
       (select concat(t.full_name, ' · ', cs.start_time, '–', cs.end_time) from erp.student_schedule_assignments ssa join erp.class_slots cs on cs.id = ssa.slot_id join erp.teachers t on t.id = cs.teacher_id join erp.enrollments se on se.id = ssa.enrollment_id where se.student_id = ps.id and ssa.valid_to is null order by ssa.valid_from desc, ssa.created_at desc limit 1) as "slotLabel",
@@ -1696,7 +1760,13 @@ export async function getStudentDetailData(studentId: string) {
     from paged_students ps
     left join lateral (
       select
+        e.id,
+        e.program_id,
+        e.teacher_id,
         e.monthly_fee,
+        e.discount_type,
+        e.lessons_per_month,
+        e.first_lesson_at,
         p.name as program_name,
         t.full_name as teacher_name
       from erp.enrollments e
@@ -1845,16 +1915,70 @@ export async function getStudentDetailData(studentId: string) {
         ? formatDecimalInput(student.monthlyFee)
         : "";
 
-  const [options, reminders] = await Promise.all([
+  const canAssignStudentManager = scopeFor(actor.permissions, "student.update") === "ALL";
+  const [options, reminders, managers] = await Promise.all([
     getStudentCreateOptions(prisma),
     getStudentReminderHistory(prisma, actor, studentId),
+    prisma.user.findMany({
+      where: canAssignStudentManager
+        ? {
+            OR: [
+              { id: student.managerId ?? "__current_manager_missing__" },
+              {
+                isActive: true,
+                roles: {
+                  some: {
+                    role: { code: { in: [AppRole.OWNER, AppRole.ADMIN, AppRole.SALES] } },
+                  },
+                },
+              },
+            ],
+          }
+        : { id: student.managerId ?? actor.id },
+      orderBy: { fullName: "asc" },
+      select: { id: true, fullName: true },
+    }),
   ]);
+
+  const programs = options.programs.map((program) => ({
+    id: program.id,
+    name: program.name,
+    monthlyFee: formatDecimalInput(program.defaultMonthlyFee),
+    lessonsPerMonth: program.defaultLessonsPerMonth?.toString() ?? "",
+  }));
+  if (student.programId && !programs.some((program) => program.id === student.programId)) {
+    programs.push({
+      id: student.programId,
+      name: student.programName ?? "Cari proqram",
+      monthlyFee: formatNonNegativeDecimalInput(student.monthlyFee),
+      lessonsPerMonth: student.lessonsPerMonth?.toString() ?? "",
+    });
+  }
+
+  const teachers = [...options.teachers];
+  if (student.teacherId && !teachers.some((teacher) => teacher.id === student.teacherId)) {
+    teachers.push({ id: student.teacherId, fullName: student.teacherName ?? "Cari müəllim" });
+  }
+
+  const campaigns = [...options.campaigns];
+  if (student.campaignId && !campaigns.some((campaign) => campaign.id === student.campaignId)) {
+    campaigns.push({ id: student.campaignId, name: student.campaignName ?? "Cari kampaniya" });
+  }
+
+  const discountTypes = [...options.discountTypes];
+  if (
+    student.discountType
+    && !discountTypes.some((discountType) => discountType.value === student.discountType)
+  ) {
+    discountTypes.push({ value: student.discountType, label: student.discountType });
+  }
 
   return {
     returnTo: `/students/${student.id}`,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
       canUpdateStudent: actor.permissions.has("student.update"),
+      canAssignStudentManager,
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),
       canChangeStatus: actor.permissions.has("student.status.change"),
@@ -1863,14 +1987,12 @@ export async function getStudentDetailData(studentId: string) {
     },
     createOptions: {
       leads: options.leads,
-      programs: options.programs.map((program) => ({
-        id: program.id,
-        name: program.name,
-        monthlyFee: formatDecimalInput(program.defaultMonthlyFee),
-        lessonsPerMonth: program.defaultLessonsPerMonth?.toString() ?? "",
-      })),
-      teachers: options.teachers,
-      campaigns: options.campaigns,
+      programs,
+      teachers,
+      managers,
+      campaigns,
+      educationLevels: options.educationLevels,
+      discountTypes,
       sourceOptions: buildCrmSourceOptions(options.sources),
       currentManagerName: actor.fullName,
       defaultRegisteredDate: formatDateInput(new Date()),
@@ -1899,7 +2021,22 @@ export async function getStudentDetailData(studentId: string) {
         paidMonths,
       },
       detail: {
+        email: student.contactEmail ?? "",
+        source: student.source ?? "",
+        educationLevel: student.educationLevel ?? "",
+        managerId: student.managerId ?? "",
         manager: student.managerName ?? "Təyin edilməyib",
+        campaignId: student.campaignId ?? "",
+        campaign: student.campaignName ?? "Təyin edilməyib",
+        enrollmentId: student.enrollmentId ?? "",
+        programId: student.programId ?? "",
+        teacherId: student.teacherId ?? "",
+        discountType: student.discountType ?? "",
+        lessonsPerMonth: student.lessonsPerMonth?.toString() ?? "",
+        firstLessonDate: student.firstLessonAt
+          ? formatDateInput(new Date(student.firstLessonAt))
+          : "",
+        registeredDate: formatDateInput(new Date(student.registeredAt as Date)),
         registeredAt: formatShortDate(student.registeredAt as Date),
         notes: student.notes ?? "Qeyd yoxdur",
         billingPaused: student.billingPaused ? "Dayandırılıb" : "Aktivdir",
@@ -1907,7 +2044,10 @@ export async function getStudentDetailData(studentId: string) {
         reminders,
         paymentDefaultAmount: defaultPaymentAmount,
         paymentDefaultDate: formatDateInput(new Date()),
-        monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
+        monthlyFee: formatNonNegativeDecimalInput(student.monthlyFee),
+        monthlyFeeLabel: student.monthlyFee === null || student.monthlyFee === undefined
+          ? "Təyin edilməyib"
+          : formatAmount(student.monthlyFee),
         invoices: asJsonArray<StudentInvoiceRecord>(student.invoices).slice(0, 6).map((invoice) => {
           const status = invoiceStatusMeta[invoice.status];
           return {

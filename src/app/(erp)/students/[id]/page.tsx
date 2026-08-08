@@ -32,7 +32,7 @@ export default async function StudentDetailPage({
     );
   }
 
-  const { student, permissions } = data;
+  const { student, permissions, createOptions } = data;
 
   return (
     <section className="page-stack student-detail-page student-detail-modern-page">
@@ -52,6 +52,15 @@ export default async function StudentDetailPage({
         
         <StudentDetailActions 
           student={student}
+          editOptions={{
+            programs: createOptions.programs,
+            teachers: createOptions.teachers,
+            managers: createOptions.managers,
+            campaigns: createOptions.campaigns,
+            educationLevels: createOptions.educationLevels,
+            discountTypes: createOptions.discountTypes,
+            sourceOptions: createOptions.sourceOptions,
+          }}
           permissions={permissions}
           recordPaymentAction={recordStudentPaymentAction}
           updateStudentProfileAction={updateStudentProfileAction}
@@ -268,8 +277,40 @@ export default async function StudentDetailPage({
               <strong>{student.detail.manager}</strong>
             </div>
             <div className="profile-info-item">
+              <span>Kampaniya</span>
+              <strong>{student.detail.campaign}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>Mənbə</span>
+              <strong>{student.detail.source || "Təyin edilməyib"}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>Təhsil səviyyəsi</span>
+              <strong>{student.detail.educationLevel || "Təyin edilməyib"}</strong>
+            </div>
+            <div className="profile-info-item">
               <span>Qeydiyyat tarixi</span>
               <strong>{student.detail.registeredAt}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>İlk dərs tarixi</span>
+              <strong>{student.detail.firstLessonDate || "Təyin edilməyib"}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>Aylıq məbləğ</span>
+              <strong>{student.detail.monthlyFeeLabel}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>Aylıq dərs sayı</span>
+              <strong>{student.detail.lessonsPerMonth || "Təyin edilməyib"}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>Güzəşt növü</span>
+              <strong>{student.detail.discountType || "Güzəşt yoxdur"}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>E-poçt</span>
+              <strong>{student.detail.email || "Təyin edilməyib"}</strong>
             </div>
             <div className="profile-info-item">
               <span>Fakturalandırma</span>

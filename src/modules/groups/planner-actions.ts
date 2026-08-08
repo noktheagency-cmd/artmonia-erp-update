@@ -392,7 +392,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
     : await prisma.teacher.findUnique({ where: { userId: actor.id }, select: { id: true } });
   if (!canManageAll && !teacherProfile) throw new Error("Müəllim profili ERP hesabına bağlanmayıb");
 
-  const teacherId = await prisma.$transaction(async (tx) => {
+  const affectedTeacherIds = await prisma.$transaction(async (tx) => {
     await lockSlots(tx, [input.slotId]);
     const slot = await tx.classSlot.findUnique({
       where: { id: input.slotId },
@@ -445,6 +445,17 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       });
     }
 
+    const previousTeacherIds = session
+      ? await tx.attendanceRecord.findMany({
+          where: {
+            sessionId: session.id,
+            enrollmentId: { in: input.items.map((item) => item.enrollmentId) },
+          },
+          select: { teacherId: true },
+          distinct: ["teacherId"],
+        })
+      : [];
+
     for (const item of input.items) {
       if (!item.status) {
         if (session) {
@@ -492,10 +503,10 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       after: { slotId: slot.id, date: input.date, items: input.items } as Prisma.InputJsonValue,
       reason: "Slot davamiyyəti yeniləndi",
     });
-    return slot.teacherId;
+    return [...new Set([slot.teacherId, ...previousTeacherIds.map((item) => item.teacherId)])];
   });
 
-  await recalculateTeacherPayoutsForMonth(date, actor.id, [teacherId]);
+  await recalculateTeacherPayoutsForMonth(date, actor.id, affectedTeacherIds);
   revalidatePlanner();
 }
 

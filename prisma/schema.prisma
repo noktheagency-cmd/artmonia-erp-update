@@ -1528,6 +1528,7 @@ model Invoice {
   refundAdjustments  RefundAdjustment[]
 
   @@index([studentId, periodMonth])
+  @@index([periodMonth, enrollmentId], map: "invoices_period_enrollment_idx")
   @@index([enrollmentId])
   @@index([dueDate, status])
   @@index([balanceDue])

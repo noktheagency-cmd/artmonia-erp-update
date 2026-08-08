@@ -3,6 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import {
+  AppRole,
   EnrollmentStatus,
   InvoiceStatus,
   LeadStage,
@@ -13,6 +14,7 @@ import {
 import type { PaymentMethod } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
+import { scopeFor } from "@/server/rbac/permissions";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { normalizePhone } from "@/modules/crm/duplicate-phone";
 import { optionalFormString } from "@/modules/shared/form-values";
@@ -136,7 +138,33 @@ const updateStudentProfileSchema = z.object({
   studentId: z.string().uuid(),
   fullName: z.string().trim().min(2).max(120),
   phone: z.string().trim().min(6).max(40),
+  email: z.preprocess(
+    optionalFormString,
+    z.string().email("E-poçt ünvanı düzgün deyil.").max(320).optional(),
+  ),
+  source: optionalText(60),
+  educationLevel: optionalText(80),
+  managerId: optionalUuid("Məsul şəxs"),
+  campaignId: optionalUuid("Kampaniya"),
+  programId: requiredUuid("Proqram"),
+  teacherId: optionalUuid("Müəllim"),
+  lifecycleStatus: z.enum(studentLifecycleStatusValues),
+  registeredDate: z.string().trim().min(1).max(20),
+  firstLessonDate: optionalText(20),
+  discountType: optionalText(100),
+  monthlyFee: z.preprocess(parseAmountInput, z.number().nonnegative().max(100_000)),
+  lessonsPerMonth: optionalInteger,
+  statusEffectiveDate: optionalText(20),
+  statusNote: optionalText(240),
   notes: optionalText(500),
+}).superRefine((value, context) => {
+  if (!isGiftDiscount(value.discountType) && value.monthlyFee <= 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["monthlyFee"],
+      message: "Aylıq məbləğ sıfırdan böyük olmalıdır.",
+    });
+  }
 });
 
 async function createStudentActionImpl(formData: FormData) {
@@ -534,6 +562,14 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     throw new Error("Telefon düzgün deyil");
   }
 
+  const registeredAt = parseDateInput(input.registeredDate, "Qeydiyyat tarixi");
+  const firstLessonAt = input.firstLessonDate
+    ? parseDateInput(input.firstLessonDate, "İlk dərs tarixi")
+    : null;
+  const statusEffectiveAt = input.statusEffectiveDate
+    ? parseDateInput(input.statusEffectiveDate, "Status tarixi")
+    : startOfToday();
+
   const prisma = getPrisma();
   await prisma.$transaction(async (tx) => {
     const current = await tx.student.findUnique({
@@ -545,6 +581,24 @@ async function updateStudentProfileActionImpl(formData: FormData) {
             fullName: true,
             phoneDisplay: true,
             phoneNormalized: true,
+            email: true,
+            source: true,
+          },
+        },
+        enrollments: {
+          where: {
+            status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+          },
+          orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+          take: 1,
+          select: {
+            id: true,
+            programId: true,
+            teacherId: true,
+            firstLessonAt: true,
+            monthlyFee: true,
+            discountType: true,
+            lessonsPerMonth: true,
           },
         },
       },
@@ -552,6 +606,32 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     if (!current) {
       throw new Error("Tələbə tapılmadı");
     }
+
+    const canManageAllStudents = scopeFor(actor.permissions, "student.update") === "ALL";
+    if (!canManageAllStudents && current.managerId !== actor.id) {
+      throw new PublicActionError("Bu tələbəni redaktə etmək icazəniz yoxdur.");
+    }
+
+    const currentEnrollment = current.enrollments[0];
+    if (!currentEnrollment) {
+      throw new PublicActionError("Tələbənin aktiv tədris qeydiyyatı tapılmadı.");
+    }
+
+    const statusChanged = current.lifecycleStatus !== input.lifecycleStatus;
+    if (statusChanged && !actor.permissions.has("student.status.change")) {
+      throw new PublicActionError("Tələbə statusunu dəyişmək icazəniz yoxdur.");
+    }
+    if (
+      statusChanged
+      && scopeFor(actor.permissions, "student.status.change") !== "ALL"
+      && current.managerId !== actor.id
+    ) {
+      throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur.");
+    }
+
+    const managerId = canManageAllStudents
+      ? input.managerId ?? null
+      : current.managerId;
 
     const phoneOwner = await tx.contact.findFirst({
       where: {
@@ -564,18 +644,174 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       throw new Error(`Telefon artıq ${phoneOwner.fullName} adına bağlıdır`);
     }
 
+    const [program, teacher, manager, campaign, educationLevel, discountType] = await Promise.all([
+      tx.program.findUnique({
+        where: { id: input.programId },
+        select: { id: true },
+      }),
+      input.teacherId
+        ? tx.teacher.findUnique({ where: { id: input.teacherId }, select: { id: true } })
+        : Promise.resolve(null),
+      managerId
+        ? tx.user.findFirst({
+            where: {
+              id: managerId,
+              OR: [
+                { id: current.managerId ?? "__current_manager_missing__" },
+                {
+                  isActive: true,
+                  roles: {
+                    some: {
+                      role: { code: { in: [AppRole.OWNER, AppRole.ADMIN, AppRole.SALES] } },
+                    },
+                  },
+                },
+              ],
+            },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      input.campaignId
+        ? tx.marketingCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true } })
+        : Promise.resolve(null),
+      input.educationLevel
+        ? tx.dropdownCatalogOption.findUnique({
+            where: {
+              catalog_value: {
+                catalog: "STUDENT_EDUCATION_LEVEL",
+                value: input.educationLevel,
+              },
+            },
+            select: { value: true, isActive: true },
+          })
+        : Promise.resolve(null),
+      input.discountType
+        ? tx.dropdownCatalogOption.findUnique({
+            where: {
+              catalog_value: {
+                catalog: "STUDENT_DISCOUNT_TYPE",
+                value: input.discountType,
+              },
+            },
+            select: { value: true, isActive: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (!program) throw new PublicActionError("Proqram tapılmadı.");
+    if (input.teacherId && !teacher) throw new PublicActionError("Müəllim tapılmadı.");
+    if (managerId && !manager) throw new PublicActionError("Məsul şəxs tapılmadı.");
+    if (input.campaignId && !campaign) throw new PublicActionError("Kampaniya tapılmadı.");
+    if (
+      input.educationLevel
+      && (!educationLevel || (!educationLevel.isActive && input.educationLevel !== current.educationLevel))
+    ) {
+      throw new PublicActionError("Təhsil səviyyəsi tapılmadı və ya artıq aktiv deyil.");
+    }
+    if (
+      input.discountType
+      && (!discountType || (!discountType.isActive && input.discountType !== currentEnrollment.discountType))
+    ) {
+      throw new PublicActionError("Güzəşt növü tapılmadı və ya artıq aktiv deyil.");
+    }
+
+    const effectiveMonthlyFee = resolveStudentMonthlyFee(discountType?.value, input.monthlyFee);
+
     await tx.contact.update({
       where: { id: current.contact.id },
       data: {
         fullName: input.fullName,
         phoneDisplay: input.phone,
         phoneNormalized,
+        email: input.email ?? null,
+        source: input.source ?? null,
       },
     });
     await tx.student.update({
       where: { id: current.id },
-      data: { notes: input.notes ?? null },
+      data: {
+        managerId,
+        campaignId: input.campaignId ?? null,
+        educationLevel: educationLevel?.value ?? null,
+        registeredAt,
+        notes: input.notes ?? null,
+      },
     });
+
+    await tx.enrollment.update({
+      where: { id: currentEnrollment.id },
+      data: {
+        programId: input.programId,
+        teacherId: input.teacherId ?? null,
+        firstLessonAt,
+        monthlyFee: effectiveMonthlyFee,
+        discountType: discountType?.value ?? null,
+        lessonsPerMonth: input.lessonsPerMonth ?? null,
+      },
+    });
+
+    if (currentEnrollment.teacherId !== (input.teacherId ?? null)) {
+      await tx.teacherAssignmentHistory.create({
+        data: {
+          enrollmentId: currentEnrollment.id,
+          oldTeacherId: currentEnrollment.teacherId,
+          newTeacherId: input.teacherId ?? null,
+          reason: "Tələbə profilindən müəllim təyinatı yeniləndi",
+          changedById: actor.id,
+        },
+      });
+    }
+
+    if (statusChanged) {
+      await tx.student.update({
+        where: { id: current.id },
+        data: buildSharedStudentStatusUpdateData(input.lifecycleStatus, statusEffectiveAt),
+      });
+
+      await tx.studentStatusHistory.create({
+        data: {
+          studentId: current.id,
+          oldStatus: current.lifecycleStatus,
+          newStatus: input.lifecycleStatus,
+          reason: getSharedStatusChangeReason(input.lifecycleStatus),
+          note: input.statusNote ?? null,
+          effectiveAt: statusEffectiveAt,
+          changedById: actor.id,
+        },
+      });
+
+      if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
+        await syncSharedActivationBilling(tx, {
+          studentId: current.id,
+          studentCode: current.code,
+          effectiveAt: statusEffectiveAt,
+        });
+        await restartStudentPaymentScheduleForActiveSlot(tx, {
+          studentId: current.id,
+          activatedAt: statusEffectiveAt,
+        });
+      } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
+        await clearStudentPaymentSchedules(tx, [current.id]);
+      }
+
+      await writeAuditLog(tx, {
+        actorUserId: actor.id,
+        action: "student.status.change",
+        entityType: "student",
+        entityId: current.id,
+        before: {
+          lifecycleStatus: current.lifecycleStatus,
+          billingPaused: current.billingPaused,
+        },
+        after: {
+          lifecycleStatus: input.lifecycleStatus,
+          billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
+          effectiveAt: statusEffectiveAt.toISOString(),
+        },
+        reason: input.statusNote ?? getSharedStatusChangeReason(input.lifecycleStatus),
+      });
+    }
+
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "student.profile.update",
@@ -584,19 +820,48 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       before: {
         fullName: current.contact.fullName,
         phone: current.contact.phoneDisplay,
+        email: current.contact.email,
+        source: current.contact.source,
+        educationLevel: current.educationLevel,
+        managerId: current.managerId,
+        campaignId: current.campaignId,
+        registeredAt: current.registeredAt.toISOString(),
+        enrollmentId: currentEnrollment.id,
+        programId: currentEnrollment.programId,
+        teacherId: currentEnrollment.teacherId,
+        firstLessonAt: currentEnrollment.firstLessonAt?.toISOString() ?? null,
+        monthlyFee: toNumber(currentEnrollment.monthlyFee),
+        discountType: currentEnrollment.discountType,
+        lessonsPerMonth: currentEnrollment.lessonsPerMonth,
         notes: current.notes,
       } satisfies Prisma.InputJsonValue,
       after: {
         fullName: input.fullName,
         phone: input.phone,
+        email: input.email ?? null,
+        source: input.source ?? null,
+        educationLevel: educationLevel?.value ?? null,
+        managerId,
+        campaignId: input.campaignId ?? null,
+        registeredAt: registeredAt.toISOString(),
+        enrollmentId: currentEnrollment.id,
+        programId: input.programId,
+        teacherId: input.teacherId ?? null,
+        firstLessonAt: firstLessonAt?.toISOString() ?? null,
+        monthlyFee: effectiveMonthlyFee,
+        discountType: discountType?.value ?? null,
+        lessonsPerMonth: input.lessonsPerMonth ?? null,
         notes: input.notes ?? null,
       } satisfies Prisma.InputJsonValue,
-      reason: "Tələbə profil məlumatları yeniləndi",
+      reason: "Tələbənin profil və tədris məlumatları yeniləndi",
     });
   });
 
   revalidatePath(`/students/${input.studentId}`);
   revalidatePath("/students");
+  revalidatePath("/dashboard");
+  revalidatePath("/finance");
+  revalidatePath("/marketing");
   invalidateStudentCaches();
 }
 
@@ -1132,12 +1397,14 @@ function invalidateStudentCaches() {
   updateTag(erpCacheTags.crm);
   updateTag(erpCacheTags.dashboard);
   updateTag(erpCacheTags.finance);
+  updateTag(erpCacheTags.marketing);
 }
 
 function invalidatePaymentCaches() {
   updateTag(erpCacheTags.students);
   updateTag(erpCacheTags.dashboard);
   updateTag(erpCacheTags.finance);
+  updateTag(erpCacheTags.marketing);
 }
 
 export const createStudentAction = safeServerAction(

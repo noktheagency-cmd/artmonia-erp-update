@@ -1,4 +1,4 @@
-import { AppRole, LeadStage, Prisma } from "@/generated/prisma/client";
+import { LeadStage, Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getCrmScopeLabel } from "@/modules/crm/access";
 import { getPrisma } from "@/server/db/prisma";
@@ -39,6 +39,7 @@ import {
   leadStageTones,
 } from "@/modules/crm/stage";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { scopeFor, type PermissionScope } from "@/server/rbac/permissions";
 
 export type CrmFollowUpFilter =
   | "all"
@@ -186,7 +187,9 @@ type CrmLeadFocusRow = {
 };
 
 type CrmPeriodRange = { gte?: Date; lt?: Date } | null;
-type CrmCacheActor = Pick<ErpActor, "id" | "roles">;
+type CrmCacheActor = Pick<ErpActor, "id" | "roles"> & {
+  readScope: PermissionScope;
+};
 type CrmCachePeriodRange = { gte?: string; lt?: string } | null;
 
 type CrmCacheInput = {
@@ -305,6 +308,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     actor: {
       id: actor.id,
       roles: actor.roles,
+      readScope: scopeFor(actor.permissions, "crm.lead.read") ?? "ASSIGNED",
     },
     search,
     searchDigits,
@@ -802,11 +806,11 @@ function getCrmRawData(
 }
 
 function buildLeadScopeSql(actor: CrmCacheActor) {
-  if (isPrivilegedActor(actor)) {
+  if (actor.readScope === "ALL") {
     return Prisma.sql`true`;
   }
 
-  if (actor.roles.includes(AppRole.SALES)) {
+  if (actor.readScope === "ASSIGNED") {
     return Prisma.sql`l.manager_id = ${actor.id}::uuid`;
   }
 

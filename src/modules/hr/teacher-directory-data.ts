@@ -55,6 +55,7 @@ export type TeacherDirectoryTeacher = {
   eligibleRevenue: number;
   estimatedSalary: number;
   attendedLessons: number;
+  absentLessons: number;
   plannedLessons: number;
 };
 
@@ -375,6 +376,7 @@ function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teache
       ? Number(row.salaryAmount ?? 0)
       : payroll?.payoutAmount ?? 0,
     attendedLessons: payroll?.attendedLessons ?? 0,
+    absentLessons: payroll?.absentLessons ?? 0,
     plannedLessons: payroll?.plannedLessons ?? 0,
     nextLesson:
       row.nextLessonDate && row.nextLessonTime

@@ -51,6 +51,7 @@ import type {
   PlannerWorkspaceData,
 } from "@/modules/groups/planner-queries";
 import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
+import { SlotDetailDialog } from "@/modules/groups/slot-detail-dialog";
 import styles from "./planner.module.css";
 
 type PlannerActions = {
@@ -71,10 +72,12 @@ export function PlannerWorkspace({
   data,
   actions,
   initialAttendanceOpen = false,
+  initialDetailsOpen = false,
 }: {
   data: PlannerWorkspaceData;
   actions: PlannerActions;
   initialAttendanceOpen?: boolean;
+  initialDetailsOpen?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -87,6 +90,7 @@ export function PlannerWorkspace({
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [assignmentEnrollmentId, setAssignmentEnrollmentId] = useState<string>();
   const [attendanceOpen, setAttendanceOpen] = useState(initialAttendanceOpen);
+  const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
 
   const filteredSlots = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("az");
@@ -103,6 +107,11 @@ export function PlannerWorkspace({
     ?? filteredSlots[0]
     ?? data.slots.find((slot) => slot.id === selectedSlotId)
     ?? data.slots[0];
+  const selectedJournalDisabled = Boolean(
+    selectedSlot
+    && selectedSlot.id === data.journal.slotId
+    && data.journal.date > data.today,
+  );
   const times = useMemo(() => buildPlannerTimeAxis(filteredSlots), [filteredSlots]);
   const plannedCount = data.slots.reduce((sum, slot) => sum + slot.assignedCount, 0);
   const openSeats = data.slots.reduce(
@@ -136,8 +145,24 @@ export function PlannerWorkspace({
     setAssignmentOpen(true);
   }
 
-  function openAttendance(slot: PlannerSlot) {
-    router.push(`/groups?slot=${slot.id}&attendance=1` as Route);
+  function openSlotDetails(slot: PlannerSlot) {
+    setSelectedSlotId(slot.id);
+    if (slot.id === data.selectedSlotId) {
+      setDetailsOpen(true);
+      return;
+    }
+    router.push(`/groups?slot=${slot.id}&details=1` as Route);
+  }
+
+  function closeSlotDetails(slot: PlannerSlot) {
+    setDetailsOpen(false);
+    router.replace(`/groups?slot=${slot.id}` as Route, { scroll: false });
+  }
+
+  function openAttendance(slot: PlannerSlot, date?: string) {
+    setDetailsOpen(false);
+    const dateParam = date ? `&date=${date}` : "";
+    router.push(`/groups?slot=${slot.id}${dateParam}&attendance=1` as Route);
   }
 
   return (
@@ -222,7 +247,7 @@ export function PlannerWorkspace({
                   weekdays={orderedWeekdays}
                   slots={filteredSlots}
                   selectedId={selectedSlot?.id}
-                  onSelect={setSelectedSlotId}
+                  onSelect={openSlotDetails}
                 />
               ))}
             </div>
@@ -284,8 +309,8 @@ export function PlannerWorkspace({
                     <Button
                       type="button"
                       onClick={() => openAttendance(selectedSlot)}
-                      disabled={selectedSlot.validFrom > data.today}
-                      title={selectedSlot.validFrom > data.today ? "Slot hələ başlamayıb" : undefined}
+                      disabled={selectedJournalDisabled}
+                      title={selectedJournalDisabled ? "Slotun ilk dərs tarixi hələ çatmayıb" : undefined}
                     >
                       <BookOpenCheck data-icon="inline-start" /> Davamiyyət
                     </Button>
@@ -308,6 +333,33 @@ export function PlannerWorkspace({
           )}
         </aside>
       </div>
+
+      {detailsOpen && selectedSlot && data.slotDetail.slotId === selectedSlot.id ? (
+        <SlotDetailDialog
+          key={selectedSlot.id}
+          slot={selectedSlot}
+          detail={data.slotDetail}
+          canManage={data.canManage}
+          canManageAttendance={data.canManageAttendance}
+          canReadStudentDetails={data.canReadStudentDetails}
+          today={data.today}
+          defaultJournalDate={data.journal.date}
+          onClose={() => closeSlotDetails(selectedSlot)}
+          onEditSlot={() => {
+            closeSlotDetails(selectedSlot);
+            setSlotDialogMode("edit");
+          }}
+          onAddStudent={() => {
+            closeSlotDetails(selectedSlot);
+            openAssignment();
+          }}
+          onTransferStudent={(enrollmentId) => {
+            closeSlotDetails(selectedSlot);
+            openAssignment(enrollmentId);
+          }}
+          onOpenJournal={(date) => openAttendance(selectedSlot, date)}
+        />
+      ) : null}
 
       {slotDialogMode ? (
         <SlotDialog
@@ -442,7 +494,7 @@ function TimeRow({
   weekdays: GroupWeekdayCode[];
   slots: PlannerSlot[];
   selectedId?: string;
-  onSelect: (id: string) => void;
+  onSelect: (slot: PlannerSlot) => void;
 }) {
   const rowHasSlots = slots.some((slot) => slot.startTime === time);
   return (
@@ -474,14 +526,15 @@ function SlotCard({
 }: {
   slot: PlannerSlot;
   selected: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (slot: PlannerSlot) => void;
 }) {
   const full = slot.assignedCount >= slot.capacity;
   return (
     <button
       className={cx(styles.slot, selected && styles.selectedSlot, full && styles.fullSlot)}
       type="button"
-      onClick={() => onSelect(slot.id)}
+      onClick={() => onSelect(slot)}
+      aria-label={`${slot.teacherName}, ${slot.startTime}–${slot.endTime} slotunun detallarını aç`}
     >
       <span className={styles.slotTop}>
         <strong>{shiftMeta[slot.shift].label}</strong>
@@ -875,6 +928,10 @@ function AttendanceDialog({
     )));
   }
 
+  function markAll(attendanceStatus: PlannerJournalMember["attendanceStatus"]) {
+    setRows((current) => current.map((row) => ({ ...row, attendanceStatus })));
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -914,10 +971,17 @@ function AttendanceDialog({
                 required
               />
             </label>
-            <div className={styles.attendanceStats} aria-label="Davamiyyət xülasəsi">
-              <span data-state="present"><b>{presentCount}</b> İştirak</span>
-              <span data-state="absent"><b>{absentCount}</b> Qayıb</span>
-              <span><b>{unmarkedCount}</b> Qeyd edilməyib</span>
+            <div className={styles.attendanceToolbarRight}>
+              <div className={styles.attendanceStats} aria-label="Davamiyyət xülasəsi">
+                <span data-state="present"><b>{presentCount}</b> Gəldi</span>
+                <span data-state="absent"><b>{absentCount}</b> Gəlmədi</span>
+                <span><b>{unmarkedCount}</b> Statussuz</span>
+              </div>
+              <div className={styles.attendanceBulkActions} aria-label="Kütləvi status dəyişimi">
+                <button type="button" onClick={() => markAll("present")}><Check /> Hamısı gəldi</button>
+                <button type="button" onClick={() => markAll("absent")}><X /> Hamısı gəlmədi</button>
+                <button type="button" onClick={() => markAll(null)}><RotateCcw /> Təmizlə</button>
+              </div>
             </div>
           </div>
 
@@ -935,18 +999,18 @@ function AttendanceDialog({
                     data-active={row.attendanceStatus === "present" || undefined}
                     data-state="present"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "present" })}
-                    aria-label={`${row.studentName}: iştirak edir`}
+                    aria-label={`${row.studentName}: gəldi`}
                   >
-                    <Check size={15} /> İştirak
+                    <Check size={15} /> Gəldi
                   </button>
                   <button
                     type="button"
                     data-active={row.attendanceStatus === "absent" || undefined}
                     data-state="absent"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "absent" })}
-                    aria-label={`${row.studentName}: qayıb`}
+                    aria-label={`${row.studentName}: gəlmədi`}
                   >
-                    <X size={15} /> Qayıb
+                    <X size={15} /> Gəlmədi
                   </button>
                   <button
                     type="button"
