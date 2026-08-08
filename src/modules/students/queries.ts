@@ -1923,7 +1923,7 @@ export async function getStudentDetailData(studentId: string) {
       where: canAssignStudentManager
         ? {
             OR: [
-              { id: student.managerId ?? "__current_manager_missing__" },
+              ...(student.managerId ? [{ id: student.managerId }] : []),
               {
                 isActive: true,
                 roles: {

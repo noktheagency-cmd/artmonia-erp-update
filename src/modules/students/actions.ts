@@ -654,11 +654,10 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         : Promise.resolve(null),
       managerId
         ? tx.user.findFirst({
-            where: {
-              id: managerId,
-              OR: [
-                { id: current.managerId ?? "__current_manager_missing__" },
-                {
+            where: managerId === current.managerId
+              ? { id: managerId }
+              : {
+                  id: managerId,
                   isActive: true,
                   roles: {
                     some: {
@@ -666,8 +665,6 @@ async function updateStudentProfileActionImpl(formData: FormData) {
                     },
                   },
                 },
-              ],
-            },
             select: { id: true },
           })
         : Promise.resolve(null),
