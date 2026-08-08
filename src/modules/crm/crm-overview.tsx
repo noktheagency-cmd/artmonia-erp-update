@@ -112,6 +112,8 @@ export function CrmOverview({
     conversionRate: item.conversionRate,
   }));
   const teamMax = Math.max(...teamData.map((item) => item.leads), 1);
+  const todayAttention = data.attentionFocus.filter((item) => item.bucket === "today");
+  const overdueAttention = data.attentionFocus.filter((item) => item.bucket === "overdue");
 
   return (
     <section className="crm-overview-grid" aria-label="CRM analitikası">
@@ -219,63 +221,25 @@ export function CrmOverview({
         <PanelHeading
           icon={AlertTriangle}
           title="Əlaqə gözləyən müraciətlər"
-          description="Bu tələbələrlə əlaqə saxlayın və növbəti addımı gecikdirmədən tamamlayın"
+          description="Cari günə planlanan və vaxtı keçmiş əlaqələr"
           meta={`${data.attentionFocus.length} müraciət`}
           tone="coral"
         />
-        <div className="crm-attention-list">
-          {data.attentionFocus.length > 0 ? (
-            data.attentionFocus.map((item) => (
-              <button
-                type="button"
-                className={cx("crm-attention-row", `is-${item.priorityTone}`)}
-                onClick={() => onLeadSelect(item.name)}
-                key={item.id}
-                aria-label={`${item.name} ilə əlaqə saxlanılmalıdır. ${item.nextActionTypeLabel}, ${item.nextFollowUpAt}`}
-              >
-                <span className="crm-person-avatar" aria-hidden="true">
-                  {item.name.slice(0, 2).toUpperCase()}
-                </span>
-                <span className="crm-attention-person">
-                  <strong>{item.name}</strong>
-                  <small>{item.phone} · {item.manager}</small>
-                </span>
-                <span className="crm-attention-status">
-                  <span className="crm-attention-priority">
-                    <small>Prioritet</small>
-                    <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
-                  </span>
-                  <span className="crm-attention-reasons">
-                    {item.reasonLabels.filter((reason) => reason !== item.priorityLabel).map((reason) => (
-                      <span key={reason}>{reason}</span>
-                    ))}
-                  </span>
-                </span>
-                <span className="crm-attention-action">
-                  <span className="crm-attention-action-icon" aria-hidden="true">
-                    <PhoneCall />
-                  </span>
-                  <span className="crm-attention-action-copy">
-                    <small>Əlaqə saxlanılmalıdır</small>
-                    <strong>{item.nextActionTypeLabel}</strong>
-                    <span>
-                      <Clock3 aria-hidden="true" />
-                      {item.nextFollowUpAt}
-                    </span>
-                  </span>
-                  <ArrowUpRight className="crm-attention-open-icon" aria-hidden="true" />
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="crm-inline-empty">
-              <CheckCircle2 aria-hidden="true" />
-              <div>
-                <strong>Diqqət siyahısı təmizdir</strong>
-                <span>Bu gün üçün kritik və gecikmiş müraciət yoxdur.</span>
-              </div>
-            </div>
-          )}
+        <div className="crm-attention-groups">
+          <AttentionGroup
+            title="Bu gün"
+            description="Bu gün əlaqə saxlanılacaq"
+            tone="today"
+            items={todayAttention}
+            onLeadSelect={onLeadSelect}
+          />
+          <AttentionGroup
+            title="Gecikənlər"
+            description="Planlaşdırılan vaxtı keçib"
+            tone="overdue"
+            items={overdueAttention}
+            onLeadSelect={onLeadSelect}
+          />
         </div>
       </article>
 
@@ -344,6 +308,73 @@ export function CrmOverview({
           <BreakdownList title="Proqramlar" items={data.dashboardStats.programStats} tone="green" />
         </div>
       </article>
+    </section>
+  );
+}
+
+function AttentionGroup({
+  title,
+  description,
+  tone,
+  items,
+  onLeadSelect,
+}: {
+  title: string;
+  description: string;
+  tone: "today" | "overdue";
+  items: CrmData["attentionFocus"];
+  onLeadSelect: (leadName: string) => void;
+}) {
+  const Icon = tone === "today" ? CalendarCheck2 : AlertTriangle;
+
+  return (
+    <section className={cx("crm-attention-group", `is-${tone}`)}>
+      <header className="crm-attention-group-heading">
+        <span aria-hidden="true"><Icon /></span>
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        <strong>{items.length}</strong>
+      </header>
+      <div className="crm-attention-list">
+        {items.length > 0 ? (
+          items.map((item) => (
+            <button
+              type="button"
+              className="crm-attention-row"
+              onClick={() => onLeadSelect(item.name)}
+              key={item.id}
+              aria-label={`${item.name} ilə əlaqə saxlanılmalıdır. ${item.nextActionTypeLabel}, ${item.nextFollowUpAt}`}
+            >
+              <span className="crm-person-avatar" aria-hidden="true">
+                {item.name.slice(0, 2).toUpperCase()}
+              </span>
+              <span className="crm-attention-person">
+                <strong>{item.name}</strong>
+                <small>{item.phone} · {item.manager}</small>
+              </span>
+              <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
+              <span className="crm-attention-action">
+                <span>
+                  <PhoneCall aria-hidden="true" />
+                  <strong>{item.nextActionTypeLabel}</strong>
+                </span>
+                <small>
+                  <Clock3 aria-hidden="true" />
+                  {item.nextFollowUpAt}
+                </small>
+              </span>
+              <ArrowUpRight className="crm-attention-open-icon" aria-hidden="true" />
+            </button>
+          ))
+        ) : (
+          <div className="crm-attention-empty">
+            <CheckCircle2 aria-hidden="true" />
+            <span>{tone === "today" ? "Bu gün üçün iş yoxdur" : "Gecikən müraciət yoxdur"}</span>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

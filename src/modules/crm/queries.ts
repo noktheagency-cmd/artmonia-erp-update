@@ -178,12 +178,12 @@ type CrmLeadFocusRow = {
   id: string;
   name: string;
   phone: string;
+  bucket: "today" | "overdue";
   priorityLabel: string;
   priorityTone: "success" | "warning" | "danger" | "neutral" | "info";
   nextActionTypeLabel: string;
   nextFollowUpAt: string;
   manager: string;
-  reasonLabels: string[];
 };
 
 type CrmPeriodRange = { gte?: Date; lt?: Date } | null;
@@ -298,9 +298,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     dateTo: dateToFilter.date,
     reference: today,
   });
-  const todayStart = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
-  );
+  const todayStart = getBakuBusinessDate(today);
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setUTCDate(todayStart.getUTCDate() + 1);
 
@@ -1094,52 +1092,55 @@ function buildAttentionFocus(
   todayStart: Date,
   tomorrowStart: Date
 ) {
-  return leads
-    .map((lead) => {
-      if (lead.stage === LeadStage.REGISTERED) {
-        return null;
-      }
+  const today: CrmLeadFocusRow[] = [];
+  const overdue: CrmLeadFocusRow[] = [];
 
-      const reasonLabels: string[] = [];
-      const followUpDate = lead.nextFollowUpIso ? new Date(lead.nextFollowUpIso) : null;
+  for (const lead of leads) {
+    if (lead.stage === LeadStage.REGISTERED || !lead.nextFollowUpIso) {
+      continue;
+    }
 
-      if (lead.nextFollowUpIso && isIsoDateInRange(lead.nextFollowUpIso, todayStart, tomorrowStart)) {
-        reasonLabels.push("Bugünkü");
-      }
+    const followUpDate = new Date(lead.nextFollowUpIso);
 
-      if (followUpDate && followUpDate < todayStart) {
-        reasonLabels.push("Gecikmiş");
-      }
+    if (isIsoDateInRange(lead.nextFollowUpIso, todayStart, tomorrowStart)) {
+      today.push(toFocusRow(lead, "today"));
+    } else if (followUpDate < todayStart) {
+      overdue.push(toFocusRow(lead, "overdue"));
+    }
+  }
 
-      if (lead.priority === "CRITICAL") {
-        reasonLabels.push("Kritik");
-      }
-
-      if (reasonLabels.length === 0) {
-        return null;
-      }
-
-      return toFocusRow(lead, reasonLabels);
-    })
-    .filter((lead): lead is CrmLeadFocusRow => Boolean(lead))
-    .slice(0, 8);
+  return [...today.slice(0, 4), ...overdue.slice(0, 4)];
 }
 
 function toFocusRow(
   lead: CrmData["leads"][number],
-  reasonLabels: string[] = []
+  bucket: CrmLeadFocusRow["bucket"]
 ): CrmLeadFocusRow {
   return {
     id: lead.id,
     name: lead.name,
     phone: lead.phone,
+    bucket,
     priorityLabel: lead.priorityLabel,
     priorityTone: lead.priorityTone,
     nextActionTypeLabel: lead.nextActionTypeLabel,
     nextFollowUpAt: lead.nextFollowUpAt,
     manager: lead.manager,
-    reasonLabels,
   };
+}
+
+function getBakuBusinessDate(reference: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Baku",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(reference);
+  const values = new Map(parts.map((part) => [part.type, part.value]));
+
+  return new Date(
+    `${values.get("year")}-${values.get("month")}-${values.get("day")}T00:00:00.000Z`
+  );
 }
 
 function formatPercent(numerator: number, denominator: number) {

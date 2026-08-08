@@ -1560,6 +1560,124 @@ html.dark .crm-filter-icon-action.is-clear {
   border-color: var(--dm-line) !important;
 }
 
+html.dark .crm-detail-dialog.ui-dialog-content {
+  color: var(--dm-text);
+  background: var(--dm-surface-gradient) !important;
+  border-color: var(--dm-line-strong) !important;
+}
+
+html.dark .crm-detail-dialog :is(.ui-dialog-title, .crm-dialog-section > header h3) {
+  color: var(--dm-text) !important;
+}
+
+html.dark .crm-detail-dialog :is(
+  .ui-dialog-description,
+  .crm-detail-summary span,
+  .crm-dialog-fields .ui-field-label,
+  .crm-dialog-fields .ui-field-description,
+  .crm-history-list p,
+  .crm-history-list small,
+  .crm-history-empty
+) {
+  color: var(--dm-muted) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-avatar {
+  color: var(--dm-blue) !important;
+  background: rgb(120 166 255 / 13%) !important;
+  border: 1px solid rgb(120 166 255 / 22%);
+}
+
+html.dark .crm-detail-dialog .crm-detail-summary > div {
+  color: var(--dm-text);
+  background: var(--dm-surface-2) !important;
+  border-color: var(--dm-line-strong) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-summary :is(strong, svg) {
+  color: var(--dm-text) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-summary svg {
+  color: var(--dm-blue) !important;
+}
+
+html.dark .crm-detail-dialog .crm-dialog-section {
+  border-color: var(--dm-line) !important;
+}
+
+html.dark .crm-detail-dialog :is(.ui-input-group, .ui-input, .ui-select-trigger, .date-picker-trigger) {
+  color: var(--dm-text) !important;
+  background: var(--dm-surface-2) !important;
+  border-color: var(--dm-line-strong) !important;
+}
+
+html.dark .crm-detail-dialog :is(.ui-input-group-input, .ui-select-display-value) {
+  color: var(--dm-text) !important;
+}
+
+html.dark .crm-detail-dialog .crm-history-list li > span {
+  background: var(--dm-blue) !important;
+  border-color: rgb(120 166 255 / 20%) !important;
+}
+
+html.dark .crm-detail-dialog .crm-history-list li > span::after {
+  background: var(--dm-line-strong) !important;
+}
+
+html.dark .crm-detail-dialog .crm-dialog-actions.ui-dialog-footer {
+  background: rgb(16 10 7 / 97%) !important;
+  border-color: var(--dm-line) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-delete-trigger {
+  color: var(--dm-red) !important;
+  background: rgb(255 129 140 / 11%) !important;
+  border-color: rgb(255 129 140 / 24%) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-delete-trigger:hover:not(:disabled) {
+  color: #ffabb3 !important;
+  background: rgb(255 129 140 / 17%) !important;
+  border-color: rgb(255 129 140 / 34%) !important;
+}
+
+html.dark .crm-detail-dialog .ui-dialog-close {
+  color: var(--dm-text-soft) !important;
+  background: var(--dm-surface-2) !important;
+  border-color: var(--dm-line-strong) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-statuses .status-success {
+  color: var(--dm-green) !important;
+  background: rgb(85 214 165 / 13%) !important;
+  border-color: rgb(85 214 165 / 28%) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-statuses .status-warning {
+  color: var(--dm-yellow) !important;
+  background: rgb(244 201 107 / 13%) !important;
+  border-color: rgb(244 201 107 / 28%) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-statuses .status-danger {
+  color: var(--dm-red) !important;
+  background: rgb(255 129 140 / 13%) !important;
+  border-color: rgb(255 129 140 / 28%) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-statuses .status-info {
+  color: var(--dm-blue) !important;
+  background: rgb(120 166 255 / 13%) !important;
+  border-color: rgb(120 166 255 / 28%) !important;
+}
+
+html.dark .crm-detail-dialog .crm-detail-statuses .status-neutral {
+  color: var(--dm-text-soft) !important;
+  background: var(--dm-surface-3) !important;
+  border-color: var(--dm-line-strong) !important;
+}
+
 html.dark .finance-command-page .finance-command-hero,
 html.dark .finance-command-page .finance-tabs,
 html.dark .finance-command-page .finance-panel,
@@ -1682,11 +1800,36 @@ html.dark .tasks-empty > span {
 }
 
 html.dark .task-row {
+  color: var(--dm-text-soft) !important;
+  background: rgb(23 15 10 / 72%) !important;
   border-color: var(--dm-line) !important;
 }
 
 html.dark .task-row:hover {
-  background: var(--dm-surface-2) !important;
+  background: var(--dm-surface-3) !important;
+}
+
+html.dark .tasks-list-heading {
+  border-color: var(--dm-line-strong) !important;
+}
+
+html.dark .tasks-page :is(.task-main h3, .task-owner strong, .task-deadline strong) {
+  color: var(--dm-text) !important;
+}
+
+html.dark .tasks-page :is(.task-main p, .task-owner small, .task-deadline small, .tasks-list-heading span) {
+  color: var(--dm-muted) !important;
+}
+
+html.dark .tasks-search input::placeholder {
+  color: var(--dm-subtle) !important;
+  opacity: 1;
+}
+
+html.dark .task-row-controls > [data-slot="button"] {
+  color: var(--dm-red) !important;
+  background: rgb(255 129 140 / 11%) !important;
+  border-color: rgb(255 129 140 / 22%) !important;
 }
 
 html.dark .task-status-select.is-open {
