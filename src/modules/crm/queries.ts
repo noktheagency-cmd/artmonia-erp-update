@@ -104,7 +104,11 @@ export type CrmData = {
   dashboardStats: {
     salesCount: string;
     conversionRate: string;
+    contactedCount: string;
+    contactRate: string;
     consultationCount: string;
+    contactToConsultationRate: string;
+    consultationToSaleRate: string;
     trialLessonLeads: string;
     trialLessonCount: string;
     directSales: string;
@@ -249,6 +253,7 @@ type CrmLeadRawRow = {
 
 type CrmConversionStatsRaw = {
   salesCount: unknown;
+  contactedCount: unknown;
   consultationCount: unknown;
   trialLessonLeads: unknown;
   trialLessonCount: unknown;
@@ -338,6 +343,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const sourceValues = asJsonArray<string>(row?.sources);
   const formattedLeads = leadRows.map((lead) => formatLeadRow(lead));
   const salesCount = toNumber(conversionStats?.salesCount);
+  const contactedCount = toNumber(conversionStats?.contactedCount);
   const consultationCount = toNumber(conversionStats?.consultationCount);
   const trialLessonLeads = toNumber(conversionStats?.trialLessonLeads);
   const trialLessonCount = toNumber(conversionStats?.trialLessonCount);
@@ -431,7 +437,11 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     dashboardStats: {
       salesCount: formatCount(salesCount),
       conversionRate: formatPercent(salesCount, totalLeads),
+      contactedCount: formatCount(contactedCount),
+      contactRate: formatPercent(contactedCount, totalLeads),
       consultationCount: formatCount(consultationCount),
+      contactToConsultationRate: formatPercent(consultationCount, contactedCount),
+      consultationToSaleRate: formatPercent(consultationSales, consultationCount),
       trialLessonLeads: formatCount(trialLessonLeads),
       trialLessonCount: formatCount(trialLessonCount),
       directSales: formatCount(directSales),
@@ -575,6 +585,9 @@ function getCrmRawData(
             where stat_leads.converted_student_id is not null
               or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
           ),
+          'contactedCount', count(*) filter (
+            where stat_leads.had_contact
+          ),
           'consultationCount', count(*) filter (
             where stat_leads.had_consultation
               or stat_leads.stage in (
@@ -621,7 +634,32 @@ function getCrmRawData(
                   'TRIAL_LESSON'::"erp"."LeadStage",
                   'TRIAL_CONSULTATION'::"erp"."LeadStage"
                 )
-            ) as had_consultation
+            ) as had_consultation,
+            (
+              l.stage in (
+                'CONTACTED'::"erp"."LeadStage",
+                'QUALIFIED'::"erp"."LeadStage",
+                'TRIAL_LESSON'::"erp"."LeadStage",
+                'TRIAL_CONSULTATION'::"erp"."LeadStage",
+                'REGISTERED'::"erp"."LeadStage",
+                'LOST'::"erp"."LeadStage",
+                'NURTURE'::"erp"."LeadStage"
+              )
+              or exists (
+                select 1
+                from erp.lead_stage_history contact_history
+                where contact_history.lead_id = l.id
+                  and contact_history.new_stage in (
+                    'CONTACTED'::"erp"."LeadStage",
+                    'QUALIFIED'::"erp"."LeadStage",
+                    'TRIAL_LESSON'::"erp"."LeadStage",
+                    'TRIAL_CONSULTATION'::"erp"."LeadStage",
+                    'REGISTERED'::"erp"."LeadStage",
+                    'LOST'::"erp"."LeadStage",
+                    'NURTURE'::"erp"."LeadStage"
+                  )
+              )
+            ) as had_contact
           from erp.leads l
           where ${summarySql}
         ) stat_leads

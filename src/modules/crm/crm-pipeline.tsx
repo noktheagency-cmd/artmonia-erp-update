@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
 import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
+import { CrmConversionDialog } from "@/modules/crm/crm-conversion-dialog";
 import { CrmOverview } from "@/modules/crm/crm-overview";
 import type { CrmData } from "@/modules/crm/queries";
 import { NewLeadDialog } from "@/modules/crm/new-lead-dialog";
@@ -64,6 +65,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const [conversionDetailsOpen, setConversionDetailsOpen] = useState(false);
   const activeTab: CrmTab = searchParams.get("tab") === "list" ? "list" : "overview";
   const showCreateToast = searchParams.get("leadCreated") === "1";
 
@@ -104,15 +106,14 @@ export function CrmPipeline({ data }: { data: CrmData }) {
   }
 
   function handleMetricClick(index: number) {
+    if (index === 3) {
+      setConversionDetailsOpen(true);
+      return;
+    }
     if (index === 2) {
       handleQuickFilter("followUp", "attention");
       return;
     }
-    if (index === 3) {
-      handleQuickFilter("stage", "REGISTERED");
-      return;
-    }
-
     const params = new URLSearchParams(searchParams.toString());
     if (index === 1) {
       params.delete("from");
@@ -216,7 +217,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
               style={{ animationDelay: `${45 + index * 45}ms` }}
               onClick={() => handleMetricClick(index)}
               key={metric.label}
-              aria-label={`${metric.label}: ${metric.value}. Siyahını aç`}
+              aria-label={`${metric.label}: ${metric.value}. ${index === 3 ? "Detalları aç" : "Siyahını aç"}`}
             >
               <span className="crm-metric-top">
                 <span>{metric.label}</span>
@@ -231,6 +232,13 @@ export function CrmPipeline({ data }: { data: CrmData }) {
           );
         })}
       </section>
+
+      <CrmConversionDialog
+        open={conversionDetailsOpen}
+        onOpenChange={setConversionDetailsOpen}
+        totalLeads={data.metrics[0]?.value ?? "0"}
+        stats={data.dashboardStats}
+      />
 
       <div className="crm-view-toolbar crm-enter" style={{ animationDelay: "230ms" }}>
         <div className="crm-view-tabs" role="tablist" aria-label="CRM görünüşü">
