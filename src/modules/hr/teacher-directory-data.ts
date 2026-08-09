@@ -3,6 +3,7 @@ import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
 import { formatAmount } from "@/modules/shared/format";
 import { getTeacherPayrollPreviews } from "@/modules/hr/teacher-payroll";
+import { buildTeacherDirectoryScope } from "@/modules/hr/teacher-directory-scope";
 
 export type TeacherDirectoryStudent = {
   id: string;
@@ -141,9 +142,9 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
   }
 
   const prisma = getPrisma();
-  const teacherScope = canReadTeachers
-    ? Prisma.sql`where not (t.is_active = false and he.id is null and t.user_id is null)`
-    : Prisma.sql`where not (t.is_active = false and he.id is null and t.user_id is null) and t.id = ${ownTeacher!.id}::uuid`;
+  const teacherScope = buildTeacherDirectoryScope(
+    canReadTeachers ? undefined : ownTeacher!.id,
+  );
   const rows = await prisma.$queryRaw<TeacherRawRow[]>(Prisma.sql`
     select
       t.id::text as "id",

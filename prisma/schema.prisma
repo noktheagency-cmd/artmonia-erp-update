@@ -1259,7 +1259,7 @@ model Enrollment {
 
 model ClassSlot {
   id          String       @id @default(uuid()) @db.Uuid
-  teacherId   String       @map("teacher_id") @db.Uuid
+  teacherId   String?      @map("teacher_id") @db.Uuid
   weekday     GroupWeekday
   shift       ClassShift
   startTime   String       @map("start_time")
@@ -1271,7 +1271,7 @@ model ClassSlot {
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  teacher     Teacher                     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  teacher     Teacher?                    @relation(fields: [teacherId], references: [id], onDelete: SetNull)
   createdBy   User?                       @relation("ClassSlotCreator", fields: [createdById], references: [id], onDelete: SetNull)
   assignments StudentScheduleAssignment[]
   sessions    SlotSession[]

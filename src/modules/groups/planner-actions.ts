@@ -40,7 +40,10 @@ import { scopeFor } from "@/server/rbac/permissions";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const slotSchema = z.object({
-  teacherId: z.string().uuid(),
+  teacherId: z.preprocess(
+    (value) => value === "" ? null : value,
+    z.string().uuid().nullable(),
+  ),
   weekday: z.enum(GroupWeekday),
   shift: z.enum(ClassShift),
   startTime: timeSchema,
@@ -93,8 +96,10 @@ async function createClassSlotActionImpl(formData: FormData) {
   const validFrom = dateFromInput(input.validFrom);
 
   const slot = await withTeacherScheduleConflictHandling(() => prisma.$transaction(async (tx) => {
-    await assertActiveTeacher(tx, input.teacherId);
-    await assertTeacherAvailability(tx, input, validFrom);
+    if (input.teacherId) {
+      await assertActiveTeacher(tx, input.teacherId);
+      await assertTeacherAvailability(tx, { ...input, teacherId: input.teacherId }, validFrom);
+    }
 
     const created = await tx.classSlot.create({
       data: {
@@ -148,8 +153,10 @@ async function updateClassSlotActionImpl(formData: FormData) {
     });
     if (!current) throw new Error("Slot tapılmadı");
 
-    await assertActiveTeacher(tx, input.teacherId);
-    await assertTeacherAvailability(tx, input, validFrom, current.id);
+    if (input.teacherId) {
+      await assertActiveTeacher(tx, input.teacherId);
+      await assertTeacherAvailability(tx, { ...input, teacherId: input.teacherId }, validFrom, current.id);
+    }
 
     const assignments = await tx.studentScheduleAssignment.findMany({
       where: {
@@ -332,8 +339,10 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       });
     }
 
-    const teacherIds = [...new Set(slots.map((slot) => slot.teacherId))];
-    const nextTeacherId = teacherIds.length === 1 ? teacherIds[0] : null;
+    const firstTeacherId = slots[0]?.teacherId ?? null;
+    const nextTeacherId = slots.length > 0 && slots.every((slot) => slot.teacherId === firstTeacherId)
+      ? firstTeacherId
+      : null;
     if (enrollment.teacherId !== nextTeacherId) {
       await tx.enrollment.update({ where: { id: enrollment.id }, data: { teacherId: nextTeacherId } });
       await tx.teacherAssignmentHistory.create({
@@ -406,6 +415,9 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       },
     });
     if (!slot) throw new Error("Slot tapılmadı");
+    if (!slot.teacherId) {
+      throw new Error("Davamiyyət yazmaq üçün əvvəlcə slota müəllim təyin edilməlidir");
+    }
     if (slot.weekday !== weekdayFromDate(input.date)) {
       throw new Error("Seçilən tarix slotun dərs gününə uyğun deyil");
     }
@@ -580,7 +592,12 @@ async function assertActiveTeacher(tx: Prisma.TransactionClient, teacherId: stri
 
 async function assertTeacherAvailability(
   tx: Prisma.TransactionClient,
-  input: Pick<z.infer<typeof slotSchema>, "teacherId" | "weekday" | "startTime" | "endTime">,
+  input: {
+    teacherId: string;
+    weekday: GroupWeekday;
+    startTime: string;
+    endTime: string;
+  },
   validFrom: Date,
   excludeId?: string,
 ) {

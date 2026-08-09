@@ -90,7 +90,12 @@ export function SlotDetailDialog({
   onOpenJournal: (date: string) => void;
 }) {
   const [tab, setTab] = useState<DetailTab>("overview");
-  const journalDisabled = defaultJournalDate > today;
+  const journalDisabled = defaultJournalDate > today || !slot.teacherId;
+  const journalDisabledTitle = !slot.teacherId
+    ? "Əvvəlcə slota müəllim təyin edin"
+    : journalDisabled
+      ? "Slot hələ başlamayıb"
+      : undefined;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -113,7 +118,7 @@ export function SlotDetailDialog({
                 type="button"
                 onClick={() => onOpenJournal(detail.journalHistory[0]?.date ?? defaultJournalDate)}
                 disabled={journalDisabled}
-                title={journalDisabled ? "Slot hələ başlamayıb" : undefined}
+                title={journalDisabledTitle}
               >
                 <BookOpenCheck data-icon="inline-start" /> Jurnala keç
               </Button>

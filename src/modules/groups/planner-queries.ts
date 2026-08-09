@@ -27,7 +27,7 @@ export type PlannerSlot = {
   shift: "morning" | "afternoon" | "evening";
   startTime: string;
   endTime: string;
-  teacherId: string;
+  teacherId: string | null;
   teacherName: string;
   room: string;
   capacity: number;
@@ -203,8 +203,8 @@ export async function getPlannerWorkspaceData(input?: {
     shift: mapShift(slot.shift),
     startTime: slot.startTime,
     endTime: slot.endTime,
-    teacherId: slot.teacher.id,
-    teacherName: slot.teacher.fullName,
+    teacherId: slot.teacher?.id ?? null,
+    teacherName: slot.teacher?.fullName ?? "Müəllim təyin edilməyib",
     room: slot.room ?? "Otaq seçilməyib",
     capacity: slot.capacity,
     validFrom: toDateInput(slot.validFrom),

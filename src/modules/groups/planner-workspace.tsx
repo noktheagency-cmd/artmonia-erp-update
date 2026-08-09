@@ -175,7 +175,10 @@ export function PlannerWorkspace({
       const text = `${slot.teacherName} ${slot.room} ${weekdayMeta[slot.weekday].label} ${shiftMeta[slot.shift].label}`
         .toLocaleLowerCase("az");
       return (!needle || text.includes(needle))
-        && (teacherFilter === "all" || slot.teacherId === teacherFilter)
+        && (
+          teacherFilter === "all"
+          || (teacherFilter === "unassigned" ? slot.teacherId === null : slot.teacherId === teacherFilter)
+        )
         && (shiftFilter === "all" || slot.shift === shiftFilter);
     });
   }, [data.slots, query, shiftFilter, teacherFilter]);
@@ -283,7 +286,10 @@ export function PlannerWorkspace({
           label="Müəllim"
           value={teacherFilter}
           onChange={setTeacherFilter}
-          options={data.teachers.map((teacher) => ({ value: teacher.id, label: teacher.name }))}
+          options={[
+            { value: "unassigned", label: "Müəllim təyin edilməyib" },
+            ...data.teachers.map((teacher) => ({ value: teacher.id, label: teacher.name })),
+          ]}
         />
         <FilterSelect
           label="Növbə"
@@ -387,8 +393,14 @@ export function PlannerWorkspace({
                     <Button
                       type="button"
                       onClick={() => openAttendance(selectedSlot)}
-                      disabled={selectedJournalDisabled}
-                      title={selectedJournalDisabled ? "Slotun ilk dərs tarixi hələ çatmayıb" : undefined}
+                      disabled={selectedJournalDisabled || !selectedSlot.teacherId}
+                      title={
+                        !selectedSlot.teacherId
+                          ? "Əvvəlcə slota müəllim təyin edin"
+                          : selectedJournalDisabled
+                            ? "Slotun ilk dərs tarixi hələ çatmayıb"
+                            : undefined
+                      }
                     >
                       <BookOpenCheck data-icon="inline-start" /> Davamiyyət
                     </Button>
@@ -589,7 +601,7 @@ function TimeRow({
               <SlotCard
                 slot={slot}
                 selected={slot.id === selectedId}
-                style={teacherSlotStyles.get(slot.teacherId)}
+                style={slot.teacherId ? teacherSlotStyles.get(slot.teacherId) : undefined}
                 onSelect={onSelect}
                 key={slot.id}
               />
@@ -724,7 +736,8 @@ function SlotDialog({
           <div className={styles.formGrid}>
             <label>
               <span>Müəllim</span>
-              <select name="teacherId" defaultValue={slot?.teacherId} required>
+              <select name="teacherId" defaultValue={slot?.teacherId ?? ""}>
+                <option value="">Müəllim təyin edilməyib</option>
                 {data.teachers.map((teacher) => (
                   <option value={teacher.id} key={teacher.id}>{teacher.name}</option>
                 ))}
@@ -764,7 +777,7 @@ function SlotDialog({
             ) : <span />}
             <div className={styles.slotDialogActions}>
               <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
-              <Button type="submit" disabled={pending || !data.teachers.length}>
+              <Button type="submit" disabled={pending}>
                 {pending ? "Yadda saxlanılır..." : editing ? "Dəyişiklikləri saxla" : "Slot yarat"}
               </Button>
             </div>
@@ -956,7 +969,7 @@ function AssignmentDialog({
                         active && styles.activeChoice,
                         full && !active && styles.disabledChoice,
                       )}
-                      style={teacherSlotStyles.get(slot.teacherId)}
+                      style={slot.teacherId ? teacherSlotStyles.get(slot.teacherId) : undefined}
                       type="button"
                       onClick={() => toggle(slot)}
                       key={slot.id}
