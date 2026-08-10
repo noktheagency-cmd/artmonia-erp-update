@@ -52,7 +52,26 @@
 .hr-password-field button:hover { color: #5e53bd; background: #f1efff; }
 .hr-password-field button:focus-visible { outline: 2px solid #6557d9; outline-offset: 1px; }
 .hr-password-field svg { width: 16px; height: 16px; }
+.hr-command,
+.hr-table-section,
+.hr-table-scroll { width: 100%; max-width: 100%; min-width: 0; }
 .hr-table-section table { min-width: 1080px; }
+@media (max-width: 1440px) and (min-width: 761px) {
+  .hr-table-section table { min-width: 960px; }
+  .hr-table-section th,
+  .hr-table-section td { padding-inline: 10px; }
+  .hr-row-actions .ui-button { padding-inline: 8px; }
+  .hr-table-section th:last-child:empty,
+  .hr-table-section td:has(.hr-row-actions) {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: #fff;
+    box-shadow: -8px 0 14px rgb(40 48 69 / 5%);
+  }
+  .hr-table-section th:last-child:empty { background: #fafbfc; }
+  .hr-table-section tbody tr:hover td:has(.hr-row-actions) { background: #fbfbfe; }
+}
 @media (max-width: 760px) { .hr-account-grid, .hr-role-options { grid-template-columns: 1fr; } .hr-account-grid .is-wide { grid-column: auto; } }
 .hr-person-link { color: inherit; text-decoration: none; }
 .hr-person-link:hover strong { color: #5e52c4; }

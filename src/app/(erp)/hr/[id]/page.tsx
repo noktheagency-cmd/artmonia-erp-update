@@ -6,6 +6,7 @@ import {
   updateHrStaffNotificationStatusAction,
 } from "@/modules/hr/staff-notification-actions";
 import { upsertHrStaffCredentialsAction } from "@/modules/hr/staff-credential-actions";
+import { updateStaffAction } from "@/modules/hr/staff-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function HrStaffProfilePage({
       createNotificationAction={createHrStaffNotificationAction}
       updateNotificationStatusAction={updateHrStaffNotificationStatusAction}
       updateCredentialsAction={upsertHrStaffCredentialsAction}
+      updateStaffAction={updateStaffAction}
     />
   );
 }

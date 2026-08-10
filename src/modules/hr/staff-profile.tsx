@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useState, useTransition, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import {
   Mail,
   MapPin,
   MessageSquareText,
+  Pencil,
   Phone,
   Send,
   ShieldAlert,
@@ -40,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
@@ -110,16 +112,19 @@ export function StaffProfile({
   createNotificationAction,
   updateNotificationStatusAction,
   updateCredentialsAction,
+  updateStaffAction,
 }: {
   data: HrStaffProfileData;
   createNotificationAction: Action;
   updateNotificationStatusAction: Action;
   updateCredentialsAction: Action;
+  updateStaffAction: Action;
 }) {
   const router = useRouter();
   const { employee, teacher, permissions } = data;
   const [composerOpen, setComposerOpen] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -205,6 +210,11 @@ export function StaffProfile({
           <ArrowLeft /> HR-a qayıt
         </Link>
         <div className="staff-profile-actions">
+          {permissions.canManage ? (
+            <Button variant="outline" onClick={() => setEditorOpen(true)}>
+              <Pencil data-icon="inline-start" /> Redaktə et
+            </Button>
+          ) : null}
           {permissions.canManageCredentials ? (
             <Button variant="outline" onClick={() => setCredentialsOpen(true)}>
               <KeyRound data-icon="inline-start" />{" "}
@@ -470,6 +480,29 @@ export function StaffProfile({
           }}
         />
       ) : null}
+      {editorOpen ? (
+        <StaffDetailsEditor
+          employee={employee}
+          lookups={data.lookups}
+          pending={pending}
+          onClose={() => setEditorOpen(false)}
+          onSubmit={(form) => {
+            startTransition(
+              () =>
+                void updateStaffAction(form)
+                  .then((result) => {
+                    unwrapActionResult(result);
+                    setEditorOpen(false);
+                    setNotice("Əməkdaş məlumatları yeniləndi.");
+                    router.refresh();
+                  })
+                  .catch((error) =>
+                    setNotice(notifyCaughtError(error, "Əməkdaş məlumatları yenilənmədi")),
+                  ),
+            );
+          }}
+        />
+      ) : null}
       {credentialsOpen ? (
         <CredentialDialog
           data={data}
@@ -504,6 +537,225 @@ export function StaffProfile({
         />
       ) : null}
     </section>
+  );
+}
+
+function StaffDetailsEditor({
+  employee,
+  lookups,
+  pending,
+  onClose,
+  onSubmit,
+}: {
+  employee: HrStaffProfileData["employee"];
+  lookups: HrStaffProfileData["lookups"];
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (form: FormData) => void;
+}) {
+  const [staffType, setStaffType] = useState(employee.staffType);
+  const [salaryMode, setSalaryMode] = useState(employee.salaryMode);
+  const [photoPreview, setPhotoPreview] = useState(employee.profilePhotoUrl);
+  const [photoError, setPhotoError] = useState("");
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit(new FormData(event.currentTarget));
+  }
+
+  function changeProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    setPhotoError("");
+    if (!file) {
+      setPhotoPreview(employee.profilePhotoUrl);
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      event.currentTarget.value = "";
+      setPhotoPreview(employee.profilePhotoUrl);
+      setPhotoError("JPEG, PNG və ya WebP seçin; maksimum ölçü 5 MB-dır.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => setPhotoPreview(String(reader.result ?? "")), { once: true });
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="staff-edit-dialog">
+        <DialogHeader>
+          <DialogTitle>Əməkdaş detallarını redaktə et</DialogTitle>
+          <DialogDescription>
+            Şəxsi, iş, status və maaş məlumatlarını yeniləyin. Login və sistem rolları ayrıca idarə olunur.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="staff-edit-form">
+          <input type="hidden" name="id" value={employee.id} />
+          <div className="staff-edit-photo is-wide">
+            <div className="staff-edit-photo-preview" aria-hidden="true">
+              {photoPreview ? (
+                <Image src={photoPreview} alt="" fill sizes="76px" unoptimized />
+              ) : (
+                <UsersRound />
+              )}
+            </div>
+            <label>
+              <span>Profil şəkli</span>
+              <input
+                name="profilePhoto"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={changeProfilePhoto}
+              />
+              <small>JPEG, PNG və ya WebP · maksimum 5 MB</small>
+              {photoError ? <em role="alert">{photoError}</em> : null}
+            </label>
+          </div>
+          <label className="is-wide">
+            <span>Əməkdaş tipi</span>
+            <select
+              name="staffType"
+              value={staffType}
+              onChange={(event) => {
+                const nextType = event.target.value as "EMPLOYEE" | "TEACHER";
+                setStaffType(nextType);
+                if (nextType === "TEACHER") setSalaryMode("PERCENT");
+              }}
+            >
+              <option value="EMPLOYEE">İşçi / inzibati əməkdaş</option>
+              <option value="TEACHER">Müəllim</option>
+            </select>
+          </label>
+          <label>
+            <span>Ad soyad</span>
+            <Input name="fullName" defaultValue={employee.fullName} required />
+          </label>
+          <label>
+            <span>Əlaqə e-poçtu</span>
+            <Input name="email" type="email" defaultValue={employee.email} />
+          </label>
+          <label>
+            <span>Telefon</span>
+            <Input name="phone" defaultValue={employee.phone} />
+          </label>
+          <label>
+            <span>İşə başlama</span>
+            <Input name="hireDate" type="date" defaultValue={employee.hireDate} required />
+          </label>
+          <label className="is-wide">
+            <span>Ünvan</span>
+            <Input name="address" defaultValue={employee.address} maxLength={240} />
+          </label>
+          <label>
+            <span>Departament</span>
+            <FormSelect
+              name="department"
+              defaultValue={employee.department}
+              options={lookups.departments.map((value) => ({ value, label: value }))}
+              searchable
+              searchPlaceholder="Departament axtar..."
+              catalogKey="HR_DEPARTMENT"
+              createLabel="Yeni departament əlavə et"
+              required
+            />
+          </label>
+          {staffType === "TEACHER" ? (
+            <label>
+              <span>Tələbə tutumu</span>
+              <Input
+                name="teacherCapacity"
+                type="number"
+                min="1"
+                max="500"
+                defaultValue={employee.teacherCapacity || 20}
+                required
+              />
+              <input type="hidden" name="position" value="Müəllim" />
+            </label>
+          ) : (
+            <label>
+              <span>Vəzifə</span>
+              <FormSelect
+                name="position"
+                defaultValue={employee.position}
+                options={lookups.positions.map((value) => ({ value, label: value }))}
+                searchable
+                searchPlaceholder="Vəzifə axtar..."
+                catalogKey="HR_POSITION"
+                createLabel="Yeni vəzifə əlavə et"
+                required
+              />
+              <input type="hidden" name="teacherCapacity" value="0" />
+            </label>
+          )}
+          <label>
+            <span>Status</span>
+            <select name="status" defaultValue={employee.status}>
+              <option value="ACTIVE">Aktiv</option>
+              <option value="PROBATION">Sınaq müddəti</option>
+              <option value="ON_LEAVE">Məzuniyyətdə</option>
+              <option value="INACTIVE">Deaktiv</option>
+            </select>
+          </label>
+          <label>
+            <span>Müqavilə</span>
+            <select name="contractType" defaultValue={employee.contractType}>
+              <option value="FULL_TIME">Tam ştat</option>
+              <option value="PART_TIME">Yarım ştat</option>
+              <option value="CONTRACTOR">Müqaviləli</option>
+            </select>
+          </label>
+          <label>
+            <span>Maaş növü</span>
+            <select
+              name="salaryMode"
+              value={salaryMode}
+              onChange={(event) => setSalaryMode(event.target.value as "STATIC" | "PERCENT")}
+            >
+              <option value="STATIC">Statik maaş</option>
+              <option value="PERCENT">Faizlə maaş</option>
+            </select>
+          </label>
+          {salaryMode === "STATIC" ? (
+            <label>
+              <span>Aylıq maaş (AZN)</span>
+              <Input
+                name="salaryAmount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                defaultValue={employee.salaryAmount || ""}
+                required
+              />
+              <input type="hidden" name="salaryPercent" value="0" />
+            </label>
+          ) : (
+            <label>
+              <span>Maaş faizi</span>
+              <Input
+                name="salaryPercent"
+                type="number"
+                min="0.01"
+                max="100"
+                step="0.01"
+                defaultValue={employee.salaryPercent || ""}
+                required
+              />
+              <input type="hidden" name="salaryAmount" value="0" />
+            </label>
+          )}
+          <label className="is-wide">
+            <span>HR qeydi</span>
+            <textarea name="note" defaultValue={employee.note} rows={4} maxLength={1000} />
+          </label>
+          <DialogFooter className="is-wide">
+            <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
+            <Button type="submit" disabled={pending}>Dəyişiklikləri saxla</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

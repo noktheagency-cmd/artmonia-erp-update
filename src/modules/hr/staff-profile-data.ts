@@ -30,6 +30,7 @@ export type HrStaffProfileData = {
   employee: {
     id: string;
     userId: string;
+    teacherCapacity: number;
     fullName: string;
     profilePhotoUrl: string;
     staffType: "EMPLOYEE" | "TEACHER";
@@ -50,6 +51,7 @@ export type HrStaffProfileData = {
     roles: Array<{ id: string; name: string }>;
     updatedAt: string;
   };
+  lookups: { departments: string[]; positions: string[] };
   teacher: TeacherDirectoryTeacher | null;
   notifications: HrStaffNotificationRow[];
   timeline: Array<{
@@ -89,9 +91,10 @@ export async function getHrStaffProfileData(
   const isOwnProfile = employee.userId === actor.id;
   if (!isOwnProfile && !actor.permissions.has("hr.employee.read")) return null;
 
+  const canManage = actor.permissions.has("hr.employee.manage");
   const hasProtectedRole = employee.user?.roles.some(({ role }) => isProtectedTeamRole(role.code)) ?? false;
   const canManageCredentials = actor.permissions.has("auth.user.manage") && !hasProtectedRole;
-  const [directory, timeline, roleOptions] = await Promise.all([
+  const [directory, timeline, roleOptions, lookups] = await Promise.all([
     employee.teacherId &&
     (actor.permissions.has("teacher.read") || isOwnProfile)
       ? getTeacherDirectoryData(isOwnProfile ? employee.teacherId : undefined)
@@ -118,12 +121,21 @@ export async function getHrStaffProfileData(
           orderBy: [{ isSystem: "desc" }, { name: "asc" }],
         })
       : Promise.resolve([]),
+    canManage
+      ? getPrisma().hrLookupOption.findMany({
+          where: { isActive: true },
+          select: { kind: true, name: true },
+          orderBy: [{ kind: "asc" }, { name: "asc" }],
+          take: 500,
+        })
+      : Promise.resolve([]),
   ]);
 
   return {
     employee: {
       id: employee.id,
       userId: employee.userId ?? "",
+      teacherCapacity: employee.teacher?.capacity ?? 0,
       fullName: employee.fullName,
       profilePhotoUrl: employee.profilePhotoUrl ?? "",
       staffType: employee.staffType,
@@ -132,7 +144,7 @@ export async function getHrStaffProfileData(
       address: employee.address ?? "",
       department: employee.department,
       position: employee.position,
-      hireDate: employee.hireDate.toISOString(),
+      hireDate: employee.hireDate.toISOString().slice(0, 10),
       status: employee.status,
       contractType: employee.contractType,
       salaryMode: employee.salaryMode === "PERCENT" ? "PERCENT" : "STATIC",
@@ -147,6 +159,16 @@ export async function getHrStaffProfileData(
           name: role.name,
         })) ?? [],
       updatedAt: employee.updatedAt.toISOString(),
+    },
+    lookups: {
+      departments: [...new Set([
+        ...lookups.filter((item) => item.kind === "DEPARTMENT" && item.name !== "__new").map((item) => item.name),
+        employee.department,
+      ])].toSorted((left, right) => left.localeCompare(right, "az")),
+      positions: [...new Set([
+        ...lookups.filter((item) => item.kind === "POSITION" && item.name !== "__new").map((item) => item.name),
+        employee.position,
+      ])].toSorted((left, right) => left.localeCompare(right, "az")),
     },
     teacher:
       directory?.teachers.find((item) => item.id === employee.teacherId) ??
@@ -173,9 +195,9 @@ export async function getHrStaffProfileData(
     })),
     roleOptions,
     permissions: {
-      canManage: actor.permissions.has("hr.employee.manage"),
+      canManage,
       canSendNotification:
-        actor.permissions.has("hr.employee.manage") && !isOwnProfile,
+        canManage && !isOwnProfile,
       canManageCredentials,
       isOwnProfile,
     },
