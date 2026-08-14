@@ -184,19 +184,14 @@ async function createLead(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     const educationLevel = await resolveEducationLevelName(tx, input.educationLevel);
-    const existingContact = phoneNormalized
-      ? await tx.contact.findUnique({ where: { phoneNormalized } })
-      : null;
-    const contact =
-      existingContact ??
-      (await tx.contact.create({
-        data: {
-          fullName: input.fullName,
-          phoneDisplay: input.phone ?? null,
-          phoneNormalized,
-          source: input.source ?? "Manual",
-        },
-      }));
+    const contact = await tx.contact.create({
+      data: {
+        fullName: input.fullName,
+        phoneDisplay: input.phone ?? null,
+        phoneNormalized,
+        source: input.source ?? "Manual",
+      },
+    });
 
     const lead = await tx.lead.create({
       data: {
@@ -289,20 +284,6 @@ async function updateLeadActionImpl(formData: FormData) {
     }
 
     assertCanAccessLead(actor, current, "crm.lead.update");
-
-    if (
-      phoneNormalized &&
-      phoneNormalized !== current.contact.phoneNormalized
-    ) {
-      const conflict = await tx.contact.findUnique({
-        where: { phoneNormalized },
-        select: { id: true, fullName: true },
-      });
-
-      if (conflict && conflict.id !== current.contactId) {
-        throw new Error(`Telefon artıq ${conflict.fullName} adına bağlıdır`);
-      }
-    }
 
     const educationLevel =
       input.educationLevel === current.educationLevel

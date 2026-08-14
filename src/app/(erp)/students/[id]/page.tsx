@@ -226,7 +226,7 @@ export default async function StudentDetailPage({
                 <div className="student-history-line" key={payment.id}>
                   <strong>{payment.amount}</strong>
                   <span>
-                    {payment.paidAt} - {payment.method} - {payment.createdBy}
+                    {payment.paidAt} - {payment.scheduleType} - {payment.method} - {payment.createdBy}
                   </span>
                   <small>Növbəti ödəniş: {payment.nextPaymentDate} · {payment.note}</small>
                 </div>

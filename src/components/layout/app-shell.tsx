@@ -34,6 +34,12 @@ import {
 import { cx } from "@/components/ui/cx";
 import { SessionHeartbeat } from "@/components/auth/session-heartbeat";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import {
+  GlobalSearch,
+  type GlobalSearchNavigationItem,
+} from "@/components/layout/global-search";
+import { AboutDialog } from "@/modules/about/about-dialog";
+import type { AboutProfileSnapshot } from "@/modules/about/about-profile";
 
 type ShellUser = {
   fullName: string;
@@ -78,11 +84,13 @@ const dashboardNavItem: NavItem = {
 export function AppShell({
   children,
   currentUser,
+  aboutProfile,
   signOutAction,
   sessionGuardEnabled,
 }: {
   children: React.ReactNode;
   currentUser: ShellUser;
+  aboutProfile: AboutProfileSnapshot;
   signOutAction: () => void | Promise<void>;
   sessionGuardEnabled: boolean;
 }) {
@@ -127,6 +135,18 @@ export function AppShell({
     !defaultMobileQuickNavItems.some((item) => item.href === activeMobileNavItem.href)
       ? [...defaultMobileQuickNavItems.slice(0, 3), activeMobileNavItem]
       : defaultMobileQuickNavItems;
+  const searchNavigationItems: GlobalSearchNavigationItem[] = [
+    dashboardNavItem,
+    ...visiblePrimaryNavItems,
+    ...visibleSecondaryNavItems,
+  ].map((item) => ({
+    href: item.href,
+    label: item.label,
+    section:
+      item === dashboardNavItem || visiblePrimaryNavItems.includes(item)
+        ? "İş axını"
+        : "Resurslar",
+  }));
   const isMobileMoreActive = !mobileQuickNavItems.some(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
   );
@@ -354,6 +374,10 @@ export function AppShell({
               <small>Studio operations</small>
             </span>
           </Link>
+          <AboutDialog
+            initialProfile={aboutProfile}
+            canEdit={currentUser.roles.includes("SUPER_ADMIN")}
+          />
         </div>
         <button
           className="mobile-sidebar-close"
@@ -543,6 +567,11 @@ export function AppShell({
         data-dashboard-section={sectionId === "dashboard" ? "true" : "false"}
         aria-busy={isNavigating}
       >
+
+        <GlobalSearch
+          navigationItems={searchNavigationItems}
+          onNavigate={markNavigation}
+        />
 
         <div
           className="route-content-shell"

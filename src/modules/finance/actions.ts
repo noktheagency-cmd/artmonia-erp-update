@@ -18,7 +18,16 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { startOfMonth, toNumber } from "@/modules/shared/format";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
-import { resolveStudentNextPaymentAt } from "@/modules/students/payment-schedule-service";
+import {
+  studentPaymentScheduleTypeValues,
+  type StudentPaymentScheduleType,
+} from "@/modules/students/payment-schedule-type";
+import {
+  clearStudentPaymentSchedules,
+  resolveStudentNextPaymentAt,
+} from "@/modules/students/payment-schedule-service";
+import { isStudentDebtDue } from "@/modules/students/student-debt-status";
+import { getBakuDateInput } from "@/modules/students/student-reminders";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
@@ -144,6 +153,7 @@ const recordFinancePaymentSchema = z.object({
   amount: requiredAmount,
   paidDate: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
+  scheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
   payerName: optionalText(120),
   receiptReference: optionalText(120),
   note: optionalText(500),
@@ -206,6 +216,7 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
       amount: input.amount,
       paidAt,
       paymentMonth,
+      scheduleType: input.scheduleType,
       method: input.method,
       payerName: input.payerName ?? null,
       receiptFileName: receipt?.fileName ?? null,
@@ -351,6 +362,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         paidAt: true,
         paymentMonth: true,
         nextPaymentAt: true,
+        scheduleType: true,
         method: true,
         payerName: true,
         receiptFileName: true,
@@ -365,6 +377,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
     }
 
     await reversePaymentAllocations(tx, existing.id);
+    await clearStudentPaymentSchedules(tx, [existing.studentId]);
 
     const payment = await tx.payment.update({
       where: { id: existing.id },
@@ -372,10 +385,13 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: input.amount,
         paidAt,
         paymentMonth,
-        nextPaymentAt: await resolveStudentNextPaymentAt(tx, {
-          studentId: existing.studentId,
-          paymentMonth,
-        }),
+        nextPaymentAt: input.scheduleType === "ONE_TIME"
+          ? null
+          : await resolveStudentNextPaymentAt(tx, {
+              studentId: existing.studentId,
+              paymentMonth,
+            }),
+        scheduleType: input.scheduleType,
         method: input.method as PaymentMethod,
         payerName: input.payerName ?? null,
         receiptFileName: receipt?.fileName ?? existing.receiptFileName,
@@ -390,6 +406,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         paidAt: true,
         paymentMonth: true,
         nextPaymentAt: true,
+        scheduleType: true,
         method: true,
       },
     });
@@ -411,6 +428,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         paidAt: existing.paidAt.toISOString(),
         paymentMonth: existing.paymentMonth.toISOString(),
         nextPaymentAt: existing.nextPaymentAt?.toISOString() ?? null,
+        scheduleType: existing.scheduleType,
         method: existing.method,
         payerName: existing.payerName,
         receiptReference: existing.receiptReference,
@@ -421,6 +439,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         paidAt: payment.paidAt.toISOString(),
         paymentMonth: payment.paymentMonth.toISOString(),
         nextPaymentAt: payment.nextPaymentAt?.toISOString() ?? null,
+        scheduleType: payment.scheduleType,
         method: payment.method,
         allocations,
       } satisfies Prisma.InputJsonValue,
@@ -453,6 +472,7 @@ async function deleteFinancePaymentActionImpl(formData: FormData) {
         amount: true,
         paidAt: true,
         paymentMonth: true,
+        scheduleType: true,
         method: true,
         payerName: true,
         receiptReference: true,
@@ -476,6 +496,7 @@ async function deleteFinancePaymentActionImpl(formData: FormData) {
         amount: toNumber(payment.amount),
         paidAt: payment.paidAt.toISOString(),
         paymentMonth: payment.paymentMonth.toISOString(),
+        scheduleType: payment.scheduleType,
         method: payment.method,
         payerName: payment.payerName,
         receiptReference: payment.receiptReference,
@@ -758,16 +779,28 @@ async function allocateExistingPayment(
 }
 
 async function markStudentDebtIfNeeded(tx: Prisma.TransactionClient, studentId: string) {
-  const openBalance = await tx.invoice.findFirst({
-    where: {
-      studentId,
-      status: { not: InvoiceStatus.VOID },
-      balanceDue: { gt: 0 },
-    },
-    select: { id: true },
-  });
+  const [openBalance, latestSchedule] = await Promise.all([
+    tx.invoice.findFirst({
+      where: {
+        studentId,
+        status: { not: InvoiceStatus.VOID },
+        balanceDue: { gt: 0 },
+      },
+      select: { id: true },
+    }),
+    tx.payment.findFirst({
+      where: { studentId, nextPaymentAt: { not: null } },
+      orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+      select: { nextPaymentAt: true },
+    }),
+  ]);
+  const today = new Date(`${getBakuDateInput()}T00:00:00.000Z`);
 
-  if (!openBalance) {
+  if (!isStudentDebtDue({
+    balance: openBalance ? 1 : 0,
+    nextPaymentAt: latestSchedule?.nextPaymentAt,
+    today,
+  })) {
     return;
   }
 
@@ -789,6 +822,7 @@ async function createPaymentAndAllocate(
     amount: number;
     paidAt: Date;
     paymentMonth: Date;
+    scheduleType: StudentPaymentScheduleType;
     method: (typeof studentPaymentMethodValues)[number];
     payerName: string | null;
     receiptFileName: string | null;
@@ -818,6 +852,12 @@ async function createPaymentAndAllocate(
           dueDate: true,
         },
       },
+      enrollments: {
+        where: { status: { in: ["ACTIVE", "PAUSED"] } },
+        orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: { id: true },
+      },
     },
   });
 
@@ -825,10 +865,49 @@ async function createPaymentAndAllocate(
     throw new Error("Telebe tapilmadi");
   }
 
-  const nextPaymentAt = await resolveStudentNextPaymentAt(tx, {
-    studentId: student.id,
-    paymentMonth: input.paymentMonth,
-  });
+  const openBalance = roundMoney(
+    student.invoices.reduce(
+      (total, invoice) => total + toNumber(invoice.balanceDue),
+      0,
+    ),
+  );
+
+  if (input.scheduleType === "ONE_TIME" && input.amount < openBalance) {
+    throw new PublicActionError(
+      "Birdəfəlik tam ödəniş açıq balansdan az ola bilməz.",
+    );
+  }
+
+  let invoices = student.invoices;
+  if (input.scheduleType === "ONE_TIME" && input.amount > openBalance) {
+    const oneTimeAmount = roundMoney(input.amount - openBalance);
+    const invoice = await tx.invoice.upsert({
+      where: { idempotencyKey: `student-one-time-${input.idempotencyKey}` },
+      update: {},
+      create: {
+        studentId: student.id,
+        enrollmentId: student.enrollments[0]?.id ?? null,
+        periodMonth: input.paymentMonth,
+        issueDate: input.paidAt,
+        dueDate: input.paidAt,
+        amount: oneTimeAmount,
+        balanceDue: oneTimeAmount,
+        status: InvoiceStatus.OPEN,
+        idempotencyKey: `student-one-time-${input.idempotencyKey}`,
+      },
+      select: { id: true, amount: true, balanceDue: true, dueDate: true },
+    });
+    invoices = [...invoices, invoice];
+  }
+
+  const nextPaymentAt = input.scheduleType === "ONE_TIME"
+    ? null
+    : await resolveStudentNextPaymentAt(tx, {
+        studentId: student.id,
+        paymentMonth: input.paymentMonth,
+      });
+
+  await clearStudentPaymentSchedules(tx, [student.id]);
 
   const payment = await tx.payment.create({
     data: {
@@ -837,6 +916,7 @@ async function createPaymentAndAllocate(
       paidAt: input.paidAt,
       paymentMonth: input.paymentMonth,
       nextPaymentAt,
+      scheduleType: input.scheduleType,
       method: input.method as PaymentMethod,
       payerName: input.payerName,
       receiptFileName: input.receiptFileName,
@@ -852,6 +932,7 @@ async function createPaymentAndAllocate(
       paidAt: true,
       paymentMonth: true,
       nextPaymentAt: true,
+      scheduleType: true,
       method: true,
       payerName: true,
       receiptFileName: true,
@@ -862,7 +943,7 @@ async function createPaymentAndAllocate(
   let remainingAmount = input.amount;
   const allocations: Array<{ invoiceId: string; amount: number }> = [];
 
-  for (const invoice of student.invoices) {
+  for (const invoice of invoices) {
     if (remainingAmount <= 0) {
       break;
     }

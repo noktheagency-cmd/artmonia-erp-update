@@ -52,11 +52,11 @@ export async function startStudentPaymentSchedule(
   const latestPayment = await tx.payment.findFirst({
     where: { studentId: input.studentId },
     orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
-    select: { id: true, paymentMonth: true },
+    select: { id: true, paymentMonth: true, scheduleType: true },
   });
 
   await clearStudentPaymentSchedules(tx, [input.studentId]);
-  if (!latestPayment) return;
+  if (!latestPayment || latestPayment.scheduleType === "ONE_TIME") return;
 
   await tx.payment.update({
     where: { id: latestPayment.id },

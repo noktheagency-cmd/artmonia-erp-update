@@ -104,6 +104,7 @@ export function SlotDetailDialog({
           <div className={styles.slotDetailTitleRow}>
             <div className={styles.slotDetailIcon}><CalendarDays /></div>
             <div>
+              <span className={styles.slotDetailEyebrow}><Check /> Seçilmiş slot</span>
               <DialogTitle>
                 {weekdayMeta[slot.weekday].label} · {slot.startTime}–{slot.endTime}
               </DialogTitle>

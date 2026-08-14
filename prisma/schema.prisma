@@ -100,6 +100,13 @@ enum PaymentMethod {
   @@schema("erp")
 }
 
+enum PaymentScheduleType {
+  MONTHLY
+  ONE_TIME
+
+  @@schema("erp")
+}
+
 enum TaskStatus {
   OPEN
   IN_PROGRESS
@@ -383,8 +390,29 @@ model User {
   createdHrNotifications           HrStaffNotification[]       @relation("HrNotificationCreator")
   createdCorporateCustomers        HrCorporateCustomer[]       @relation("HrCorporateCustomerCreator")
   createdDropdownCatalogOptions    DropdownCatalogOption[]     @relation("DropdownCatalogOptionCreator")
+  updatedAboutProfiles             AboutProfile[]               @relation("AboutProfileUpdater")
 
   @@map("users")
+  @@schema("erp")
+}
+
+model AboutProfile {
+  id           String   @id @default(uuid()) @db.Uuid
+  singletonKey String   @unique @default("primary") @map("singleton_key") @db.VarChar(32)
+  title        String   @db.VarChar(80)
+  tagline      String   @db.VarChar(180)
+  story        String   @db.Text
+  mission      String   @db.Text
+  vision       String   @db.Text
+  values       String[] @default([])
+  updatedById  String?  @map("updated_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation("AboutProfileUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedById])
+  @@map("about_profiles")
   @@schema("erp")
 }
 
@@ -985,7 +1013,7 @@ model Contact {
   id              String   @id @default(uuid()) @db.Uuid
   fullName        String   @map("full_name")
   phoneDisplay    String?  @map("phone_display")
-  phoneNormalized String?  @unique @map("phone_normalized")
+  phoneNormalized String?  @map("phone_normalized")
   email           String?
   source          String?
   notes           String?
@@ -998,6 +1026,7 @@ model Contact {
   studentRelationships StudentRelationship[]
 
   @@index([fullName])
+  @@index([phoneNormalized])
   @@map("contacts")
   @@schema("erp")
 }
@@ -1543,6 +1572,7 @@ model Payment {
   paidAt           DateTime      @map("paid_at") @db.Date
   paymentMonth     DateTime      @map("payment_month") @db.Date
   nextPaymentAt    DateTime?     @map("next_payment_at") @db.Date
+  scheduleType     PaymentScheduleType @default(MONTHLY) @map("schedule_type")
   method           PaymentMethod @default(CASH)
   payerName        String?       @map("payer_name")
   note             String?

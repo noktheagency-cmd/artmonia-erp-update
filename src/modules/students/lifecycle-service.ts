@@ -83,6 +83,8 @@ export async function syncActivationBilling(
     orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
+      startDate: true,
+      firstLessonAt: true,
       monthlyFee: true,
     },
   });
@@ -95,8 +97,8 @@ export async function syncActivationBilling(
     where: { id: enrollment.id },
     data: {
       status: EnrollmentStatus.ACTIVE,
-      startDate: input.effectiveAt,
-      firstLessonAt: input.effectiveAt,
+      startDate: enrollment.firstLessonAt ? enrollment.startDate : input.effectiveAt,
+      firstLessonAt: enrollment.firstLessonAt ?? input.effectiveAt,
     },
   });
 

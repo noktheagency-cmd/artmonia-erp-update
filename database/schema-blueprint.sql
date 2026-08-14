@@ -126,9 +126,8 @@ create table erp.contacts (
   updated_at timestamptz not null default now()
 );
 
-create unique index contacts_phone_normalized_uq
-  on erp.contacts (phone_normalized)
-  where phone_normalized is not null;
+create index contacts_phone_normalized_idx
+  on erp.contacts (phone_normalized);
 
 create table erp.teachers (
   id uuid primary key default gen_random_uuid(),

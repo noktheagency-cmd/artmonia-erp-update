@@ -27,6 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
@@ -319,6 +320,14 @@ export function StudentDetailActions({
                   required
                 />
               </label>
+              <label className="form-field">
+                <span>Ödəniş növü</span>
+                <FormSelect
+                  name="scheduleType"
+                  defaultValue="MONTHLY"
+                  options={studentPaymentScheduleTypeOptions}
+                />
+              </label>
             </div>
 
             <label className="form-field">
@@ -331,7 +340,7 @@ export function StudentDetailActions({
             </label>
 
             <p className="payment-policy-note">
-              İmtina zamanı qəbul edilən ödəniş geri qaytarılmır.
+              Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmır.
             </p>
 
             <DialogFooter>

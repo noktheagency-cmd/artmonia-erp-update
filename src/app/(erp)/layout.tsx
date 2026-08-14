@@ -2,6 +2,7 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { signOutAction } from "@/modules/auth/actions";
+import { getAboutProfile } from "@/modules/about/queries";
 import { requireErpActor } from "@/server/auth/actor";
 
 export default async function ErpLayout({
@@ -17,6 +18,8 @@ export default async function ErpLayout({
     redirect("/login" as Route);
   }
 
+  const aboutProfile = await getAboutProfile();
+
   return (
     <AppShell
       currentUser={{
@@ -26,6 +29,7 @@ export default async function ErpLayout({
         roles: actor.roles,
         permissions: [...actor.permissions.keys()],
       }}
+      aboutProfile={aboutProfile}
       signOutAction={signOutAction}
       sessionGuardEnabled={Boolean(actor.currentSessionId)}
     >

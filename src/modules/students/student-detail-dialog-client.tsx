@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -169,6 +170,14 @@ export function StudentDetailDialogClient({
                     required
                   />
                 </label>
+                <label className="form-field">
+                  <span>Ödəniş növü</span>
+                  <FormSelect
+                    name="scheduleType"
+                    defaultValue="MONTHLY"
+                    options={studentPaymentScheduleTypeOptions}
+                  />
+                </label>
               </div>
 
               <label className="form-field">
@@ -181,7 +190,7 @@ export function StudentDetailDialogClient({
               </label>
 
               <p className="payment-policy-note">
-                İmtina zamanı qəbul edilən ödəniş geri qaytarılmır.
+                Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmır.
               </p>
 
               <DialogFooter>
@@ -211,7 +220,7 @@ export function StudentDetailDialogClient({
                   <div className="student-history-line" key={payment.id}>
                     <strong>{payment.amount}</strong>
                     <span>
-                      {payment.paidAt} - {payment.method} - {payment.createdBy}
+                      {payment.paidAt} - {payment.scheduleType} - {payment.method} - {payment.createdBy}
                     </span>
                     <small>Növbəti ödəniş: {payment.nextPaymentDate} · {payment.note}</small>
                   </div>

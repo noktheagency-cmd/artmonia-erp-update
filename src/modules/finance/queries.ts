@@ -119,6 +119,7 @@ export type FinanceData = {
     dateKey: string;
     paidDateValue: string;
     paymentMonth: string;
+    scheduleTypeValue: string;
     methodValue: string;
     method: string;
     receipt: string;
@@ -262,6 +263,7 @@ type PaymentRow = {
   dateKey: string;
   paidDateValue: string;
   paymentMonth: string;
+  scheduleType: string;
   method: string;
   receiptFileName: string | null;
   receiptFilePath: string | null;
@@ -726,7 +728,11 @@ export async function getFinanceData(
         to_char(p.paid_at, 'DD.MM.YYYY') as "paidAt",
         to_char(p.paid_at, 'YYYY-MM-DD') as "dateKey",
         to_char(p.paid_at, 'YYYY-MM-DD') as "paidDateValue",
-        coalesce(to_char(p.next_payment_at, 'DD.MM.YYYY'), '—') as "paymentMonth",
+        case
+          when p.schedule_type = 'ONE_TIME'::"erp"."PaymentScheduleType" then 'Tam ödənilib'
+          else coalesce(to_char(p.next_payment_at, 'DD.MM.YYYY'), '—')
+        end as "paymentMonth",
+        p.schedule_type::text as "scheduleType",
         p.method::text as "method",
         p.receipt_file_name as "receiptFileName",
         p.receipt_file_path as "receiptFilePath",
@@ -1081,6 +1087,7 @@ export async function getFinanceData(
       dateKey: payment.dateKey,
       paidDateValue: payment.paidDateValue,
       paymentMonth: payment.paymentMonth,
+      scheduleTypeValue: payment.scheduleType,
       methodValue: payment.method,
       method: getStudentPaymentMethodLabel(payment.method),
       receipt: payment.receiptReference ?? payment.receiptFileName ?? "-",
@@ -1104,6 +1111,7 @@ export async function getFinanceData(
         dateKey: payment.dateKey,
         paidDateValue: payment.paidDateValue,
         paymentMonth: "Tədbirlər (Workshop / Masterclass)",
+        scheduleTypeValue: "ONE_TIME",
         methodValue: payment.method,
         method: getStudentPaymentMethodLabel(payment.method),
         receipt: payment.receiptReference ?? payment.receiptFileName ?? "-",

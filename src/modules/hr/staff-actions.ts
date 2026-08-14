@@ -428,4 +428,4 @@ function isUploadedFile(value: FormDataEntryValue | null): value is File {
 }
 
 function currentMonth() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); }
-function revalidateHr() { revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance"); revalidatePath("/", "layout"); }
+function revalidateHr() { revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance"); revalidatePath("/tasks"); revalidatePath("/", "layout"); }

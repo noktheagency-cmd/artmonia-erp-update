@@ -360,6 +360,102 @@ html.dark .route-content-shell {
   color: var(--dm-text);
 }
 
+html.dark .global-search-control {
+  color: #8f9ab0;
+  background: linear-gradient(135deg, rgb(24 30 43 / 97%), rgb(19 25 36 / 94%));
+  border-color: rgb(72 85 108 / 84%);
+  box-shadow: 0 16px 42px rgb(0 0 0 / 30%), inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+html.dark .global-search.is-open .global-search-control,
+html.dark .global-search-control:focus-within {
+  border-color: rgb(93 123 229 / 72%);
+  box-shadow: 0 22px 56px rgb(0 0 0 / 38%), 0 0 0 4px rgb(74 105 214 / 12%);
+}
+
+html.dark .global-search-control input {
+  color: #eef2fa;
+}
+
+html.dark .global-search-control input::placeholder {
+  color: #7e899e;
+}
+
+html.dark .global-search-shortcut,
+html.dark .global-search-clear {
+  color: #9aa5b8;
+  background: #293143;
+  border-color: #3b465b;
+}
+
+html.dark .global-search-panel {
+  background: #141a26;
+  border-color: rgb(67 80 102 / 92%);
+  box-shadow: 0 36px 100px rgb(0 0 0 / 52%), 0 10px 28px rgb(0 0 0 / 28%);
+}
+
+html.dark .global-search-panel-head,
+html.dark .global-search-footer,
+html.dark .global-search-section + .global-search-section {
+  border-color: #30394b;
+}
+
+html.dark .global-search-panel-head > span,
+html.dark .global-search-message strong {
+  color: #e4e9f3;
+}
+
+html.dark .global-search-panel-head small,
+html.dark .global-search-section h2,
+html.dark .global-search-result-copy small,
+html.dark .global-search-message p {
+  color: #8f9aaf;
+}
+
+html.dark .global-search-section h2 span,
+html.dark .global-search-footer {
+  color: #95a0b4;
+  background: #181f2e;
+}
+
+html.dark .global-search-result {
+  color: #e1e7f1;
+}
+
+html.dark .global-search-result:hover,
+html.dark .global-search-result:focus-visible,
+html.dark .global-search-result[data-search-active="true"] {
+  color: #ffffff;
+  background: linear-gradient(100deg, #283451, #202b42 72%, #1b2435);
+  border-color: #3b4d78;
+}
+
+html.dark .global-search-result-copy em {
+  color: #78849a;
+}
+
+html.dark .global-search-result-icon[data-kind] {
+  border-color: rgb(255 255 255 / 8%);
+  filter: saturate(0.85) brightness(0.92);
+}
+
+html.dark .global-search-footer kbd {
+  color: #aab4c6;
+  background: #252e3f;
+  border-color: #3b4658;
+}
+
+html.dark .global-search-message > span {
+  color: #90a7ff;
+  background: #283451;
+}
+
+html.dark .global-search-loading i,
+html.dark .global-search-loading b,
+html.dark .global-search-loading em {
+  background: #293244;
+}
+
 /* Module-local palettes */
 html.dark .workshop-page,
 html.dark .workshop-shell {
@@ -2449,5 +2545,126 @@ html.dark .side-rail .brand-mark:hover .brand-logo-dark {
   html.dark .app-stage.is-sidebar-compact .side-rail .brand-logo-dark {
     width: 38px !important;
     max-height: 38px;
+  }
+}
+
+/* About Artmonia — warm gallery treatment in dark mode. */
+html.dark .about-rail-badge {
+  color: #ffd2a1;
+  background: linear-gradient(145deg, rgb(56 35 20 / 96%), rgb(39 25 16 / 96%));
+  border-color: rgb(255 165 75 / 24%);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 25%), inset 0 1px 0 rgb(255 220 178 / 7%);
+}
+
+html.dark .about-rail-badge:hover,
+html.dark .about-rail-badge:focus-visible {
+  color: #ffe1bd;
+  border-color: rgb(255 165 75 / 42%);
+}
+
+html.dark .about-dialog.ui-dialog-content {
+  color: #f7eee4;
+  background:
+    radial-gradient(circle at 8% 0%, rgb(226 112 18 / 18%), transparent 35%),
+    linear-gradient(145deg, #211710, #160f0b 70%) !important;
+  border-color: rgb(255 174 91 / 18%) !important;
+  box-shadow: 0 38px 110px rgb(0 0 0 / 55%), inset 0 1px 0 rgb(255 225 193 / 5%) !important;
+}
+
+html.dark .about-dialog .ui-dialog-close,
+html.dark .about-dialog-edit-button {
+  color: #f3c18d;
+  background: rgb(43 29 20 / 80%);
+  border-color: rgb(255 174 91 / 16%);
+}
+
+html.dark .about-dialog-heading .ui-dialog-title,
+html.dark .about-perspective h3,
+html.dark .about-values h3 {
+  color: #fff7ef;
+}
+
+html.dark .about-dialog-heading .ui-dialog-description,
+html.dark .about-story p,
+html.dark .about-perspective p {
+  color: #c7b6a7;
+}
+
+html.dark .about-story,
+html.dark .about-perspective {
+  background: rgb(47 32 22 / 62%);
+  border-color: rgb(255 178 99 / 12%);
+  box-shadow: 0 15px 36px rgb(0 0 0 / 13%);
+}
+
+html.dark .about-perspective-icon {
+  color: #ffbd7c;
+  background: rgb(198 81 0 / 24%);
+}
+
+html.dark .about-perspective-icon.is-vision {
+  color: #e7b98e;
+  background: rgb(137 86 44 / 22%);
+}
+
+html.dark .about-values-kicker {
+  color: #d99c64;
+}
+
+html.dark .about-values li {
+  color: #f1c598;
+  background: rgb(143 70 18 / 20%);
+  border-color: rgb(255 174 91 / 13%);
+}
+
+html.dark .about-dialog-footer {
+  border-color: rgb(255 181 108 / 10%);
+}
+
+html.dark .about-dialog-signature {
+  color: #efb77f;
+}
+
+html.dark .about-dialog-meta,
+html.dark .about-editor-field > span {
+  color: #a99788;
+}
+
+html.dark .about-editor-field input,
+html.dark .about-editor-field textarea {
+  color: #f5e9dd;
+  background: rgb(43 30 21 / 80%);
+  border-color: rgb(255 180 104 / 15%);
+}
+
+html.dark .about-editor-field input:focus,
+html.dark .about-editor-field textarea:focus {
+  background: rgb(49 33 22 / 96%);
+  border-color: rgb(245 145 52 / 48%);
+  box-shadow: 0 0 0 3px rgb(245 145 52 / 10%);
+}
+
+html.dark .about-editor-cancel {
+  color: #d3c2b2;
+  background: rgb(43 30 21 / 76%);
+  border-color: rgb(255 180 104 / 14%);
+}
+
+html.dark .about-dialog-feedback.is-success {
+  color: #a7ddb8;
+  background: rgb(38 101 58 / 18%);
+  border-color: rgb(117 205 144 / 20%);
+}
+
+html.dark .about-dialog-feedback.is-error {
+  color: #f0aab0;
+  background: rgb(142 47 58 / 18%);
+  border-color: rgb(229 113 124 / 20%);
+}
+
+@media (max-width: 700px) {
+  html.dark .about-editor-actions {
+    background: rgb(25 17 12 / 96%);
+    border-color: rgb(255 181 108 / 10%);
   }
 }

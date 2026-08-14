@@ -50,6 +50,11 @@ import type {
   PlannerSlot,
   PlannerWorkspaceData,
 } from "@/modules/groups/planner-queries";
+import {
+  minimumAssignmentDate,
+  preferredAssignmentDate,
+  selectedSlotsFirst,
+} from "@/modules/groups/planner-assignment";
 import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
 import { SlotDetailDialog } from "@/modules/groups/slot-detail-dialog";
 import styles from "./planner.module.css";
@@ -670,17 +675,6 @@ function formatInputDate(value: string) {
   return `${day}.${month}.${year}`;
 }
 
-function minimumAssignmentDate(slotIds: string[], slots: PlannerSlot[], today: string) {
-  const slotById = new Map(slots.map((slot) => [slot.id, slot]));
-  return slotIds.reduce(
-    (latest, slotId) => {
-      const slotStart = slotById.get(slotId)?.validFrom;
-      return slotStart && slotStart > latest ? slotStart : latest;
-    },
-    today,
-  );
-}
-
 function Avatar({ name, compact = false }: { name: string; compact?: boolean }) {
   const initials = name
     .split(/\s+/)
@@ -836,9 +830,11 @@ function AssignmentDialog({
     : firstEnrollment ? [initialSlot.id] : [];
   const [enrollmentId, setEnrollmentId] = useState(firstEnrollment?.id ?? "");
   const [selected, setSelected] = useState<string[]>(initialSelection);
-  const [activeWeekday, setActiveWeekday] = useState<GroupWeekdayCode>(initialSlot.weekday);
+  const [activeWeekday, setActiveWeekday] = useState<GroupWeekdayCode>(() => (
+    data.slots.find((slot) => initialSelection.includes(slot.id))?.weekday ?? initialSlot.weekday
+  ));
   const [validFrom, setValidFrom] = useState(() => (
-    minimumAssignmentDate(initialSelection, data.slots, data.today)
+    preferredAssignmentDate(initialSelection, data.slots, data.today)
   ));
   const enrollment = data.enrollments.find((item) => item.id === enrollmentId);
   const enrollmentOptions = useMemo(
@@ -852,8 +848,11 @@ function AssignmentDialog({
   const selectedIds = useMemo(() => new Set(selected), [selected]);
   const slotsById = useMemo(() => new Map(data.slots.map((slot) => [slot.id, slot])), [data.slots]);
   const activeDaySlots = useMemo(
-    () => data.slots.filter((slot) => slot.weekday === activeWeekday),
-    [activeWeekday, data.slots],
+    () => selectedSlotsFirst(
+      data.slots.filter((slot) => slot.weekday === activeWeekday),
+      selectedIds,
+    ),
+    [activeWeekday, data.slots, selectedIds],
   );
   const selectedCountByDay = useMemo(() => {
     const counts = new Map<GroupWeekdayCode, number>();
@@ -876,7 +875,7 @@ function AssignmentDialog({
     setActiveWeekday(
       data.slots.find((slot) => nextSelection.includes(slot.id))?.weekday ?? initialSlot.weekday,
     );
-    setValidFrom(minimumAssignmentDate(nextSelection, data.slots, data.today));
+    setValidFrom(preferredAssignmentDate(nextSelection, data.slots, data.today));
   }
 
   function toggle(slot: PlannerSlot) {
@@ -884,9 +883,9 @@ function AssignmentDialog({
     const next = selected.includes(slot.id)
       ? selected.filter((id) => id !== slot.id)
       : [...selected, slot.id];
-    const minimum = minimumAssignmentDate(next, data.slots, data.today);
+    const minimum = minimumAssignmentDate(next, data.slots);
     setSelected(next);
-    setValidFrom((currentDate) => currentDate < minimum ? minimum : currentDate);
+    setValidFrom((currentDate) => minimum && currentDate < minimum ? minimum : currentDate);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -975,11 +974,13 @@ function AssignmentDialog({
                       key={slot.id}
                       disabled={full && !active}
                       aria-pressed={active}
-                      aria-label={`${slot.startTime}–${slot.endTime}, ${slot.teacherName}, ${slot.room}`}
+                      aria-label={`${slot.startTime}–${slot.endTime}, ${slot.teacherName}, ${slot.room}${active ? ", seçilib" : ""}`}
                     >
                       <span className={styles.slotChoiceTop}>
                         <strong>{slot.startTime}–{slot.endTime}</strong>
-                        <em>{shiftMeta[slot.shift].label}</em>
+                        <em className={active ? styles.selectedChoiceLabel : undefined}>
+                          {active ? <><Check size={12} /> Seçilib</> : shiftMeta[slot.shift].label}
+                        </em>
                       </span>
                       <span className={styles.slotChoiceTeacher}>
                         <UserRound size={14} />
@@ -989,7 +990,6 @@ function AssignmentDialog({
                         <small><DoorOpen size={13} />{slot.room}</small>
                         <b><UsersRound size={13} />{full && !active ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>
                       </span>
-                      {active ? <Check className={styles.slotChoiceCheck} size={16} /> : null}
                     </button>
                   );
                 })}
@@ -1026,11 +1026,14 @@ function AssignmentDialog({
                 <input
                   name="validFrom"
                   type="date"
-                  min={minimumAssignmentDate(selected, data.slots, data.today)}
+                  min={minimumAssignmentDate(selected, data.slots)}
                   value={validFrom}
                   onChange={(event) => setValidFrom(event.target.value)}
                   required
                 />
+                <small className={styles.startDateHint}>
+                  Slotun başlanğıc tarixindən etibarən keçmiş tarix seçilə bilər.
+                </small>
               </label>
               {enrollment?.lessonsPerMonth ? (
                 <div className={styles.packageNote}>

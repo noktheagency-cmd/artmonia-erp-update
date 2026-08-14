@@ -18,6 +18,50 @@
   -webkit-overflow-scrolling: touch;
 }
 
+@media (max-width: 560px) {
+  .global-search-control {
+    gap: 8px;
+    height: 46px;
+    padding-inline: 12px 9px;
+  }
+
+  .global-search-leading {
+    width: 20px;
+    flex-basis: 20px;
+  }
+
+  .global-search-control input {
+    font-size: 11.5px;
+  }
+
+  .global-search-shortcut {
+    display: none;
+  }
+
+  .global-search-panel {
+    position: fixed;
+    top: calc(126px + env(safe-area-inset-top));
+    right: var(--mobile-page-gutter);
+    left: var(--mobile-page-gutter);
+    max-height: calc(100dvh - 218px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 18px;
+  }
+
+  .global-search-results {
+    max-height: calc(100dvh - 302px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .global-search-result {
+    min-height: 62px;
+    grid-template-columns: 38px minmax(0, 1fr) 18px;
+    padding-inline: 8px;
+  }
+
+  .global-search-footer {
+    display: none;
+  }
+}
+
 /* Shared contract for every tabular list in the ERP. Module CSS still owns
  * column semantics and colors; this layer only guarantees predictable sizing
  * and scrolling across routes. */
@@ -167,6 +211,22 @@
 
   .erp-frame {
     z-index: auto;
+  }
+
+  .global-search {
+    z-index: 980;
+    width: 100%;
+    max-width: 680px;
+    margin-bottom: 16px;
+  }
+
+  .global-search.is-open {
+    width: 100%;
+  }
+
+  .global-search-control {
+    height: 48px;
+    border-radius: 15px;
   }
 
   .route-content-shell,
@@ -523,6 +583,10 @@
   .app-stage.is-sidebar-compact .erp-frame,
   .erp-frame[data-dashboard-section="false"] {
     padding-top: calc(74px + env(safe-area-inset-top));
+  }
+
+  .global-search {
+    top: calc(70px + env(safe-area-inset-top));
   }
 
   .erp-frame :is(
@@ -1424,5 +1488,105 @@
   .app-stage.is-sidebar-compact .side-rail .rail-utility-actions {
     display: flex;
     flex-direction: row;
+  }
+}
+
+/* About dialog — mobile sheet keeps the presentation readable and touch friendly. */
+@media (max-width: 700px) {
+  html body .about-dialog.ui-dialog-content {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-width: none;
+    max-height: min(92dvh, 820px);
+    padding: 0;
+    border: 0 !important;
+    border-top: 1px solid rgb(202 114 37 / 20%) !important;
+    border-radius: 25px 25px 0 0;
+    transform: none;
+  }
+
+  .about-dialog .ui-dialog-close {
+    top: 16px;
+    right: 16px;
+  }
+
+  .about-dialog-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 13px;
+    padding: 24px 56px 18px 18px;
+  }
+
+  .about-dialog-emblem {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+
+  .about-dialog-heading .ui-dialog-title {
+    font-size: 25px;
+  }
+
+  .about-dialog-heading .ui-dialog-description {
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .about-dialog-edit-button {
+    grid-column: 1 / -1;
+    width: fit-content;
+    min-height: 34px;
+    margin-left: 57px;
+  }
+
+  .about-dialog-body,
+  .about-editor {
+    gap: 14px;
+    padding: 0 18px 22px;
+  }
+
+  .about-story {
+    gap: 12px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .about-story p {
+    font-size: 11.5px;
+    line-height: 1.65;
+  }
+
+  .about-perspectives,
+  .about-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .about-editor-field-wide {
+    grid-column: auto;
+  }
+
+  .about-perspective {
+    padding: 14px;
+  }
+
+  .about-values,
+  .about-dialog-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .about-values ul {
+    justify-content: flex-start;
+  }
+
+  .about-editor-actions {
+    position: sticky;
+    bottom: -22px;
+    margin: 0 -18px -22px;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+    background: rgb(255 250 243 / 96%);
+    border-top: 1px solid rgb(174 111 57 / 14%);
+    backdrop-filter: blur(18px);
   }
 }

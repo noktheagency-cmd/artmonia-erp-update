@@ -59,6 +59,7 @@ async function updateEmployeeActionImpl(formData: FormData) {
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.employee.update", entityType: "hr_employee", entityId: id, before, after: data, reason: "İşçi profili yeniləndi" });
   });
   revalidatePath("/hr");
+  revalidatePath("/tasks");
 }
 
 async function createHrLookupActionImpl(formData: FormData) {
@@ -265,6 +266,7 @@ async function deleteEmployeeActionImpl(formData: FormData) {
     await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.employee.delete", entityType: "hr_employee", entityId: id, before, after: null, reason: "İşçi profili silindi" });
   });
   revalidatePath("/hr");
+  revalidatePath("/tasks");
 }
 
 async function linkTeacherAccountActionImpl(formData: FormData) {

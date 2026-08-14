@@ -8,6 +8,10 @@ import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
+import {
+  buildCurrentTaskAssigneeWhere,
+  buildTaskWorkspaceWhere,
+} from "@/modules/tasks/task-scope";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -35,12 +39,12 @@ async function createTaskActionImpl(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     const owner = await tx.user.findFirst({
-      where: { id: ownerUserId, isActive: true },
+      where: buildCurrentTaskAssigneeWhere(ownerUserId),
       select: { id: true, fullName: true },
     });
 
     if (!owner) {
-      throw new Error("Seçilmiş işçi tapılmadı");
+      throw new PublicActionError("Seçilmiş əməkdaş artıq aktiv deyil.", "NOT_FOUND");
     }
 
     const task = await tx.task.create({
@@ -82,8 +86,8 @@ async function updateTaskStatusActionImpl(formData: FormData) {
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
-    const current = await tx.task.findUnique({
-      where: { id: input.taskId },
+    const current = await tx.task.findFirst({
+      where: { id: input.taskId, ...buildTaskWorkspaceWhere() },
       select: { id: true, ownerUserId: true, status: true },
     });
 
@@ -126,8 +130,8 @@ async function deleteTaskActionImpl(formData: FormData) {
   const manageScope = scopeFor(actor.permissions, "task.manage");
 
   await getPrisma().$transaction(async (tx) => {
-    const task = await tx.task.findUnique({
-      where: { id: input.taskId },
+    const task = await tx.task.findFirst({
+      where: { id: input.taskId, ...buildTaskWorkspaceWhere() },
       select: {
         id: true,
         title: true,

@@ -65,6 +65,7 @@ import { FormSelect, type SelectOptionCrudConfig } from "@/components/ui/select"
 import { StatusChip } from "@/components/ui/status-chip";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { FinanceData } from "@/modules/finance/queries";
 import {
@@ -748,8 +749,12 @@ function PaymentDialog({
                 />
               </label>
               <label className="form-field">
-                <span>Ödəniş üsulu</span>
-                <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
+                <span>Ödəniş növü</span>
+                <FormSelect
+                  name="scheduleType"
+                  defaultValue="MONTHLY"
+                  options={studentPaymentScheduleTypeOptions}
+                />
               </label>
             </div>
             <div className="field-grid">
@@ -763,6 +768,10 @@ function PaymentDialog({
                   popoverPlacement="floating"
                   required
                 />
+              </label>
+              <label className="form-field">
+                <span>Ödəniş üsulu</span>
+                <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
               </label>
             </div>
             <div className="field-grid">
@@ -795,7 +804,7 @@ function PaymentDialog({
             </label>
             <div className="finance-allocation-note">
               <AlertTriangle size={14} aria-hidden="true" />
-              Bu ödəniş açıq fakturalara avtomatik bölüşdürüləcək və alacaq balansı yenilənəcək.
+              Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmayacaq.
             </div>
           </section>
 
@@ -1892,6 +1901,14 @@ function PaymentCrudActions({
               <label className="form-field">
                 <span>Ödəniş tarixi</span>
                 <DatePicker name="paidDate" defaultValue={payment.paidDateValue} allowClear={false} popoverPlacement="floating" required />
+              </label>
+              <label className="form-field">
+                <span>Ödəniş növü</span>
+                <FormSelect
+                  name="scheduleType"
+                  defaultValue={payment.scheduleTypeValue}
+                  options={studentPaymentScheduleTypeOptions}
+                />
               </label>
             </div>
             <div className="field-grid">

@@ -19,6 +19,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -129,6 +130,14 @@ export function StudentPaymentDialogClient({
                 <span>Metod</span>
                 <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
               </label>
+              <label className="form-field">
+                <span>Ödəniş növü</span>
+                <FormSelect
+                  name="scheduleType"
+                  defaultValue="MONTHLY"
+                  options={studentPaymentScheduleTypeOptions}
+                />
+              </label>
             </div>
 
             <label className="form-field">
@@ -137,7 +146,7 @@ export function StudentPaymentDialogClient({
             </label>
 
             <p className="payment-policy-note">
-              <CalendarDays /> Ödəniş ən köhnə açıq fakturalara avtomatik bölüşdürülür.
+              <CalendarDays /> Birdəfəlik ödənişdə növbəti aylıq ödəniş tarixi yaradılmır.
             </p>
 
             <DialogFooter>

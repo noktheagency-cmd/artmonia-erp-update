@@ -2,6 +2,10 @@ import { TaskStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
+import {
+  buildCurrentTaskAssigneeWhere,
+  buildTaskWorkspaceWhere,
+} from "@/modules/tasks/task-scope";
 
 export type TaskRow = {
   id: string;
@@ -35,7 +39,7 @@ export async function getTaskData(input: { page?: string; pageSize?: string } = 
   const canManageAll = manageScope === "ALL";
   const page = Math.max(1, Number.parseInt(input.page ?? "1", 10) || 1);
   const pageSize = Math.min(50, Math.max(10, Number.parseInt(input.pageSize ?? "25", 10) || 25));
-  const where = canManageAll ? undefined : { ownerUserId: actor.id };
+  const where = buildTaskWorkspaceWhere(canManageAll ? undefined : actor.id);
 
   const [tasks, total, statusCounts, employees] = await Promise.all([
     prisma.task.findMany({
@@ -57,11 +61,18 @@ export async function getTaskData(input: { page?: string; pageSize?: string } = 
     prisma.task.groupBy({ by: ["status"], where, _count: { _all: true } }),
     canManageAll
       ? prisma.user.findMany({
-          where: { isActive: true },
+          where: buildCurrentTaskAssigneeWhere(),
           orderBy: { fullName: "asc" },
+          take: 500,
           select: { id: true, fullName: true },
         })
-      : Promise.resolve(canManage ? [{ id: actor.id, fullName: actor.fullName }] : []),
+      : canManage
+        ? prisma.user.findMany({
+            where: buildCurrentTaskAssigneeWhere(actor.id),
+            take: 1,
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve([]),
   ]);
 
   const now = new Date();

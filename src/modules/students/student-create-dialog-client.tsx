@@ -21,7 +21,11 @@ import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
-import { isGiftDiscount } from "@/modules/students/student-create-rules";
+import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
+import {
+  isGiftDiscount,
+  studentFirstLessonModeOptions,
+} from "@/modules/students/student-create-rules";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -32,6 +36,7 @@ type StudentFormValues = {
   paymentAmount: string;
   paymentDate: string;
   paymentMethod: string;
+  paymentScheduleType: string;
   paymentNote: string;
 };
 
@@ -47,12 +52,15 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
     discountType: "",
     lifecycleStatus: "SLOT_WAITING",
     registeredDate: createOptions.defaultRegisteredDate,
+    firstLessonMode: "AUTO",
+    firstLessonDate: "",
     monthlyFee: "",
     lessonsPerMonth: "",
     notes: "",
     paymentAmount: "",
     paymentDate: createOptions.defaultPaymentDate,
     paymentMethod: "CASH",
+    paymentScheduleType: "MONTHLY",
     paymentNote: "",
   };
 }
@@ -222,6 +230,7 @@ export function StudentCreateDialogClient({
           <input name="paymentAmount" type="hidden" value={values.paymentAmount} />
           <input name="paymentDate" type="hidden" value={values.paymentDate} />
           <input name="paymentMethod" type="hidden" value={values.paymentMethod} />
+          <input name="paymentScheduleType" type="hidden" value={values.paymentScheduleType} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
 
           <label className="form-field student-create-lead-field">
@@ -389,6 +398,36 @@ export function StudentCreateDialogClient({
                 />
               </label>
               <label className="form-field">
+                <span>İlk dərs tarixi</span>
+                <FormSelect
+                  name="firstLessonMode"
+                  value={values.firstLessonMode}
+                  onValueChange={(value) => updateValue("firstLessonMode", value)}
+                  options={studentFirstLessonModeOptions}
+                />
+              </label>
+              {values.firstLessonMode === "MANUAL" ? (
+                <label className="form-field">
+                  <span>Manual ilk dərs tarixi</span>
+                  <DatePicker
+                    name="firstLessonDate"
+                    value={values.firstLessonDate}
+                    onValueChange={(value) => updateValue("firstLessonDate", value)}
+                    allowClear={false}
+                    popoverPlacement="floating"
+                    required
+                  />
+                </label>
+              ) : (
+                <label className="form-field">
+                  <span>Avtomatik tarix</span>
+                  <div className="student-readonly-status" aria-label="Slot veriləndə avtomatik təyin ediləcək">
+                    <span />
+                    <strong>İlk slot tarixindən</strong>
+                  </div>
+                </label>
+              )}
+              <label className="form-field">
                 <span>Güzəşt növü</span>
                 <FormSelect
                   aria-label="Güzəşt növü"
@@ -542,6 +581,15 @@ function InitialPaymentDialog({
               />
             </label>
           </div>
+          <label className="form-field">
+            <span>Ödəniş növü</span>
+            <FormSelect
+              name="paymentScheduleType"
+              value={values.paymentScheduleType}
+              onValueChange={(value) => onChange("paymentScheduleType", value)}
+              options={studentPaymentScheduleTypeOptions}
+            />
+          </label>
           <label className="form-field">
             <span>Ödəniş tarixi</span>
             <DatePicker

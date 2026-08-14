@@ -286,7 +286,7 @@
   max-height: 354px;
   padding: 2px 5px 4px 2px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   scrollbar-gutter: stable;
 }
 
@@ -325,7 +325,6 @@
 .slotChoiceTop {
   justify-content: space-between;
   gap: 8px;
-  padding-right: 24px;
 }
 
 .slotChoiceTop strong {
@@ -339,6 +338,27 @@
   font-size: 8px;
   font-style: normal;
   font-weight: 730;
+}
+
+.selectedChoiceLabel {
+  display: inline-flex;
+  min-height: 23px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: #fff !important;
+  background: var(--assignment-blue);
+  border-radius: 999px;
+  font-size: 8px !important;
+  font-weight: 800 !important;
+  letter-spacing: .01em;
+}
+
+.selectedChoiceLabel svg {
+  position: static;
+  width: 11px;
+  height: 11px;
+  stroke-width: 3;
 }
 
 .slotChoiceTeacher {
@@ -527,6 +547,13 @@
   box-shadow: 0 0 0 3px rgba(23, 105, 232, .12);
 }
 
+.startDateHint {
+  color: var(--assignment-muted);
+  font-size: 9px;
+  font-weight: 520;
+  line-height: 1.45;
+}
+
 .packageNote {
   display: flex;
   align-items: center;
@@ -584,7 +611,10 @@
 @media(max-width:900px) {
   .assignmentDialog {
     max-height: 92vh;
-    overflow-y: auto;
+  }
+
+  .assignmentDialog:global(.ui-dialog-content) {
+    overflow: hidden !important;
   }
 
   .assignmentBody {
@@ -598,6 +628,8 @@
 
   .slotChoiceGrid {
     grid-template-columns: repeat(3, minmax(118px, 1fr));
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -623,6 +655,7 @@
     display: flex;
     overflow-x: auto;
     scrollbar-width: none;
+    touch-action: pan-x;
   }
 
   .weekdayTabs::-webkit-scrollbar {
@@ -635,7 +668,7 @@
 
   .slotChoiceGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-height: 330px;
+    max-height: none;
   }
 
   .assignmentFooter {
@@ -1007,7 +1040,7 @@
 
 .canvas {
   min-height: 0;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   scrollbar-gutter: stable both-edges;
 }
 
@@ -1090,7 +1123,10 @@
   }
 
   .canvas {
-    max-height: min(68dvh, 620px);
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior: auto;
   }
 
   .inspector {
@@ -1139,7 +1175,27 @@
 .assignmentBody {
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.slotDetailEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+  color: #1769e8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.slotDetailEyebrow svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
 }
 
 @media(max-width:640px) {
@@ -1293,7 +1349,10 @@
   max-height: calc(min(92dvh, 860px) - 166px);
   padding: 24px 28px 28px;
   overflow-y: auto;
+  overscroll-behavior: auto;
   scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .slotOverview { display: grid; gap: 20px; }

@@ -22,8 +22,14 @@ import { toNumber } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
 import {
+  studentPaymentScheduleTypeValues,
+  type StudentPaymentScheduleType,
+} from "@/modules/students/payment-schedule-type";
+import {
   isGiftDiscount,
+  resolveInitialFirstLessonAt,
   resolveStudentMonthlyFee,
+  studentFirstLessonModeValues,
 } from "@/modules/students/student-create-rules";
 import {
   clearStudentPaymentSchedules,
@@ -89,6 +95,7 @@ const createStudentSchema = z.object({
   discountType: optionalText(100),
   lifecycleStatus: z.enum(studentLifecycleStatusValues).default(StudentLifecycleStatus.SLOT_WAITING),
   registeredDate: z.string().trim().min(1).max(20),
+  firstLessonMode: z.enum(studentFirstLessonModeValues).default("AUTO"),
   firstLessonDate: optionalText(20),
   monthlyFee: z.preprocess(parseAmountInput, z.number().nonnegative().max(100_000)),
   lessonsPerMonth: optionalInteger,
@@ -100,6 +107,7 @@ const createStudentSchema = z.object({
   paymentAmount: optionalAmount,
   paymentDate: optionalText(20),
   paymentMethod: z.enum(studentPaymentMethodValues).default("CASH"),
+  paymentScheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
   paymentNote: optionalText(240),
   returnTo: optionalText(260),
 }).superRefine((value, context) => {
@@ -110,6 +118,13 @@ const createStudentSchema = z.object({
       message: "Aylıq məbləğ sıfırdan böyük olmalıdır.",
     });
   }
+  if (value.firstLessonMode === "MANUAL" && !value.firstLessonDate) {
+    context.addIssue({
+      code: "custom",
+      path: ["firstLessonDate"],
+      message: "Manual rejimdə ilk dərs tarixi seçilməlidir.",
+    });
+  }
 });
 
 const recordPaymentSchema = z.object({
@@ -118,6 +133,7 @@ const recordPaymentSchema = z.object({
   amount: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
   paidDate: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
+  scheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
   note: optionalText(240),
   returnTo: optionalText(260),
 });
@@ -196,12 +212,13 @@ async function createStudentActionImpl(formData: FormData) {
   }
 
   const registeredAt = parseDateInput(input.registeredDate, "Qeydiyyat tarixi");
-  const requestedFirstLessonAt = input.firstLessonDate
+  const requestedFirstLessonAt = input.firstLessonMode === "MANUAL" && input.firstLessonDate
     ? parseDateInput(input.firstLessonDate, "İlk dərs tarixi")
     : null;
   const firstLessonAt = resolveInitialFirstLessonAt({
     lifecycleStatus: input.lifecycleStatus,
     registeredAt,
+    mode: input.firstLessonMode,
     requestedFirstLessonAt,
   });
   const enrollmentStartDate = firstLessonAt ?? registeredAt;
@@ -269,13 +286,14 @@ async function createStudentActionImpl(formData: FormData) {
     const lead = await resolveLeadForStudentCreation(tx, input.leadId);
     const contactId = lead
       ? await updateLeadContact(tx, {
+          leadId: lead.id,
           contactId: lead.contactId,
           fullName: input.fullName,
           phone: input.phone,
           phoneNormalized,
           source: input.source ?? "Manual",
         })
-      : await createOrUpdateStudentContact(tx, {
+      : await createStudentContact(tx, {
           fullName: input.fullName,
           phone: input.phone,
           phoneNormalized,
@@ -360,6 +378,7 @@ async function createStudentActionImpl(formData: FormData) {
         amount: input.paymentAmount,
         paidAt: paymentDate,
         paymentMonth,
+        scheduleType: input.paymentScheduleType,
         method: input.paymentMethod,
         note: input.paymentNote ?? input.notes ?? null,
         actorId: actor.id,
@@ -372,6 +391,7 @@ async function createStudentActionImpl(formData: FormData) {
         where: { id: lead.id },
         data: {
           stage: LeadStage.REGISTERED,
+          contactId,
           convertedStudentId: student.id,
           programInterestId: input.programId,
           managerId,
@@ -400,6 +420,8 @@ async function createStudentActionImpl(formData: FormData) {
         leadId: lead?.id ?? null,
         campaignId,
         discountType: discountType?.value ?? null,
+        firstLessonMode: input.firstLessonMode,
+        firstLessonAt: firstLessonAt?.toISOString() ?? null,
         enrollmentId: enrollment.id,
         invoiceId: invoice?.id ?? null,
         paymentId: paymentResult?.payment.id ?? null,
@@ -448,6 +470,7 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
       amount: input.amount,
       paidAt,
       paymentMonth,
+      scheduleType: input.scheduleType,
       method: input.method,
       note: input.note ?? null,
       actorId: actor.id,
@@ -632,17 +655,6 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     const managerId = canManageAllStudents
       ? input.managerId ?? null
       : current.managerId;
-
-    const phoneOwner = await tx.contact.findFirst({
-      where: {
-        phoneNormalized,
-        id: { not: current.contact.id },
-      },
-      select: { fullName: true },
-    });
-    if (phoneOwner) {
-      throw new Error(`Telefon artıq ${phoneOwner.fullName} adına bağlıdır`);
-    }
 
     const [program, teacher, manager, campaign, educationLevel, discountType] = await Promise.all([
       tx.program.findUnique({
@@ -992,11 +1004,6 @@ async function resolveLeadForStudentCreation(
       managerId: true,
       campaignId: true,
       convertedStudentId: true,
-      contact: {
-        select: {
-          students: { select: { code: true }, take: 1 },
-        },
-      },
     },
   });
 
@@ -1008,36 +1015,13 @@ async function resolveLeadForStudentCreation(
     throw new Error("Müraciət artıq tələbəyə çevrilib");
   }
 
-  if (lead.contact.students.length > 0) {
-    throw new Error(`Bu əlaqə artıq ${lead.contact.students[0].code} kodlu tələbəyə bağlıdır`);
-  }
-
   return lead;
-}
-
-function resolveInitialFirstLessonAt({
-  lifecycleStatus,
-  registeredAt,
-  requestedFirstLessonAt,
-}: {
-  lifecycleStatus: StudentLifecycleStatus;
-  registeredAt: Date;
-  requestedFirstLessonAt: Date | null;
-}) {
-  if (lifecycleStatus !== StudentLifecycleStatus.ACTIVE) {
-    return null;
-  }
-
-  if (requestedFirstLessonAt) {
-    return requestedFirstLessonAt;
-  }
-
-  return registeredAt;
 }
 
 async function updateLeadContact(
   tx: Prisma.TransactionClient,
   input: {
+    leadId: string;
     contactId: string;
     fullName: string;
     phone: string;
@@ -1045,13 +1029,34 @@ async function updateLeadContact(
     source: string;
   }
 ) {
-  const conflict = await tx.contact.findUnique({
-    where: { phoneNormalized: input.phoneNormalized },
-    select: { id: true, fullName: true },
+  const currentContact = await tx.contact.findUnique({
+    where: { id: input.contactId },
+    select: {
+      students: { select: { id: true }, take: 1 },
+      leads: { select: { id: true }, take: 2 },
+    },
   });
 
-  if (conflict && conflict.id !== input.contactId) {
-    throw new Error(`Telefon artıq ${conflict.fullName} adına bağlıdır`);
+  if (!currentContact) {
+    throw new Error("Əlaqə məlumatı tapılmadı");
+  }
+
+  const isSharedContact =
+    currentContact.students.length > 0 ||
+    currentContact.leads.some((lead) => lead.id !== input.leadId);
+
+  if (isSharedContact) {
+    const contact = await tx.contact.create({
+      data: {
+        fullName: input.fullName,
+        phoneDisplay: input.phone,
+        phoneNormalized: input.phoneNormalized,
+        source: input.source,
+      },
+      select: { id: true },
+    });
+
+    return contact.id;
   }
 
   await tx.contact.update({
@@ -1067,7 +1072,7 @@ async function updateLeadContact(
   return input.contactId;
 }
 
-async function createOrUpdateStudentContact(
+async function createStudentContact(
   tx: Prisma.TransactionClient,
   input: {
     fullName: string;
@@ -1076,31 +1081,6 @@ async function createOrUpdateStudentContact(
     source: string;
   }
 ) {
-  const existing = await tx.contact.findUnique({
-    where: { phoneNormalized: input.phoneNormalized },
-    select: {
-      id: true,
-      students: { select: { code: true }, take: 1 },
-    },
-  });
-
-  if (existing?.students.length) {
-    throw new Error(`Bu telefon artıq ${existing.students[0].code} kodlu tələbəyə bağlıdır`);
-  }
-
-  if (existing) {
-    await tx.contact.update({
-      where: { id: existing.id },
-      data: {
-        fullName: input.fullName,
-        phoneDisplay: input.phone,
-        source: input.source,
-      },
-    });
-
-    return existing.id;
-  }
-
   const contact = await tx.contact.create({
     data: {
       fullName: input.fullName,
@@ -1121,6 +1101,7 @@ async function createPaymentAndAllocate(
     amount: number;
     paidAt: Date;
     paymentMonth: Date;
+    scheduleType: StudentPaymentScheduleType;
     method: (typeof studentPaymentMethodValues)[number];
     note: string | null;
     actorId: string;
@@ -1150,7 +1131,7 @@ async function createPaymentAndAllocate(
         where: { status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] } },
         orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
         take: 1,
-        select: { monthlyFee: true },
+        select: { id: true, monthlyFee: true },
       },
     },
   });
@@ -1160,14 +1141,44 @@ async function createPaymentAndAllocate(
   }
 
   const monthlyFee = toNumber(student.enrollments[0]?.monthlyFee);
-  const nextPaymentAt = await resolveStudentNextPaymentAt(tx, {
-    studentId: student.id,
-    paymentMonth: input.paymentMonth,
-  });
+  const nextPaymentAt = input.scheduleType === "ONE_TIME"
+    ? null
+    : await resolveStudentNextPaymentAt(tx, {
+        studentId: student.id,
+        paymentMonth: input.paymentMonth,
+      });
   let invoices = student.invoices;
   const periodMonth = startOfMonth(input.paidAt);
+  const openBalance = roundMoney(
+    invoices.reduce((total, invoice) => total + toNumber(invoice.balanceDue), 0),
+  );
 
-  if (monthlyFee > 0 && invoices.length === 0) {
+  if (input.scheduleType === "ONE_TIME" && input.amount < openBalance) {
+    throw new PublicActionError(
+      "Birdəfəlik tam ödəniş açıq balansdan az ola bilməz.",
+    );
+  }
+
+  if (input.scheduleType === "ONE_TIME" && input.amount > openBalance) {
+    const oneTimeAmount = roundMoney(input.amount - openBalance);
+    const invoice = await tx.invoice.upsert({
+      where: { idempotencyKey: `student-one-time-${input.idempotencyKey}` },
+      update: {},
+      create: {
+        studentId: student.id,
+        enrollmentId: student.enrollments[0]?.id ?? null,
+        periodMonth,
+        issueDate: input.paidAt,
+        dueDate: input.paidAt,
+        amount: oneTimeAmount,
+        balanceDue: oneTimeAmount,
+        status: InvoiceStatus.OPEN,
+        idempotencyKey: `student-one-time-${input.idempotencyKey}`,
+      },
+      select: { id: true, amount: true, balanceDue: true, dueDate: true },
+    });
+    invoices = [...invoices, invoice];
+  } else if (input.scheduleType === "MONTHLY" && monthlyFee > 0 && invoices.length === 0) {
     const invoice = await tx.invoice.upsert({
       where: {
         idempotencyKey: `student-month-${student.code}-${periodMonth.toISOString().slice(0, 10)}`,
@@ -1175,7 +1186,7 @@ async function createPaymentAndAllocate(
       update: {},
       create: {
         studentId: student.id,
-        enrollmentId: null,
+        enrollmentId: student.enrollments[0]?.id ?? null,
         periodMonth,
         issueDate: input.paidAt,
         dueDate: input.paidAt,
@@ -1189,6 +1200,8 @@ async function createPaymentAndAllocate(
     invoices = [invoice];
   }
 
+  await clearStudentPaymentSchedules(tx, [student.id]);
+
   const payment = await tx.payment.create({
     data: {
       studentId: student.id,
@@ -1196,6 +1209,7 @@ async function createPaymentAndAllocate(
       paidAt: input.paidAt,
       paymentMonth: input.paymentMonth,
       nextPaymentAt,
+      scheduleType: input.scheduleType,
       method: input.method as PaymentMethod,
       note: input.note,
       idempotencyKey: input.idempotencyKey,
@@ -1207,6 +1221,7 @@ async function createPaymentAndAllocate(
       paidAt: true,
       paymentMonth: true,
       nextPaymentAt: true,
+      scheduleType: true,
       method: true,
     },
   });
