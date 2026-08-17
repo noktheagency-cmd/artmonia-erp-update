@@ -1,7 +1,32 @@
+import {
+  dateFromInput,
+  toDateInput,
+  weekdayFromDate,
+  type GroupWeekdayCode,
+} from "@/modules/groups/shared";
+
 type AssignmentSlot = {
   id: string;
   validFrom: string;
+  weekday: GroupWeekdayCode;
 };
+
+export function firstSlotOccurrenceDate(
+  requestedDate: string,
+  slot: Pick<AssignmentSlot, "validFrom" | "weekday">,
+) {
+  const anchor = requestedDate > slot.validFrom ? requestedDate : slot.validFrom;
+  const start = dateFromInput(anchor);
+
+  for (let offset = 0; offset < 7; offset += 1) {
+    const candidate = new Date(start);
+    candidate.setUTCDate(start.getUTCDate() + offset);
+    const value = toDateInput(candidate);
+    if (weekdayFromDate(value) === slot.weekday) return value;
+  }
+
+  return anchor;
+}
 
 export function minimumAssignmentDate(
   slotIds: readonly string[],
@@ -24,7 +49,13 @@ export function preferredAssignmentDate(
   today: string,
 ) {
   const minimum = minimumAssignmentDate(slotIds, slots);
-  return minimum && minimum > today ? minimum : today;
+  const requestedDate = minimum && minimum > today ? minimum : today;
+  const selectedIds = new Set(slotIds);
+  const occurrences = slots
+    .filter((slot) => selectedIds.has(slot.id))
+    .map((slot) => firstSlotOccurrenceDate(requestedDate, slot));
+
+  return occurrences.length ? occurrences.toSorted()[0] : requestedDate;
 }
 
 export function selectedSlotsFirst<T extends { id: string }>(

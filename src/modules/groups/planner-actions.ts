@@ -15,6 +15,7 @@ import {
   buildTeacherAvailabilityWhere,
   isTeacherScheduleOverlapError,
 } from "@/modules/groups/slot-availability";
+import { firstSlotOccurrenceDate } from "@/modules/groups/planner-assignment";
 import {
   dateFromInput,
   formatDateAz,
@@ -266,8 +267,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = assignmentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
-  const validFrom = dateFromInput(input.validFrom);
-  const previousDay = previousDate(validFrom);
+  const requestedValidFrom = dateFromInput(input.validFrom);
   const uniqueSlotIds = [...new Set(input.slotIds)];
 
   const studentId = await prisma.$transaction(async (tx) => {
@@ -285,39 +285,60 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
     await lockSlots(tx, uniqueSlotIds);
     const slots = uniqueSlotIds.length
       ? await tx.classSlot.findMany({
-          where: { id: { in: uniqueSlotIds }, validFrom: { lte: validFrom } },
-          select: { id: true, teacherId: true, capacity: true },
+          where: { id: { in: uniqueSlotIds } },
+          select: { id: true, teacherId: true, capacity: true, validFrom: true, weekday: true },
         })
       : [];
     if (slots.length !== uniqueSlotIds.length) {
-      throw new Error("Seçilmiş slotlardan biri mövcud deyil və ya həmin tarixdə başlamayıb");
+      throw new Error("Seçilmiş slotlardan biri mövcud deyil");
     }
 
+    const startBySlotId = new Map(slots.map((slot) => [
+      slot.id,
+      dateFromInput(firstSlotOccurrenceDate(input.validFrom, {
+        validFrom: slot.validFrom.toISOString().slice(0, 10),
+        weekday: slot.weekday,
+      })),
+    ]));
+    const scheduleStartedAt = [...startBySlotId.values()].toSorted(
+      (left, right) => left.getTime() - right.getTime(),
+    )[0] ?? requestedValidFrom;
+    const previousDay = previousDate(scheduleStartedAt);
+
     if (uniqueSlotIds.length) {
-      const occupancy = await tx.studentScheduleAssignment.groupBy({
-        by: ["slotId"],
+      const latestSlotStart = [...startBySlotId.values()].toSorted(
+        (left, right) => right.getTime() - left.getTime(),
+      )[0] ?? scheduleStartedAt;
+      const occupancy = await tx.studentScheduleAssignment.findMany({
         where: {
           slotId: { in: uniqueSlotIds },
           enrollmentId: { not: enrollment.id },
-          validFrom: { lte: validFrom },
-          OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
+          validFrom: { lte: latestSlotStart },
+          OR: [{ validTo: null }, { validTo: { gte: scheduleStartedAt } }],
         },
-        _count: { _all: true },
+        select: { slotId: true, validFrom: true, validTo: true },
       });
-      const countBySlot = new Map(occupancy.map((item) => [item.slotId, item._count._all]));
-      const fullSlot = slots.find((slot) => (countBySlot.get(slot.id) ?? 0) >= slot.capacity);
+      const fullSlot = slots.find((slot) => {
+        const slotStartedAt = startBySlotId.get(slot.id) ?? scheduleStartedAt;
+        const count = occupancy.filter((item) => (
+          item.slotId === slot.id
+          && item.validFrom <= slotStartedAt
+          && (!item.validTo || item.validTo >= slotStartedAt)
+        )).length;
+        return count >= slot.capacity;
+      });
       if (fullSlot) throw new Error("Seçilmiş slotlardan birinin tutumu doludur");
     }
 
     const before = await tx.studentScheduleAssignment.findMany({
       where: {
         enrollmentId: enrollment.id,
-        OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
+        OR: [{ validTo: null }, { validTo: { gte: scheduleStartedAt } }],
       },
       select: { id: true, slotId: true, enrollmentId: true, validFrom: true, validTo: true },
     });
-    const futureIds = before.filter((item) => item.validFrom >= validFrom).map((item) => item.id);
-    const activeIds = before.filter((item) => item.validFrom < validFrom).map((item) => item.id);
+    const futureIds = before.filter((item) => item.validFrom >= scheduleStartedAt).map((item) => item.id);
+    const activeIds = before.filter((item) => item.validFrom < scheduleStartedAt).map((item) => item.id);
     if (futureIds.length) {
       await tx.studentScheduleAssignment.deleteMany({ where: { id: { in: futureIds } } });
     }
@@ -333,7 +354,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
         data: slots.map((slot) => ({
           slotId: slot.id,
           enrollmentId: enrollment.id,
-          validFrom,
+          validFrom: startBySlotId.get(slot.id) ?? scheduleStartedAt,
           assignedById: actor.id,
         })),
       });
@@ -362,7 +383,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       await syncStudentActivationAndPayment(tx, {
         actorId: actor.id,
         enrollment,
-        slotStartedAt: validFrom,
+        slotStartedAt: scheduleStartedAt,
       });
     } else {
       await clearStudentPaymentSchedules(tx, [enrollment.studentId]);
@@ -374,7 +395,13 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       entityType: "enrollment",
       entityId: enrollment.id,
       before: before as unknown as Prisma.InputJsonValue,
-      after: { slotIds: uniqueSlotIds, validFrom: input.validFrom },
+      after: {
+        slotIds: uniqueSlotIds,
+        requestedValidFrom: input.validFrom,
+        slotStartDates: Object.fromEntries(
+          [...startBySlotId].map(([slotId, start]) => [slotId, start.toISOString().slice(0, 10)]),
+        ),
+      },
       reason: uniqueSlotIds.length
         ? "Tələbənin həftəlik slot planı yeniləndi"
         : "Tələbənin həftəlik slot planı silindi",

@@ -68,6 +68,11 @@ export function formatDateAz(value: string | Date) {
   }).format(value instanceof Date ? value : dateFromInput(value));
 }
 
+export function formatNumericDateAz(value: string) {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}.${month}.${year}` : value;
+}
+
 export function latestScheduledDate(
   weekdays: GroupWeekdayCode[],
   requested?: string,

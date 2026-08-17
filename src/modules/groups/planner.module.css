@@ -366,6 +366,22 @@
   color: var(--slot-accent-strong, #405a7e);
 }
 
+.slotChoiceDate {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #52647e;
+  font-size: 9px;
+  font-weight: 680;
+}
+
+.slotChoiceDate svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--slot-accent-strong, #405a7e);
+}
+
 .slotChoiceTeacher svg,
 .slotChoiceBottom svg {
   position: static;

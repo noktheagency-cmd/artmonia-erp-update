@@ -41,6 +41,7 @@ import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import {
   groupWeekdays,
+  formatNumericDateAz,
   orderedWeekdays,
   weekdayMeta,
   type GroupWeekdayCode,
@@ -51,6 +52,7 @@ import type {
   PlannerWorkspaceData,
 } from "@/modules/groups/planner-queries";
 import {
+  firstSlotOccurrenceDate,
   minimumAssignmentDate,
   preferredAssignmentDate,
   selectedSlotsFirst,
@@ -883,9 +885,8 @@ function AssignmentDialog({
     const next = selected.includes(slot.id)
       ? selected.filter((id) => id !== slot.id)
       : [...selected, slot.id];
-    const minimum = minimumAssignmentDate(next, data.slots);
     setSelected(next);
-    setValidFrom((currentDate) => minimum && currentDate < minimum ? minimum : currentDate);
+    setValidFrom(preferredAssignmentDate(next, data.slots, data.today));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -961,6 +962,7 @@ function AssignmentDialog({
                 {activeDaySlots.map((slot) => {
                   const active = selectedIds.has(slot.id);
                   const full = slot.assignedCount >= slot.capacity;
+                  const occurrenceDate = firstSlotOccurrenceDate(validFrom, slot);
                   return (
                     <button
                       className={cx(
@@ -986,6 +988,10 @@ function AssignmentDialog({
                         <UserRound size={14} />
                         <strong>{slot.teacherName}</strong>
                       </span>
+                      <span className={styles.slotChoiceDate}>
+                        <CalendarDays size={13} />
+                        {formatNumericDateAz(occurrenceDate)}
+                      </span>
                       <span className={styles.slotChoiceBottom}>
                         <small><DoorOpen size={13} />{slot.room}</small>
                         <b><UsersRound size={13} />{full && !active ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>
@@ -1009,10 +1015,13 @@ function AssignmentDialog({
                 <ul>
                   {selected.map((id) => {
                     const slot = slotsById.get(id);
+                    const occurrenceDate = slot ? firstSlotOccurrenceDate(validFrom, slot) : null;
                     return slot ? (
                       <li key={id}>
                         <CalendarDays size={16} />
-                        <span>{weekdayMeta[slot.weekday].shortLabel} {slot.startTime}–{slot.endTime}</span>
+                        <span>
+                          {weekdayMeta[slot.weekday].shortLabel} · {formatNumericDateAz(occurrenceDate!)} · {slot.startTime}–{slot.endTime}
+                        </span>
                       </li>
                     ) : null;
                   })}
@@ -1022,7 +1031,7 @@ function AssignmentDialog({
                 ) : <p>Heç bir slot seçilməyib. Plan saxlananda silinəcək.</p>}
               </div>
               <label className={styles.startDateField}>
-                <span>Başlama tarixi</span>
+                <span>Plan üçün ən erkən tarix</span>
                 <input
                   name="validFrom"
                   type="date"
@@ -1032,7 +1041,7 @@ function AssignmentDialog({
                   required
                 />
                 <small className={styles.startDateHint}>
-                  Slotun başlanğıc tarixindən etibarən keçmiş tarix seçilə bilər.
+                  Hər slotun real başlanğıc günü yuxarıda avtomatik hesablanır.
                 </small>
               </label>
               {enrollment?.lessonsPerMonth ? (

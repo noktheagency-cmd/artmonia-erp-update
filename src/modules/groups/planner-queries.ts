@@ -5,9 +5,9 @@ import {
   latestScheduledDate,
   todayInBaku,
   toDateInput,
-  weekdayFromDate,
   type GroupWeekdayCode,
 } from "@/modules/groups/shared";
+import { firstSlotOccurrenceDate } from "@/modules/groups/planner-assignment";
 import { formatAmount } from "@/modules/shared/format";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -221,7 +221,7 @@ export async function getPlannerWorkspaceData(input?: {
   const selectedSlot = plannerSlots.find((slot) => slot.id === input?.slotId) ?? plannerSlots[0];
   const selectedSlotId = selectedSlot?.id ?? "";
   const firstLessonDate = selectedSlot
-    ? firstScheduledDate(selectedSlot.validFrom, selectedSlot.weekday)
+    ? firstSlotOccurrenceDate(selectedSlot.validFrom, selectedSlot)
     : today;
   const journalDate = selectedSlot
     ? firstLessonDate > today
@@ -485,17 +485,6 @@ export async function getPlannerWorkspaceData(input?: {
       unmarkedCount: journalMembers.filter((member) => member.attendanceStatus === null).length,
     },
   };
-}
-
-function firstScheduledDate(validFrom: string, weekday: GroupWeekdayCode) {
-  const start = dateFromInput(validFrom);
-  for (let offset = 0; offset < 7; offset += 1) {
-    const candidate = new Date(start);
-    candidate.setUTCDate(start.getUTCDate() + offset);
-    const value = toDateInput(candidate);
-    if (weekdayFromDate(value) === weekday) return value;
-  }
-  return validFrom;
 }
 
 function mapShift(shift: "MORNING" | "AFTERNOON" | "EVENING"): PlannerSlot["shift"] {

@@ -73,7 +73,6 @@ export async function restartStudentPaymentScheduleForActiveSlot(
   tx: Prisma.TransactionClient,
   input: {
     studentId: string;
-    activatedAt: Date;
   },
 ) {
   const activeAssignment = await tx.studentScheduleAssignment.findFirst({
@@ -81,7 +80,8 @@ export async function restartStudentPaymentScheduleForActiveSlot(
       validTo: null,
       enrollment: { studentId: input.studentId },
     },
-    select: { id: true },
+    orderBy: [{ validFrom: "asc" }, { createdAt: "asc" }],
+    select: { validFrom: true },
   });
 
   if (!activeAssignment) {
@@ -91,6 +91,6 @@ export async function restartStudentPaymentScheduleForActiveSlot(
 
   await startStudentPaymentSchedule(tx, {
     studentId: input.studentId,
-    slotStartedAt: input.activatedAt,
+    slotStartedAt: activeAssignment.validFrom,
   });
 }

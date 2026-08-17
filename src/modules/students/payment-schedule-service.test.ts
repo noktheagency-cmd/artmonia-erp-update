@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Prisma } from "@/generated/prisma/client";
 import {
+  restartStudentPaymentScheduleForActiveSlot,
   resolveStudentNextPaymentAt,
   startStudentPaymentSchedule,
 } from "./payment-schedule-service";
@@ -106,4 +107,31 @@ test("does not restart a monthly schedule after a one-time full payment", async 
       data: { nextPaymentAt: null },
     },
   ]);
+});
+
+test("restarts a schedule from the real slot date instead of the status action date", async () => {
+  const updates: unknown[] = [];
+  const tx = {
+    studentScheduleAssignment: {
+      findFirst: async () => ({ validFrom: utcDate("2026-08-20") }),
+    },
+    payment: {
+      findFirst: async () => ({
+        id: "payment-4",
+        paymentMonth: utcDate("2026-08-01"),
+        scheduleType: "MONTHLY",
+      }),
+      updateMany: async (args: unknown) => updates.push(args),
+      update: async (args: unknown) => updates.push(args),
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  await restartStudentPaymentScheduleForActiveSlot(tx, {
+    studentId: "student-1",
+  });
+
+  assert.deepEqual(updates.at(-1), {
+    where: { id: "payment-4" },
+    data: { nextPaymentAt: utcDate("2026-09-20") },
+  });
 });

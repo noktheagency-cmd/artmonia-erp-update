@@ -545,7 +545,6 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       });
       await restartStudentPaymentScheduleForActiveSlot(tx, {
         studentId: current.id,
-        activatedAt: effectiveAt,
       });
     } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
       await clearStudentPaymentSchedules(tx, [current.id]);
@@ -797,7 +796,6 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         });
         await restartStudentPaymentScheduleForActiveSlot(tx, {
           studentId: current.id,
-          activatedAt: statusEffectiveAt,
         });
       } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
         await clearStudentPaymentSchedules(tx, [current.id]);
