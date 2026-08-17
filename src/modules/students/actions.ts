@@ -638,6 +638,8 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     if (!currentEnrollment) {
       throw new PublicActionError("Tələbənin aktiv tədris qeydiyyatı tapılmadı.");
     }
+    const firstLessonChanged =
+      currentEnrollment.firstLessonAt?.getTime() !== firstLessonAt?.getTime();
 
     const statusChanged = current.lifecycleStatus !== input.lifecycleStatus;
     if (statusChanged && !actor.permissions.has("student.status.change")) {
@@ -816,6 +818,16 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           effectiveAt: statusEffectiveAt.toISOString(),
         },
         reason: input.statusNote ?? getSharedStatusChangeReason(input.lifecycleStatus),
+      });
+    }
+
+    if (
+      !statusChanged
+      && firstLessonChanged
+      && !isSharedBillingPausedStatus(input.lifecycleStatus)
+    ) {
+      await restartStudentPaymentScheduleForActiveSlot(tx, {
+        studentId: current.id,
       });
     }
 

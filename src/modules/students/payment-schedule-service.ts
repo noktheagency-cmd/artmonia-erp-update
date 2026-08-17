@@ -16,12 +16,15 @@ export async function resolveStudentNextPaymentAt(
         student: { billingPaused: false },
       },
     },
-    orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }],
-    select: { validFrom: true },
+    orderBy: [{ validFrom: "asc" }, { createdAt: "asc" }],
+    select: {
+      validFrom: true,
+      enrollment: { select: { firstLessonAt: true } },
+    },
   });
 
   return resolveNextPaymentAt({
-    slotStartedAt: assignment?.validFrom ?? null,
+    slotStartedAt: assignment?.enrollment.firstLessonAt ?? assignment?.validFrom ?? null,
     paymentMonth: input.paymentMonth,
   });
 }
@@ -81,7 +84,10 @@ export async function restartStudentPaymentScheduleForActiveSlot(
       enrollment: { studentId: input.studentId },
     },
     orderBy: [{ validFrom: "asc" }, { createdAt: "asc" }],
-    select: { validFrom: true },
+    select: {
+      validFrom: true,
+      enrollment: { select: { firstLessonAt: true } },
+    },
   });
 
   if (!activeAssignment) {
@@ -91,6 +97,6 @@ export async function restartStudentPaymentScheduleForActiveSlot(
 
   await startStudentPaymentSchedule(tx, {
     studentId: input.studentId,
-    slotStartedAt: activeAssignment.validFrom,
+    slotStartedAt: activeAssignment.enrollment.firstLessonAt ?? activeAssignment.validFrom,
   });
 }

@@ -32,7 +32,7 @@ import {
 } from "@/modules/students/lifecycle-service";
 import {
   clearStudentPaymentSchedules,
-  startStudentPaymentSchedule,
+  restartStudentPaymentScheduleForActiveSlot,
 } from "@/modules/students/payment-schedule-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
@@ -600,9 +600,8 @@ async function syncStudentActivationAndPayment(
     student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
     || !isBillingPausedStatus(student.lifecycleStatus)
   ) {
-    await startStudentPaymentSchedule(tx, {
+    await restartStudentPaymentScheduleForActiveSlot(tx, {
       studentId: student.id,
-      slotStartedAt: input.slotStartedAt,
     });
   } else {
     await clearStudentPaymentSchedules(tx, [student.id]);

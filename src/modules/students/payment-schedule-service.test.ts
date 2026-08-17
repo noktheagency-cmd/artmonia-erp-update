@@ -37,6 +37,24 @@ test("requires an active slot and unpaused billing before scheduling", async () 
   });
 });
 
+test("new payments keep a manually edited first lesson as the monthly anchor", async () => {
+  const tx = {
+    studentScheduleAssignment: {
+      findFirst: async () => ({
+        validFrom: utcDate("2026-08-20"),
+        enrollment: { firstLessonAt: utcDate("2026-08-25") },
+      }),
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  const result = await resolveStudentNextPaymentAt(tx, {
+    studentId: "student-1",
+    paymentMonth: utcDate("2026-08-01"),
+  });
+
+  assert.deepEqual(result, utcDate("2026-09-25"));
+});
+
 test("replaces legacy dates with one schedule on the latest payment", async () => {
   const updates: unknown[] = [];
   const tx = {
@@ -113,7 +131,10 @@ test("restarts a schedule from the real slot date instead of the status action d
   const updates: unknown[] = [];
   const tx = {
     studentScheduleAssignment: {
-      findFirst: async () => ({ validFrom: utcDate("2026-08-20") }),
+      findFirst: async () => ({
+        validFrom: utcDate("2026-08-20"),
+        enrollment: { firstLessonAt: null },
+      }),
     },
     payment: {
       findFirst: async () => ({
@@ -133,5 +154,35 @@ test("restarts a schedule from the real slot date instead of the status action d
   assert.deepEqual(updates.at(-1), {
     where: { id: "payment-4" },
     data: { nextPaymentAt: utcDate("2026-09-20") },
+  });
+});
+
+test("a manually edited first lesson date overrides the slot payment anchor", async () => {
+  const updates: unknown[] = [];
+  const tx = {
+    studentScheduleAssignment: {
+      findFirst: async () => ({
+        validFrom: utcDate("2026-08-20"),
+        enrollment: { firstLessonAt: utcDate("2026-08-25") },
+      }),
+    },
+    payment: {
+      findFirst: async () => ({
+        id: "payment-5",
+        paymentMonth: utcDate("2026-08-01"),
+        scheduleType: "MONTHLY",
+      }),
+      updateMany: async (args: unknown) => updates.push(args),
+      update: async (args: unknown) => updates.push(args),
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  await restartStudentPaymentScheduleForActiveSlot(tx, {
+    studentId: "student-1",
+  });
+
+  assert.deepEqual(updates.at(-1), {
+    where: { id: "payment-5" },
+    data: { nextPaymentAt: utcDate("2026-09-25") },
   });
 });
