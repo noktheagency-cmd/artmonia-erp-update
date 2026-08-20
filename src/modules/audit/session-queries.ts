@@ -8,6 +8,7 @@ import type {
   SessionAuditData,
   SessionDeviceTypeDto,
   SessionUserDto,
+  SecurityAccountDto,
 } from "@/modules/audit/session-types";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -35,6 +36,26 @@ type AuthSessionRow = {
   recordBrowserVersion: string | null;
   recordOsName: string | null;
   recordOsVersion: string | null;
+};
+
+type SecurityAccountRow = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  department: string;
+  position: string;
+  profilePhotoUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  user: null | {
+    id: string;
+    email: string;
+    authUserId: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    roles: Array<{ role: { id: string; name: string; code: AppRole | null } }>;
+  };
 };
 
 export async function getSessionAuditData(): Promise<SessionAuditData> {
@@ -116,13 +137,50 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     orderBy: { createdAt: "desc" },
     include: { actor: { select: { fullName: true, email: true } } },
   });
-  const [sessionRows, activityLogs] = await Promise.all([sessionsPromise, activityPromise]);
+  const accountsPromise = getPrisma().hrEmployee.findMany({
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      department: true,
+      position: true,
+      profilePhotoUrl: true,
+      createdAt: true,
+      updatedAt: true,
+      user: {
+        select: {
+          id: true,
+          email: true,
+          authUserId: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          roles: { select: { role: { select: { id: true, name: true, code: true } } } },
+        },
+      },
+    },
+    orderBy: [{ status: "asc" }, { fullName: "asc" }],
+    take: 501,
+  });
+  const roleOptionsPromise = getPrisma().role.findMany({
+    where: { OR: [{ code: null }, { code: { notIn: [AppRole.SUPER_ADMIN, AppRole.ADMIN] } }] },
+    select: { id: true, name: true, code: true },
+    orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+    take: 100,
+  });
+  const [sessionRows, activityLogs, accountRows, accountRoleOptions] = await Promise.all([
+    sessionsPromise,
+    activityPromise,
+    accountsPromise,
+    roleOptionsPromise,
+  ]);
   const generatedAt = new Date();
   const truncated = sessionRows.length > 1_000;
   const sessions = sessionRows
     .slice(0, 1_000)
     .map((row) => mapSession(row, actor.currentSessionId));
   const users = buildUsers(sessions);
+  const accounts = buildAccounts(accountRows.slice(0, 500), sessions, actor.id);
   const recentThreshold = generatedAt.getTime() - 15 * 60_000;
 
   return {
@@ -147,6 +205,8 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
       ipAddress: log.ipAddress,
       createdAt: log.createdAt.toISOString(),
     })),
+    accounts,
+    accountRoleOptions: accountRoleOptions.map((role) => ({ id: role.id, name: role.name, code: role.code })),
     summary: {
       activeSessions: sessions.length,
       activeUsers: new Set(sessions.map((session) => session.userId)).size,
@@ -158,6 +218,43 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
       ).length,
     },
   };
+}
+
+function buildAccounts(
+  rows: SecurityAccountRow[],
+  sessions: AuthSessionDto[],
+  actorId: string,
+): SecurityAccountDto[] {
+  const sessionSummary = new Map<string, { count: number; lastSeenAt: string | null }>();
+  for (const session of sessions) {
+    const current = sessionSummary.get(session.userId) ?? { count: 0, lastSeenAt: null };
+    current.count += 1;
+    if (!current.lastSeenAt || session.lastSeenAt > current.lastSeenAt) current.lastSeenAt = session.lastSeenAt;
+    sessionSummary.set(session.userId, current);
+  }
+  return rows.map((employee) => {
+    const user = employee.user;
+    const summary = user ? sessionSummary.get(user.id) : undefined;
+    const roles = user?.roles.map(({ role }) => ({ id: role.id, name: role.name, code: role.code })) ?? [];
+    return {
+      employeeId: employee.id,
+      userId: user?.id ?? null,
+      fullName: employee.fullName,
+      profilePhotoUrl: employee.profilePhotoUrl,
+      contactEmail: employee.email,
+      loginEmail: user?.email ?? null,
+      department: employee.department,
+      position: employee.position,
+      roles,
+      status: !user?.authUserId ? "NOT_CREATED" : user.isActive ? "ACTIVE" : "DISABLED",
+      activeSessionCount: summary?.count ?? 0,
+      lastSeenAt: summary?.lastSeenAt ?? null,
+      createdAt: (user?.createdAt ?? employee.createdAt).toISOString(),
+      updatedAt: (user?.updatedAt ?? employee.updatedAt).toISOString(),
+      protectedRole: roles.some((role) => role.code === AppRole.SUPER_ADMIN || role.code === AppRole.ADMIN),
+      isCurrent: user?.id === actorId,
+    };
+  });
 }
 
 function mapSession(row: AuthSessionRow, currentSessionId: string | null): AuthSessionDto {

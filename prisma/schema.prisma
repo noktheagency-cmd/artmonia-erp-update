@@ -399,9 +399,12 @@ model User {
   bonusProgressAdjustments         HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
   approvedBonusAwards              HrBonusAward[]              @relation("HrBonusAwardApprover")
   createdHrNotifications           HrStaffNotification[]       @relation("HrNotificationCreator")
+  createdHrEmployeeNotes           HrEmployeeNote[]            @relation("HrEmployeeNoteCreator")
+  updatedHrEmployeeNotes           HrEmployeeNote[]            @relation("HrEmployeeNoteUpdater")
+  uploadedHrEmployeeDocuments      HrEmployeeDocument[]        @relation("HrEmployeeDocumentUploader")
   createdCorporateCustomers        HrCorporateCustomer[]       @relation("HrCorporateCustomerCreator")
   createdDropdownCatalogOptions    DropdownCatalogOption[]     @relation("DropdownCatalogOptionCreator")
-  updatedAboutProfiles             AboutProfile[]               @relation("AboutProfileUpdater")
+  updatedAboutProfiles             AboutProfile[]              @relation("AboutProfileUpdater")
 
   @@map("users")
   @@schema("erp")
@@ -455,10 +458,52 @@ model HrEmployee {
   bonusParticipants    HrBonusParticipant[]
   bonusFinanceExpenses FinanceExpense[]      @relation("FinanceExpenseHrEmployee")
   notifications        HrStaffNotification[]
+  notes                HrEmployeeNote[]
+  documents            HrEmployeeDocument[]
 
   @@index([status])
   @@index([department])
   @@map("hr_employees")
+  @@schema("erp")
+}
+
+model HrEmployeeNote {
+  id          String   @id @default(uuid()) @db.Uuid
+  employeeId  String   @map("employee_id") @db.Uuid
+  title       String   @db.VarChar(160)
+  content     Json
+  createdById String?  @map("created_by_id") @db.Uuid
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  employee  HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy User?      @relation("HrEmployeeNoteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?      @relation("HrEmployeeNoteUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, updatedAt(sort: Desc)])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("hr_employee_notes")
+  @@schema("erp")
+}
+
+model HrEmployeeDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  employeeId   String   @map("employee_id") @db.Uuid
+  originalName String   @map("original_name") @db.VarChar(255)
+  objectKey    String   @unique @map("object_key") @db.VarChar(500)
+  mimeType     String   @map("mime_type") @db.VarChar(120)
+  sizeBytes    Int      @map("size_bytes")
+  uploadedById String?  @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  employee   HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedBy User?      @relation("HrEmployeeDocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, createdAt(sort: Desc)])
+  @@index([uploadedById])
+  @@map("hr_employee_documents")
   @@schema("erp")
 }
 
@@ -1577,22 +1622,22 @@ model Invoice {
 }
 
 model Payment {
-  id               String        @id @default(uuid()) @db.Uuid
-  studentId        String        @map("student_id") @db.Uuid
-  amount           Decimal       @db.Decimal(12, 2)
-  paidAt           DateTime      @map("paid_at") @db.Date
-  paymentMonth     DateTime      @map("payment_month") @db.Date
-  nextPaymentAt    DateTime?     @map("next_payment_at") @db.Date
+  id               String              @id @default(uuid()) @db.Uuid
+  studentId        String              @map("student_id") @db.Uuid
+  amount           Decimal             @db.Decimal(12, 2)
+  paidAt           DateTime            @map("paid_at") @db.Date
+  paymentMonth     DateTime            @map("payment_month") @db.Date
+  nextPaymentAt    DateTime?           @map("next_payment_at") @db.Date
   scheduleType     PaymentScheduleType @default(MONTHLY) @map("schedule_type")
-  method           PaymentMethod @default(CASH)
-  payerName        String?       @map("payer_name")
+  method           PaymentMethod       @default(CASH)
+  payerName        String?             @map("payer_name")
   note             String?
-  receiptFileName  String?       @map("receipt_file_name")
-  receiptFilePath  String?       @map("receipt_file_path")
-  receiptReference String?       @map("receipt_reference")
-  idempotencyKey   String?       @unique @map("idempotency_key")
-  createdById      String?       @map("created_by_id") @db.Uuid
-  createdAt        DateTime      @default(now()) @map("created_at")
+  receiptFileName  String?             @map("receipt_file_name")
+  receiptFilePath  String?             @map("receipt_file_path")
+  receiptReference String?             @map("receipt_reference")
+  idempotencyKey   String?             @unique @map("idempotency_key")
+  createdById      String?             @map("created_by_id") @db.Uuid
+  createdAt        DateTime            @default(now()) @map("created_at")
 
   student           Student             @relation(fields: [studentId], references: [id])
   createdBy         User?               @relation("PaymentCreator", fields: [createdById], references: [id])
@@ -1804,8 +1849,8 @@ model Task {
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
 
-  ownerUser User? @relation("TaskOwner", fields: [ownerUserId], references: [id])
-  createdBy User? @relation("TaskCreator", fields: [createdById], references: [id])
+  ownerUser     User?                  @relation("TaskOwner", fields: [ownerUserId], references: [id])
+  createdBy     User?                  @relation("TaskCreator", fields: [createdById], references: [id])
   notifications PersonalNotification[]
 
   @@index([ownerUserId, status, dueAt])

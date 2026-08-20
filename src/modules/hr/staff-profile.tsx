@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useState, useTransition, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -15,9 +16,6 @@ import {
   CircleDollarSign,
   Clock3,
   GraduationCap,
-  Eye,
-  EyeOff,
-  KeyRound,
   Mail,
   MapPin,
   MessageSquareText,
@@ -25,9 +23,7 @@ import {
   Phone,
   Send,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
-  UserRoundCheck,
   UsersRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +46,11 @@ import type {
   HrStaffNotificationRow,
 } from "@/modules/hr/staff-profile-data";
 import "./staff-profile.css";
+
+const StaffKnowledgeWorkspace = dynamic(
+  () => import("@/modules/hr/staff-knowledge-workspace").then((module) => module.StaffKnowledgeWorkspace),
+  { loading: () => <div className="staff-profile-panel">Qeydlər və sənədlər yüklənir...</div> },
+);
 
 type Action = (formData: FormData) => Promise<unknown>;
 type Category = HrStaffNotificationRow["category"];
@@ -111,19 +112,22 @@ export function StaffProfile({
   data,
   createNotificationAction,
   updateNotificationStatusAction,
-  updateCredentialsAction,
   updateStaffAction,
+  createNoteAction,
+  updateNoteAction,
+  finalizeDocumentAction,
 }: {
   data: HrStaffProfileData;
   createNotificationAction: Action;
   updateNotificationStatusAction: Action;
-  updateCredentialsAction: Action;
   updateStaffAction: Action;
+  createNoteAction: Action;
+  updateNoteAction: Action;
+  finalizeDocumentAction: Action;
 }) {
   const router = useRouter();
   const { employee, teacher, permissions } = data;
   const [composerOpen, setComposerOpen] = useState(false);
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
@@ -215,12 +219,6 @@ export function StaffProfile({
               <Pencil data-icon="inline-start" /> Redaktə et
             </Button>
           ) : null}
-          {permissions.canManageCredentials ? (
-            <Button variant="outline" onClick={() => setCredentialsOpen(true)}>
-              <KeyRound data-icon="inline-start" />{" "}
-              {employee.hasLogin ? "Login məlumatları" : "Login hesabı yarat"}
-            </Button>
-          ) : null}
           {permissions.canSendNotification ? (
             <Button onClick={() => setComposerOpen(true)}>
               <BellRing data-icon="inline-start" /> Bildiriş göndər
@@ -293,6 +291,17 @@ export function StaffProfile({
           {notice}
           <button onClick={() => setNotice("")}>×</button>
         </div>
+      ) : null}
+
+      {data.knowledge.permissions.canReadNotes || data.knowledge.permissions.canReadDocuments ? (
+        <StaffKnowledgeWorkspace
+          employeeId={employee.id}
+          employeeName={employee.fullName}
+          knowledge={data.knowledge}
+          createNoteAction={createNoteAction}
+          updateNoteAction={updateNoteAction}
+          finalizeDocumentAction={finalizeDocumentAction}
+        />
       ) : null}
 
       <div className="staff-profile-grid">
@@ -427,28 +436,9 @@ export function StaffProfile({
               }
             />
             <Fact
-              label="ERP girişi"
-              value={employee.hasLogin ? "Aktivdir" : "Yaradılmayıb"}
-            />
-            <Fact
-              label="Sistem rolu"
-              value={
-                employee.roles.map((role) => role.name).join(", ") ||
-                "Rol verilməyib"
-              }
-            />
-            <Fact
               label="Son yenilənmə"
               value={formatDateTime(employee.updatedAt)}
             />
-          </section>
-          <section className="staff-profile-panel staff-note-card">
-            <PanelHeading
-              icon={UserRoundCheck}
-              title="HR qeydi"
-              description="Daxili profil qeydi"
-            />
-            <p>{employee.note || "Bu profil üçün əlavə HR qeydi yoxdur."}</p>
           </section>
         </aside>
       </div>
@@ -498,39 +488,6 @@ export function StaffProfile({
                   })
                   .catch((error) =>
                     setNotice(notifyCaughtError(error, "Əməkdaş məlumatları yenilənmədi")),
-                  ),
-            );
-          }}
-        />
-      ) : null}
-      {credentialsOpen ? (
-        <CredentialDialog
-          data={data}
-          pending={pending}
-          onClose={() => setCredentialsOpen(false)}
-          onSubmit={(form) => {
-            startTransition(
-              () =>
-                void updateCredentialsAction(form)
-                  .then((result) => {
-                    unwrapActionResult(result);
-                    setCredentialsOpen(false);
-                    setNotice(
-                      employee.hasLogin
-                        ? "Login məlumatları uğurla yeniləndi."
-                        : "ERP login hesabı uğurla yaradıldı.",
-                    );
-                    router.refresh();
-                  })
-                  .catch((error) =>
-                    setNotice(
-                      notifyCaughtError(
-                        error,
-                        employee.hasLogin
-                          ? "Login məlumatları yenilənmədi"
-                          : "Login hesabı yaradılmadı",
-                      ),
-                    ),
                   ),
             );
           }}
@@ -745,10 +702,6 @@ function StaffDetailsEditor({
               <input type="hidden" name="salaryAmount" value="0" />
             </label>
           )}
-          <label className="is-wide">
-            <span>HR qeydi</span>
-            <textarea name="note" defaultValue={employee.note} rows={4} maxLength={1000} />
-          </label>
           <DialogFooter className="is-wide">
             <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
             <Button type="submit" disabled={pending}>Dəyişiklikləri saxla</Button>
@@ -756,215 +709,6 @@ function StaffDetailsEditor({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function CredentialDialog({
-  data,
-  pending,
-  onClose,
-  onSubmit,
-}: {
-  data: HrStaffProfileData;
-  pending: boolean;
-  onClose: () => void;
-  onSubmit: (form: FormData) => void;
-}) {
-  const { employee, roleOptions } = data;
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const defaultRoleId =
-    (employee.staffType === "TEACHER"
-      ? roleOptions.find((role) => role.code === "TEACHER")
-      : roleOptions.find((role) => role.code !== "TEACHER")
-    )?.id ??
-    roleOptions[0]?.id ??
-    "";
-  const [roleIds, setRoleIds] = useState<string[]>(() => {
-    const availableRoleIds = new Set(roleOptions.map((role) => role.id));
-    const assignedRoleIds = employee.roles
-      .map((role) => role.id)
-      .filter((roleId) => availableRoleIds.has(roleId));
-    return assignedRoleIds.length
-      ? assignedRoleIds
-      : defaultRoleId
-        ? [defaultRoleId]
-        : [];
-  });
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    const form = new FormData(event.currentTarget);
-    const password = String(form.get("password") ?? "");
-    const confirmation = String(form.get("passwordConfirmation") ?? "");
-    if (!roleIds.length) {
-      setError("Ən azı bir sistem rolu seçilməlidir.");
-      return;
-    }
-    if (!employee.hasLogin && password.length < 8) {
-      setError("Parol ən az 8 simvoldan ibarət olmalıdır.");
-      return;
-    }
-    if (password && password !== confirmation) {
-      setError("Parol və parol təsdiqi eyni deyil.");
-      return;
-    }
-    form.delete("passwordConfirmation");
-    form.set("roleIds", JSON.stringify(roleIds));
-    onSubmit(form);
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="staff-credential-dialog">
-        <DialogHeader>
-          <div className="staff-credential-heading">
-            <span>
-              <KeyRound />
-            </span>
-            <div>
-              <DialogTitle>
-                {employee.hasLogin
-                  ? "Login məlumatlarını dəyiş"
-                  : "ERP login hesabı yarat"}
-              </DialogTitle>
-              <DialogDescription>
-                {employee.hasLogin
-                  ? `${employee.fullName} üçün giriş e-poçtunu və ya parolu təhlükəsiz şəkildə yeniləyin.`
-                  : `${employee.fullName} üçün sistemə giriş hesabı və uyğun səlahiyyət rolu yaradın.`}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-        <form onSubmit={submit} className="staff-credential-form">
-          <input type="hidden" name="employeeId" value={employee.id} />
-          <label>
-            <span>Login e-poçtu</span>
-            <Input
-              type="email"
-              name="loginEmail"
-              defaultValue={employee.loginEmail || employee.email}
-              autoComplete="off"
-              placeholder="ad.soyad@şirkət.az"
-              required
-            />
-            <small>Əməkdaş sistemə bu e-poçt ünvanı ilə daxil olacaq.</small>
-          </label>
-          <CredentialRoleMultiSelect
-            roleOptions={roleOptions}
-            roleIds={roleIds}
-            onChange={setRoleIds}
-          />
-          <div className="staff-credential-grid">
-            <label>
-              <span>{employee.hasLogin ? "Yeni parol" : "Parol"}</span>
-              <div className="staff-password-field">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  minLength={employee.hasLogin ? undefined : 8}
-                  maxLength={72}
-                  autoComplete="new-password"
-                  required={!employee.hasLogin}
-                  placeholder="Ən az 8 simvol"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                  aria-label={showPassword ? "Parolu gizlət" : "Parolu göstər"}
-                >
-                  {showPassword ? <EyeOff /> : <Eye />}
-                </button>
-              </div>
-            </label>
-            <label>
-              <span>Parolu təsdiqlə</span>
-              <Input
-                type={showPassword ? "text" : "password"}
-                name="passwordConfirmation"
-                maxLength={72}
-                autoComplete="new-password"
-                required={!employee.hasLogin}
-                placeholder="Parolu təkrar daxil edin"
-              />
-            </label>
-          </div>
-          {employee.hasLogin ? (
-            <p className="staff-field-hint">
-              Parolu dəyişmək istəmirsinizsə, hər iki parol sahəsini boş
-              saxlayın.
-            </p>
-          ) : null}
-          {error ? (
-            <div className="staff-credential-error" role="alert">
-              {error}
-            </div>
-          ) : null}
-          <div className="staff-security-note">
-            <ShieldCheck />
-            <span>
-              <strong>Təhlükəsiz dəyişiklik</strong>Parol profil məlumatlarında
-              və fəaliyyət tarixçəsində saxlanılmır. Yalnız dəyişiklik faktı
-              audit qeydinə əlavə edilir.
-            </span>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Ləğv et
-            </Button>
-            <Button
-              type="submit"
-              disabled={pending || !roleOptions.length || !roleIds.length}
-            >
-              <KeyRound data-icon="inline-start" />{" "}
-              {employee.hasLogin ? "Yenilə" : "Hesab yarat"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CredentialRoleMultiSelect({
-  roleOptions,
-  roleIds,
-  onChange,
-}: {
-  roleOptions: HrStaffProfileData["roleOptions"];
-  roleIds: string[];
-  onChange: (roleIds: string[]) => void;
-}) {
-  return (
-    <fieldset className="staff-credential-role-field">
-      <legend>Sistem rolları</legend>
-      <div className="staff-credential-role-options">
-        {roleOptions.map((role) => {
-          const checked = roleIds.includes(role.id);
-          return (
-            <label key={role.id}>
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() =>
-                  onChange(
-                    checked
-                      ? roleIds.filter((roleId) => roleId !== role.id)
-                      : [...roleIds, role.id],
-                  )
-                }
-              />
-              <span>{role.name}</span>
-            </label>
-          );
-        })}
-      </div>
-      <small>
-        Əməkdaş üçün bir və ya bir neçə rol seçə bilərsiniz. Dəyişikliklər mövcud
-        giriş hesabına da tətbiq olunur.
-      </small>
-    </fieldset>
   );
 }
 

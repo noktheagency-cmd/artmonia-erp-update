@@ -17,6 +17,7 @@ import {
 import {
   BriefcaseBusiness,
   BookOpenText,
+  Building2,
   CalendarDays,
   CreditCard,
   Gauge,
@@ -40,8 +41,6 @@ import {
   GlobalSearch,
   type GlobalSearchNavigationItem,
 } from "@/components/layout/global-search";
-import { AboutDialog } from "@/modules/about/about-dialog";
-import type { AboutProfileSnapshot } from "@/modules/about/about-profile";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
 
 type ShellUser = {
@@ -73,6 +72,7 @@ const primaryNavItems: NavItem[] = [
 ];
 
 const secondaryNavItems: NavItem[] = [
+  { href: "/about" as Route, label: "Biz kimik", icon: Building2, requiredPermissions: [] },
   { href: "/audit" as Route, label: "Audit və təhlükəsizlik", icon: ShieldCheck, requiredPermissions: [], requiredRoles: ["SUPER_ADMIN"] },
   { href: "/marketing" as Route, label: "Marketing", icon: Megaphone, requiredPermissions: ["marketing.read"] },
   { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText, requiredPermissions: ["playbook.read"] },
@@ -90,14 +90,12 @@ const dashboardNavItem: NavItem = {
 export function AppShell({
   children,
   currentUser,
-  aboutProfile,
   initialNotificationCounts,
   signOutAction,
   sessionGuardEnabled,
 }: {
   children: React.ReactNode;
   currentUser: ShellUser;
-  aboutProfile: AboutProfileSnapshot;
   initialNotificationCounts: NotificationCounts;
   signOutAction: () => void | Promise<void>;
   sessionGuardEnabled: boolean;
@@ -431,10 +429,6 @@ export function AppShell({
               <small>Studio operations</small>
             </span>
           </Link>
-          <AboutDialog
-            initialProfile={aboutProfile}
-            canEdit={currentUser.roles.includes("SUPER_ADMIN")}
-          />
         </div>
         <button
           className="mobile-sidebar-close"

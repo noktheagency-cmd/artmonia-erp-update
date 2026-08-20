@@ -1,7 +1,7 @@
 import { AppRole } from "@/generated/prisma/client";
-import { isProtectedTeamRole } from "@/lib/protected-roles";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import { hrDocumentStorageConfigured } from "@/server/storage/hr-documents";
 import {
   getTeacherDirectoryData,
   type TeacherDirectoryTeacher,
@@ -45,10 +45,6 @@ export type HrStaffProfileData = {
     salaryMode: "STATIC" | "PERCENT";
     salaryAmount: number;
     salaryPercent: number;
-    note: string;
-    hasLogin: boolean;
-    loginEmail: string;
-    roles: Array<{ id: string; name: string }>;
     updatedAt: string;
   };
   lookups: { departments: string[]; positions: string[] };
@@ -61,11 +57,41 @@ export type HrStaffProfileData = {
     actor: string;
     createdAt: string;
   }>;
-  roleOptions: Array<{ id: string; name: string; code: string | null }>;
+  knowledge: {
+    notes: Array<{
+      id: string;
+      title: string;
+      content: unknown;
+      updatedByName: string;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    documents: Array<{
+      id: string;
+      name: string;
+      mimeType: string;
+      sizeBytes: number;
+      uploadedByName: string;
+      createdAt: string;
+    }>;
+    activity: Array<{
+      id: string;
+      action: string;
+      actorName: string;
+      reason: string;
+      createdAt: string;
+    }>;
+    storageConfigured: boolean;
+    permissions: {
+      canReadNotes: boolean;
+      canManageNotes: boolean;
+      canReadDocuments: boolean;
+      canManageDocuments: boolean;
+    };
+  };
   permissions: {
     canManage: boolean;
     canSendNotification: boolean;
-    canManageCredentials: boolean;
     isOwnProfile: boolean;
   };
 };
@@ -78,7 +104,6 @@ export async function getHrStaffProfileData(
     where: { id },
     include: {
       teacher: true,
-      user: { include: { roles: { include: { role: true } } } },
       notifications: {
         include: { creator: true },
         orderBy: { createdAt: "desc" },
@@ -92,9 +117,11 @@ export async function getHrStaffProfileData(
   if (!isOwnProfile && !actor.permissions.has("hr.employee.read")) return null;
 
   const canManage = actor.permissions.has("hr.employee.manage");
-  const hasProtectedRole = employee.user?.roles.some(({ role }) => isProtectedTeamRole(role.code)) ?? false;
-  const canManageCredentials = actor.permissions.has("auth.user.manage") && !hasProtectedRole;
-  const [directory, timeline, roleOptions, lookups] = await Promise.all([
+  const canReadNotes = !isOwnProfile && actor.permissions.has("hr.note.read");
+  const canManageNotes = canReadNotes && actor.permissions.has("hr.note.manage");
+  const canReadDocuments = !isOwnProfile && actor.permissions.has("hr.document.read");
+  const canManageDocuments = canReadDocuments && actor.permissions.has("hr.document.manage");
+  const [directory, timeline, lookups, notes, documents, knowledgeActivity] = await Promise.all([
     employee.teacherId &&
     (actor.permissions.has("teacher.read") || isOwnProfile)
       ? getTeacherDirectoryData(isOwnProfile ? employee.teacherId : undefined)
@@ -114,19 +141,59 @@ export async function getHrStaffProfileData(
           take: 20,
         })
       : Promise.resolve([]),
-    canManageCredentials
-      ? getPrisma().role.findMany({
-          where: { OR: [{ code: null }, { code: { notIn: [AppRole.SUPER_ADMIN, AppRole.ADMIN] } }] },
-          select: { id: true, name: true, code: true },
-          orderBy: [{ isSystem: "desc" }, { name: "asc" }],
-        })
-      : Promise.resolve([]),
     canManage
       ? getPrisma().hrLookupOption.findMany({
           where: { isActive: true },
           select: { kind: true, name: true },
           orderBy: [{ kind: "asc" }, { name: "asc" }],
           take: 500,
+        })
+      : Promise.resolve([]),
+    canReadNotes
+      ? getPrisma().hrEmployeeNote.findMany({
+          where: { employeeId: employee.id },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            createdAt: true,
+            updatedAt: true,
+            updatedBy: { select: { fullName: true } },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 50,
+        })
+      : Promise.resolve([]),
+    canReadDocuments
+      ? getPrisma().hrEmployeeDocument.findMany({
+          where: { employeeId: employee.id },
+          select: {
+            id: true,
+            originalName: true,
+            mimeType: true,
+            sizeBytes: true,
+            createdAt: true,
+            uploadedBy: { select: { fullName: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        })
+      : Promise.resolve([]),
+    canReadNotes || canReadDocuments
+      ? getPrisma().auditLog.findMany({
+          where: {
+            entityId: employee.id,
+            entityType: { in: ["hr_employee_note", "hr_employee_document"] },
+          },
+          select: {
+            id: true,
+            action: true,
+            reason: true,
+            createdAt: true,
+            actor: { select: { fullName: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 30,
         })
       : Promise.resolve([]),
   ]);
@@ -150,14 +217,6 @@ export async function getHrStaffProfileData(
       salaryMode: employee.salaryMode === "PERCENT" ? "PERCENT" : "STATIC",
       salaryAmount: Number(employee.salaryAmount),
       salaryPercent: Number(employee.salaryPercent ?? 0),
-      note: employee.note ?? "",
-      hasLogin: Boolean(employee.user?.authUserId),
-      loginEmail: employee.user?.email ?? employee.email ?? "",
-      roles:
-        employee.user?.roles.map(({ role }) => ({
-          id: role.id,
-          name: role.name,
-        })) ?? [],
       updatedAt: employee.updatedAt.toISOString(),
     },
     lookups: {
@@ -193,12 +252,37 @@ export async function getHrStaffProfileData(
       actor: item.actor?.fullName ?? "Sistem",
       createdAt: item.createdAt.toISOString(),
     })),
-    roleOptions,
+    knowledge: {
+      notes: notes.map((note) => ({
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        updatedByName: note.updatedBy?.fullName ?? "Sistem",
+        createdAt: note.createdAt.toISOString(),
+        updatedAt: note.updatedAt.toISOString(),
+      })),
+      documents: documents.map((document) => ({
+        id: document.id,
+        name: document.originalName,
+        mimeType: document.mimeType,
+        sizeBytes: document.sizeBytes,
+        uploadedByName: document.uploadedBy?.fullName ?? "Sistem",
+        createdAt: document.createdAt.toISOString(),
+      })),
+      activity: knowledgeActivity.map((item) => ({
+        id: item.id,
+        action: item.action,
+        actorName: item.actor?.fullName ?? "Sistem",
+        reason: item.reason ?? "Daxili məlumat yeniləndi",
+        createdAt: item.createdAt.toISOString(),
+      })),
+      storageConfigured: hrDocumentStorageConfigured(),
+      permissions: { canReadNotes, canManageNotes, canReadDocuments, canManageDocuments },
+    },
     permissions: {
       canManage,
       canSendNotification:
         canManage && !isOwnProfile,
-      canManageCredentials,
       isOwnProfile,
     },
   };

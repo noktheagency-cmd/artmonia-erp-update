@@ -24,6 +24,10 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   DIRECT_URL: z.string().optional(),
+  CLOUDFLARE_R2_ACCOUNT_ID: z.string().optional(),
+  CLOUDFLARE_R2_ACCESS_KEY_ID: z.string().optional(),
+  CLOUDFLARE_R2_SECRET_ACCESS_KEY: z.string().optional(),
+  CLOUDFLARE_R2_HR_BUCKET: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   MCP_PUBLIC_URL: z.string().url().optional(),
   MCP_OAUTH_CLIENT_ID: z.string().uuid().optional(),
@@ -72,4 +76,14 @@ export function hasSupabasePublicEnv() {
 
 export function hasDatabaseEnv() {
   return hasEnv("DATABASE_URL");
+}
+
+export function hasHrDocumentStorageEnv() {
+  const env = getEnv();
+  return Boolean(
+    env.CLOUDFLARE_R2_ACCOUNT_ID &&
+      env.CLOUDFLARE_R2_ACCESS_KEY_ID &&
+      env.CLOUDFLARE_R2_SECRET_ACCESS_KEY &&
+      env.CLOUDFLARE_R2_HR_BUCKET,
+  );
 }

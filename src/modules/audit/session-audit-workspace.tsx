@@ -18,6 +18,7 @@ import {
   Smartphone,
   Tablet,
   UserRound,
+  UserRoundCog,
   UsersRound,
   Wifi,
 } from "lucide-react";
@@ -51,6 +52,11 @@ const AuditLogPanel = dynamic(
   { loading: () => <div className={styles.activityLoading}>Fəaliyyət jurnalı yüklənir...</div> },
 );
 
+const AccountSecurityPanel = dynamic(
+  () => import("@/modules/audit/account-security-panel").then((module) => module.AccountSecurityPanel),
+  { loading: () => <div className={styles.activityLoading}>Hesab təhlükəsizliyi yüklənir...</div> },
+);
+
 type RevokeIntent =
   | { kind: "SESSION"; session: AuthSessionDto }
   | { kind: "OTHERS"; user: SessionUserDto; count: number };
@@ -65,7 +71,7 @@ const deviceFilters: Array<{ value: "ALL" | SessionDeviceTypeDto; label: string 
 export function SessionAuditWorkspace({ initialData }: { initialData: SessionAuditData }) {
   const router = useRouter();
   const [sessions, setSessions] = useState(initialData.sessions);
-  const [tab, setTab] = useState<"SESSIONS" | "ACTIVITY">("SESSIONS");
+  const [tab, setTab] = useState<"SESSIONS" | "ACCOUNTS" | "ACTIVITY">("SESSIONS");
   const [selectedUserId, setSelectedUserId] = useState(
     initialData.users.some((user) => user.id === initialData.currentUserId)
       ? initialData.currentUserId
@@ -176,12 +182,13 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
       <header className={styles.pageHeader}>
         <div>
           <h1>Audit və təhlükəsizlik</h1>
-          <p>Aktiv girişləri izləyin, cihazları yoxlayın və şübhəli sessiyaları dərhal bağlayın.</p>
+          <p>Giriş hesablarını, parolları, rolları və aktiv sessiyaları vahid təhlükəsizlik mərkəzindən idarə edin.</p>
         </div>
         <span className={styles.scopeLabel}>
           <ShieldCheck /> {tab === "ACTIVITY"
             ? initialData.canViewAudit ? "Bütün əməliyyatlar" : "Mənim təhlükəsizlik qeydlərim"
-            : initialData.canViewAll ? "Bütün əməkdaşlar" : "Yalnız mənim sessiyalarım"}
+            : tab === "ACCOUNTS" ? "Super Admin hesab idarəetməsi"
+              : initialData.canViewAll ? "Bütün əməkdaşlar" : "Yalnız mənim sessiyalarım"}
         </span>
       </header>
 
@@ -194,6 +201,15 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
           onClick={() => setTab("SESSIONS")}
         >
           <ShieldCheck /> Aktiv sessiyalar <span>{sessions.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "ACCOUNTS"}
+          className={tab === "ACCOUNTS" ? styles.activeTab : undefined}
+          onClick={() => setTab("ACCOUNTS")}
+        >
+          <UserRoundCog /> Hesablar <span>{initialData.accounts.length}</span>
         </button>
         <button
           type="button"
@@ -342,6 +358,12 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
             </div>
           </section>
         </>
+      ) : tab === "ACCOUNTS" ? (
+        <AccountSecurityPanel
+          accounts={initialData.accounts}
+          roleOptions={initialData.accountRoleOptions}
+          generatedAt={initialData.generatedAt}
+        />
       ) : (
         <AuditLogPanel logs={initialData.activity} />
       )}

@@ -48,6 +48,31 @@ export type AuditLogDto = {
   createdAt: string;
 };
 
+export type SecurityAccountDto = {
+  employeeId: string;
+  userId: string | null;
+  fullName: string;
+  profilePhotoUrl: string | null;
+  contactEmail: string | null;
+  loginEmail: string | null;
+  department: string;
+  position: string;
+  roles: Array<{ id: string; name: string; code: string | null }>;
+  status: "ACTIVE" | "DISABLED" | "NOT_CREATED";
+  activeSessionCount: number;
+  lastSeenAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  protectedRole: boolean;
+  isCurrent: boolean;
+};
+
+export type SecurityRoleOptionDto = {
+  id: string;
+  name: string;
+  code: string | null;
+};
+
 export type SessionAuditData = {
   generatedAt: string;
   truncated: boolean;
@@ -58,6 +83,8 @@ export type SessionAuditData = {
   sessions: AuthSessionDto[];
   users: SessionUserDto[];
   activity: AuditLogDto[];
+  accounts: SecurityAccountDto[];
+  accountRoleOptions: SecurityRoleOptionDto[];
   summary: {
     activeSessions: number;
     activeUsers: number;

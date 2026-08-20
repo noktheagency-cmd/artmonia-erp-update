@@ -54,7 +54,7 @@ export async function revokeSessionAction(input: {
     if (!target) {
       return { ok: false, code: "NOT_FOUND", message: "Sessiya artıq aktiv deyil." };
     }
-    if (!canManageTarget(actor, target.userId)) {
+    if (!canManageTarget(actor)) {
       return { ok: false, code: "FORBIDDEN", message: "Bu sessiyanı bağlamaq icazəniz yoxdur." };
     }
 
@@ -91,7 +91,7 @@ export async function revokeOtherSessionsAction(input: {
     if (!actor.currentSessionId) {
       return { ok: false, code: "FORBIDDEN", message: "Təhlükəsiz giriş sessiyası tapılmadı." };
     }
-    if (!canManageTarget(actor, parsed.data.userId)) {
+    if (!canManageTarget(actor)) {
       return { ok: false, code: "FORBIDDEN", message: "Bu istifadəçinin sessiyalarını bağlamaq icazəniz yoxdur." };
     }
 
@@ -237,7 +237,6 @@ async function loadTargetSessionsForUser(userId: string, preserveSessionId: stri
 
 function canManageTarget(
   actor: Awaited<ReturnType<typeof requireErpActor>>,
-  _targetUserId: string,
 ) {
   return actor.roles.includes(AppRole.SUPER_ADMIN);
 }

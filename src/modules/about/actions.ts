@@ -98,7 +98,7 @@ async function updateAboutProfileActionImpl(formData: FormData): Promise<AboutPr
     return profile;
   });
 
-  revalidatePath("/", "layout");
+  revalidatePath("/about");
 
   return {
     title: saved.title,

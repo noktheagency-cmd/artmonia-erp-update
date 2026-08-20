@@ -9,8 +9,6 @@ import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import {
   BriefcaseBusiness,
   Download,
-  Eye,
-  EyeOff,
   GraduationCap,
   LoaderCircle,
   MoreHorizontal,
@@ -387,8 +385,6 @@ export function HrWorkspace({
           employee={editor === "new" ? undefined : editor}
           today={employeeData.today}
           lookups={employeeData.lookups}
-          roleOptions={employeeData.roleOptions}
-          canCreateAccount={employeeData.permissions.canCreateAccount}
           initialStaffType={newStaffType}
           pending={pending}
           onClose={() => setEditor(null)}
@@ -750,7 +746,6 @@ function EmployeeTable({
               <th>Əməkdaş</th>
               <th>Tip / vəzifə</th>
               <th>Departament</th>
-              <th>Rol və giriş</th>
               <th>Maaş</th>
               <th>Status</th>
               <th>İşə başlama</th>
@@ -790,17 +785,6 @@ function EmployeeTable({
                   </td>
                   <td>
                     <Badge variant="secondary">{employee.department}</Badge>
-                  </td>
-                  <td>
-                    <strong>
-                      {employee.roles.map((role) => role.name).join(", ") ||
-                        "Rol verilməyib"}
-                    </strong>
-                    <small className="hr-salary-mode">
-                      {employee.hasLogin
-                        ? "ERP girişi aktivdir"
-                        : "Giriş hesabı yoxdur"}
-                    </small>
                   </td>
                   <td>
                     <strong className="hr-salary-cell">
@@ -847,7 +831,7 @@ function EmployeeTable({
               ))
             ) : (
               <tr>
-                <td colSpan={canManage ? 8 : 7}>
+                <td colSpan={canManage ? 7 : 6}>
                   <Empty text="Filtrə uyğun əməkdaş yoxdur. Yeni əməkdaş yaradaraq başlayın." />
                 </td>
               </tr>
@@ -996,8 +980,6 @@ function EmployeeDialog({
   employee,
   today,
   lookups,
-  roleOptions,
-  canCreateAccount,
   initialStaffType,
   pending,
   onClose,
@@ -1006,8 +988,6 @@ function EmployeeDialog({
   employee?: HrEmployeeRow;
   today: string;
   lookups: HrEmployeeData["lookups"];
-  roleOptions: HrEmployeeData["roleOptions"];
-  canCreateAccount: boolean;
   initialStaffType: "EMPLOYEE" | "TEACHER";
   pending: boolean;
   onClose: () => void;
@@ -1019,29 +999,15 @@ function EmployeeDialog({
   const [salaryMode, setSalaryMode] = useState<"STATIC" | "PERCENT">(
     employee?.salaryMode ?? "STATIC",
   );
-  const [createAccount, setCreateAccount] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(employee?.profilePhotoUrl ?? "");
   const [photoError, setPhotoError] = useState("");
-  const teacherRole = roleOptions.find((role) => role.code === "TEACHER");
-  const [roleIds, setRoleIds] = useState<string[]>(
-    employee?.roles.map((role) => role.id)
-      ?? (initialStaffType === "TEACHER" && teacherRole ? [teacherRole.id] : []),
-  );
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSubmit(new FormData(event.currentTarget));
   }
   function changeStaffType(value: "EMPLOYEE" | "TEACHER") {
     setStaffType(value);
-    if (value === "TEACHER") {
-      setSalaryMode("PERCENT");
-      if (teacherRole) {
-        setRoleIds((current) => current.includes(teacherRole.id) ? current : [...current, teacherRole.id]);
-      }
-    } else if (teacherRole) {
-      setRoleIds((current) => current.filter((roleId) => roleId !== teacherRole.id));
-    }
+    if (value === "TEACHER") setSalaryMode("PERCENT");
   }
   function changeProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -1068,8 +1034,7 @@ function EmployeeDialog({
             {employee ? "Əməkdaş profilini yenilə" : "Əməkdaş yarat"}
           </DialogTitle>
           <DialogDescription>
-            Əməkdaş tipini, iş məlumatlarını, ERP girişini və rolunu bir yerdən
-            təyin edin.
+            Əməkdaş tipini və iş məlumatlarını vahid profildə idarə edin.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="hr-employee-form">
@@ -1238,153 +1203,17 @@ function EmployeeDialog({
               <input type="hidden" name="salaryAmount" value="0" />
             </label>
           )}
-          {!employee && canCreateAccount ? (
-            <section className="hr-account-section is-wide">
-              <label className="hr-account-toggle">
-                <input
-                  type="checkbox"
-                  checked={createAccount}
-                  onChange={(event) => setCreateAccount(event.target.checked)}
-                />
-                <span>
-                  <strong>ERP giriş hesabı yarat</strong>
-                  <small>
-                    Əməkdaş e-poçt və parol ilə sistemə daxil ola biləcək.
-                  </small>
-                </span>
-              </label>
-              <input
-                type="hidden"
-                name="createAccount"
-                value={createAccount ? "true" : "false"}
-              />
-              {createAccount ? (
-                <div className="hr-account-grid">
-                  <label>
-                    <span>Giriş e-poçtu</span>
-                    <Input
-                      name="loginEmail"
-                      type="email"
-                      autoComplete="off"
-                      required
-                    />
-                  </label>
-                  <label>
-                    <span>İlkin parol</span>
-                    <div className="hr-password-field">
-                      <Input
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        minLength={8}
-                        maxLength={72}
-                        autoComplete="new-password"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((value) => !value)}
-                        aria-label={showPassword ? "Şifrəni gizlət" : "Şifrəni göstər"}
-                        aria-pressed={showPassword}
-                      >
-                        {showPassword ? <EyeOff /> : <Eye />}
-                      </button>
-                    </div>
-                  </label>
-                  <RoleMultiSelect
-                    roleOptions={roleOptions.filter((role) => staffType === "TEACHER" || role.code !== "TEACHER")}
-                    value={roleIds}
-                    onValueChange={setRoleIds}
-                  />
-                  <input type="hidden" name="roleIds" value={JSON.stringify(roleIds)} />
-                </div>
-              ) : (
-                <>
-                  <input type="hidden" name="loginEmail" value="" />
-                  <input type="hidden" name="password" value="" />
-                </>
-              )}
-            </section>
-          ) : (
-            <>
-              <input type="hidden" name="createAccount" value="false" />
-              <input type="hidden" name="loginEmail" value="" />
-              <input type="hidden" name="password" value="" />
-            </>
-          )}
-          {employee?.userId && canCreateAccount ? (
-            <section className="hr-account-section is-wide">
-              <div className="hr-account-heading">
-                <strong>ERP rolları</strong>
-                <small>Əməkdaşa bir və ya bir neçə rol verə bilərsiniz.</small>
-              </div>
-              <RoleMultiSelect
-                roleOptions={roleOptions.filter((role) => staffType === "TEACHER" || role.code !== "TEACHER")}
-                value={roleIds}
-                onValueChange={setRoleIds}
-              />
-              <input type="hidden" name="roleIds" value={JSON.stringify(roleIds)} />
-            </section>
-          ) : null}
-          <label className="is-wide">
-            <span>Qeyd</span>
-            <textarea name="note" defaultValue={employee?.note} rows={3} />
-          </label>
           <DialogFooter className="is-wide">
             <Button type="button" variant="outline" onClick={onClose}>
               Ləğv et
             </Button>
-            <Button
-              type="submit"
-              disabled={pending || (
-                (createAccount || Boolean(employee?.userId && canCreateAccount))
-                && roleIds.length === 0
-                && !(employee?.staffType === "TEACHER" && staffType === "EMPLOYEE")
-              )}
-            >
+            <Button type="submit" disabled={pending}>
               {employee ? "Yadda saxla" : staffType === "TEACHER" ? "Müəllimi əlavə et" : "Əməkdaşı yarat"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function RoleMultiSelect({
-  roleOptions,
-  value,
-  onValueChange,
-}: {
-  roleOptions: HrEmployeeData["roleOptions"];
-  value: string[];
-  onValueChange: (value: string[]) => void;
-}) {
-  function toggle(roleId: string, checked: boolean) {
-    onValueChange(checked
-      ? [...new Set([...value, roleId])]
-      : value.filter((id) => id !== roleId));
-  }
-
-  return (
-    <div className="hr-role-multi is-wide">
-      <span>Rol ver</span>
-      <div className="hr-role-options">
-        {roleOptions.map((role) => (
-          <label key={role.id}>
-            <input
-              type="checkbox"
-              checked={value.includes(role.id)}
-              onChange={(event) => toggle(role.id, event.target.checked)}
-            />
-            <span>
-              <strong>{role.name}</strong>
-              <small>{role.isSystem ? "Sistem rolu" : "Custom rol"}</small>
-            </span>
-          </label>
-        ))}
-      </div>
-      <small className="hr-field-help">{value.length} rol seçilib.</small>
-    </div>
   );
 }
 

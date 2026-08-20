@@ -67,6 +67,10 @@ export const permissionDefinitions = define([
 
   { code: "hr.employee.read", module: "hr", moduleLabel: "HR", tab: "employees", tabLabel: "İcmal və işçilər", action: "read", actionLabel: "Görə bilər", description: "İşçi profillərini görmək", sensitive: true },
   { code: "hr.employee.manage", module: "hr", moduleLabel: "HR", tab: "employees", tabLabel: "İşçilər", action: "special", actionLabel: "İşçiləri idarə edə bilər", description: "İşçi profillərini yaratmaq, dəyişmək və silmək", sensitive: true, dependsOn: "hr.employee.read" },
+  { code: "hr.note.read", module: "hr", moduleLabel: "HR", tab: "knowledge", tabLabel: "Qeydlər və sənədlər", action: "read", actionLabel: "Qeydləri görə bilər", description: "Əməkdaşın daxili qeydlərini görmək", sensitive: true, dependsOn: "hr.employee.read" },
+  { code: "hr.note.manage", module: "hr", moduleLabel: "HR", tab: "knowledge", tabLabel: "Qeydlər və sənədlər", action: "special", actionLabel: "Qeydləri idarə edə bilər", description: "Əməkdaşın daxili qeydlərini yaratmaq və dəyişmək", sensitive: true, dependsOn: "hr.note.read" },
+  { code: "hr.document.read", module: "hr", moduleLabel: "HR", tab: "knowledge", tabLabel: "Qeydlər və sənədlər", action: "read", actionLabel: "Sənədləri görə bilər", description: "Əməkdaşa aid qorunan sənədləri görmək", sensitive: true, dependsOn: "hr.employee.read" },
+  { code: "hr.document.manage", module: "hr", moduleLabel: "HR", tab: "knowledge", tabLabel: "Qeydlər və sənədlər", action: "special", actionLabel: "Sənəd əlavə edə bilər", description: "Əməkdaşa aid qorunan sənədləri əlavə etmək", sensitive: true, dependsOn: "hr.document.read" },
   { code: "hr.corporate.read", module: "hr", moduleLabel: "HR", tab: "corporate", tabLabel: "Korporativ müştərilər", action: "read", actionLabel: "Görə bilər", description: "Korporativ müştəri şirkətlərini, büdcələri və əlaqəli şəxsləri görmək", sensitive: true },
   { code: "hr.corporate.manage", module: "hr", moduleLabel: "HR", tab: "corporate", tabLabel: "Korporativ müştərilər", action: "special", actionLabel: "İdarə edə bilər", description: "Korporativ müştəriləri və əlaqəli şəxsləri yaratmaq, dəyişmək və silmək", sensitive: true, dependsOn: "hr.corporate.read" },
   { code: "hr.bonus.read", module: "hr", moduleLabel: "HR", tab: "bonus", tabLabel: "Bonus", action: "read", actionLabel: "Görə bilər", description: "Departament bonus kampaniyasını görmək", supportsScope: true },
@@ -132,6 +136,8 @@ legacyRolePermissionMap[AppRole.OWNER].unshift("hr.corporate.read", "hr.corporat
 legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.corporate.read", "hr.corporate.manage");
 legacyRolePermissionMap[AppRole.FINANCE].unshift("hr.corporate.read");
 legacyRolePermissionMap[AppRole.AUDITOR].unshift("hr.corporate.read");
+legacyRolePermissionMap[AppRole.OWNER].unshift("hr.note.read", "hr.note.manage", "hr.document.read", "hr.document.manage");
+legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.note.read", "hr.note.manage", "hr.document.read", "hr.document.manage");
 
 export const rolePermissionMap = legacyRolePermissionMap;
 
