@@ -3,11 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Route } from "next";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type MouseEvent,
   type PointerEvent,
   type SyntheticEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -40,8 +42,10 @@ import {
 } from "@/components/layout/global-search";
 import { AboutDialog } from "@/modules/about/about-dialog";
 import type { AboutProfileSnapshot } from "@/modules/about/about-profile";
+import { createSupabaseBrowserClient } from "@/server/supabase/browser";
 
 type ShellUser = {
+  id: string;
   fullName: string;
   email: string;
   profilePhotoUrl: string | null;
@@ -56,6 +60,8 @@ type NavItem = {
   requiredPermissions: string[];
   requiredRoles?: string[];
 };
+
+type NotificationCounts = { all: number; tasks: number };
 
 const primaryNavItems: NavItem[] = [
   { href: "/students", label: "Tələbələr", icon: GraduationCap, requiredPermissions: ["student.read"] },
@@ -85,12 +91,14 @@ export function AppShell({
   children,
   currentUser,
   aboutProfile,
+  initialNotificationCounts,
   signOutAction,
   sessionGuardEnabled,
 }: {
   children: React.ReactNode;
   currentUser: ShellUser;
   aboutProfile: AboutProfileSnapshot;
+  initialNotificationCounts: NotificationCounts;
   signOutAction: () => void | Promise<void>;
   sessionGuardEnabled: boolean;
 }) {
@@ -100,6 +108,7 @@ export function AppShell({
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [isSidebarCompact, setIsSidebarCompact] = useState(false);
   const [mobileSidebarPathname, setMobileSidebarPathname] = useState<string | null>(null);
+  const [notificationCounts, setNotificationCounts] = useState(initialNotificationCounts);
   const prefetchedHrefs = useRef<Set<string>>(new Set());
   const currentParams = searchParams.toString();
   const currentHref = currentParams ? `${pathname}?${currentParams}` : pathname;
@@ -151,6 +160,54 @@ export function AppShell({
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
   );
   const isMobileSidebarOpen = mobileSidebarPathname === pathname;
+
+  const refreshNotificationCounts = useCallback(async () => {
+    try {
+      const response = await fetch("/api/notifications/refresh", {
+        method: "POST",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return;
+      const counts = await response.json() as Partial<NotificationCounts>;
+      if (typeof counts.all === "number" && typeof counts.tasks === "number") {
+        setNotificationCounts({ all: counts.all, tasks: counts.tasks });
+      }
+    } catch {
+      // The next interval, focus event, or realtime message retries the refresh.
+    }
+  }, []);
+
+  useEffect(() => {
+    let client: ReturnType<typeof createSupabaseBrowserClient> | null = null;
+    let channel: RealtimeChannel | null = null;
+    try {
+      client = createSupabaseBrowserClient();
+      channel = client
+        .channel(`app-notifications:${currentUser.id}`)
+        .on("broadcast", { event: "changed" }, () => void refreshNotificationCounts())
+        .subscribe();
+    } catch {
+      client = null;
+      channel = null;
+    }
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshNotificationCounts();
+    };
+    const interval = window.setInterval(() => void refreshNotificationCounts(), 30_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    window.addEventListener("app-notifications:changed", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      window.removeEventListener("app-notifications:changed", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      if (client && channel) void client.removeChannel(channel);
+    };
+  }, [currentUser.id, refreshNotificationCounts]);
 
   useEffect(() => {
     if (!isMobileSidebarOpen) {
@@ -451,6 +508,9 @@ export function AppShell({
                   <Icon size={18} strokeWidth={1.9} />
                 </span>
                 <span className="nav-item-label">{item.label}</span>
+                {item.href === "/tasks" && notificationCounts.tasks > 0 ? (
+                  <NotificationBadge count={notificationCounts.tasks} />
+                ) : null}
               </Link>
             );
           })}
@@ -517,6 +577,7 @@ export function AppShell({
               <strong>{currentUser.fullName}</strong>
               <small>{currentUser.roles[0] || "İstifadəçi"}</small>
             </span>
+            {notificationCounts.all > 0 ? <NotificationBadge count={notificationCounts.all} profile /> : null}
           </Link>
           <div className="rail-utility-actions">
             <ThemeToggle className="rail-utility-button theme-toggle-rail" />
@@ -546,6 +607,9 @@ export function AppShell({
             >
               <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
               <span>{item.label}</span>
+              {item.href === "/tasks" && notificationCounts.tasks > 0 ? (
+                <NotificationBadge count={notificationCounts.tasks} mobile />
+              ) : null}
             </Link>
           );
         })}
@@ -586,5 +650,28 @@ export function AppShell({
         </div>
       </main>
     </div>
+  );
+}
+
+function NotificationBadge({
+  count,
+  profile = false,
+  mobile = false,
+}: {
+  count: number;
+  profile?: boolean;
+  mobile?: boolean;
+}) {
+  return (
+    <span
+      className={cx(
+        "sidebar-notification-badge",
+        profile && "is-profile",
+        mobile && "is-mobile",
+      )}
+      aria-label={`${count} oxunmamış bildiriş`}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
   );
 }

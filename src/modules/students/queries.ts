@@ -20,6 +20,10 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 import { getStudentPaymentScheduleTypeLabel } from "@/modules/students/payment-schedule-type";
 import {
+  normalizeStudentPage,
+  STUDENT_LIST_PAGE_SIZE,
+} from "@/modules/students/student-pagination";
+import {
   isStudentDebtDue,
   resolveStudentLifecycleStatus,
   resolveStudentPaymentStatus,
@@ -48,12 +52,21 @@ export type StudentListFilters = {
   payment?: string;
   from?: string;
   to?: string;
+  page?: string;
+  tab?: string;
 };
 
 export type StudentListData = {
   query: string;
   returnTo: string;
   total: number;
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    from: number;
+    to: number;
+  };
   todayReminders: {
     dateLabel: string;
     items: StudentReminderItem[];
@@ -229,6 +242,8 @@ type StudentListCacheInput = {
   today: string;
   dateFrom: string;
   dateTo: string;
+  page: number;
+  pageSize: number;
 };
 
 type StudentListRawData = {
@@ -334,8 +349,10 @@ export async function getStudentListData(
   const paymentFilter = normalizePaymentFilter(input.payment);
   const dateFromFilter = normalizeDateFilter(input.from);
   const dateToFilter = normalizeDateFilter(input.to);
+  const activeTab = normalizeStudentTab(input.tab);
+  let page = activeTab === "list" ? normalizeStudentPage(input.page) : 1;
   const today = startOfToday();
-  const [rawData, todayReminders] = await Promise.all([
+  const [initialRawData, todayReminders] = await Promise.all([
     readStudentListRawData({
       search,
       statusFilter,
@@ -346,9 +363,27 @@ export async function getStudentListData(
       today: today.toISOString(),
       dateFrom: dateFromFilter.input,
       dateTo: dateToFilter.input,
+      page,
+      pageSize: STUDENT_LIST_PAGE_SIZE,
     }),
     getTodayStudentReminders(getPrisma(), actor),
   ]);
+  const rawData = page > 1 && initialRawData.rows.length === 0
+    ? await readStudentListRawData({
+        search,
+        statusFilter,
+        churnOnly,
+        programFilter,
+        teacherFilter,
+        paymentFilter,
+        today: today.toISOString(),
+        dateFrom: dateFromFilter.input,
+        dateTo: dateToFilter.input,
+        page: 1,
+        pageSize: STUDENT_LIST_PAGE_SIZE,
+      })
+    : initialRawData;
+  if (rawData !== initialRawData) page = 1;
   const { rows, options, clv, paymentSummary } = rawData;
   const { programs, teachers, leads: convertibleLeads, sources, campaigns, discountTypes } = options;
 
@@ -403,6 +438,10 @@ export async function getStudentListData(
     dateFromFilter.input,
     dateToFilter.input,
   ].filter(Boolean).length;
+  const total = rows[0]?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / STUDENT_LIST_PAGE_SIZE));
+  const pageFrom = total > 0 ? (page - 1) * STUDENT_LIST_PAGE_SIZE + 1 : 0;
+  const pageTo = Math.min(page * STUDENT_LIST_PAGE_SIZE, total);
 
   return {
     query: search,
@@ -415,8 +454,17 @@ export async function getStudentListData(
       payment: paymentFilter,
       from: dateFromFilter.input,
       to: dateToFilter.input,
+      page,
+      tab: activeTab,
     }),
-    total: rows[0]?.totalCount ?? 0,
+    total,
+    pagination: {
+      page,
+      pageSize: STUDENT_LIST_PAGE_SIZE,
+      totalPages,
+      from: pageFrom,
+      to: pageTo,
+    },
     todayReminders,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
@@ -876,6 +924,8 @@ async function getStudentRows(
     today: Date;
     dateFrom: Date | null;
     dateTo: Date | null;
+    page: number;
+    pageSize: number;
   }
 ): Promise<StudentListQueryRow[]> {
   const whereSql = buildStudentWhereSql(input);
@@ -904,7 +954,8 @@ async function getStudentRows(
       join erp.contacts c on c.id = s.contact_id
       left join erp.users u on u.id = s.manager_id
       order by s.registered_at desc, s.created_at desc
-      limit 50
+      limit ${input.pageSize}
+      offset ${(input.page - 1) * input.pageSize}
     )
     select
       ps.id::text as "id",
@@ -1094,7 +1145,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v7"],
+  ["student-list-data-v8"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -1133,6 +1184,8 @@ async function getStudentListRawData(
   const [rows, options, clv, paymentSummary] = await Promise.all([
     getStudentRows(prisma, {
       ...filterInput,
+      page: input.page,
+      pageSize: input.pageSize,
     }),
     getStudentCreateOptions(prisma, filterInput.today),
     getStudentClvSummary(prisma, filterInput),
@@ -1687,6 +1740,11 @@ function normalizeDateFilter(value: string | undefined) {
   };
 }
 
+function normalizeStudentTab(value: string | undefined) {
+  if (value === "list" || value === "programs") return value;
+  return "overview";
+}
+
 function normalizeDateValue(value: string | undefined) {
   const trimmed = value?.trim();
 
@@ -1720,6 +1778,8 @@ function buildStudentsUrl({
   payment,
   from,
   to,
+  page,
+  tab,
 }: {
   q: string;
   status: StudentLifecycleStatus | "";
@@ -1729,8 +1789,14 @@ function buildStudentsUrl({
   payment: StudentPaymentFilter;
   from?: string;
   to?: string;
+  page?: number;
+  tab?: "overview" | "list" | "programs";
 }) {
   const params = new URLSearchParams();
+
+  if (tab && tab !== "overview") {
+    params.set("tab", tab);
+  }
 
   if (q) {
     params.set("q", q);
@@ -1762,6 +1828,10 @@ function buildStudentsUrl({
 
   if (to) {
     params.set("to", to);
+  }
+
+  if (tab === "list" && page && page > 1) {
+    params.set("page", page.toString());
   }
 
   return params.size > 0 ? `/students?${params.toString()}` : "/students";

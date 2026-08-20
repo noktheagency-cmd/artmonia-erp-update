@@ -60,7 +60,7 @@ export function DashboardTasksPanel({
           <span className="owner-dashboard-task-kicker">Canlı iş axını</span>
           <h2>Son tapşırıqlar</h2>
         </div>
-        {data.permissions.canManage ? (
+        {data.permissions.canAdminister ? (
           <CreateDashboardTaskDialog employees={data.employees} action={createTaskAction} />
         ) : null}
       </div>

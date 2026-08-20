@@ -4,14 +4,21 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma, TaskStatus } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
+import {
+  broadcastNotificationChange,
+  createAssignedTaskNotification,
+} from "@/modules/notifications/notification-service";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
-import { scopeFor } from "@/server/rbac/permissions";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import {
   buildCurrentTaskAssigneeWhere,
   buildTaskWorkspaceWhere,
 } from "@/modules/tasks/task-scope";
+import {
+  assertCanAdministerTasks,
+  canAdministerTasks,
+} from "@/modules/tasks/task-permissions";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -30,16 +37,15 @@ const deleteTaskSchema = z.object({
 });
 
 async function createTaskActionImpl(formData: FormData) {
-  const actor = await requireMutationActor("task.manage");
+  const actor = await requireMutationActor();
+  await assertCanAdministerTasks(actor);
   const input = createTaskSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const dueAt = new Date(`${input.dueDate}T12:00:00.000Z`);
-  const manageScope = scopeFor(actor.permissions, "task.manage");
-  const ownerUserId = manageScope === "ALL" ? input.ownerUserId : actor.id;
 
-  await prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     const owner = await tx.user.findFirst({
-      where: buildCurrentTaskAssigneeWhere(ownerUserId),
+      where: buildCurrentTaskAssigneeWhere(input.ownerUserId),
       select: { id: true, fullName: true },
     });
 
@@ -57,7 +63,20 @@ async function createTaskActionImpl(formData: FormData) {
         status: TaskStatus.OPEN,
         createdById: actor.id,
       },
-      select: { id: true, title: true, status: true, dueAt: true },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        ownerUserId: true,
+        status: true,
+        dueAt: true,
+        createdAt: true,
+      },
+    });
+
+    await createAssignedTaskNotification(tx, {
+      ...task,
+      ownerUserId: owner.id,
     });
 
     await writeAuditLog(tx, {
@@ -71,19 +90,25 @@ async function createTaskActionImpl(formData: FormData) {
         ownerName: owner.fullName,
         status: task.status,
         dueAt: task.dueAt?.toISOString() ?? null,
+        createdAt: task.createdAt.toISOString(),
       } satisfies Prisma.InputJsonValue,
       reason: "Task yaradıldı",
     });
+
+    return { taskId: task.id, recipientUserId: owner.id };
   });
 
+  await broadcastNotificationChange(created.recipientUserId);
   revalidatePath("/tasks");
   revalidatePath("/dashboard");
+  return { id: created.taskId };
 }
 
 async function updateTaskStatusActionImpl(formData: FormData) {
   const actor = await requireMutationActor("task.read");
   const input = updateStatusSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
+  const canAdminister = await canAdministerTasks(actor);
 
   await prisma.$transaction(async (tx) => {
     const current = await tx.task.findFirst({
@@ -95,9 +120,11 @@ async function updateTaskStatusActionImpl(formData: FormData) {
       throw new Error("Task tapılmadı");
     }
 
-    const manageScope = scopeFor(actor.permissions, "task.manage");
-    if (manageScope !== "ALL" && current.ownerUserId !== actor.id) {
-      throw new Error("Bu taskın statusunu dəyişmək icazəniz yoxdur");
+    if (current.ownerUserId !== actor.id && !canAdminister) {
+      throw new PublicActionError(
+        "Bu taskın statusunu dəyişmək icazəniz yoxdur.",
+        "FORBIDDEN",
+      );
     }
 
     const updated = await tx.task.update({
@@ -125,9 +152,9 @@ async function updateTaskStatusActionImpl(formData: FormData) {
 }
 
 async function deleteTaskActionImpl(formData: FormData) {
-  const actor = await requireMutationActor("task.manage");
+  const actor = await requireMutationActor();
+  await assertCanAdministerTasks(actor);
   const input = deleteTaskSchema.parse(Object.fromEntries(formData));
-  const manageScope = scopeFor(actor.permissions, "task.manage");
 
   await getPrisma().$transaction(async (tx) => {
     const task = await tx.task.findFirst({
@@ -145,10 +172,6 @@ async function deleteTaskActionImpl(formData: FormData) {
 
     if (!task) {
       throw new PublicActionError("Task tapılmadı.", "NOT_FOUND");
-    }
-
-    if (manageScope !== "ALL" && task.ownerUserId !== actor.id) {
-      throw new PublicActionError("Bu taskı silmək icazəniz yoxdur.", "FORBIDDEN");
     }
 
     await tx.task.delete({ where: { id: task.id } });

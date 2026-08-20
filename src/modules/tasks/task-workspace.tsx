@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useOptimistic, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -50,14 +50,17 @@ export function TaskWorkspace({
   createTaskAction,
   updateTaskStatusAction,
   deleteTaskAction,
+  markNotificationsReadAction,
 }: {
   data: TaskData;
   createTaskAction: TaskAction;
   updateTaskStatusAction: TaskAction;
   deleteTaskAction: TaskAction;
+  markNotificationsReadAction: () => unknown | Promise<unknown>;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
+  const didMarkNotificationsRead = useRef(false);
   const normalizedQuery = query.trim().toLocaleLowerCase("az");
   const filteredTasks = useMemo(
     () =>
@@ -76,6 +79,17 @@ export function TaskWorkspace({
     [data.tasks, filter, normalizedQuery]
   );
 
+  useEffect(() => {
+    if (didMarkNotificationsRead.current) return;
+    didMarkNotificationsRead.current = true;
+    void Promise.resolve(markNotificationsReadAction())
+      .then((result) => {
+        unwrapActionResult(result);
+        window.dispatchEvent(new Event("app-notifications:changed"));
+      })
+      .catch(() => undefined);
+  }, [markNotificationsReadAction]);
+
   return (
     <section className="page-stack tasks-page">
       <header className="tasks-header">
@@ -88,7 +102,7 @@ export function TaskWorkspace({
         </div>
         <div className="tasks-header-actions">
           <span className="tasks-header-mascot" role="img" aria-label="Sakit rəssam maskotu" />
-          {data.permissions.canManage ? (
+          {data.permissions.canAdminister ? (
             <CreateTaskDialog employees={data.employees} action={createTaskAction} />
           ) : null}
         </div>
@@ -140,7 +154,8 @@ export function TaskWorkspace({
                 task={task}
                 updateTaskStatusAction={updateTaskStatusAction}
                 deleteTaskAction={deleteTaskAction}
-                canDelete={data.permissions.canManage}
+                canDelete={data.permissions.canAdminister}
+                isHighlighted={data.selectedTaskId === task.id}
               />
             ))}
           </div>
@@ -152,10 +167,10 @@ export function TaskWorkspace({
           </div>
         )}
         {data.pagination.page > 1 || data.pagination.hasNext ? (
-          <nav className="mt-4 flex items-center justify-end gap-2" aria-label="Task sÉ™hifÉ™lÉ™ri">
-            {data.pagination.page > 1 ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page - 1}&pageSize=${data.pagination.pageSize}` as Route}>ÆvvÉ™lki</Link> : null}
+          <nav className="mt-4 flex items-center justify-end gap-2" aria-label="Task səhifələri">
+            {data.pagination.page > 1 ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page - 1}&pageSize=${data.pagination.pageSize}` as Route}>Əvvəlki</Link> : null}
             <span>{data.pagination.page} / {Math.max(1, Math.ceil(data.pagination.total / data.pagination.pageSize))}</span>
-            {data.pagination.hasNext ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page + 1}&pageSize=${data.pagination.pageSize}` as Route}>NÃ¶vbÉ™ti</Link> : null}
+            {data.pagination.hasNext ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page + 1}&pageSize=${data.pagination.pageSize}` as Route}>Növbəti</Link> : null}
           </nav>
         ) : null}
       </div>
@@ -177,11 +192,13 @@ function TaskListRow({
   updateTaskStatusAction,
   deleteTaskAction,
   canDelete,
+  isHighlighted,
 }: {
   task: TaskRow;
   updateTaskStatusAction: TaskAction;
   deleteTaskAction: TaskAction;
   canDelete: boolean;
+  isHighlighted: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -200,13 +217,13 @@ function TaskListRow({
         unwrapActionResult(await updateTaskStatusAction(formData));
         router.refresh();
       } catch (error) {
-        notifyCaughtError(error, "Task statusu yenilÉ™nmÉ™di", "Status yenilÉ™nmÉ™di");
+        notifyCaughtError(error, "Task statusu yenilənmədi", "Status yenilənmədi");
       }
     });
   }
 
   return (
-    <article className={cx("task-row", task.isOverdue && "is-overdue", isPending && "is-pending")}>
+    <article id={`task-${task.id}`} className={cx("task-row", task.isOverdue && "is-overdue", isHighlighted && "is-highlighted", isPending && "is-pending")}>
       <span className={cx("task-status-mark", `is-${optimisticStatus.toLowerCase()}`)} aria-hidden="true" />
       <div className="task-main">
         <h3>{task.title}</h3>

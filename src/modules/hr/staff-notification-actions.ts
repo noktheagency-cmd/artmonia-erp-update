@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
+import { broadcastNotificationChange as broadcastPersonalNotificationChange } from "@/modules/notifications/notification-service";
 import {
   PublicActionError,
   safeServerAction,
@@ -23,7 +24,10 @@ const createNotificationSchema = z.object({
 async function createHrStaffNotificationActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.employee.manage");
   const input = createNotificationSchema.parse(Object.fromEntries(formData));
-  const employee = await getPrisma().hrEmployee.findUnique({ where: { id: input.employeeId }, select: { id: true, fullName: true } });
+  const employee = await getPrisma().hrEmployee.findUnique({
+    where: { id: input.employeeId },
+    select: { id: true, fullName: true, userId: true },
+  });
   if (!employee) throw new PublicActionError("Əməkdaş profili tapılmadı", "NOT_FOUND");
 
   const notification = await getPrisma().$transaction(async (tx) => {
@@ -41,6 +45,7 @@ async function createHrStaffNotificationActionImpl(formData: FormData) {
 
   revalidateProfile(input.employeeId);
   await broadcastNotificationChange(input.employeeId);
+  if (employee.userId) await broadcastPersonalNotificationChange(employee.userId);
   return { id: notification.id };
 }
 
@@ -88,6 +93,7 @@ async function updateHrStaffNotificationStatusActionImpl(formData: FormData) {
 
   revalidateProfile(current.employee.id);
   await broadcastNotificationChange(current.employee.id);
+  if (current.employee.userId) await broadcastPersonalNotificationChange(current.employee.userId);
 }
 
 export const createHrStaffNotificationAction = safeServerAction(
@@ -110,7 +116,7 @@ async function broadcastNotificationChange(employeeId: string) {
   try {
     const client = getSupabaseAdminClient();
     const channel = client.channel("hr-notifications");
-    await channel.send({ type: "broadcast", event: "changed", payload: { employeeId } });
+    await channel.httpSend("changed", { employeeId });
     await client.removeChannel(channel);
   } catch {
     // Database write is authoritative; realtime is a progressive enhancement.

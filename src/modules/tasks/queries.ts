@@ -1,7 +1,7 @@
 import { TaskStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
-import { scopeFor } from "@/server/rbac/permissions";
+import { canAdministerTasks } from "@/modules/tasks/task-permissions";
 import {
   buildCurrentTaskAssigneeWhere,
   buildTaskWorkspaceWhere,
@@ -25,21 +25,24 @@ export type TaskStatusValue = "OPEN" | "IN_PROGRESS" | "DONE" | "CANCELLED";
 export type TaskData = {
   tasks: TaskRow[];
   employees: Array<{ value: string; label: string }>;
-  permissions: { canManage: boolean };
+  permissions: { canAdminister: boolean };
   currentUserId: string;
+  selectedTaskId: string | null;
   summary: { open: number; inProgress: number; done: number };
   pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
 };
 
-export async function getTaskData(input: { page?: string; pageSize?: string } = {}): Promise<TaskData> {
+export async function getTaskData(input: { page?: string; pageSize?: string; task?: string } = {}): Promise<TaskData> {
   const actor = await requireErpActor("task.read");
   const prisma = getPrisma();
-  const manageScope = scopeFor(actor.permissions, "task.manage");
-  const canManage = manageScope !== null;
-  const canManageAll = manageScope === "ALL";
+  const canAdminister = await canAdministerTasks(actor);
   const page = Math.max(1, Number.parseInt(input.page ?? "1", 10) || 1);
   const pageSize = Math.min(50, Math.max(10, Number.parseInt(input.pageSize ?? "25", 10) || 25));
-  const where = buildTaskWorkspaceWhere(canManageAll ? undefined : actor.id);
+  const selectedTaskId = /^[0-9a-f-]{36}$/i.test(input.task ?? "") ? input.task : undefined;
+  const where = {
+    ...buildTaskWorkspaceWhere(canAdminister ? undefined : actor.id),
+    ...(selectedTaskId ? { id: selectedTaskId } : {}),
+  };
 
   const [tasks, total, statusCounts, employees] = await Promise.all([
     prisma.task.findMany({
@@ -59,20 +62,14 @@ export async function getTaskData(input: { page?: string; pageSize?: string } = 
     }),
     prisma.task.count({ where }),
     prisma.task.groupBy({ by: ["status"], where, _count: { _all: true } }),
-    canManageAll
+    canAdminister
       ? prisma.user.findMany({
           where: buildCurrentTaskAssigneeWhere(),
           orderBy: { fullName: "asc" },
           take: 500,
           select: { id: true, fullName: true },
         })
-      : canManage
-        ? prisma.user.findMany({
-            where: buildCurrentTaskAssigneeWhere(actor.id),
-            take: 1,
-            select: { id: true, fullName: true },
-          })
-        : Promise.resolve([]),
+      : Promise.resolve([]),
   ]);
 
   const now = new Date();
@@ -101,8 +98,9 @@ export async function getTaskData(input: { page?: string; pageSize?: string } = 
   return {
     tasks: rows,
     employees: employees.map((employee) => ({ value: employee.id, label: employee.fullName })),
-    permissions: { canManage },
+    permissions: { canAdminister },
     currentUserId: actor.id,
+    selectedTaskId: selectedTaskId ?? null,
     summary: {
       open: statusCounts.find((item) => item.status === TaskStatus.OPEN)?._count._all ?? 0,
       inProgress: statusCounts.find((item) => item.status === TaskStatus.IN_PROGRESS)?._count._all ?? 0,

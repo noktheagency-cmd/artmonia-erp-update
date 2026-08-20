@@ -116,6 +116,16 @@ enum TaskStatus {
   @@schema("erp")
 }
 
+enum PersonalNotificationType {
+  TASK_ASSIGNED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  DOCUMENT
+  SYSTEM
+
+  @@schema("erp")
+}
+
 enum ApprovalStatus {
   DRAFT
   REQUESTED
@@ -354,6 +364,7 @@ model User {
   approvedPayouts                  TeacherPayout[]             @relation("PayoutApprovedBy")
   ownedTasks                       Task[]                      @relation("TaskOwner")
   createdTasks                     Task[]                      @relation("TaskCreator")
+  personalNotifications            PersonalNotification[]      @relation("PersonalNotificationRecipient")
   ownedTargets                     Target[]                    @relation("TargetOwner")
   managedTargets                   Target[]                    @relation("TargetManager")
   auditLogs                        AuditLog[]                  @relation("AuditActor")
@@ -1795,11 +1806,38 @@ model Task {
 
   ownerUser User? @relation("TaskOwner", fields: [ownerUserId], references: [id])
   createdBy User? @relation("TaskCreator", fields: [createdById], references: [id])
+  notifications PersonalNotification[]
 
   @@index([ownerUserId, status, dueAt])
   @@index([createdById])
   @@index([entityType, entityId])
   @@map("tasks")
+  @@schema("erp")
+}
+
+model PersonalNotification {
+  id                String                   @id @default(uuid()) @db.Uuid
+  recipientUserId   String                   @map("recipient_user_id") @db.Uuid
+  type              PersonalNotificationType
+  title             String
+  message           String
+  href              String?
+  relatedEntityType String?                  @map("related_entity_type")
+  relatedEntityId   String?                  @map("related_entity_id") @db.Uuid
+  taskId            String?                  @map("task_id") @db.Uuid
+  metadata          Json?
+  dedupeKey         String                   @unique @map("dedupe_key")
+  readAt            DateTime?                @map("read_at")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+
+  recipient User  @relation("PersonalNotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  task      Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([recipientUserId, readAt, createdAt(sort: Desc)])
+  @@index([recipientUserId, type, readAt])
+  @@index([taskId, createdAt])
+  @@map("personal_notifications")
   @@schema("erp")
 }
 

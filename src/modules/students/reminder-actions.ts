@@ -5,6 +5,10 @@ import { z } from "zod";
 import { Prisma, TaskStatus } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import {
+  broadcastNotificationChange,
+  createAssignedTaskNotification,
+} from "@/modules/notifications/notification-service";
+import {
   getBakuDateInput,
   getStudentReminderKind,
   parseStudentReminderDate,
@@ -79,6 +83,7 @@ async function createStudentReminderActionImpl(formData: FormData) {
   const reminderMeta = studentReminderMeta[input.kind];
 
   let reminderId: string;
+  let createdRecipientUserId: string | null = null;
 
   try {
     reminderId = await prisma.$transaction(async (tx) => {
@@ -115,8 +120,26 @@ async function createStudentReminderActionImpl(formData: FormData) {
           idempotencyKey: input.idempotencyKey,
           createdById: actor.id,
         },
-        select: { id: true, type: true, dueAt: true, status: true },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          type: true,
+          ownerUserId: true,
+          dueAt: true,
+          status: true,
+        },
       });
+
+      await createAssignedTaskNotification(tx, {
+        id: reminder.id,
+        title: reminder.title,
+        description: reminder.description,
+        ownerUserId: actor.id,
+        dueAt: reminder.dueAt,
+        status: reminder.status,
+      });
+      createdRecipientUserId = actor.id;
 
       await writeAuditLog(tx, {
         actorUserId: actor.id,
@@ -154,6 +177,9 @@ async function createStudentReminderActionImpl(formData: FormData) {
     reminderId = recovered.id;
   }
 
+  if (createdRecipientUserId) {
+    await broadcastNotificationChange(createdRecipientUserId);
+  }
   revalidateStudentReminderPaths(input.studentId);
   return { reminderId };
 }

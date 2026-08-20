@@ -13,6 +13,8 @@ import {
   BarChart3,
   BellRing,
   CalendarClock,
+  ChevronLeft,
+  ChevronRight,
   CirclePause,
   CircleX,
   CreditCard,
@@ -44,6 +46,7 @@ import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { StudentListData } from "@/modules/students/queries";
 import { completeStudentReminderAction } from "@/modules/students/reminder-actions";
 import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
+import { buildStudentPaginationItems } from "@/modules/students/student-pagination";
 
 type StudentRow = StudentListData["students"][number];
 type DashboardTab = "overview" | "list" | "programs";
@@ -83,11 +86,13 @@ export function StudentList({ data }: { data: StudentListData }) {
   function handleTabChange(tab: DashboardTab) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
+    params.delete("page");
     navigate(`/students?${params.toString()}`);
   }
 
   function handleQuickFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("page");
     if (key === "status" && value) {
       params.delete("churn");
     }
@@ -102,6 +107,7 @@ export function StudentList({ data }: { data: StudentListData }) {
 
   function handleDebtQuickFilter() {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("page");
     params.delete("status");
     params.set("payment", "open");
     params.set("tab", "list");
@@ -114,8 +120,17 @@ export function StudentList({ data }: { data: StudentListData }) {
 
   function handleClearDateRange() {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("page");
     params.delete("from");
     params.delete("to");
+    navigate(`/students?${params.toString()}`);
+  }
+
+  function handlePageChange(page: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "list");
+    if (page > 1) params.set("page", page.toString());
+    else params.delete("page");
     navigate(`/students?${params.toString()}`);
   }
 
@@ -285,7 +300,10 @@ export function StudentList({ data }: { data: StudentListData }) {
         total={data.total}
         metrics={data.listMetrics}
         isPreview={activeTab === "overview"}
+        pagination={data.pagination}
+        isPending={isPending}
         onShowAll={() => handleTabChange("list")}
+        onPageChange={handlePageChange}
         onClearFilters={handleClearFilters}
       />
     </section>
@@ -348,14 +366,20 @@ function StudentDataTable({
   total,
   metrics,
   isPreview,
+  pagination,
+  isPending,
   onShowAll,
+  onPageChange,
   onClearFilters,
 }: {
   students: StudentRow[];
   total: number;
   metrics: StudentListData["listMetrics"];
   isPreview: boolean;
+  pagination: StudentListData["pagination"];
+  isPending: boolean;
   onShowAll: () => void;
+  onPageChange: (page: number) => void;
   onClearFilters: () => void;
 }) {
   return (
@@ -475,7 +499,75 @@ function StudentDataTable({
           </Button>
         </div>
       )}
+      {!isPreview && students.length > 0 && pagination.totalPages > 1 ? (
+        <StudentPagination
+          pagination={pagination}
+          total={total}
+          isPending={isPending}
+          onPageChange={onPageChange}
+        />
+      ) : null}
     </article>
+  );
+}
+
+function StudentPagination({
+  pagination,
+  total,
+  isPending,
+  onPageChange,
+}: {
+  pagination: StudentListData["pagination"];
+  total: number;
+  isPending: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const items = buildStudentPaginationItems(pagination.page, pagination.totalPages);
+
+  return (
+    <nav className="students-pagination" aria-label="Tələbə siyahısı səhifələri">
+      <span className="students-pagination-summary">
+        {pagination.from}–{pagination.to} / {total} tələbə
+      </span>
+      <div className="students-pagination-controls">
+        <button
+          type="button"
+          className="students-pagination-button is-direction"
+          disabled={isPending || pagination.page === 1}
+          onClick={() => onPageChange(pagination.page - 1)}
+          aria-label="Əvvəlki səhifə"
+        >
+          <ChevronLeft aria-hidden="true" />
+        </button>
+        {items.map((item) =>
+          typeof item === "number" ? (
+            <button
+              type="button"
+              className="students-pagination-button"
+              data-active={item === pagination.page}
+              disabled={isPending || item === pagination.page}
+              onClick={() => onPageChange(item)}
+              aria-current={item === pagination.page ? "page" : undefined}
+              aria-label={`${item}-ci səhifə`}
+              key={item}
+            >
+              {item}
+            </button>
+          ) : (
+            <span className="students-pagination-ellipsis" aria-hidden="true" key={item}>…</span>
+          ),
+        )}
+        <button
+          type="button"
+          className="students-pagination-button is-direction"
+          disabled={isPending || pagination.page === pagination.totalPages}
+          onClick={() => onPageChange(pagination.page + 1)}
+          aria-label="Növbəti səhifə"
+        >
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -492,7 +584,7 @@ function ActiveFilterBar({
 }) {
   return (
     <div className="students-active-filters" aria-label="Aktiv filtrlər">
-      <span>{data.students.length} nəticə</span>
+      <span>{data.total} nəticə</span>
       {data.filters.status ? (
         <FilterChip label={`Status: ${data.filterLabels.status}`} onRemove={() => onQuickFilter("status", "")} />
       ) : null}

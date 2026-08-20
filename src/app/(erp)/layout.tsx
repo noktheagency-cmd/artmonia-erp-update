@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { signOutAction } from "@/modules/auth/actions";
 import { getAboutProfile } from "@/modules/about/queries";
+import { getNotificationShellCounts } from "@/modules/notifications/queries";
 import { requireErpActor } from "@/server/auth/actor";
 
 export default async function ErpLayout({
@@ -18,11 +19,15 @@ export default async function ErpLayout({
     redirect("/login" as Route);
   }
 
-  const aboutProfile = await getAboutProfile();
+  const [aboutProfile, notificationCounts] = await Promise.all([
+    getAboutProfile(),
+    getNotificationShellCounts(actor.id),
+  ]);
 
   return (
     <AppShell
       currentUser={{
+        id: actor.id,
         fullName: actor.fullName,
         email: actor.email,
         profilePhotoUrl: actor.profilePhotoUrl,
@@ -30,6 +35,7 @@ export default async function ErpLayout({
         permissions: [...actor.permissions.keys()],
       }}
       aboutProfile={aboutProfile}
+      initialNotificationCounts={notificationCounts}
       signOutAction={signOutAction}
       sessionGuardEnabled={Boolean(actor.currentSessionId)}
     >
