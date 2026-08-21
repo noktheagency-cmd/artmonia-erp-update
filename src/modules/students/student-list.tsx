@@ -4,6 +4,7 @@ import { useEffect, useTransition, type CSSProperties } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   AlertCircle,
@@ -14,10 +15,14 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
+  CirclePause,
+  CircleX,
   CreditCard,
   GraduationCap,
   List,
   Snowflake,
+  TrendingUp,
+  UserRoundCheck,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -45,6 +50,26 @@ import { buildStudentPaginationItems } from "@/modules/students/student-paginati
 
 type StudentRow = StudentListData["students"][number];
 type DashboardTab = "overview" | "list" | "programs";
+
+const visibleStatuses = [
+  "ACTIVE",
+  "DEBT",
+  "SLOT_WAITING",
+  "FROZEN",
+  "STOPPED",
+  "DECLINED",
+  "COMPLETED",
+] as const;
+
+const metricIcons: readonly LucideIcon[] = [
+  GraduationCap,
+  CreditCard,
+  Activity,
+  Snowflake,
+  CirclePause,
+  CircleX,
+  UserRoundCheck,
+];
 
 export function StudentList({ data }: { data: StudentListData }) {
   const router = useRouter();
@@ -99,16 +124,6 @@ export function StudentList({ data }: { data: StudentListData }) {
     params.delete("status");
     params.delete("churn");
     params.set("payment", "open");
-    params.set("tab", "list");
-    navigate(`/students?${params.toString()}`);
-  }
-
-  function handleChurnQuickFilter() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("page");
-    params.delete("status");
-    params.delete("payment");
-    params.set("churn", "1");
     params.set("tab", "list");
     navigate(`/students?${params.toString()}`);
   }
@@ -186,44 +201,52 @@ export function StudentList({ data }: { data: StudentListData }) {
         />
       </section>
 
-      {activeTab === "overview" ? (
-        <StudentAuditControl
-          data={data}
-          onDebt={handleDebtQuickFilter}
-          onOverdue={() => handleQuickFilter("payment", "overdue")}
-          onSlotWaiting={() => handleQuickFilter("status", "SLOT_WAITING")}
-        />
-      ) : null}
-
       <section className="students-kpi-grid" aria-label="Tələbə statistika kartları">
-        <button type="button" className="students-kpi students-kpi-blue students-enter" style={sequenceStyle(0)} onClick={() => handleQuickFilter("status", "ACTIVE")}>
+        <article className="students-kpi students-kpi-clv students-enter" style={sequenceStyle(0)}>
           <div className="students-kpi-head">
-            <span>Aktiv tələbələr</span>
+            <span>Orta tələbə CLV-si</span>
             <span className="students-kpi-icon" aria-hidden="true">
-              <GraduationCap />
+              <TrendingUp />
             </span>
           </div>
-          <strong>{data.operations.activeCount}</strong>
+          <strong>{data.clv.averagePaid}</strong>
           <div className="students-kpi-foot">
-            <span>Təhsil davam edir</span>
-            <ArrowRight aria-hidden="true" />
+            <span>Toplam {data.clv.totalPaid}</span>
+            <small>{data.clv.paidMonths} ödəniş ayı</small>
           </div>
-        </button>
-        <button type="button" className="students-kpi students-kpi-coral students-enter" style={sequenceStyle(1)} onClick={handleDebtQuickFilter}>
-          <div className="students-kpi-head"><span>Qalıq borcu olanlar</span><span className="students-kpi-icon" aria-hidden="true"><CreditCard /></span></div>
-          <strong>{data.operations.actionableCount}</strong>
-          <div className="students-kpi-foot"><span>{data.operations.actionableAmount}</span><ArrowRight aria-hidden="true" /></div>
-        </button>
-        <button type="button" className="students-kpi students-kpi-yellow students-enter" style={sequenceStyle(2)} onClick={() => handleQuickFilter("status", "SLOT_WAITING")}>
-          <div className="students-kpi-head"><span>Slot gözləyənlər</span><span className="students-kpi-icon" aria-hidden="true"><Activity /></span></div>
-          <strong>{data.operations.slotWaitingCount}</strong>
-          <div className="students-kpi-foot"><span>Təyinat nəzarəti</span><ArrowRight aria-hidden="true" /></div>
-        </button>
-        <button type="button" className="students-kpi students-kpi-mint students-enter" style={sequenceStyle(3)} onClick={handleChurnQuickFilter}>
-          <div className="students-kpi-head"><span>Dondurulub / dayandırılıb</span><span className="students-kpi-icon" aria-hidden="true"><Snowflake /></span></div>
-          <strong>{data.operations.frozenOrStoppedCount}</strong>
-          <div className="students-kpi-foot"><span>Qayıdış və arxiv nəzarəti</span><ArrowRight aria-hidden="true" /></div>
-        </button>
+        </article>
+
+        {data.statusSummary.map((item, index) => {
+          const Icon = metricIcons[index] ?? UserRoundCheck;
+          return (
+            <button
+              type="button"
+              className={`students-kpi students-kpi-${item.tone} students-enter`}
+              style={sequenceStyle(index + 1)}
+              onClick={() => {
+                if (index === 1) {
+                  handleDebtQuickFilter();
+                  return;
+                }
+                handleQuickFilter("status", visibleStatuses[index] ?? "");
+              }}
+              key={item.label}
+              aria-label={`${item.label} siyahısını aç`}
+            >
+              <div className="students-kpi-head">
+                <span>{item.label}</span>
+                <span className="students-kpi-icon" aria-hidden="true">
+                  <Icon />
+                </span>
+              </div>
+              <strong>{item.value}</strong>
+              <div className="students-kpi-foot">
+                <span>{item.delta}</span>
+                <ArrowRight aria-hidden="true" />
+              </div>
+            </button>
+          );
+        })}
       </section>
 
       <div className="students-view-toolbar">
@@ -264,15 +287,22 @@ export function StudentList({ data }: { data: StudentListData }) {
       {activeTab === "programs" ? (
         <ProgramManager programs={data.createOptions.programs} canManage={data.permissions.canManagePrograms} saveAction={saveProgramAction} deleteAction={deleteProgramAction} />
       ) : activeTab === "overview" ? (
-        <StudentOverviewCharts
-          collectionRate={data.operations.collectionRate}
-          debtCount={data.operations.actionableCount}
-          futureCount={data.operations.futureCount}
-          collectedAmount={data.operations.collectedAmount}
-          expectedAmount={data.operations.expectedAmount}
-          programs={data.operations.programs}
-          teachers={data.operations.teachers}
-        />
+        <>
+          <StudentOverviewCharts
+            collectionRate={data.operations.collectionRate}
+            debtCount={data.operations.actionableCount}
+            futureCount={data.operations.futureCount}
+            collectedAmount={data.operations.collectedAmount}
+            expectedAmount={data.operations.expectedAmount}
+            programs={data.operations.programs}
+            teachers={data.operations.teachers}
+          />
+          <CompactStudentAudit
+            data={data}
+            onOverdue={() => handleQuickFilter("payment", "overdue")}
+            onUnassigned={() => handleQuickFilter("teacher", "unassigned")}
+          />
+        </>
       ) : data.filters.activeCount > 0 ? (
         <ActiveFilterBar
           data={data}
@@ -297,112 +327,65 @@ export function StudentList({ data }: { data: StudentListData }) {
   );
 }
 
-function StudentAuditControl({
+function CompactStudentAudit({
   data,
-  onDebt,
   onOverdue,
-  onSlotWaiting,
+  onUnassigned,
 }: {
   data: StudentListData;
-  onDebt: () => void;
   onOverdue: () => void;
-  onSlotWaiting: () => void;
+  onUnassigned: () => void;
 }) {
   const operations = data.operations;
+  const reminders = data.todayReminders.items;
 
   return (
-    <section className="students-audit-control students-enter" aria-labelledby="students-audit-control-title">
-      <header className="students-audit-control-head">
-        <div className="students-audit-control-title">
-          <span className="students-today-reminders-icon" aria-hidden="true">
-            <BellRing />
-          </span>
-          <div>
-            <span>Cari ay nəzarəti</span>
-            <h2 id="students-audit-control-title">Audit və xatırlatma mərkəzi</h2>
-            <p>{operations.periodLabel} üzrə tələbə əməliyyatları</p>
-          </div>
+    <section className="students-audit-compact students-enter" aria-labelledby="students-audit-compact-title">
+      <header className="students-audit-compact-head">
+        <div>
+          <BellRing aria-hidden="true" />
+          <h2 id="students-audit-compact-title">Audit qeydləri</h2>
+          <span>{operations.periodLabel}</span>
         </div>
-        <span className="students-live-badge">
-          <i aria-hidden="true" /> Canlı · {operations.refreshSeconds} san.
-        </span>
+        <span className="students-live-badge"><i aria-hidden="true" /> Canlı</span>
       </header>
 
-      <div className="students-audit-metrics" aria-label="Avtomatik nəzarət bildirişləri">
-        <button type="button" data-tone="amber" onClick={onSlotWaiting}>
-          <span><Activity /> Slot gözləyir</span>
-          <strong>{operations.slotWaitingCount}</strong>
-          <small>Təyinat tələb olunur</small>
-        </button>
-        <button type="button" data-tone="coral" onClick={onDebt}>
-          <span><CreditCard /> Qalıq borc</span>
-          <strong>{operations.actionableCount}</strong>
-          <small>{operations.actionableAmount}</small>
-        </button>
-        <button type="button" data-tone="danger" onClick={onOverdue}>
-          <span><AlertCircle /> Gecikmiş</span>
-          <strong>{operations.overdueCount}</strong>
-          <small>{operations.overdueAmount}</small>
-        </button>
-        <Link data-tone="blue" href="/finance?type=debts">
-          <span><CalendarClock /> Planlı ödəniş</span>
-          <strong>{operations.futureCount}</strong>
-          <small>{operations.futureAmount} · Maliyyə</small>
-        </Link>
-        <div data-tone="mint">
-          <span><BellRing /> Bugünkü xatırlatma</span>
-          <strong>{data.todayReminders.items.length}</strong>
-          <small>{data.todayReminders.dateLabel}</small>
-        </div>
-      </div>
+      <ul className="students-audit-compact-list">
+        <li data-tone="success">
+          <Banknote aria-hidden="true" />
+          <span>Cari ay planının <strong>{operations.collectionRate}%-i</strong> toplanıb: {operations.collectedAmount} / {operations.expectedAmount}.</span>
+        </li>
+        <li data-tone="danger">
+          <AlertCircle aria-hidden="true" />
+          <span>Ödəniş prioriteti: <button type="button" onClick={onOverdue}>{operations.overdueCount} gecikmiş</button>, {operations.dueTodayCount} bu gün ödənməli, {operations.unscheduledCount} tarixsiz qeyd.</span>
+        </li>
+        <li data-tone="blue">
+          <CalendarClock aria-hidden="true" />
+          <span>Gələcək planlı ödənişlər: <Link href="/finance?type=debts">{operations.futureCount} tələbə · {operations.futureAmount} — Maliyyədə alacaqlara bax</Link>.</span>
+        </li>
+        <li data-tone="amber">
+          <GraduationCap aria-hidden="true" />
+          <span>Təyinat nəzarəti: <button type="button" onClick={onUnassigned}>{operations.activeWithoutTeacherCount} aktiv tələbədə müəllim təyin edilməyib</button>.</span>
+        </li>
+      </ul>
 
-      <div className="students-audit-notices">
-        <div>
-          <strong>{operations.unscheduledCount}</strong>
-          <span>tələbədə ödəniş tarixi yoxdur</span>
-        </div>
-        <div>
-          <strong>{operations.dueTodayCount}</strong>
-          <span>ödəniş bu gün alınmalıdır</span>
-        </div>
-        <div>
-          <strong>{operations.activeWithoutTeacherCount}</strong>
-          <span>aktiv tələbədə müəllim təyin edilməyib</span>
-        </div>
-        <div>
-          <strong>{operations.collectedAmount}</strong>
-          <span>{operations.expectedAmount} planın {operations.collectionRate}%-i toplanıb</span>
-        </div>
-      </div>
-
-      <div className="students-today-reminders-row" aria-label="Bugünkü fərdi xatırlatmalar">
-        {data.todayReminders.items.length > 0 ? data.todayReminders.items.map((reminder) => (
-          <article className="students-today-reminder-card" data-kind={reminder.kind.toLowerCase()} key={reminder.id}>
-            <span className="students-today-reminder-kind" aria-hidden="true">
-              {reminder.kind === "PAYMENT" ? <Banknote /> : <BellRing />}
-            </span>
-            <div className="students-today-reminder-copy">
-              <span>{reminder.kindLabel}</span>
-              <Link href={`/students/${reminder.studentId}` as Route}>
-                {reminder.studentName}
-                <small>{reminder.studentCode}</small>
-              </Link>
-              <p>{reminder.note}</p>
-            </div>
-            {reminder.canComplete ? (
-              <CompleteStudentReminderButton reminderId={reminder.id} studentId={reminder.studentId} action={completeStudentReminderAction} compact />
-            ) : null}
-          </article>
-        )) : (
-          <div className="students-audit-reminder-empty">
-            <span className="students-today-reminders-icon" aria-hidden="true">
-              <BellRing />
-            </span>
-            <div>
-              <strong>Bu gün üçün fərdi xatırlatma yoxdur</strong>
-              <p>Avtomatik audit göstəriciləri yuxarıda işləməyə davam edir.</p>
-            </div>
+      <div className="students-audit-compact-reminders" aria-label="Bugünkü fərdi xatırlatmalar">
+        <strong>{data.todayReminders.dateLabel}:</strong>
+        {reminders.length > 0 ? (
+          <div>
+            {reminders.map((reminder) => (
+              <span key={reminder.id}>
+                <Link href={`/students/${reminder.studentId}` as Route}>
+                  {reminder.studentName} — {reminder.kindLabel.toLocaleLowerCase("az-AZ")}
+                </Link>
+                {reminder.canComplete ? (
+                  <CompleteStudentReminderButton reminderId={reminder.id} studentId={reminder.studentId} action={completeStudentReminderAction} compact />
+                ) : null}
+              </span>
+            ))}
           </div>
+        ) : (
+          <span>bu gün üçün fərdi xatırlatma yoxdur.</span>
         )}
       </div>
     </section>

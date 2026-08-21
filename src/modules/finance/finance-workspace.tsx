@@ -32,6 +32,8 @@ import {
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Line,
@@ -114,7 +116,7 @@ const financeTabs: Array<{
   },
 ];
 
-const financeKpiIcons = [Banknote, ReceiptText, BarChart3, Calculator, AlertTriangle];
+const financeKpiIcons = [Banknote, ReceiptText, BadgeDollarSign, BarChart3, Calculator, AlertTriangle];
 
 const financeCostCenterOptions = [
   { value: "TEACHING", label: "Tədris" },
@@ -1298,7 +1300,7 @@ function CategoryDistributionList({ data }: { data: FinanceData }) {
       helper: `${item.count} qeyd`,
       color: chartPalette[index % chartPalette.length],
     }));
-    return list.slice(0, 5);
+    return list.filter((slice) => slice.value > 0).slice(0, 7);
   }, [data.expenseBreakdown]);
 
   if (slices.length === 0) {
@@ -1306,11 +1308,81 @@ function CategoryDistributionList({ data }: { data: FinanceData }) {
   }
 
   return (
-    <DonutChart
+    <ExpenseBreakdownBarChart
       slices={slices}
-      centerLabel="Cəmi xərc"
-      centerValue={formatChartAmount(sumChartValues(slices))}
     />
+  );
+}
+
+function ExpenseBreakdownBarChart({
+  slices,
+  compact = false,
+}: {
+  slices: ChartSlice[];
+  compact?: boolean;
+}) {
+  const total = sumChartValues(slices);
+  const topShare = total > 0 ? Math.round((slices[0].value / total) * 100) : 0;
+  const reduceMotion = useReducedMotion();
+  const config = {
+    value: { label: "Məbləğ", color: "#5974de" },
+  } satisfies ChartConfig;
+  const chartHeight = Math.max(compact ? 210 : 250, slices.length * (compact ? 38 : 44));
+
+  return (
+    <div className={`finance-expense-bars${compact ? " is-compact" : ""}`}>
+      <div className="finance-expense-bars-meta">
+        <strong>Top kateqoriyalar</strong>
+        <span>{topShare}% ən çox</span>
+      </div>
+      <ChartContainer
+        config={config}
+        className="finance-expense-bars-chart"
+        initialDimension={{ width: 520, height: chartHeight }}
+        style={{ height: chartHeight }}
+      >
+        <BarChart
+          accessibilityLayer
+          data={slices}
+          layout="vertical"
+          margin={{ top: 4, right: 20, bottom: 4, left: 8 }}
+        >
+          <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+          <XAxis
+            type="number"
+            axisLine={false}
+            tickLine={false}
+            tickMargin={8}
+            tickFormatter={formatCompactAmount}
+          />
+          <YAxis
+            type="category"
+            dataKey="label"
+            axisLine={false}
+            tickLine={false}
+            tickMargin={9}
+            width={compact ? 108 : 124}
+          />
+          <ChartTooltip
+            cursor={{ fill: "rgb(89 116 222 / 6%)" }}
+            content={<ChartTooltipContent hideLabel formatter={(value, _name, item) => (
+              <div className="finance-tooltip-value">
+                <span>{item.payload?.label}</span>
+                <strong>{formatChartAmount(Number(value))}</strong>
+              </div>
+            )} />}
+          />
+          <Bar
+            dataKey="value"
+            fill="var(--color-value)"
+            radius={[0, 9, 9, 0]}
+            maxBarSize={compact ? 22 : 26}
+            isAnimationActive={!reduceMotion}
+            animationDuration={850}
+          />
+        </BarChart>
+      </ChartContainer>
+    </div>
   );
 }
 
@@ -2142,6 +2214,7 @@ function ExpenseLedger({
           <thead>
             <tr>
               <th>Kateqoriya</th>
+              <th>Xərc mərkəzi</th>
               <th>Məbləğ</th>
               <th>Tarix</th>
               <th>Ödəniş üsulu</th>
@@ -2160,10 +2233,15 @@ function ExpenseLedger({
                       <span>
                         {expense.sourceKind === "EVENT"
                           ? `${expense.category} · ${expense.workshopEventTitle}`
-                          : `${expense.category} · ${getFinancialClassLabel(expense.financialClass)} · ${getCostCenterLabel(expense.costCenter)}`}
+                          : `${expense.category} · ${getFinancialClassLabel(expense.financialClass)}`}
                       </span>
                       {expense.classificationReviewRequired ? <StatusChip tone="warning">Təsnifat yoxlanmalıdır</StatusChip> : null}
                     </div>
+                  </td>
+                  <td>
+                    <span className="finance-cost-center-chip">
+                      {expense.sourceKind === "EVENT" ? "Tədbir" : getCostCenterLabel(expense.costCenter)}
+                    </span>
                   </td>
                   <td className="finance-money negative">{expense.amount}</td>
                   <td>{expense.expenseDate}</td>
@@ -2190,7 +2268,7 @@ function ExpenseLedger({
               ))
             ) : (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="finance-empty">Seçilmiş filtrlərlə xərc tapılmadı</div>
                 </td>
               </tr>
@@ -2209,7 +2287,8 @@ function ExpenseCategoryChart({
 }) {
   const slices = useMemo<ChartSlice[]>(() => {
     return breakdown
-      .slice(0, 6)
+      .filter((slice) => slice.value > 0)
+      .slice(0, 7)
       .map((slice, index) => ({
         label: slice.label,
         value: slice.value,
@@ -2225,10 +2304,8 @@ function ExpenseCategoryChart({
         <strong>Aktiv filtr üzrə xərc strukturu</strong>
       </div>
       {slices.length > 0 ? (
-        <DonutChart
+        <ExpenseBreakdownBarChart
           slices={slices}
-          centerLabel="Ümumi xərc"
-          centerValue={formatChartAmount(sumChartValues(slices))}
           compact
         />
       ) : (

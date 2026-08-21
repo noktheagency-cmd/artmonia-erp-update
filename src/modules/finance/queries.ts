@@ -1115,6 +1115,7 @@ export async function getFinanceData(
     financingOut,
     legacyLiability,
   });
+  const grossMargin = income > 0 ? (grossProfit / income) * 100 : 0;
   const net = operatingProfit;
   const expenses = expenseRows.map(mapExpenseRow);
   const payrollItems = payrollRows.map(mapExpenseRow);
@@ -1210,33 +1211,39 @@ export async function getFinanceData(
     },
     kpis: [
       {
-        label: "Əsas fəaliyyət gəliri",
+        label: "Revenue",
         value: formatAmount(income),
-        helper: `Təhsil ${formatAmount(studentIncome)} · Tədbirlər ${formatAmount(eventIncome)}`,
+        helper: `Tuition ${formatAmount(studentIncome)} · Events ${formatAmount(eventIncome)}`,
         tone: "success",
       },
       {
-        label: "Ümumi mənfəət",
+        label: "Gross Profit",
         value: formatAmount(grossProfit),
-        helper: `Gəlir − birbaşa xərc ${formatAmount(directCost)}`,
+        helper: `Revenue − direct cost ${formatAmount(directCost)}`,
         tone: grossProfit >= 0 ? "success" : "danger",
       },
       {
-        label: "Əməliyyat mənfəəti",
+        label: "Gross Margin",
+        value: `${grossMargin.toLocaleString("az-AZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`,
+        helper: "Gross Profit / Revenue",
+        tone: grossMargin >= 0 ? "success" : "danger",
+      },
+      {
+        label: "Operating Profit",
         value: formatAmount(operatingProfit),
-        helper: `Əməliyyat xərci ${formatAmount(opex)} · Tədbir xərci ${formatAmount(eventExpense)}`,
+        helper: `OPEX ${formatAmount(opex)} · Event expense ${formatAmount(eventExpense)}`,
         tone: expense > income ? "danger" : "neutral",
       },
       {
-        label: "Net pul hərəkəti",
+        label: "Net Cash Flow",
         value: formatAmount(netCash),
-        helper: `Kapital xərci ${formatAmount(capex)} · Maliyyələşmə net ${formatAmount(financingIn - financingOut - legacyLiability)}`,
+        helper: `CAPEX ${formatAmount(capex)} · Net financing ${formatAmount(financingIn - financingOut - legacyLiability)}`,
         tone: netCash >= 0 ? "success" : "danger",
       },
       {
-        label: "Alacaqlar",
+        label: "Receivables",
         value: formatAmount(debt),
-        helper: `${formatCount(debtorCount)} alacaq qeydi`,
+        helper: `${formatCount(debtorCount)} open records`,
         tone: debt > 0 ? "warning" : "success",
       },
     ],
