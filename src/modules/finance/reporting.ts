@@ -20,3 +20,30 @@ export function getIncomeDescription(
     ? `${personName} — ${sourceLabel}`
     : `${personName} — kurs haqqı`;
 }
+
+export function calculateFinanceStatement(input: {
+  operatingIncome: number;
+  directCost: number;
+  opex: number;
+  capex: number;
+  financingIn: number;
+  financingOut: number;
+  legacyLiability: number;
+}) {
+  const grossProfit = input.operatingIncome - input.directCost;
+  const operatingProfit = grossProfit - input.opex;
+  const netCash =
+    input.operatingIncome +
+    input.financingIn -
+    input.directCost -
+    input.opex -
+    input.capex -
+    input.financingOut -
+    input.legacyLiability;
+
+  return { grossProfit, operatingProfit, netCash };
+}
+
+export function isCashInflow(transactionType: string) {
+  return transactionType === "INCOME" || transactionType === "FINANCING_IN";
+}

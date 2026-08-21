@@ -9,7 +9,7 @@ export function isStudentDebtDue({
   nextPaymentAt: Date | null | undefined;
   today: Date;
 }) {
-  return balance > 0 && Boolean(nextPaymentAt && nextPaymentAt <= today);
+  return balance > 0 && (!nextPaymentAt || nextPaymentAt <= today);
 }
 
 export function resolveStudentPaymentStatus({
@@ -25,8 +25,12 @@ export function resolveStudentPaymentStatus({
     return { label: "Ödənilib", tone: "success" };
   }
 
-  if (!nextPaymentAt || nextPaymentAt > today) {
-    return { label: "Ödəniş tarixi gözlənilir", tone: "neutral" };
+  if (!nextPaymentAt) {
+    return { label: "Qalıq borc", tone: "warning" };
+  }
+
+  if (nextPaymentAt > today) {
+    return { label: "Planlı ödəniş", tone: "neutral" };
   }
 
   if (nextPaymentAt < today) {

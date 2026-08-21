@@ -12,7 +12,6 @@ import {
   GraduationCap,
   LoaderCircle,
   MoreHorizontal,
-  Power,
   Plus,
   RefreshCw,
   Search,
@@ -78,7 +77,6 @@ export function HrWorkspace({
     remove: Action;
     updateTeacherSalary: Action;
     updateTeacher: Action;
-    setTeacherStatus: Action;
     deleteTeacher: Action;
     createBonus: Action;
     adjustBonus: Action;
@@ -317,15 +315,6 @@ export function HrWorkspace({
             canManage={teacherData.permissions.canManageTeacherRules}
             onEdit={setTeacherEditor}
             onEditSalary={setSalaryTeacher}
-            onStatusChange={(teacher) => {
-              const form = new FormData();
-              form.set("id", teacher.id);
-              form.set("status", teacher.isActive ? "INACTIVE" : "ACTIVE");
-              run(
-                () => actions.setTeacherStatus(form),
-                teacher.isActive ? "Müəllim passiv edildi." : "Müəllim aktiv edildi.",
-              );
-            }}
             onDelete={setDeletingTeacher}
           />
         </TabsContent>
@@ -459,11 +448,11 @@ export function HrWorkspace({
         <Dialog open onOpenChange={(open) => !open && setDeletingTeacher(null)}>
           <DialogContent className="hr-confirm-dialog">
             <DialogHeader>
-              <DialogTitle>Müəllimlik statusunu silmək?</DialogTitle>
+              <DialogTitle>Müəllim profilini silmək?</DialogTitle>
               <DialogDescription>
                 {deletingTeacher.fullName} artıq müəllim kimi görünməyəcək.
-                İstifadəçi hesabı, digər rolları, jurnal və maliyyə tarixçəsi qorunacaq.
-                Aktiv təyinat varsa əvvəlcə başqa müəllimə keçirilməlidir.
+                Əməkdaş və istifadəçi hesabı qorunacaq. Aktiv tələbə/slot təyinatı
+                və ya maliyyə-davamiyyət tarixçəsi varsa silinmə bloklanacaq.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -481,7 +470,7 @@ export function HrWorkspace({
                   form.set("id", deletingTeacher.id);
                   run(
                     () => actions.deleteTeacher(form),
-                    "Müəllimlik statusu silindi; digər rollar qorundu.",
+                    "Müəllim profili silindi; digər rollar qorundu.",
                   );
                 }}
               >
@@ -848,14 +837,12 @@ function TeacherTable({
   canManage,
   onEdit,
   onEditSalary,
-  onStatusChange,
   onDelete,
 }: {
   teachers: TeacherDirectoryData["teachers"];
   canManage: boolean;
   onEdit: (teacher: TeacherDirectoryData["teachers"][number]) => void;
   onEditSalary: (teacher: TeacherDirectoryData["teachers"][number]) => void;
-  onStatusChange: (teacher: TeacherDirectoryData["teachers"][number]) => void;
   onDelete: (teacher: TeacherDirectoryData["teachers"][number]) => void;
 }) {
   return (
@@ -869,7 +856,6 @@ function TeacherTable({
               <th>Ödəniş bazası</th>
               <th>Faiz</th>
               <th>Hesablanan maaş</th>
-              <th>Status</th>
               {canManage ? <th /> : null}
             </tr>
           </thead>
@@ -912,15 +898,6 @@ function TeacherTable({
                       {formatMoney(teacher.estimatedSalary)}
                     </strong>
                   </td>
-                  <td>
-                    <Badge
-                      variant="outline"
-                      className={`hr-status is-${teacher.isActive ? "active" : "muted"}`}
-                    >
-                      <i />
-                      {teacher.isActive ? "Aktiv" : "Passiv"}
-                    </Badge>
-                  </td>
                   {canManage ? (
                     <td>
                       <div className="hr-row-actions">
@@ -941,15 +918,6 @@ function TeacherTable({
                           </Button>
                         ) : null}
                         <Button
-                          variant="outline"
-                          size="sm"
-                          aria-label={`${teacher.fullName} ${teacher.isActive ? "passiv" : "aktiv"} et`}
-                          onClick={() => onStatusChange(teacher)}
-                        >
-                          <Power data-icon="inline-start" />
-                          {teacher.isActive ? "Passiv et" : "Aktiv et"}
-                        </Button>
-                        <Button
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`${teacher.fullName} müəllimlik statusunu sil`}
@@ -964,7 +932,7 @@ function TeacherTable({
               ))
             ) : (
               <tr>
-                <td colSpan={canManage ? 7 : 6}>
+                <td colSpan={canManage ? 6 : 5}>
                   <Empty text="Müəllim məlumatı yoxdur." />
                 </td>
               </tr>

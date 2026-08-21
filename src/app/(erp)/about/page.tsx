@@ -1,18 +1,17 @@
 import "@/modules/about/about-page.css";
 import { AboutWorkspace } from "@/modules/about/about-workspace";
-import { getAboutProfile } from "@/modules/about/queries";
-import { requireErpActor } from "@/server/auth/actor";
+import { getCompanyKnowledgeData } from "@/modules/about/queries";
+import { isPrivilegedActor, requireErpActor } from "@/server/auth/actor";
 
 export default async function AboutPage() {
-  const [profile, actor] = await Promise.all([
-    getAboutProfile(),
-    requireErpActor(),
-  ]);
+  const actor = await requireErpActor();
+  const canEdit = isPrivilegedActor(actor);
+  const data = await getCompanyKnowledgeData(canEdit);
 
   return (
     <AboutWorkspace
-      initialProfile={profile}
-      canEdit={actor.roles.includes("SUPER_ADMIN")}
+      initialData={data}
+      canEdit={canEdit}
     />
   );
 }

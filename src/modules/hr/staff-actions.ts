@@ -132,13 +132,10 @@ async function updateStaffActionImpl(formData: FormData) {
           include: { hrEmployee: { select: { id: true } } },
         });
         if (reusableTeacher) {
-          const isRemovedProfile = !reusableTeacher.isActive
-            && !reusableTeacher.userId
-            && !reusableTeacher.hrEmployee;
           const isSameUnlinkedUser = Boolean(before.userId)
             && reusableTeacher.userId === before.userId
             && !reusableTeacher.hrEmployee;
-          if (!isRemovedProfile && !isSameUnlinkedUser) {
+          if (!isSameUnlinkedUser) {
             throw new PublicActionError("Bu ad və ya ERP hesabı başqa müəllim profilinə bağlıdır", "CONFLICT");
           }
           if (reusableTeacher.hrEmployee?.id && reusableTeacher.hrEmployee.id !== input.id) {
@@ -174,10 +171,7 @@ async function updateStaffActionImpl(formData: FormData) {
 
       if (leavingTeacher && before.teacherId) {
         await assertTeacherCanBeRemoved(tx, before.teacherId);
-        await tx.teacher.update({
-          where: { id: before.teacherId },
-          data: { isActive: false, userId: null },
-        });
+        await tx.teacher.delete({ where: { id: before.teacherId } });
         nextTeacherId = null;
         teacherIdForRecalculation = null;
       }
@@ -210,7 +204,7 @@ async function updateStaffActionImpl(formData: FormData) {
           teacherId: nextTeacherId,
         } as Prisma.InputJsonValue,
         reason: leavingTeacher
-          ? "Əməkdaşın müəllimlik profili deaktiv edildi"
+          ? "Əməkdaşın müəllim profili silindi"
           : becomingTeacher
             ? "Əməkdaşa müəllimlik statusu əlavə edildi"
             : "Əməkdaş profili yeniləndi",
@@ -275,13 +269,22 @@ async function syncTeacherSalaryRule(
 }
 
 async function assertTeacherCanBeRemoved(tx: Prisma.TransactionClient, teacherId: string) {
-  const [activeClassSlots, activeEnrollments] = await Promise.all([
+  const [activeClassSlots, activeEnrollments, attendanceRecords, bonusCohorts, payouts] = await Promise.all([
     tx.classSlot.count({ where: { teacherId } }),
     tx.enrollment.count({ where: { teacherId, status: "ACTIVE" } }),
+    tx.attendanceRecord.count({ where: { teacherId } }),
+    tx.hrBonusTeacherCohort.count({ where: { teacherId } }),
+    tx.teacherPayout.count({ where: { teacherId } }),
   ]);
   if (activeClassSlots || activeEnrollments) {
     throw new PublicActionError(
       "Müəllimlik statusunu silməzdən əvvəl slot və tələbə təyinatlarını başqa müəllimə keçirin",
+      "CONFLICT",
+    );
+  }
+  if (attendanceRecords || bonusCohorts || payouts) {
+    throw new PublicActionError(
+      "Bu müəllimin maliyyə və ya davamiyyət tarixçəsi var; profil silinə bilməz",
       "CONFLICT",
     );
   }

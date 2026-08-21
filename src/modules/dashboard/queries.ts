@@ -269,6 +269,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         where fe.expense_date >= ${periodStart}
           and fe.expense_date < ${periodEndExclusive}
           and fe.voided_at is null
+          and fe.financial_class in ('DIRECT_COST'::"erp"."FinanceFinancialClass", 'OPEX'::"erp"."FinanceFinancialClass")
       ), 0) as "periodExpenses",
       coalesce((
         select sum(fe.amount)
@@ -277,6 +278,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           and fe.expense_date < ${periodEndExclusive}
           and fe.voided_at is null
           and fe.workshop_event_id is null
+          and fe.financial_class in ('DIRECT_COST'::"erp"."FinanceFinancialClass", 'OPEX'::"erp"."FinanceFinancialClass")
       ), 0) as "periodOperatingExpenses",
       coalesce((
         select sum(fe.amount)
@@ -285,6 +287,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           and fe.expense_date < ${periodEndExclusive}
           and fe.voided_at is null
           and fe.workshop_event_id is not null
+          and fe.financial_class in ('DIRECT_COST'::"erp"."FinanceFinancialClass", 'OPEX'::"erp"."FinanceFinancialClass")
       ), 0) as "periodWorkshopExpenses",
       coalesce((
         select sum(p.amount)
@@ -304,6 +307,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         where fe.expense_date >= ${previousPeriodStart}
           and fe.expense_date < ${previousPeriodEndExclusive}
           and fe.voided_at is null
+          and fe.financial_class in ('DIRECT_COST'::"erp"."FinanceFinancialClass", 'OPEX'::"erp"."FinanceFinancialClass")
       ), 0) as "previousPeriodExpenses",
       coalesce((
         select sum(i.balance_due)
@@ -350,6 +354,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           where fe.expense_date >= ${firstRevenueMonth}
             and fe.expense_date < ${nextRevenueMonth}
             and fe.voided_at is null
+            and fe.financial_class in ('DIRECT_COST'::"erp"."FinanceFinancialClass", 'OPEX'::"erp"."FinanceFinancialClass")
           group by date_trunc('month', fe.expense_date)::date
         ) expense
       ), '[]'::jsonb) as "expenseRows",

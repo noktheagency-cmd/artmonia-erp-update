@@ -372,7 +372,10 @@ const eventAggregateCte = Prisma.sql`
   ),
   expense_totals as (
     select workshop_event_id as event_id,
-      coalesce(sum(amount) filter (where voided_at is null), 0) as expense
+      coalesce(sum(amount) filter (
+        where voided_at is null
+          and financial_class in ('DIRECT_COST'::"erp"."FinanceFinancialClass", 'OPEX'::"erp"."FinanceFinancialClass")
+      ), 0) as expense
     from erp.finance_expenses
     where workshop_event_id is not null
     group by workshop_event_id
@@ -604,7 +607,14 @@ export async function getWorkshopDetailData(
       order by c.full_name asc limit 500
     `),
     permissions.canManageFinance
-      ? prisma.financeExpenseCategory.findMany({ orderBy: [{ isSystem: "desc" }, { name: "asc" }] })
+      ? prisma.financeExpenseCategory.findMany({
+          where: {
+            isActive: true,
+            requiresProject: true,
+            transactionType: { not: "INCOME" },
+          },
+          orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+        })
       : Promise.resolve([]),
     prisma.$queryRaw<Array<{ eventType: string }>>(Prisma.sql`
       select distinct coalesce(category, event_type::text) as "eventType"

@@ -4,7 +4,10 @@ import { revalidatePath, updateTag } from "next/cache";
 import type { Route } from "next";
 import { z } from "zod";
 import {
+  FinanceCostCenter,
+  FinanceFinancialClass,
   FinanceSalaryMode,
+  FinanceTransactionType,
   InvoiceStatus,
   PaymentAllocationMode,
   PaymentMethod,
@@ -35,11 +38,6 @@ import { uploadReceipt } from "@/server/storage/erp-files";
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
 
-const optionalUuid = z.preprocess(
-  optionalFormString,
-  z.string().uuid().optional()
-);
-
 const optionalAmount = z.preprocess((value) => {
   const normalized = optionalFormString(value);
   return normalized ? parseAmountInput(normalized) : undefined;
@@ -47,7 +45,57 @@ const optionalAmount = z.preprocess((value) => {
 
 const expenseCategorySchema = z.object({
   id: z.preprocess(optionalFormString, z.string().uuid().optional()),
+  code: z.string().trim().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
   name: z.string().trim().min(2).max(80),
+  description: optionalText(300),
+  transactionType: z.enum([
+    FinanceTransactionType.INCOME,
+    FinanceTransactionType.EXPENSE,
+    FinanceTransactionType.CAPEX_OUT,
+    FinanceTransactionType.FINANCING_IN,
+    FinanceTransactionType.FINANCING_OUT,
+  ]),
+  financialClass: z.preprocess(optionalFormString, z.enum([
+    FinanceFinancialClass.DIRECT_COST,
+    FinanceFinancialClass.OPEX,
+    FinanceFinancialClass.CAPEX,
+    FinanceFinancialClass.FINANCING,
+    FinanceFinancialClass.LEGACY_LIABILITY,
+  ]).optional()),
+  isActive: z.preprocess((value) => value === "true" || value === "on", z.boolean()),
+  requiresStaff: z.preprocess((value) => value === "true" || value === "on", z.boolean()),
+  requiresProject: z.preprocess((value) => value === "true" || value === "on", z.boolean()),
+}).superRefine((value, context) => {
+  if (value.transactionType === FinanceTransactionType.INCOME && value.financialClass) {
+    context.addIssue({ code: "custom", message: "Gəlir kateqoriyasına xərc sinfi verilə bilməz" });
+  }
+  if (value.transactionType !== FinanceTransactionType.INCOME && !value.financialClass) {
+    context.addIssue({ code: "custom", message: "Maliyyə sinfi seçilməlidir" });
+  }
+  if (
+    value.transactionType === FinanceTransactionType.EXPENSE &&
+    value.financialClass !== FinanceFinancialClass.DIRECT_COST &&
+    value.financialClass !== FinanceFinancialClass.OPEX
+  ) {
+    context.addIssue({ code: "custom", message: "Adi xərc yalnız birbaşa və ya əməliyyat xərci ola bilər" });
+  }
+  if (
+    value.transactionType === FinanceTransactionType.CAPEX_OUT &&
+    value.financialClass !== FinanceFinancialClass.CAPEX
+  ) {
+    context.addIssue({ code: "custom", message: "Kapital çıxışı kapital investisiyası kimi təsnif edilməlidir" });
+  }
+  if (
+    (value.transactionType === FinanceTransactionType.FINANCING_IN ||
+      value.transactionType === FinanceTransactionType.FINANCING_OUT) &&
+    value.financialClass !== FinanceFinancialClass.FINANCING &&
+    !(
+      value.transactionType === FinanceTransactionType.FINANCING_OUT &&
+      value.financialClass === FinanceFinancialClass.LEGACY_LIABILITY
+    )
+  ) {
+    context.addIssue({ code: "custom", message: "Maliyyələşmə hərəkətinin uyğun maliyyə sinfi seçilməlidir" });
+  }
 });
 
 async function saveFinanceExpenseCategoryActionImpl(formData: FormData) {
@@ -59,11 +107,17 @@ async function saveFinanceExpenseCategoryActionImpl(formData: FormData) {
     if (!input.id) {
       const created = await tx.financeExpenseCategory.create({
         data: {
+          code: input.code,
           name: input.name,
-          description: "Dropdown daxilindən əlavə edildi",
+          description: input.description ?? null,
+          transactionType: input.transactionType,
+          financialClass: input.financialClass ?? null,
+          isActive: input.isActive,
           isSystem: false,
+          requiresStaff: input.requiresStaff,
+          requiresProject: input.requiresProject,
         },
-        select: { id: true, name: true, isSystem: true },
+        select: { id: true, code: true, name: true, isSystem: true, isActive: true },
       });
       await writeAuditLog(tx, {
         actorUserId: actor.id,
@@ -77,14 +131,21 @@ async function saveFinanceExpenseCategoryActionImpl(formData: FormData) {
 
     const current = await tx.financeExpenseCategory.findUnique({
       where: { id: input.id },
-      select: { id: true, name: true, isSystem: true },
+      select: { id: true, code: true, name: true, isSystem: true, isActive: true },
     });
     if (!current) throw new PublicActionError("Xərc kateqoriyası tapılmadı.", "NOT_FOUND");
-    if (current.isSystem) throw new PublicActionError("Sistem kateqoriyasının adı dəyişdirilə bilməz.");
     const updated = await tx.financeExpenseCategory.update({
       where: { id: current.id },
-      data: { name: input.name },
-      select: { id: true, name: true, isSystem: true },
+      data: {
+        name: input.name,
+        description: input.description ?? null,
+        transactionType: input.transactionType,
+        financialClass: input.financialClass ?? null,
+        isActive: input.isActive,
+        requiresStaff: input.requiresStaff,
+        requiresProject: input.requiresProject,
+      },
+      select: { id: true, code: true, name: true, isSystem: true, isActive: true },
     });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -112,14 +173,13 @@ async function deleteFinanceExpenseCategoryActionImpl(formData: FormData) {
       select: { id: true, name: true, isSystem: true, _count: { select: { expenses: true } } },
     });
     if (!current) throw new PublicActionError("Xərc kateqoriyası tapılmadı.", "NOT_FOUND");
-    if (current.isSystem) throw new PublicActionError("Sistem kateqoriyası silinə bilməz.");
-    if (current._count.expenses > 0) {
-      throw new PublicActionError("Bu kateqoriya xərc qeydlərində istifadə olunur və silinə bilməz.", "CONFLICT");
-    }
-    await tx.financeExpenseCategory.delete({ where: { id } });
+    await tx.financeExpenseCategory.update({
+      where: { id },
+      data: { isActive: false },
+    });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
-      action: "finance.expense_category.delete",
+      action: "finance.expense_category.deactivate",
       entityType: "finance_expense_category",
       entityId: current.id,
       before: { id: current.id, name: current.name },
@@ -132,14 +192,7 @@ async function deleteFinanceExpenseCategoryActionImpl(formData: FormData) {
 }
 
 async function requireExpenseCategoryActor() {
-  const actor = await requireMutationActor();
-  if (
-    !actor.permissions.has("billing.expense.create") &&
-    !actor.permissions.has("workshop.finance.manage")
-  ) {
-    throw new PublicActionError("Xərc kateqoriyalarını idarə etmək icazəniz yoxdur.", "FORBIDDEN");
-  }
-  return actor;
+  return requireMutationActor("billing.category.manage");
 }
 
 const requiredAmount = z.preprocess(
@@ -171,13 +224,19 @@ const deleteFinancePaymentSchema = z.object({
 
 const createExpenseSchema = z.object({
   idempotencyKey: z.string().uuid(),
-  categoryId: optionalUuid,
-  newCategoryName: optionalText(80),
+  categoryId: z.string().uuid(),
   amount: requiredAmount,
   expenseDate: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
   vendor: optionalText(120),
-  description: optionalText(700),
+  description: z.string().trim().min(3).max(700),
+  costCenter: z.enum([
+    FinanceCostCenter.TEACHING,
+    FinanceCostCenter.SALES,
+    FinanceCostCenter.MARKETING,
+    FinanceCostCenter.OPERATIONS,
+    FinanceCostCenter.MANAGEMENT,
+  ]),
   staffTarget: optionalText(80),
   salaryMode: z
     .enum([
@@ -253,49 +312,35 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
   const expenseDate = parseDateInput(input.expenseDate, "Xərc tarixi");
   const staff = parseStaffTarget(input.staffTarget);
 
-  if (!input.categoryId && !input.newCategoryName) {
-    throw new Error("Xərc kateqoriyası seçilməlidir");
-  }
-
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
-    const category = input.newCategoryName
-      ? await tx.financeExpenseCategory.upsert({
-          where: { name: input.newCategoryName },
-          create: {
-            name: input.newCategoryName,
-            description: "Maliyyə modulundan əlavə edildi",
-            isSystem: false,
-          },
-          update: {},
-          select: { id: true, name: true },
-        })
-      : await tx.financeExpenseCategory.findUnique({
-          where: { id: input.categoryId },
-          select: { id: true, name: true },
-        });
-
-    if (!category) {
-      throw new Error("Xərc kateqoriyası tapılmadı");
-    }
-
-    const usesPayrollFlow = isPayrollCategoryName(category.name);
+    const category = await resolveFinanceMovementCategory(tx, input.categoryId);
+    const usesPayrollFlow = category.requiresStaff;
     const expenseStaff = usesPayrollFlow
       ? staff
       : { employeeUserId: null, teacherId: null };
     const salarySnapshot = usesPayrollFlow
       ? await resolveStaffSalarySnapshot(tx, staff, expenseDate)
       : emptySalarySnapshot();
+    const vendor = salarySnapshot.payeeName ?? input.vendor;
+
+    if (!vendor) {
+      throw new PublicActionError("Kimə ödəniş edildiyi qeyd olunmalıdır.");
+    }
 
     const expense = await tx.financeExpense.create({
       data: {
         categoryId: category.id,
+        transactionType: category.transactionType,
+        financialClass: category.financialClass,
+        costCenter: input.costCenter,
+        classificationReviewRequired: false,
         amount: input.amount,
         expenseDate,
         method: input.method as PaymentMethod,
-        vendor: input.vendor ?? null,
-        description: input.description ?? null,
+        vendor,
+        description: input.description,
         employeeUserId: expenseStaff.employeeUserId,
         teacherId: expenseStaff.teacherId,
         salaryMode: salarySnapshot.salaryMode,
@@ -323,7 +368,11 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
       entityType: "finance_expense",
       entityId: expense.id,
       after: {
+        categoryCode: category.code,
         category: category.name,
+        transactionType: category.transactionType,
+        financialClass: category.financialClass,
+        costCenter: input.costCenter,
         amount: toNumber(expense.amount),
         expenseDate: expense.expenseDate.toISOString(),
         method: expense.method,
@@ -333,7 +382,7 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
         receiptFileName: receipt?.fileName ?? null,
         receiptReference: input.receiptReference ?? null,
       } satisfies Prisma.InputJsonValue,
-      reason: input.description ?? `${category.name} xərc qeydi yaradıldı`,
+      reason: input.description,
     });
   });
 
@@ -522,10 +571,6 @@ async function updateFinanceExpenseActionImpl(formData: FormData) {
   const expenseDate = parseDateInput(input.expenseDate, "Xərc tarixi");
   const staff = parseStaffTarget(input.staffTarget);
 
-  if (!input.categoryId && !input.newCategoryName) {
-    throw new Error("Xərc kateqoriyası seçilməlidir");
-  }
-
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
@@ -549,43 +594,33 @@ async function updateFinanceExpenseActionImpl(formData: FormData) {
       throw new Error("Xərc qeydi tapılmadı");
     }
 
-    const category = input.newCategoryName
-      ? await tx.financeExpenseCategory.upsert({
-          where: { name: input.newCategoryName },
-          create: {
-            name: input.newCategoryName,
-            description: "Maliyyə modulundan əlavə edildi",
-            isSystem: false,
-          },
-          update: {},
-          select: { id: true, name: true },
-        })
-      : await tx.financeExpenseCategory.findUnique({
-          where: { id: input.categoryId },
-          select: { id: true, name: true },
-        });
-
-    if (!category) {
-      throw new Error("Xərc kateqoriyası tapılmadı");
-    }
-
-    const usesPayrollFlow = isPayrollCategoryName(category.name);
+    const category = await resolveFinanceMovementCategory(tx, input.categoryId);
+    const usesPayrollFlow = category.requiresStaff;
     const expenseStaff = usesPayrollFlow
       ? staff
       : { employeeUserId: null, teacherId: null };
     const salarySnapshot = usesPayrollFlow
       ? await resolveStaffSalarySnapshot(tx, staff, expenseDate)
       : emptySalarySnapshot();
+    const vendor = salarySnapshot.payeeName ?? input.vendor;
+
+    if (!vendor) {
+      throw new PublicActionError("Kimə ödəniş edildiyi qeyd olunmalıdır.");
+    }
 
     const expense = await tx.financeExpense.update({
       where: { id: existing.id },
       data: {
         categoryId: category.id,
+        transactionType: category.transactionType,
+        financialClass: category.financialClass,
+        costCenter: input.costCenter,
+        classificationReviewRequired: false,
         amount: input.amount,
         expenseDate,
         method: input.method as PaymentMethod,
-        vendor: input.vendor ?? null,
-        description: input.description ?? null,
+        vendor,
+        description: input.description,
         employeeUserId: expenseStaff.employeeUserId,
         teacherId: expenseStaff.teacherId,
         salaryMode: salarySnapshot.salaryMode,
@@ -611,12 +646,16 @@ async function updateFinanceExpenseActionImpl(formData: FormData) {
         method: existing.method,
       } satisfies Prisma.InputJsonValue,
       after: {
+        categoryCode: category.code,
         category: category.name,
+        transactionType: category.transactionType,
+        financialClass: category.financialClass,
+        costCenter: input.costCenter,
         amount: toNumber(expense.amount),
         expenseDate: expense.expenseDate.toISOString(),
         method: expense.method,
       } satisfies Prisma.InputJsonValue,
-      reason: input.description ?? "Xərc qeydi düzəliş edildi",
+      reason: input.description,
     });
   });
 
@@ -628,7 +667,7 @@ async function updateFinanceExpenseActionImpl(formData: FormData) {
 }
 
 async function deleteFinanceExpenseActionImpl(formData: FormData) {
-  const actor = await requireMutationActor("billing.expense.create");
+  const actor = await requireMutationActor("billing.expense.void");
   const input = deleteExpenseSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
 
@@ -643,18 +682,29 @@ async function deleteFinanceExpenseActionImpl(formData: FormData) {
         method: true,
         vendor: true,
         description: true,
+        voidedAt: true,
       },
     });
 
     if (!expense) {
       throw new Error("Xərc qeydi tapılmadı");
     }
+    if (expense.voidedAt) {
+      throw new PublicActionError("Bu maliyyə hərəkəti artıq ləğv edilib.");
+    }
 
-    await tx.financeExpense.delete({ where: { id: expense.id } });
+    await tx.financeExpense.update({
+      where: { id: expense.id },
+      data: {
+        voidedAt: new Date(),
+        voidedById: actor.id,
+        voidReason: "Maliyyə ekranından ləğv edildi",
+      },
+    });
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
-      action: "finance.expense.delete",
+      action: "finance.expense.void",
       entityType: "finance_expense",
       entityId: expense.id,
       before: {
@@ -665,7 +715,7 @@ async function deleteFinanceExpenseActionImpl(formData: FormData) {
         vendor: expense.vendor,
         description: expense.description,
       } satisfies Prisma.InputJsonValue,
-      reason: "Xərc qeydi silindi",
+      reason: "Maliyyə hərəkəti ləğv edildi",
     });
   });
 
@@ -1013,8 +1063,43 @@ async function createPaymentAndAllocate(
   };
 }
 
+async function resolveFinanceMovementCategory(
+  tx: Prisma.TransactionClient,
+  categoryId: string
+) {
+  const category = await tx.financeExpenseCategory.findUnique({
+    where: { id: categoryId },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      isActive: true,
+      transactionType: true,
+      financialClass: true,
+      requiresStaff: true,
+      requiresProject: true,
+    },
+  });
+
+  if (!category || !category.isActive) {
+    throw new PublicActionError("Seçilmiş kateqoriya aktiv deyil və ya tapılmadı.");
+  }
+  if (category.transactionType === FinanceTransactionType.INCOME) {
+    throw new PublicActionError("Əsas fəaliyyət gəliri ödəniş və tədbir satışları bölməsindən qeydə alınmalıdır.");
+  }
+  if (!category.financialClass) {
+    throw new PublicActionError("Kateqoriyanın maliyyə sinfi təyin edilməyib.");
+  }
+  if (category.requiresProject) {
+    throw new PublicActionError("Bu kateqoriya yalnız tədbir və ya layihə daxilində istifadə oluna bilər.");
+  }
+
+  return { ...category, financialClass: category.financialClass };
+}
+
 function emptySalarySnapshot() {
   return {
+    payeeName: null,
     salaryMode: FinanceSalaryMode.NONE,
     salaryPercent: null,
     salaryBaseAmount: null,
@@ -1034,7 +1119,14 @@ async function resolveStaffSalarySnapshot(
   if (staff.employeeUserId) {
     const employee = await tx.hrEmployee.findUnique({
       where: { userId: staff.employeeUserId },
-      select: { id: true, salaryMode: true, salaryAmount: true, salaryPercent: true, user: { select: { isActive: true } } },
+      select: {
+        id: true,
+        fullName: true,
+        salaryMode: true,
+        salaryAmount: true,
+        salaryPercent: true,
+        user: { select: { isActive: true } },
+      },
     });
 
     if (!employee?.user?.isActive) {
@@ -1058,6 +1150,7 @@ async function resolveStaffSalarySnapshot(
       : roundMoney(toNumber(employee.salaryAmount));
 
     return {
+      payeeName: employee.fullName,
       salaryMode: employee.salaryMode,
       salaryPercent: employee.salaryMode === FinanceSalaryMode.PERCENT ? salaryPercent : null,
       salaryBaseAmount: employee.salaryMode === FinanceSalaryMode.PERCENT ? salaryBase : salaryAmount,
@@ -1068,7 +1161,7 @@ async function resolveStaffSalarySnapshot(
   const periodMonth = startOfMonth(expenseDate);
   const teacher = await tx.teacher.findUnique({
     where: { id: staff.teacherId ?? "" },
-    select: { id: true, isActive: true },
+    select: { id: true, fullName: true, isActive: true },
   });
 
   if (!teacher?.isActive) {
@@ -1121,6 +1214,7 @@ async function resolveStaffSalarySnapshot(
       );
 
   return {
+    payeeName: teacher.fullName,
     salaryMode: FinanceSalaryMode.PERCENT,
     salaryPercent,
     salaryBaseAmount,
@@ -1157,37 +1251,6 @@ function parseStaffTarget(value: string | undefined) {
   }
 
   throw new Error("Əməkdaş seçimi düzgün deyil");
-}
-
-function isPayrollCategoryName(value: string) {
-  const normalized = normalizeKeyword(value);
-  return [
-    "maas",
-    "emekhaqqi",
-    "emek haqqi",
-    "salary",
-    "payroll",
-    "isci",
-    "işçi",
-    "əməkdaş",
-    "employee",
-    "staff",
-    "worker",
-  ].some((keyword) => normalized.includes(keyword));
-}
-
-function normalizeKeyword(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[ə]/g, "e")
-    .replace(/[ı]/g, "i")
-    .replace(/[ş]/g, "s")
-    .replace(/[ç]/g, "c")
-    .replace(/[ğ]/g, "g")
-    .replace(/[ö]/g, "o")
-    .replace(/[ü]/g, "u");
 }
 
 async function persistReceiptFile(

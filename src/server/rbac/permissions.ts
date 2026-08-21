@@ -51,6 +51,7 @@ export const permissionDefinitions = define([
   { code: "billing.expense.read", module: "finance", moduleLabel: "Maliyyə", tab: "expenses", tabLabel: "Xərclər", action: "read", actionLabel: "Görə bilər", description: "Xərcləri görmək", sensitive: true },
   { code: "billing.expense.create", module: "finance", moduleLabel: "Maliyyə", tab: "expenses", tabLabel: "Xərclər", action: "create", actionLabel: "Əlavə edə bilər", description: "Xərc yaratmaq", sensitive: true, dependsOn: "billing.expense.read" },
   { code: "billing.expense.void", module: "finance", moduleLabel: "Maliyyə", tab: "expenses", tabLabel: "Xərclər", action: "delete", actionLabel: "Ləğv edə bilər", description: "Xərci ləğv etmək", sensitive: true, dependsOn: "billing.expense.read" },
+  { code: "billing.category.manage", module: "finance", moduleLabel: "Maliyyə", tab: "expenses", tabLabel: "Xərclər", action: "special", actionLabel: "Kateqoriyaları idarə edə bilər", description: "Nəzarətli maliyyə kateqoriya kataloqunu idarə etmək", sensitive: true, dependsOn: "billing.expense.read" },
   { code: "billing.adjustment.request", module: "finance", moduleLabel: "Maliyyə", tab: "payments", tabLabel: "Ödənişlər", action: "special", actionLabel: "Düzəliş tələb edə bilər", description: "Refund və düzəliş istəyi", sensitive: true, dependsOn: "billing.payment.read" },
   { code: "billing.adjustment.approve.finance", module: "finance", moduleLabel: "Maliyyə", tab: "payments", tabLabel: "Ödənişlər", action: "special", actionLabel: "Finance təsdiqi", description: "Maliyyə təsdiqi vermək", sensitive: true, dependsOn: "billing.payment.read" },
   { code: "billing.adjustment.approve.owner", module: "finance", moduleLabel: "Maliyyə", tab: "payments", tabLabel: "Ödənişlər", action: "special", actionLabel: "Owner təsdiqi", description: "Owner təsdiqi vermək", sensitive: true, dependsOn: "billing.payment.read" },
@@ -136,6 +137,9 @@ legacyRolePermissionMap[AppRole.OWNER].unshift("hr.corporate.read", "hr.corporat
 legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.corporate.read", "hr.corporate.manage");
 legacyRolePermissionMap[AppRole.FINANCE].unshift("hr.corporate.read");
 legacyRolePermissionMap[AppRole.AUDITOR].unshift("hr.corporate.read");
+legacyRolePermissionMap[AppRole.OWNER].unshift("billing.category.manage");
+legacyRolePermissionMap[AppRole.ADMIN].unshift("billing.category.manage");
+legacyRolePermissionMap[AppRole.FINANCE].unshift("billing.category.manage");
 legacyRolePermissionMap[AppRole.OWNER].unshift("hr.note.read", "hr.note.manage", "hr.document.read", "hr.document.manage");
 legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.note.read", "hr.note.manage", "hr.document.read", "hr.document.manage");
 

@@ -1,6 +1,6 @@
 import { getTeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 import { getHrEmployeeData } from "@/modules/hr/employee-data";
-import { deleteEmployeeAction, deleteTeacherAction, setTeacherStatusAction, updateTeacherAction, updateTeacherSalaryRuleAction } from "@/modules/hr/actions";
+import { deleteEmployeeAction, deleteTeacherAction, updateTeacherAction, updateTeacherSalaryRuleAction } from "@/modules/hr/actions";
 import { createStaffAction, updateStaffAction } from "@/modules/hr/staff-actions";
 import {
   addBonusProgressAdjustmentAction,
@@ -27,5 +27,5 @@ export default async function HrPage() {
     getCorporateCustomerData(),
   ]);
 
-  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} corporateData={corporateData} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, setTeacherStatus: setTeacherStatusAction, deleteTeacher: deleteTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction, createCorporate: createCorporateCustomerAction, updateCorporate: updateCorporateCustomerAction, deleteCorporate: deleteCorporateCustomerAction }} />;
+  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} corporateData={corporateData} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, deleteTeacher: deleteTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction, createCorporate: createCorporateCustomerAction, updateCorporate: updateCorporateCustomerAction, deleteCorporate: deleteCorporateCustomerAction }} />;
 }

@@ -152,30 +152,6 @@ async function updateTeacherActionImpl(formData: FormData) {
   revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance");
 }
 
-async function setTeacherStatusActionImpl(formData: FormData) {
-  const actor = await requireMutationActor("teacher.rule.manage");
-  const input = z.object({
-    id: z.string().uuid(),
-    status: z.enum(["ACTIVE", "INACTIVE"]),
-  }).parse(Object.fromEntries(formData));
-  await getPrisma().$transaction(async (tx) => {
-    const before = await tx.teacher.findUnique({ where: { id: input.id } });
-    if (!before) throw new PublicActionError("Müəllim tapılmadı", "NOT_FOUND");
-    const isActive = input.status === "ACTIVE";
-    await tx.teacher.update({ where: { id: input.id }, data: { isActive } });
-    await writeAuditLog(tx, {
-      actorUserId: actor.id,
-      action: isActive ? "teacher.activate" : "teacher.deactivate",
-      entityType: "teacher",
-      entityId: input.id,
-      before: { isActive: before.isActive },
-      after: { isActive },
-      reason: isActive ? "Müəllim profili aktiv edildi" : "Müəllim profili passiv edildi",
-    });
-  });
-  revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance");
-}
-
 async function deleteTeacherActionImpl(formData: FormData) {
   const actor = await requireMutationActor("teacher.rule.manage");
   const id = z.string().uuid().parse(formData.get("id"));
@@ -215,10 +191,7 @@ async function deleteTeacherActionImpl(formData: FormData) {
     if (userId && teacherRole) {
       await tx.userRole.deleteMany({ where: { userId, roleId: teacherRole.id } });
     }
-    await tx.teacher.update({
-      where: { id },
-      data: { isActive: false, userId: null },
-    });
+    await tx.teacher.delete({ where: { id } });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "teacher.delete",
@@ -231,24 +204,33 @@ async function deleteTeacherActionImpl(formData: FormData) {
         roles: linkedUser?.roles.map(({ role }) => role.name) ?? [],
       },
       after: {
-        teacherIndicatorRemoved: true,
+        teacherProfileDeleted: true,
         preservedRoles: otherRoleNames,
         hrEmployeeId: teacher.hrEmployee?.id ?? null,
       },
-      reason: "Müəllimlik statusu silindi; istifadəçi hesabı və digər rollar qorundu",
+      reason: "Müəllim profili silindi; istifadəçi hesabı və digər rollar qorundu",
     });
   });
   revalidatePath("/hr"); revalidatePath("/groups"); revalidatePath("/finance");
 }
 
 async function assertTeacherCanBeRemoved(tx: Prisma.TransactionClient, teacherId: string) {
-  const [activeClassSlots, activeEnrollments] = await Promise.all([
+  const [activeClassSlots, activeEnrollments, attendanceRecords, bonusCohorts, payouts] = await Promise.all([
     tx.classSlot.count({ where: { teacherId } }),
     tx.enrollment.count({ where: { teacherId, status: "ACTIVE" } }),
+    tx.attendanceRecord.count({ where: { teacherId } }),
+    tx.hrBonusTeacherCohort.count({ where: { teacherId } }),
+    tx.teacherPayout.count({ where: { teacherId } }),
   ]);
   if (activeClassSlots || activeEnrollments) {
     throw new PublicActionError(
       "Müəllimlik statusunu silməzdən əvvəl slot və tələbə təyinatlarını başqa müəllimə keçirin",
+      "CONFLICT",
+    );
+  }
+  if (attendanceRecords || bonusCohorts || payouts) {
+    throw new PublicActionError(
+      "Bu müəllimin maliyyə və ya davamiyyət tarixçəsi var; profil silinə bilməz",
       "CONFLICT",
     );
   }
@@ -337,13 +319,9 @@ export const updateTeacherAction = safeServerAction(
   updateTeacherActionImpl,
   "Müəllim məlumatları yenilənə bilmədi.",
 );
-export const setTeacherStatusAction = safeServerAction(
-  setTeacherStatusActionImpl,
-  "Müəllim statusu dəyişdirilə bilmədi.",
-);
 export const deleteTeacherAction = safeServerAction(
   deleteTeacherActionImpl,
-  "Müəllimlik statusu silinə bilmədi.",
+  "Müəllim profili silinə bilmədi.",
 );
 export const deleteEmployeeAction = safeServerAction(
   deleteEmployeeActionImpl,

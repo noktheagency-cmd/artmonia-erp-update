@@ -4,7 +4,9 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import {
+  FinanceCostCenter,
   FinanceSalaryMode,
+  FinanceTransactionType,
   PaymentMethod,
   Prisma,
   WorkshopEventStatus,
@@ -21,7 +23,7 @@ import {
 } from "@/modules/workshops/finance-rules";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
-import { safeServerAction } from "@/server/actions/safe-action";
+import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import {
   deleteWorkshopPoster,
   uploadReceipt,
@@ -149,12 +151,12 @@ const voidPaymentSchema = z.object({
 const expenseSchema = z.object({
   idempotencyKey: z.string().uuid().optional(),
   eventId: z.string().uuid(),
-  categoryId: optionalUuid,
-  newCategoryName: optionalText(80),
+  categoryId: z.string().uuid(),
   amount: requiredPositiveAmount,
   expenseDate: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default(PaymentMethod.CASH),
-  description: optionalText(700),
+  vendor: z.string().trim().min(2).max(120),
+  description: z.string().trim().min(3).max(700),
   receiptReference: optionalText(180),
 });
 
@@ -654,33 +656,23 @@ async function createWorkshopExpenseActionImpl(formData: FormData) {
   const input = expenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
-  if (!input.categoryId && !input.newCategoryName) {
-    throw new Error("Xərc kateqoriyası seçilməlidir");
-  }
   const expense = await prisma.$transaction(async (tx) => {
     const event = await tx.workshopEvent.findUnique({ where: { id: input.eventId }, select: { id: true, title: true } });
     if (!event) throw new Error("Tədbir tapılmadı");
-    const category = input.newCategoryName
-      ? await tx.financeExpenseCategory.upsert({
-          where: { name: input.newCategoryName },
-          create: {
-            name: input.newCategoryName,
-            description: "Workshop modulundan əlavə edildi",
-            isSystem: false,
-          },
-          update: {},
-        })
-      : await tx.financeExpenseCategory.findUnique({ where: { id: input.categoryId } });
-    if (!category) throw new Error("Xərc kateqoriyası tapılmadı");
+    const category = await resolveWorkshopExpenseCategory(tx, input.categoryId);
     const created = await tx.financeExpense.create({
       data: {
         workshopEventId: event.id,
         categoryId: category.id,
+        transactionType: category.transactionType,
+        financialClass: category.financialClass,
+        costCenter: FinanceCostCenter.OPERATIONS,
+        classificationReviewRequired: false,
         amount: input.amount,
         expenseDate: parseDateInput(input.expenseDate, "Xərc tarixi"),
         method: input.method as PaymentMethod,
-        vendor: null,
-        description: input.description ?? null,
+        vendor: input.vendor,
+        description: input.description,
         salaryMode: FinanceSalaryMode.NONE,
         receiptFileName: receipt?.fileName ?? null,
         receiptFilePath: receipt?.filePath ?? null,
@@ -695,7 +687,7 @@ async function createWorkshopExpenseActionImpl(formData: FormData) {
       entityType: "finance_expense",
       entityId: created.id,
       after: expenseAuditJson(created),
-      reason: input.description ?? `Workshop xərci: ${event.title}`,
+      reason: input.description,
     });
     return created;
   });
@@ -709,26 +701,12 @@ async function replaceWorkshopExpenseActionImpl(formData: FormData) {
   const input = replaceExpenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
-  if (!input.categoryId && !input.newCategoryName) {
-    throw new Error("Xərc kateqoriyası seçilməlidir");
-  }
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.financeExpense.findUnique({ where: { id: input.expenseId } });
     if (!existing?.workshopEventId || existing.voidedAt) throw new Error("Aktiv workshop xərci tapılmadı");
     if (existing.workshopEventId !== input.eventId) throw new Error("Xərc başqa tədbirə aiddir");
-    const category = input.newCategoryName
-      ? await tx.financeExpenseCategory.upsert({
-          where: { name: input.newCategoryName },
-          create: {
-            name: input.newCategoryName,
-            description: "Workshop modulundan əlavə edildi",
-            isSystem: false,
-          },
-          update: {},
-        })
-      : await tx.financeExpenseCategory.findUnique({ where: { id: input.categoryId } });
-    if (!category) throw new Error("Xərc kateqoriyası tapılmadı");
+    const category = await resolveWorkshopExpenseCategory(tx, input.categoryId);
     await tx.financeExpense.update({
       where: { id: existing.id },
       data: { voidedAt: new Date(), voidedById: actor.id, voidReason: input.reason },
@@ -737,11 +715,15 @@ async function replaceWorkshopExpenseActionImpl(formData: FormData) {
       data: {
         workshopEventId: existing.workshopEventId,
         categoryId: category.id,
+        transactionType: category.transactionType,
+        financialClass: category.financialClass,
+        costCenter: FinanceCostCenter.OPERATIONS,
+        classificationReviewRequired: false,
         amount: input.amount,
         expenseDate: parseDateInput(input.expenseDate, "Xərc tarixi"),
         method: input.method as PaymentMethod,
-        vendor: null,
-        description: input.description ?? null,
+        vendor: input.vendor,
+        description: input.description,
         salaryMode: FinanceSalaryMode.NONE,
         receiptFileName: receipt?.fileName ?? existing.receiptFileName,
         receiptFilePath: receipt?.filePath ?? existing.receiptFilePath,
@@ -796,6 +778,35 @@ async function voidWorkshopExpenseActionImpl(formData: FormData) {
 
   invalidateWorkshopCaches(eventId);
   return { ok: true as const };
+}
+
+async function resolveWorkshopExpenseCategory(
+  tx: Prisma.TransactionClient,
+  categoryId: string
+) {
+  const category = await tx.financeExpenseCategory.findUnique({
+    where: { id: categoryId },
+    select: {
+      id: true,
+      isActive: true,
+      transactionType: true,
+      financialClass: true,
+      requiresProject: true,
+    },
+  });
+
+  if (!category || !category.isActive) {
+    throw new PublicActionError("Seçilmiş tədbir xərci kateqoriyası aktiv deyil.");
+  }
+  if (
+    category.transactionType === FinanceTransactionType.INCOME ||
+    !category.financialClass ||
+    !category.requiresProject
+  ) {
+    throw new PublicActionError("Tədbir üçün yalnız layihə xərci kateqoriyası seçilə bilər.");
+  }
+
+  return { ...category, financialClass: category.financialClass };
 }
 
 async function getPayableParticipant(

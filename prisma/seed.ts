@@ -6,7 +6,10 @@ import {
   AttendanceMark,
   ClassShift,
   EnrollmentStatus,
+  FinanceCostCenter,
+  FinanceFinancialClass,
   FinanceSalaryMode,
+  FinanceTransactionType,
   GroupWeekday,
   InvoiceStatus,
   LeadStage,
@@ -19,6 +22,7 @@ import {
   type Teacher,
 } from "../src/generated/prisma/client";
 import { permissionCatalog } from "../src/server/rbac/permissions";
+import { financeCategoryCatalog } from "./finance-category-catalog";
 
 dotenv.config({ path: ".env.local" });
 dotenv.config();
@@ -648,32 +652,29 @@ async function seedFinanceExpenseLedger(input: {
   financeId: string;
   teachers: Awaited<ReturnType<typeof seedTeachersAndPrograms>>["teachers"];
 }) {
-  const categorySeed = [
-    ["Maas", "Statik ve faizle hesablanan emekhaqqi xercleri"],
-    ["Icare", "Studiya, filial ve otaq icareleri"],
-    ["Kommunal", "Isiq, su, internet ve gundelik ofis xercleri"],
-    ["Marketing", "Reklam, kontent ve satis kampaniyalari"],
-    ["Material", "Ders materiallari ve inventar"],
-    ["Diger", "Diger cari ve birdəfəlik xercler"],
-  ] as const;
-
   const categories = await prisma.financeExpenseCategory.createManyAndReturn({
-    data: categorySeed.map(([name, description]) => ({
-      name,
-      description,
+    data: financeCategoryCatalog.map((category) => ({
+      ...category,
       isSystem: true,
+      isActive: true,
+      requiresStaff: category.requiresStaff ?? false,
+      requiresProject: category.requiresProject ?? false,
     })),
   });
-  const categoryByName = new Map(categories.map((category) => [category.name, category]));
-  const salaryCategory = categoryByName.get("Maas")!;
-  const rentCategory = categoryByName.get("Icare")!;
-  const marketingCategory = categoryByName.get("Marketing")!;
+  const categoryByCode = new Map(categories.map((category) => [category.code, category]));
+  const employeeSalaryCategory = categoryByCode.get("OP_PAYROLL_SALES_ADMIN")!;
+  const teacherSalaryCategory = categoryByCode.get("DC_TEACHER_COMP")!;
+  const rentCategory = categoryByCode.get("OP_RENT")!;
+  const marketingCategory = categoryByCode.get("OP_MARKETING_ADS")!;
   const [aysel] = input.teachers;
 
   await prisma.financeExpense.createMany({
     data: [
       {
-        categoryId: salaryCategory.id,
+        categoryId: employeeSalaryCategory.id,
+        transactionType: FinanceTransactionType.EXPENSE,
+        financialClass: FinanceFinancialClass.OPEX,
+        costCenter: FinanceCostCenter.OPERATIONS,
         amount: "1200.00",
         expenseDate: date("2026-06-28"),
         method: PaymentMethod.BANK_TRANSFER,
@@ -687,7 +688,10 @@ async function seedFinanceExpenseLedger(input: {
         createdById: input.ownerId,
       },
       {
-        categoryId: salaryCategory.id,
+        categoryId: teacherSalaryCategory.id,
+        transactionType: FinanceTransactionType.EXPENSE,
+        financialClass: FinanceFinancialClass.DIRECT_COST,
+        costCenter: FinanceCostCenter.TEACHING,
         amount: "211.50",
         expenseDate: date("2026-06-28"),
         method: PaymentMethod.BANK_TRANSFER,
@@ -703,6 +707,9 @@ async function seedFinanceExpenseLedger(input: {
       },
       {
         categoryId: rentCategory.id,
+        transactionType: FinanceTransactionType.EXPENSE,
+        financialClass: FinanceFinancialClass.OPEX,
+        costCenter: FinanceCostCenter.OPERATIONS,
         amount: "900.00",
         expenseDate: date("2026-06-05"),
         method: PaymentMethod.BANK_TRANSFER,
@@ -713,6 +720,9 @@ async function seedFinanceExpenseLedger(input: {
       },
       {
         categoryId: marketingCategory.id,
+        transactionType: FinanceTransactionType.EXPENSE,
+        financialClass: FinanceFinancialClass.OPEX,
+        costCenter: FinanceCostCenter.MARKETING,
         amount: "280.00",
         expenseDate: date("2026-06-14"),
         method: PaymentMethod.CARD,

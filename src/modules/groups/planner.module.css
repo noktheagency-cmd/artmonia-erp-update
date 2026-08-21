@@ -1154,6 +1154,71 @@
   background: inherit;
 }
 
+/* Keep slot context useful without letting the inspector dominate the planner. */
+.inspectorHead {
+  padding: 15px 14px 12px;
+}
+
+.inspectorHead h2 {
+  margin: 4px 0 2px;
+  font-size: 17px;
+}
+
+.inspectorHead p {
+  font-size: 11px;
+}
+
+.slotFacts {
+  gap: 9px;
+  padding: 12px 14px 9px;
+}
+
+.slotFacts dt {
+  gap: 6px;
+}
+
+.slotFacts dt > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.inspector > .capacityTrack {
+  margin: 0 14px 12px;
+}
+
+.memberHead {
+  padding: 10px 14px 6px;
+}
+
+.memberList {
+  padding-inline: 8px;
+}
+
+.member {
+  gap: 7px;
+  padding: 7px 5px;
+}
+
+.member .avatar {
+  width: 30px;
+  height: 30px;
+}
+
+.noMembers {
+  padding: 14px 6px;
+}
+
+.inspectorActions {
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.inspectorActions :global([data-slot="button"]) {
+  min-height: 36px;
+  padding-inline: 10px;
+  font-size: 11px;
+}
+
 .slotDialogFooter {
   align-items: center;
   justify-content: space-between;
@@ -1270,6 +1335,10 @@
   .memberList {
     max-height: 260px;
   }
+
+  .inspectorActions :global([data-slot="button"]) {
+    min-height: 42px;
+  }
 }
 
 @media(max-width:640px) {
@@ -1293,7 +1362,7 @@
 /* Wide weekly planning surface */
 @media(min-width:861px) {
   :global(.erp-frame[data-section="groups"]) {
-    padding: 14px;
+    padding: 12px;
   }
 
   :global(.erp-frame[data-section="groups"] .route-content-shell) {
@@ -1302,11 +1371,11 @@
 
   :global(.erp-frame[data-section="groups"] .global-search) {
     width: min(100%, 760px);
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
 
   :global(.erp-frame[data-section="groups"] .global-search-control) {
-    height: 44px;
+    height: 40px;
   }
 
   .page {
@@ -1314,28 +1383,82 @@
   }
 
   .header {
-    gap: 18px;
-    padding: 0 2px 12px;
+    gap: 12px;
+    padding: 0 2px 8px;
+  }
+
+  .heading {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 10px;
   }
 
   .heading h1 {
-    font-size: 28px;
+    flex: 0 0 auto;
+    font-size: 24px;
   }
 
   .heading p {
-    margin-top: 5px;
-    font-size: 12px;
+    overflow: hidden;
+    margin: 0;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .headerRight {
+    gap: 6px;
+  }
+
+  .metric {
+    min-width: 104px;
+    gap: 7px;
+    padding: 6px 8px;
+  }
+
+  .metric > span {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .metric strong {
+    font-size: 14px;
+  }
+
+  .metric small {
+    margin-top: 3px;
+    font-size: 8px;
+  }
+
+  .headerRight > :global([data-slot="button"]) {
+    min-height: 36px;
+    padding-inline: 12px;
   }
 
   .filterBand {
-    margin: 8px 0 9px;
-    padding: 9px 10px;
+    margin: 4px 0 7px;
+    padding: 7px 8px;
+  }
+
+  .search,
+  .filter select {
+    height: 36px;
+  }
+
+  .filter {
+    gap: 2px;
+  }
+
+  .filterBand > :global([data-slot="button"]) {
+    min-height: 36px;
   }
 
   .workspace {
-    grid-template-columns: minmax(0, 1fr) 270px;
-    height: clamp(450px, calc(100dvh - 270px), 900px);
-    min-height: 450px;
+    grid-template-columns: minmax(0, 1fr) 236px;
+    height: clamp(500px, calc(100dvh - 214px), 980px);
+    min-height: 500px;
     border-radius: 18px;
   }
 
@@ -1353,12 +1476,12 @@
 
 @media(min-width:1600px) {
   :global(.erp-frame[data-section="groups"]) {
-    padding: 16px;
+    padding: 12px;
   }
 
   .workspace {
-    grid-template-columns: minmax(0, 1fr) 286px;
-    height: clamp(560px, calc(100dvh - 258px), 960px);
+    grid-template-columns: minmax(0, 1fr) 236px;
+    height: clamp(620px, calc(100dvh - 206px), 1000px);
   }
 
   .timetable {

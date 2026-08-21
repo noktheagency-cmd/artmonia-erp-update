@@ -2,11 +2,9 @@ import "@/modules/finance/finance.css";
 import { FinanceWorkspace } from "@/modules/finance/finance-workspace";
 import {
   createFinanceExpenseAction,
-  deleteFinanceExpenseCategoryAction,
   deleteFinanceExpenseAction,
   deleteFinancePaymentAction,
   recordFinancePaymentAction,
-  saveFinanceExpenseCategoryAction,
   updateFinanceExpenseAction,
   updateFinancePaymentAction,
 } from "@/modules/finance/actions";
@@ -38,8 +36,6 @@ export default async function FinancePage({
       deletePaymentAction={deleteFinancePaymentAction}
       updateExpenseAction={updateFinanceExpenseAction}
       deleteExpenseAction={deleteFinanceExpenseAction}
-      saveExpenseCategoryAction={saveFinanceExpenseCategoryAction}
-      deleteExpenseCategoryAction={deleteFinanceExpenseCategoryAction}
     />
   );
 }

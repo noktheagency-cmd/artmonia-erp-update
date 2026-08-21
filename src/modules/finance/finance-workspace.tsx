@@ -61,7 +61,7 @@ import {
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
-import { FormSelect, type SelectOptionCrudConfig } from "@/components/ui/select";
+import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
@@ -71,6 +71,7 @@ import type { FinanceData } from "@/modules/finance/queries";
 import {
   getIncomeDescription,
   getIncomeReportingCategory,
+  isCashInflow,
 } from "@/modules/finance/reporting";
 
 type FinanceTab = FinanceData["filters"]["type"];
@@ -115,6 +116,28 @@ const financeTabs: Array<{
 
 const financeKpiIcons = [Banknote, ReceiptText, BarChart3, Calculator, AlertTriangle];
 
+const financeCostCenterOptions = [
+  { value: "TEACHING", label: "Tədris" },
+  { value: "SALES", label: "Satış" },
+  { value: "MARKETING", label: "Marketinq" },
+  { value: "OPERATIONS", label: "Əməliyyat" },
+  { value: "MANAGEMENT", label: "Rəhbərlik" },
+];
+
+function getFinancialClassLabel(value: string) {
+  return {
+    DIRECT_COST: "Birbaşa xərc",
+    OPEX: "Əməliyyat xərci",
+    CAPEX: "Kapital investisiyası",
+    FINANCING: "Maliyyələşmə",
+    LEGACY_LIABILITY: "Keçmiş öhdəlik",
+  }[value] ?? "Maliyyə hərəkəti";
+}
+
+function getCostCenterLabel(value: string) {
+  return financeCostCenterOptions.find((option) => option.value === value)?.label ?? "Təyin edilməyib";
+}
+
 function buildFinanceExportPreview(data: FinanceData): Array<Record<string, string>> {
   if (data.filters.type === "payments") {
     return data.payments.map((payment) => ({
@@ -147,6 +170,8 @@ function buildFinanceExportPreview(data: FinanceData): Array<Record<string, stri
   return expenses.map((expense) => ({
     staff: expense.staffName,
     category: expense.category,
+    financialClass: getFinancialClassLabel(expense.financialClass),
+    costCenter: getCostCenterLabel(expense.costCenter),
     amount: expense.amount,
     expenseDate: expense.expenseDate,
     method: expense.method,
@@ -183,13 +208,6 @@ type FinanceMutationAction = (
   formData: FormData,
 ) => Promise<ActionResult<FinanceMutationResult>>;
 
-type FinanceCategorySaveAction = (
-  formData: FormData,
-) => Promise<ActionResult<{ id: string; name: string; isSystem: boolean }>>;
-type FinanceCategoryDeleteAction = (
-  formData: FormData,
-) => Promise<ActionResult<{ id: string }>>;
-
 export function FinanceWorkspace({
   data,
   recordPaymentAction,
@@ -198,8 +216,6 @@ export function FinanceWorkspace({
   deletePaymentAction,
   updateExpenseAction,
   deleteExpenseAction,
-  saveExpenseCategoryAction,
-  deleteExpenseCategoryAction,
 }: {
   data: FinanceData;
   recordPaymentAction: FinanceMutationAction;
@@ -208,10 +224,19 @@ export function FinanceWorkspace({
   deletePaymentAction: FinanceMutationAction;
   updateExpenseAction: FinanceMutationAction;
   deleteExpenseAction: FinanceMutationAction;
-  saveExpenseCategoryAction: FinanceCategorySaveAction;
-  deleteExpenseCategoryAction: FinanceCategoryDeleteAction;
 }) {
+  const router = useRouter();
   const [toast, setToast] = useState<FinanceToastMessage | null>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, [router]);
 
   function showToast(message: Omit<FinanceToastMessage, "id">) {
     setToast({ ...message, id: Date.now() });
@@ -242,8 +267,6 @@ export function FinanceWorkspace({
             <ExpenseDialog
               data={data}
               action={createExpenseAction}
-              saveCategoryAction={saveExpenseCategoryAction}
-              deleteCategoryAction={deleteExpenseCategoryAction}
               onNotify={showToast}
             />
             <PaymentDialog
@@ -290,7 +313,7 @@ export function FinanceWorkspace({
             onNotify={showToast}
           />
         ) : null}
-        {data.filters.type === "debts" ? <DebtLedger debtors={data.debtors} /> : null}
+        {data.filters.type === "debts" ? <DebtLedger key={data.returnTo} data={data} /> : null}
         {data.filters.type === "expenses" ? (
           <ExpenseLedger
             data={data}
@@ -360,8 +383,8 @@ function FinanceOperationToast({
       },
       "expense-deleted": {
         tone: "success",
-        title: "Xərc silindi",
-        body: "Maliyyə cədvəlləri yeniləndi.",
+        title: "Maliyyə hərəkəti ləğv edildi",
+        body: "Qeyd audit tarixçəsində saxlanıldı və hesabatlardan çıxarıldı.",
       },
     };
     const message = messages[notice];
@@ -828,27 +851,24 @@ function PaymentDialog({
 function ExpenseDialog({
   data,
   action,
-  saveCategoryAction,
-  deleteCategoryAction,
   onNotify,
 }: {
   data: FinanceData;
   action: FinanceMutationAction;
-  saveCategoryAction: FinanceCategorySaveAction;
-  deleteCategoryAction: FinanceCategoryDeleteAction;
   onNotify: (message: Omit<FinanceToastMessage, "id">) => void;
 }) {
   const router = useRouter();
   const [isSubmitting, startSubmitTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
   const [categoryValue, setCategoryValue] = useState("");
-  const [categories, setCategories] = useState(data.categories);
   const [staffTarget, setStaffTarget] = useState("");
   const selectedStaff = data.staff.find((staff) => staff.id === staffTarget);
   const [amount, setAmount] = useState("");
-  const selectedCategory = categories.find((category) => category.id === categoryValue);
-  const categoryName = selectedCategory?.name ?? "";
-  const usesPayrollFlow = isPayrollCategoryName(categoryName);
+  const availableCategories = data.categories.filter(
+    (category) => category.isActive && !category.requiresProject && category.transactionType !== "INCOME"
+  );
+  const selectedCategory = availableCategories.find((category) => category.id === categoryValue);
+  const usesPayrollFlow = selectedCategory?.requiresStaff ?? false;
   const salaryMode = usesPayrollFlow && selectedStaff ? selectedStaff.salaryMode : "NONE";
   const salaryBaseAmount = usesPayrollFlow && selectedStaff ? getStaffSalaryBase(selectedStaff) : "";
   const salaryCalculatedAmount =
@@ -870,12 +890,12 @@ function ExpenseDialog({
   }
 
   function handleCategoryChange(value: string) {
-    const nextCategory = cleanSelectValue(value);
-    const nextCategoryName = categories.find((category) => category.id === nextCategory)?.name ?? "";
+    const nextCategoryId = cleanSelectValue(value);
+    const nextCategory = availableCategories.find((category) => category.id === nextCategoryId);
 
-    setCategoryValue(nextCategory);
+    setCategoryValue(nextCategory?.id ?? "");
 
-    if (!isPayrollCategoryName(nextCategoryName)) {
+    if (!nextCategory?.requiresStaff) {
       setStaffTarget("");
       return;
     }
@@ -884,34 +904,6 @@ function ExpenseDialog({
       setAmount(getStaffCalculatedSalary(selectedStaff));
     }
   }
-
-  const categoryCrud: SelectOptionCrudConfig = {
-    canManage: data.permissions.canCreateExpense,
-    createLabel: "Yeni xərc kateqoriyası əlavə et",
-    async onCreate(label) {
-      const formData = new FormData();
-      formData.set("name", label);
-      const saved = unwrapActionResult(await saveCategoryAction(formData));
-      setCategories((current) => [...current.filter((item) => item.id !== saved.id), { ...saved, description: "" }].toSorted((left, right) => left.name.localeCompare(right.name, "az")));
-      return { id: saved.id, value: saved.id, label: saved.name, locked: saved.isSystem };
-    },
-    async onUpdate(option, label) {
-      if (!option.id) throw new Error("Xərc kateqoriyası tapılmadı.");
-      const formData = new FormData();
-      formData.set("id", option.id);
-      formData.set("name", label);
-      const saved = unwrapActionResult(await saveCategoryAction(formData));
-      setCategories((current) => [...current.filter((item) => item.id !== saved.id), { ...saved, description: "" }].toSorted((left, right) => left.name.localeCompare(right.name, "az")));
-      return { id: saved.id, value: saved.id, label: saved.name, locked: saved.isSystem };
-    },
-    async onDelete(option) {
-      if (!option.id) throw new Error("Xərc kateqoriyası tapılmadı.");
-      const formData = new FormData();
-      formData.set("id", option.id);
-      unwrapActionResult(await deleteCategoryAction(formData));
-      setCategories((current) => current.filter((item) => item.id !== option.id));
-    },
-  };
 
   function handleStaffChange(value: string) {
     const nextTarget = cleanSelectValue(value);
@@ -952,11 +944,11 @@ function ExpenseDialog({
       <DialogTrigger asChild>
         <Button type="button" variant="secondary" disabled={!data.permissions.canCreateExpense}>
           <Plus data-icon="inline-start" />
-          Xərc əlavə et
+          Maliyyə hərəkəti əlavə et
         </Button>
       </DialogTrigger>
       <DialogContent className="finance-dialog finance-expense-dialog">
-        <DialogTitle className="sr-only">Yeni xərc qeydi</DialogTitle>
+        <DialogTitle className="sr-only">Yeni maliyyə hərəkəti</DialogTitle>
         <DialogDescription className="sr-only">
           Yeni xərc qeydinin məlumatları
         </DialogDescription>
@@ -984,7 +976,7 @@ function ExpenseDialog({
               <span>Kateqoriya</span>
             </div>
             <label className="form-field finance-category-field">
-              <span>Xərc növü</span>
+              <span>Təsdiqlənmiş kateqoriya</span>
               <FormSelect
                 name="categorySelector"
                 value={categoryValue}
@@ -992,15 +984,22 @@ function ExpenseDialog({
                 emptyLabel="Kateqoriya seç"
                 searchable
                 searchPlaceholder="Kateqoriya axtar..."
-                options={categories.map((category) => ({
+                options={availableCategories.map((category) => ({
                     value: category.id,
-                    label: category.name,
-                    id: category.id,
-                    locked: category.isSystem,
+                    label: `${category.name} / ${getFinancialClassLabel(category.financialClass)}`,
                   }))}
-                optionCrud={categoryCrud}
+                required
               />
             </label>
+            {selectedCategory ? (
+              <div className="finance-selected-record">
+                <div>
+                  <strong>{selectedCategory.name}</strong>
+                  <span>{selectedCategory.description || "Təsdiqlənmiş maliyyə kateqoriyası"}</span>
+                </div>
+                <StatusChip tone="info">{getFinancialClassLabel(selectedCategory.financialClass)}</StatusChip>
+              </div>
+            ) : null}
           </section>
 
           {usesPayrollFlow ? (
@@ -1084,6 +1083,25 @@ function ExpenseDialog({
               <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
             </label>
             <div className="field-grid">
+              <label className="form-field">
+                <span>{usesPayrollFlow ? "Ödəniş alan əməkdaş" : "Kimə ödənilib"}</span>
+                <Input
+                  name="vendor"
+                  placeholder={usesPayrollFlow ? selectedStaff?.label ?? "Əməkdaş seçimindən doldurulur" : "Şəxs və ya şirkət"}
+                  disabled={usesPayrollFlow}
+                  required={!usesPayrollFlow}
+                />
+              </label>
+              <label className="form-field">
+                <span>Xərc mərkəzi</span>
+                <FormSelect name="costCenter" defaultValue="OPERATIONS" options={financeCostCenterOptions} required />
+              </label>
+            </div>
+            <div className="field-grid">
+              <label className="form-field">
+                <span>Qəbz nömrəsi</span>
+                <Input name="receiptReference" maxLength={120} placeholder="Varsa qəbz və ya sənəd nömrəsi" />
+              </label>
               <label className="form-field finance-receipt-upload-field">
                 <span>Qəbz əlavə et</span>
                 <span className="finance-file-control">
@@ -1096,7 +1114,7 @@ function ExpenseDialog({
             </div>
             <label className="form-field">
               <span>Açıqlama</span>
-              <textarea name="description" maxLength={700} placeholder="Xərcin səbəbi, qəbz qeydi və ya əməkhaqqı izahı" />
+              <textarea name="description" minLength={3} maxLength={700} placeholder="Hərəkətin məqsədi və izahı" required />
             </label>
           </section>
 
@@ -1116,7 +1134,7 @@ function ExpenseDialog({
               }
             >
               <Upload data-icon="inline-start" />
-              Xərci saxla
+              Maliyyə hərəkətini saxla
             </SubmitButton>
           </DialogFooter>
         </form>
@@ -1157,9 +1175,11 @@ function CashFlowChart({ data }: { data: FinanceData }) {
     return dates.map(date => {
       const dayIncome = data.payments
         .filter((payment) => payment.dateKey === date)
-        .reduce((sum, payment) => sum + payment.amountValue, 0);
+        .reduce((sum, payment) => sum + payment.amountValue, 0) + expenseMovements
+        .filter((movement) => movement.dateKey === date && isCashInflow(movement.transactionType))
+        .reduce((sum, movement) => sum + movement.amountValue, 0);
       const dayExpense = expenseMovements
-        .filter((expense) => expense.dateKey === date)
+        .filter((expense) => expense.dateKey === date && !isCashInflow(expense.transactionType))
         .reduce((sum, expense) => sum + expense.amountValue, 0);
       accumulatedIncome += dayIncome;
       accumulatedExpense += dayExpense;
@@ -1181,9 +1201,9 @@ function CashFlowChart({ data }: { data: FinanceData }) {
     [trendPoints]
   );
   const chartConfig = {
-    income: { label: "Gəlir", color: "#11a683" },
-    expense: { label: "Xərc", color: "#f04462" },
-    net: { label: "Xalis", color: "#3158f5" },
+    income: { label: "Pul girişi", color: "#11a683" },
+    expense: { label: "Pul çıxışı", color: "#f04462" },
+    net: { label: "Net pul", color: "#3158f5" },
   } satisfies ChartConfig;
 
   return (
@@ -1871,7 +1891,7 @@ function PaymentCrudActions({
     <div className="finance-row-actions">
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogTrigger asChild>
-          <button type="button" className="finance-row-action-btn">
+          <button type="button" className="finance-row-action-btn" disabled={!data.permissions.canCreateExpense}>
             <Pencil size={13} />
             Düzəliş
           </button>
@@ -1946,7 +1966,7 @@ function PaymentCrudActions({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+      {data.permissions.canVoidExpense ? <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <DialogTrigger asChild>
           <button type="button" className="finance-row-action-btn is-danger">
             <Trash2 size={13} />
@@ -1977,28 +1997,65 @@ function PaymentCrudActions({
             </DialogFooter>
           </form>
         </DialogContent>
-      </Dialog>
+      </Dialog> : null}
     </div>
   );
 }
 
-function DebtLedger({ debtors }: { debtors: FinanceData["debtors"] }) {
+type ReceivableFilter = "student" | "overdue" | "future" | "workshop" | "masterclass";
+
+function DebtLedger({ data }: { data: FinanceData }) {
+  const [filter, setFilter] = useState<ReceivableFilter>(() => {
+    if (data.filters.source === "workshop") {
+      return data.receivableSummary.workshop.count > 0 ? "workshop" : "masterclass";
+    }
+    return "student";
+  });
+  const summaryCards: Array<{
+    key: ReceivableFilter;
+    label: string;
+    value: FinanceData["receivableSummary"]["studentOutstanding"];
+    tone: string;
+  }> = [
+    { key: "student", label: "Qalıq borcu olanlar", value: data.receivableSummary.studentOutstanding, tone: "amber" },
+    { key: "overdue", label: "Ödənişi gecikənlər", value: data.receivableSummary.studentOverdue, tone: "danger" },
+    { key: "future", label: "Gələcək ödəniş", value: data.receivableSummary.studentFuture, tone: "blue" },
+    { key: "workshop", label: "Workshop alacaqları", value: data.receivableSummary.workshop, tone: "mint" },
+    { key: "masterclass", label: "Masterclass alacaqları", value: data.receivableSummary.masterclass, tone: "violet" },
+  ];
+  const debtors = data.debtors.filter((debt) => {
+    if (filter === "student") return debt.sourceKind === "STUDENT";
+    if (filter === "overdue") return debt.sourceKind === "STUDENT" && debt.receivableState === "OVERDUE";
+    if (filter === "future") return debt.sourceKind === "STUDENT" && debt.receivableState === "FUTURE" && debt.isInSelectedPeriod;
+    if (filter === "workshop") return debt.sourceKind === "WORKSHOP";
+    return debt.sourceKind === "MASTERCLASS";
+  });
+
   return (
-    <article className="finance-panel">
+    <article className="finance-panel finance-receivables-panel">
       <div className="finance-panel-head">
         <div>
-          <span>Alacaqlar cədvəli</span>
-          <h2>Alacaqlar</h2>
-          <small>{debtors.length} balans göstərilir</small>
+          <span>{data.receivableSummary.periodLabel}</span>
+          <h2>Alacaqlar nəzarəti</h2>
+          <small>Tələbə, workshop və masterclass ödənişləri ayrı izlənir</small>
         </div>
         <AlertTriangle size={18} />
+      </div>
+      <div className="finance-receivable-summary" aria-label="Alacaq kateqoriyaları">
+        {summaryCards.map((card) => (
+          <button type="button" data-active={filter === card.key} data-tone={card.tone} onClick={() => setFilter(card.key)} key={card.key}>
+            <span>{card.label}</span>
+            <strong>{card.value.amount}</strong>
+            <small>{card.value.count} qeyd</small>
+          </button>
+        ))}
       </div>
       <div className="finance-table-wrap" data-erp-table-scroll="">
         <table className="finance-table finance-debt-table" data-erp-table="" data-erp-sticky-first="">
           <thead>
             <tr>
-              <th>Tələbə</th>
-              <th>Proqram / müəllim</th>
+              <th>Şəxs / mənbə</th>
+              <th>Proqram / təlimçi</th>
               <th>Alacaq</th>
               <th>Növbəti son tarix</th>
               <th>Gecikmə</th>
@@ -2027,12 +2084,12 @@ function DebtLedger({ debtors }: { debtors: FinanceData["debtors"] }) {
                   <td>{debt.nextDueDate}</td>
                   <td>{debt.overdueDays}</td>
                   <td>{debt.phone}</td>
-                  <td><StatusChip tone={debt.tone}>{formatDebtStatus(debt.tone)}</StatusChip></td>
+                  <td><StatusChip tone={debt.tone}>{formatDebtStatus(debt)}</StatusChip></td>
                   <td>
                     <div className="finance-row-actions">
                       <Link className="finance-row-action-btn" href={debt.sourceHref as Route}>
                         <Eye size={13} />
-                        {debt.sourceKind === "WORKSHOP" ? "Tədbir" : "Profil"}
+                        {debt.sourceKind === "STUDENT" ? "Profil" : "Tədbir"}
                       </Link>
                       <Link className="finance-row-action-btn" href="/finance?type=payments">
                         <Banknote size={13} />
@@ -2045,7 +2102,7 @@ function DebtLedger({ debtors }: { debtors: FinanceData["debtors"] }) {
             ) : (
               <tr>
                 <td colSpan={8}>
-                  <div className="finance-empty">Alacaq tapılmadı</div>
+                  <div className="finance-empty">Seçilmiş kateqoriyada alacaq tapılmadı</div>
                 </td>
               </tr>
             )}
@@ -2103,8 +2160,9 @@ function ExpenseLedger({
                       <span>
                         {expense.sourceKind === "EVENT"
                           ? `${expense.category} · ${expense.workshopEventTitle}`
-                          : expense.description}
+                          : `${expense.category} · ${getFinancialClassLabel(expense.financialClass)} · ${getCostCenterLabel(expense.costCenter)}`}
                       </span>
+                      {expense.classificationReviewRequired ? <StatusChip tone="warning">Təsnifat yoxlanmalıdır</StatusChip> : null}
                     </div>
                   </td>
                   <td className="finance-money negative">{expense.amount}</td>
@@ -2312,7 +2370,7 @@ function ExpenseCrudActions({
 
   function handleDelete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    runMutation(new FormData(event.currentTarget), deleteAction, "Xərc silindi");
+    runMutation(new FormData(event.currentTarget), deleteAction, "Maliyyə hərəkəti ləğv edildi");
   }
 
   return (
@@ -2333,10 +2391,34 @@ function ExpenseCrudActions({
           </DialogHeader>
           <form className="finance-form" onSubmit={handleUpdate}>
             <input type="hidden" name="expenseId" value={expense.id} />
-            <input type="hidden" name="categoryId" value={expense.categoryId} />
             <input type="hidden" name="staffTarget" value={expense.staffTarget} />
             <input type="hidden" name="salaryMode" value="NONE" />
             <input type="hidden" name="returnTo" value={data.returnTo} />
+            <div className="field-grid">
+              <label className="form-field">
+                <span>Kateqoriya</span>
+                <FormSelect
+                  name="categoryId"
+                  defaultValue={expense.categoryId}
+                  options={data.categories
+                    .filter((category) => category.isActive && !category.requiresProject && category.transactionType !== "INCOME")
+                    .map((category) => ({
+                      value: category.id,
+                      label: `${category.name} / ${getFinancialClassLabel(category.financialClass)}`,
+                    }))}
+                  required
+                />
+              </label>
+              <label className="form-field">
+                <span>Xərc mərkəzi</span>
+                <FormSelect
+                  name="costCenter"
+                  defaultValue={expense.costCenter || "OPERATIONS"}
+                  options={financeCostCenterOptions}
+                  required
+                />
+              </label>
+            </div>
             <div className="field-grid">
               <label className="form-field">
                 <span>Məbləğ</span>
@@ -2351,6 +2433,10 @@ function ExpenseCrudActions({
               <label className="form-field">
                 <span>Ödəniş üsulu</span>
                 <FormSelect name="method" defaultValue={expense.methodValue} options={studentPaymentMethodOptions} />
+              </label>
+              <label className="form-field">
+                <span>Kimə ödənilib</span>
+                <Input name="vendor" defaultValue={expense.vendor === "-" ? "" : expense.vendor} maxLength={120} required />
               </label>
             </div>
             <div className="field-grid">
@@ -2370,7 +2456,7 @@ function ExpenseCrudActions({
             </div>
             <label className="form-field">
               <span>Açıqlama</span>
-              <textarea name="description" defaultValue={expense.description === "-" ? "" : expense.description} maxLength={700} />
+              <textarea name="description" defaultValue={expense.description === "-" ? "" : expense.description} minLength={3} maxLength={700} required />
             </label>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setIsEditOpen(false)}>
@@ -2388,14 +2474,14 @@ function ExpenseCrudActions({
         <DialogTrigger asChild>
           <button type="button" className="finance-row-action-btn is-danger">
             <Trash2 size={13} />
-            Sil
+            Ləğv et
           </button>
         </DialogTrigger>
         <DialogContent className="finance-dialog finance-confirm-dialog">
           <DialogHeader>
-            <DialogTitle>Xərc silinsin?</DialogTitle>
+            <DialogTitle>Maliyyə hərəkəti ləğv edilsin?</DialogTitle>
             <DialogDescription>
-              Bu qeyd maliyyə cədvəlindən silinəcək.
+              Qeyd silinməyəcək; audit tarixçəsində saxlanılıb hesabatlardan çıxarılacaq.
             </DialogDescription>
           </DialogHeader>
           <form className="finance-form" onSubmit={handleDelete}>
@@ -2410,7 +2496,7 @@ function ExpenseCrudActions({
                 Ləğv et
               </Button>
               <Button type="submit" disabled={isPending} variant="secondary">
-                Sil
+                Ləğv et
               </Button>
             </DialogFooter>
           </form>
@@ -2582,54 +2668,28 @@ function buildFinanceTabHref(data: FinanceData, tab: FinanceTab) {
   };
 }
 
-function formatDebtStatus(tone: FinanceData["debtors"][number]["tone"]) {
-  if (tone === "danger") {
-    return "Kritik";
+function formatDebtStatus(debt: FinanceData["debtors"][number]) {
+  if (debt.sourceKind === "WORKSHOP") {
+    return "Workshop";
   }
 
-  if (tone === "warning") {
-    return "Gecikir";
+  if (debt.sourceKind === "MASTERCLASS") {
+    return "Masterclass";
   }
 
-  return "Planlı";
+  if (debt.receivableState === "OVERDUE") {
+    return "Gecikmiş";
+  }
+
+  if (debt.receivableState === "FUTURE") {
+    return "Gələcək ödəniş";
+  }
+
+  return "Qalıq borc";
 }
 
 function cleanSelectValue(value: string) {
   return value === EMPTY_SELECT_VALUE ? "" : value;
-}
-
-function isPayrollCategoryName(value: string) {
-  const normalized = normalizeKeyword(value);
-  return [
-    "maas",
-    "maaş",
-    "əməkhaqqı",
-    "emekhaqqi",
-    "əmək haqqı",
-    "emek haqqi",
-    "salary",
-    "payroll",
-    "isci",
-    "işçi",
-    "əməkdaş",
-    "employee",
-    "staff",
-    "worker",
-  ].some((keyword) => normalized.includes(keyword));
-}
-
-function normalizeKeyword(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[ə]/g, "e")
-    .replace(/[ı]/g, "i")
-    .replace(/[ş]/g, "s")
-    .replace(/[ç]/g, "c")
-    .replace(/[ğ]/g, "g")
-    .replace(/[ö]/g, "o")
-    .replace(/[ü]/g, "u");
 }
 
 function getStaffSalaryBase(staff: FinanceData["staff"][number]) {

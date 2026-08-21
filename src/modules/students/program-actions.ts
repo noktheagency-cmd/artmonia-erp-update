@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { optionalFormString } from "@/modules/shared/form-values";
-import { safeServerAction } from "@/server/actions/safe-action";
+import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -17,7 +17,6 @@ const programSchema = z.object({
   monthlyFee: z.preprocess((value) => Number(String(value).replace(",", ".")), z.number().min(0).max(100_000)),
   lessonsPerMonth: z.preprocess(optionalFormString, z.coerce.number().int().positive().max(120).optional()),
   description: optionalText(500),
-  isActive: z.preprocess((value) => value === "true" || value === "on", z.boolean()),
 });
 
 async function saveProgramActionImpl(formData: FormData) {
@@ -30,7 +29,7 @@ async function saveProgramActionImpl(formData: FormData) {
     defaultMonthlyFee: input.monthlyFee,
     defaultLessonsPerMonth: input.lessonsPerMonth ?? null,
     description: input.description ?? null,
-    isActive: input.isActive,
+    isActive: true,
   };
 
   if (input.id) await prisma.program.update({ where: { id: input.id }, data });
@@ -44,8 +43,13 @@ async function deleteProgramActionImpl(formData: FormData) {
   const id = z.string().uuid().parse(formData.get("id"));
   const prisma = getPrisma();
   const usage = await prisma.enrollment.count({ where: { programId: id } });
-  if (usage > 0) await prisma.program.update({ where: { id }, data: { isActive: false } });
-  else await prisma.program.delete({ where: { id } });
+  if (usage > 0) {
+    throw new PublicActionError(
+      "Proqramı silməzdən əvvəl tələbə təyinatlarını başqa proqrama keçirin",
+      "CONFLICT",
+    );
+  }
+  await prisma.program.delete({ where: { id } });
   revalidatePath("/students");
 }
 

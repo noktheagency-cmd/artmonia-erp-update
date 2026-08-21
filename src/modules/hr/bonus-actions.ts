@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
+  FinanceCostCenter,
+  FinanceFinancialClass,
+  FinanceTransactionType,
   HrBonusDistributionMode,
   HrBonusMetricKind,
   PaymentMethod,
@@ -214,13 +217,25 @@ async function postBonusStageAwardsActionImpl(formData: FormData) {
     if (stage.awards.some((award) => !award.participant.employeeId)) throw new PublicActionError("Bonus iştirakçılarından birinin HR profili artıq mövcud deyil", "CONFLICT");
 
     const category = await tx.financeExpenseCategory.upsert({
-      where: { name: "Əməkdaş bonusu" },
-      create: { name: "Əməkdaş bonusu", description: "HR bonus kampaniyalarından təsdiqlənmiş ödənişlər", isSystem: true },
-      update: { isSystem: true },
+      where: { code: "OP_BONUS_COMMISSION" },
+      create: {
+        code: "OP_BONUS_COMMISSION",
+        name: "Bonus və komissiyalar",
+        description: "Satış, performans bonusu və komissiyalar",
+        transactionType: FinanceTransactionType.EXPENSE,
+        financialClass: FinanceFinancialClass.OPEX,
+        isActive: true,
+        isSystem: true,
+        requiresStaff: true,
+      },
+      update: { isActive: true, isSystem: true },
     });
     await tx.financeExpense.createMany({
       data: stage.awards.map((award) => ({
           categoryId: category.id,
+          transactionType: FinanceTransactionType.EXPENSE,
+          financialClass: FinanceFinancialClass.OPEX,
+          costCenter: FinanceCostCenter.SALES,
           amount: award.amount,
           expenseDate: new Date(),
           method: PaymentMethod.BANK_TRANSFER,

@@ -49,18 +49,18 @@ const teacherChartConfig = {
 
 export function StudentOverviewCharts({
   collectionRate,
-  paidCount,
   debtCount,
-  waitingCount,
-  frozenCount,
+  futureCount,
+  collectedAmount,
+  expectedAmount,
   programs,
   teachers,
 }: {
   collectionRate: number;
-  paidCount: number;
   debtCount: number;
-  waitingCount: number;
-  frozenCount: number;
+  futureCount: number;
+  collectedAmount: string;
+  expectedAmount: string;
   programs: DistributionItem[];
   teachers: DistributionItem[];
 }) {
@@ -84,7 +84,7 @@ export function StudentOverviewCharts({
         <AnalyticsHeading
           icon={CircleDollarSign}
           title="Maliyyə sağlamlığı"
-          description="Ödəniş və açıq balans nisbəti"
+          description="Cari ay üzrə toplanan məbləğ və aylıq plan"
           meta={`${collectionRate}% toplanıb`}
           tone="green"
         />
@@ -133,10 +133,10 @@ export function StudentOverviewCharts({
             </div>
           </div>
           <div className="students-analytics-list">
-            <AnalyticsRow color="green" label="Tam ödəniş edənlər" value={`${paidCount} (${collectionRate}%)`} />
-            <AnalyticsRow color="coral" label="Borcu olanlar" value={`${debtCount} (${100 - collectionRate}%)`} />
-            <AnalyticsRow color="amber" label="Slot gözləyənlər" value={`${waitingCount} tələbə`} />
-            <AnalyticsRow color="blue" label="Dondurulanlar" value={`${frozenCount} tələbə`} />
+            <AnalyticsRow color="green" label="Bu ay toplanıb" value={collectedAmount} />
+            <AnalyticsRow color="blue" label="Aylıq ödəniş planı" value={expectedAmount} />
+            <AnalyticsRow color="coral" label="Qalıq borc nəzarəti" value={`${debtCount} tələbə`} />
+            <AnalyticsRow color="amber" label="Planlı gələcək ödəniş" value={`${futureCount} tələbə`} />
           </div>
         </div>
       </article>

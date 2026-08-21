@@ -20,6 +20,20 @@ enum AppRole {
   @@schema("erp")
 }
 
+enum KnowledgeSectionType {
+  COMPANY
+  PLAYBOOK
+
+  @@schema("erp")
+}
+
+enum KnowledgeContentStatus {
+  DRAFT
+  PUBLISHED
+
+  @@schema("erp")
+}
+
 enum PermissionScope {
   ASSIGNED
   ALL
@@ -151,6 +165,36 @@ enum FinanceSalaryMode {
   NONE
   STATIC
   PERCENT
+
+  @@schema("erp")
+}
+
+enum FinanceTransactionType {
+  INCOME
+  EXPENSE
+  CAPEX_OUT
+  FINANCING_IN
+  FINANCING_OUT
+
+  @@schema("erp")
+}
+
+enum FinanceFinancialClass {
+  DIRECT_COST
+  OPEX
+  CAPEX
+  FINANCING
+  LEGACY_LIABILITY
+
+  @@schema("erp")
+}
+
+enum FinanceCostCenter {
+  TEACHING
+  SALES
+  MARKETING
+  OPERATIONS
+  MANAGEMENT
 
   @@schema("erp")
 }
@@ -405,6 +449,10 @@ model User {
   createdCorporateCustomers        HrCorporateCustomer[]       @relation("HrCorporateCustomerCreator")
   createdDropdownCatalogOptions    DropdownCatalogOption[]     @relation("DropdownCatalogOptionCreator")
   updatedAboutProfiles             AboutProfile[]              @relation("AboutProfileUpdater")
+  createdKnowledgeCategories       KnowledgeCategory[]         @relation("KnowledgeCategoryCreator")
+  updatedKnowledgeCategories       KnowledgeCategory[]         @relation("KnowledgeCategoryUpdater")
+  createdKnowledgeArticles         KnowledgeArticle[]          @relation("KnowledgeArticleCreator")
+  updatedKnowledgeArticles         KnowledgeArticle[]          @relation("KnowledgeArticleUpdater")
 
   @@map("users")
   @@schema("erp")
@@ -427,6 +475,71 @@ model AboutProfile {
 
   @@index([updatedById])
   @@map("about_profiles")
+  @@schema("erp")
+}
+
+model KnowledgeSection {
+  id        String                 @id @default(uuid()) @db.Uuid
+  key       String                 @unique @db.VarChar(48)
+  name      String                 @db.VarChar(80)
+  type      KnowledgeSectionType
+  position  Int                    @default(0)
+  status    KnowledgeContentStatus @default(PUBLISHED)
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+
+  categories KnowledgeCategory[]
+
+  @@index([type, status, position])
+  @@map("knowledge_sections")
+  @@schema("erp")
+}
+
+model KnowledgeCategory {
+  id          String                 @id @default(uuid()) @db.Uuid
+  sectionId   String                 @map("section_id") @db.Uuid
+  name        String                 @db.VarChar(120)
+  position    Int                    @default(0)
+  status      KnowledgeContentStatus @default(PUBLISHED)
+  createdById String?                @map("created_by_id") @db.Uuid
+  updatedById String?                @map("updated_by_id") @db.Uuid
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+
+  section   KnowledgeSection   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdBy User?              @relation("KnowledgeCategoryCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?              @relation("KnowledgeCategoryUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  articles  KnowledgeArticle[]
+
+  @@unique([sectionId, name])
+  @@index([sectionId, status, position])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("knowledge_categories")
+  @@schema("erp")
+}
+
+model KnowledgeArticle {
+  id          String                 @id @default(uuid()) @db.Uuid
+  categoryId  String                 @map("category_id") @db.Uuid
+  title       String                 @db.VarChar(180)
+  content     Json                   @db.JsonB
+  plainText   String                 @default("") @map("plain_text") @db.Text
+  position    Int                    @default(0)
+  status      KnowledgeContentStatus @default(DRAFT)
+  createdById String?                @map("created_by_id") @db.Uuid
+  updatedById String?                @map("updated_by_id") @db.Uuid
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+
+  category  KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("KnowledgeArticleCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?             @relation("KnowledgeArticleUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([categoryId, status, position])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("knowledge_articles")
   @@schema("erp")
 }
 
@@ -1671,47 +1784,60 @@ model PaymentAllocation {
 }
 
 model FinanceExpenseCategory {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique
-  description String?
-  isSystem    Boolean  @default(false) @map("is_system")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              String                 @id @default(uuid()) @db.Uuid
+  code            String                 @unique
+  name            String                 @unique
+  description     String?
+  transactionType FinanceTransactionType @map("transaction_type")
+  financialClass  FinanceFinancialClass? @map("financial_class")
+  isActive        Boolean                @default(true) @map("is_active")
+  isSystem        Boolean                @default(false) @map("is_system")
+  requiresStaff   Boolean                @default(false) @map("requires_staff")
+  requiresProject Boolean                @default(false) @map("requires_project")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
 
   expenses FinanceExpense[]
 
+  @@index([isActive, transactionType])
+  @@index([financialClass, isActive])
   @@map("finance_expense_categories")
   @@schema("erp")
 }
 
 model FinanceExpense {
-  id                     String            @id @default(uuid()) @db.Uuid
-  categoryId             String            @map("category_id") @db.Uuid
-  amount                 Decimal           @db.Decimal(12, 2)
-  expenseDate            DateTime          @map("expense_date") @db.Date
-  method                 PaymentMethod     @default(CASH)
-  vendor                 String?
-  description            String?
-  employeeUserId         String?           @map("employee_user_id") @db.Uuid
-  hrEmployeeId           String?           @map("hr_employee_id") @db.Uuid
-  bonusAwardId           String?           @unique @map("bonus_award_id") @db.Uuid
-  teacherId              String?           @map("teacher_id") @db.Uuid
-  salaryMode             FinanceSalaryMode @default(NONE) @map("salary_mode")
-  salaryPercent          Decimal?          @map("salary_percent") @db.Decimal(5, 2)
-  salaryBaseAmount       Decimal?          @map("salary_base_amount") @db.Decimal(12, 2)
-  salaryCalculatedAmount Decimal?          @map("salary_calculated_amount") @db.Decimal(12, 2)
-  receiptFileName        String?           @map("receipt_file_name")
-  receiptFilePath        String?           @map("receipt_file_path")
-  receiptReference       String?           @map("receipt_reference")
-  idempotencyKey         String?           @unique @map("idempotency_key") @db.Uuid
-  workshopEventId        String?           @map("workshop_event_id") @db.Uuid
-  createdById            String?           @map("created_by_id") @db.Uuid
-  voidedAt               DateTime?         @map("voided_at")
-  voidedById             String?           @map("voided_by_id") @db.Uuid
-  voidReason             String?           @map("void_reason")
-  replacesExpenseId      String?           @unique @map("replaces_expense_id") @db.Uuid
-  createdAt              DateTime          @default(now()) @map("created_at")
-  updatedAt              DateTime          @updatedAt @map("updated_at")
+  id                           String                 @id @default(uuid()) @db.Uuid
+  categoryId                   String                 @map("category_id") @db.Uuid
+  amount                       Decimal                @db.Decimal(12, 2)
+  expenseDate                  DateTime               @map("expense_date") @db.Date
+  transactionType              FinanceTransactionType @default(EXPENSE) @map("transaction_type")
+  financialClass               FinanceFinancialClass  @default(OPEX) @map("financial_class")
+  costCenter                   FinanceCostCenter      @map("cost_center")
+  method                       PaymentMethod          @default(CASH)
+  vendor                       String?
+  description                  String?
+  employeeUserId               String?                @map("employee_user_id") @db.Uuid
+  hrEmployeeId                 String?                @map("hr_employee_id") @db.Uuid
+  bonusAwardId                 String?                @unique @map("bonus_award_id") @db.Uuid
+  teacherId                    String?                @map("teacher_id") @db.Uuid
+  salaryMode                   FinanceSalaryMode      @default(NONE) @map("salary_mode")
+  salaryPercent                Decimal?               @map("salary_percent") @db.Decimal(5, 2)
+  salaryBaseAmount             Decimal?               @map("salary_base_amount") @db.Decimal(12, 2)
+  salaryCalculatedAmount       Decimal?               @map("salary_calculated_amount") @db.Decimal(12, 2)
+  receiptFileName              String?                @map("receipt_file_name")
+  receiptFilePath              String?                @map("receipt_file_path")
+  receiptReference             String?                @map("receipt_reference")
+  idempotencyKey               String?                @unique @map("idempotency_key") @db.Uuid
+  workshopEventId              String?                @map("workshop_event_id") @db.Uuid
+  createdById                  String?                @map("created_by_id") @db.Uuid
+  voidedAt                     DateTime?              @map("voided_at")
+  voidedById                   String?                @map("voided_by_id") @db.Uuid
+  voidReason                   String?                @map("void_reason")
+  replacesExpenseId            String?                @unique @map("replaces_expense_id") @db.Uuid
+  legacyCategoryName           String?                @map("legacy_category_name")
+  classificationReviewRequired Boolean                @default(false) @map("classification_review_required")
+  createdAt                    DateTime               @default(now()) @map("created_at")
+  updatedAt                    DateTime               @updatedAt @map("updated_at")
 
   category        FinanceExpenseCategory @relation(fields: [categoryId], references: [id])
   employeeUser    User?                  @relation("FinanceExpenseEmployee", fields: [employeeUserId], references: [id])
@@ -1725,6 +1851,8 @@ model FinanceExpense {
   replacement     FinanceExpense?        @relation("FinanceExpenseReplacement")
 
   @@index([categoryId, expenseDate])
+  @@index([financialClass, expenseDate])
+  @@index([transactionType, expenseDate])
   @@index([employeeUserId])
   @@index([hrEmployeeId])
   @@index([teacherId])

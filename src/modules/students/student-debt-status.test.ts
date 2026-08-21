@@ -17,7 +17,7 @@ test("does not mark a student as debtor before the next payment date", () => {
   assert.equal(isStudentDebtDue({ balance: 250, nextPaymentAt, today }), false);
   assert.deepEqual(
     resolveStudentPaymentStatus({ balance: 250, nextPaymentAt, today }),
-    { label: "Ödəniş tarixi gözlənilir", tone: "neutral" },
+    { label: "Planlı ödəniş", tone: "neutral" },
   );
   assert.equal(
     resolveStudentLifecycleStatus({ lifecycleStatus: "DEBT", debtDue: false }),
@@ -53,9 +53,13 @@ test("marks a student as overdue after the next payment date", () => {
   );
 });
 
-test("requires both an outstanding balance and a scheduled payment date", () => {
+test("treats an unscheduled outstanding balance as actionable debt", () => {
   const today = utcDate("2026-08-15");
 
   assert.equal(isStudentDebtDue({ balance: 0, nextPaymentAt: today, today }), false);
-  assert.equal(isStudentDebtDue({ balance: 250, nextPaymentAt: null, today }), false);
+  assert.equal(isStudentDebtDue({ balance: 250, nextPaymentAt: null, today }), true);
+  assert.deepEqual(
+    resolveStudentPaymentStatus({ balance: 250, nextPaymentAt: null, today }),
+    { label: "Qalıq borc", tone: "warning" },
+  );
 });
