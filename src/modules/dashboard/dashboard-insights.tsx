@@ -2,13 +2,11 @@
 
 import { type CSSProperties, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CircleDollarSign, Percent, TrendingDown } from "lucide-react";
-import { Area, AreaChart, PolarAngleAxis, RadialBar, RadialBarChart } from "recharts";
+import { ArrowRight, Percent, TrendingDown } from "lucide-react";
+import { PolarAngleAxis, RadialBar, RadialBarChart } from "recharts";
 import {
   type ChartConfig,
   ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
   Dialog,
@@ -20,7 +18,6 @@ import {
 import type { DashboardData } from "@/modules/dashboard/queries";
 
 type ChurnCounts = DashboardData["churnCounts"];
-type RevenuePoint = DashboardData["revenueBars"][number];
 
 const conversionChartConfig = {
   value: { label: "Konversiya", color: "var(--chart-violet)" },
@@ -30,24 +27,14 @@ const churnChartConfig = {
   value: { label: "Churn", color: "var(--chart-danger)" },
 } satisfies ChartConfig;
 
-const forecastChartConfig = {
-  revenue: { label: "Gəlir", color: "var(--chart-secondary)" },
-} satisfies ChartConfig;
-
 export function DashboardInsights({
   conversionRate,
   conversionHelper,
-  revenueForecast,
-  revenueForecastHelper,
-  revenueBars,
   churnRate,
   churnCounts,
 }: {
   conversionRate: string;
   conversionHelper: string;
-  revenueForecast: string;
-  revenueForecastHelper: string;
-  revenueBars: RevenuePoint[];
   churnRate: string;
   churnCounts: ChurnCounts;
 }) {
@@ -69,15 +56,6 @@ export function DashboardInsights({
           <strong>{conversionRate}</strong>
           <small>{conversionHelper}</small>
         </div>
-      </section>
-
-      <section className="owner-dashboard-insight-card owner-dashboard-insight-forecast">
-        <div className="owner-dashboard-insight-copy">
-          <span><CircleDollarSign size={15} aria-hidden="true" /> Ay sonu gəlir</span>
-          <strong>{revenueForecast}</strong>
-          <small>{revenueForecastHelper}</small>
-        </div>
-        <ForecastTrend items={revenueBars} />
       </section>
 
       <button
@@ -186,34 +164,6 @@ function ChurnRateDial({ rate }: { rate: string }) {
       <strong>{rate}</strong>
       <small>churn</small>
     </span>
-  );
-}
-
-function ForecastTrend({ items }: { items: RevenuePoint[] }) {
-  const data = items.map((item) => ({ month: item.label, revenue: item.rawAmount, amount: item.amount }));
-
-  return (
-    <ChartContainer config={forecastChartConfig} className="owner-dashboard-insight-forecast-chart">
-      <AreaChart accessibilityLayer data={data} margin={{ top: 8, right: 2, bottom: 2, left: 2 }}>
-        <defs>
-          <linearGradient id="insight-forecast-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-revenue)" stopOpacity={0.45} />
-            <stop offset="100%" stopColor="var(--color-revenue)" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <ChartTooltip
-          cursor={false}
-          content={<ChartTooltipContent hideLabel indicator="line" />}
-        />
-        <Area
-          type="monotone"
-          dataKey="revenue"
-          stroke="var(--color-revenue)"
-          strokeWidth={2.2}
-          fill="url(#insight-forecast-fill)"
-        />
-      </AreaChart>
-    </ChartContainer>
   );
 }
 

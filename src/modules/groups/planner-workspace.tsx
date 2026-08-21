@@ -56,6 +56,7 @@ import {
   minimumAssignmentDate,
   preferredAssignmentDate,
   selectedSlotsFirst,
+  slotsForAssignedTeacher,
 } from "@/modules/groups/planner-assignment";
 import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
 import { SlotDetailDialog } from "@/modules/groups/slot-detail-dialog";
@@ -827,34 +828,52 @@ function AssignmentDialog({
 }) {
   const firstEnrollment = data.enrollments.find((item) => item.id === initialEnrollmentId)
     ?? data.enrollments[0];
-  const initialSelection = firstEnrollment?.slotIds.length
-    ? firstEnrollment.slotIds
-    : firstEnrollment ? [initialSlot.id] : [];
+  const initialTeacherSlots = slotsForAssignedTeacher(
+    data.slots,
+    firstEnrollment?.teacherId ?? null,
+  );
+  const initialTeacherSlotIds = new Set(initialTeacherSlots.map((slot) => slot.id));
+  const scheduledSelection = firstEnrollment?.slotIds.filter((slotId) => (
+    initialTeacherSlotIds.has(slotId)
+  )) ?? [];
+  const initialSelection = scheduledSelection.length
+    ? scheduledSelection
+    : firstEnrollment && initialTeacherSlotIds.has(initialSlot.id) ? [initialSlot.id] : [];
   const [enrollmentId, setEnrollmentId] = useState(firstEnrollment?.id ?? "");
   const [selected, setSelected] = useState<string[]>(initialSelection);
   const [activeWeekday, setActiveWeekday] = useState<GroupWeekdayCode>(() => (
-    data.slots.find((slot) => initialSelection.includes(slot.id))?.weekday ?? initialSlot.weekday
+    initialTeacherSlots.find((slot) => initialSelection.includes(slot.id))?.weekday
+      ?? initialTeacherSlots[0]?.weekday
+      ?? initialSlot.weekday
   ));
   const [validFrom, setValidFrom] = useState(() => (
-    preferredAssignmentDate(initialSelection, data.slots, data.today)
+    preferredAssignmentDate(initialSelection, initialTeacherSlots, data.today)
   ));
-  const enrollment = data.enrollments.find((item) => item.id === enrollmentId);
+  const enrollmentsById = useMemo(
+    () => new Map(data.enrollments.map((item) => [item.id, item])),
+    [data.enrollments],
+  );
+  const enrollment = enrollmentsById.get(enrollmentId);
   const enrollmentOptions = useMemo(
     () => data.enrollments.map((item) => ({
       value: item.id,
       label: `${item.studentName} · ${item.studentCode} · ${item.program}`,
-      searchText: `${item.studentName} ${item.studentCode} ${item.program}`,
+      searchText: `${item.studentName} ${item.studentCode} ${item.program} ${item.teacherName ?? ""}`,
     })),
     [data.enrollments],
   );
   const selectedIds = useMemo(() => new Set(selected), [selected]);
   const slotsById = useMemo(() => new Map(data.slots.map((slot) => [slot.id, slot])), [data.slots]);
+  const teacherSlots = useMemo(
+    () => slotsForAssignedTeacher(data.slots, enrollment?.teacherId ?? null),
+    [data.slots, enrollment?.teacherId],
+  );
   const activeDaySlots = useMemo(
     () => selectedSlotsFirst(
-      data.slots.filter((slot) => slot.weekday === activeWeekday),
+      teacherSlots.filter((slot) => slot.weekday === activeWeekday),
       selectedIds,
     ),
-    [activeWeekday, data.slots, selectedIds],
+    [activeWeekday, selectedIds, teacherSlots],
   );
   const selectedCountByDay = useMemo(() => {
     const counts = new Map<GroupWeekdayCode, number>();
@@ -864,20 +883,24 @@ function AssignmentDialog({
     });
     return counts;
   }, [selected, slotsById]);
-  const selectedTeachers = useMemo(
-    () => [...new Set(selected.map((id) => slotsById.get(id)?.teacherName).filter(Boolean))],
-    [selected, slotsById],
-  );
-
   function changeEnrollment(value: string) {
-    const next = data.enrollments.find((item) => item.id === value);
-    const nextSelection = next?.slotIds.length ? next.slotIds : [initialSlot.id];
+    const next = enrollmentsById.get(value);
+    const nextTeacherSlots = slotsForAssignedTeacher(data.slots, next?.teacherId ?? null);
+    const nextTeacherSlotIds = new Set(nextTeacherSlots.map((slot) => slot.id));
+    const nextScheduledSelection = next?.slotIds.filter((slotId) => (
+      nextTeacherSlotIds.has(slotId)
+    )) ?? [];
+    const nextSelection = nextScheduledSelection.length
+      ? nextScheduledSelection
+      : next && nextTeacherSlotIds.has(initialSlot.id) ? [initialSlot.id] : [];
     setEnrollmentId(value);
     setSelected(nextSelection);
     setActiveWeekday(
-      data.slots.find((slot) => nextSelection.includes(slot.id))?.weekday ?? initialSlot.weekday,
+      nextTeacherSlots.find((slot) => nextSelection.includes(slot.id))?.weekday
+        ?? nextTeacherSlots[0]?.weekday
+        ?? initialSlot.weekday,
     );
-    setValidFrom(preferredAssignmentDate(nextSelection, data.slots, data.today));
+    setValidFrom(preferredAssignmentDate(nextSelection, nextTeacherSlots, data.today));
   }
 
   function toggle(slot: PlannerSlot) {
@@ -886,7 +909,7 @@ function AssignmentDialog({
       ? selected.filter((id) => id !== slot.id)
       : [...selected, slot.id];
     setSelected(next);
-    setValidFrom(preferredAssignmentDate(next, data.slots, data.today));
+    setValidFrom(preferredAssignmentDate(next, teacherSlots, data.today));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -902,7 +925,7 @@ function AssignmentDialog({
         <DialogHeader className={styles.assignmentHeader}>
           <DialogTitle>Tələbə slot planı</DialogTitle>
           <DialogDescription>
-            Tələbənin bütün həftəlik slotlarını bir ekranda əlavə edin, dəyişin və ya silin.
+            Seçilmiş tələbənin müəlliminə aid həftəlik slotları bir ekranda idarə edin.
           </DialogDescription>
         </DialogHeader>
 
@@ -926,6 +949,25 @@ function AssignmentDialog({
                   contentClassName={styles.studentDropdown}
                 />
               </div>
+
+              {enrollment ? (
+                <div
+                  className={styles.teacherContext}
+                  data-empty={!enrollment.teacherId || undefined}
+                  aria-live="polite"
+                >
+                  <span className={styles.teacherContextIcon}><UserRound /></span>
+                  <div>
+                    <small>Təyin edilmiş müəllim</small>
+                    <strong>{enrollment.teacherName ?? "Müəllim təyin edilməyib"}</strong>
+                  </div>
+                  <p>
+                    {enrollment.teacherId
+                      ? "Yalnız bu müəllimin uyğun slotları göstərilir."
+                      : "Əvvəlcə Tələbələr bölməsindən müəllim təyin edin."}
+                  </p>
+                </div>
+              ) : null}
 
               <div className={styles.assignmentSectionHeading}>
                 <div>
@@ -1000,7 +1042,19 @@ function AssignmentDialog({
                   );
                 })}
                 {activeDaySlots.length ? null : (
-                  <span className={styles.emptySlotDay}>Bu gün üçün slot yoxdur.</span>
+                  <span className={styles.emptySlotDay}>
+                    <CalendarDays />
+                    <strong>
+                      {enrollment?.teacherId
+                        ? `${enrollment.teacherName} üçün bu gün uyğun slot yoxdur.`
+                        : "Tələbəyə müəllim təyin edilməyib."}
+                    </strong>
+                    <small>
+                      {enrollment?.teacherId
+                        ? "Digər günləri seçərək müəllimin uyğun vaxtlarına baxın."
+                        : "Slot seçimi müəllim təyin edildikdən sonra aktiv olacaq."}
+                    </small>
+                  </span>
                 )}
               </div>
             </div>
@@ -1026,8 +1080,8 @@ function AssignmentDialog({
                     ) : null;
                   })}
                 </ul>
-                {selectedTeachers.length ? (
-                  <p><UserRound size={16} /> {selectedTeachers.join(", ")}</p>
+                {selected.length && enrollment?.teacherName ? (
+                  <p><UserRound size={16} /> {enrollment.teacherName}</p>
                 ) : <p>Heç bir slot seçilməyib. Plan saxlananda silinəcək.</p>}
               </div>
               <label className={styles.startDateField}>
@@ -1035,7 +1089,7 @@ function AssignmentDialog({
                 <input
                   name="validFrom"
                   type="date"
-                  min={minimumAssignmentDate(selected, data.slots)}
+                  min={minimumAssignmentDate(selected, teacherSlots)}
                   value={validFrom}
                   onChange={(event) => setValidFrom(event.target.value)}
                   required
@@ -1053,7 +1107,11 @@ function AssignmentDialog({
           </div>
           <DialogFooter className={styles.assignmentFooter}>
             <Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button>
-            <Button type="submit" disabled={pending || !enrollmentId}>
+            <Button
+              type="submit"
+              disabled={pending || !enrollmentId || Boolean(enrollment && !enrollment.teacherId)}
+              title={enrollment && !enrollment.teacherId ? "Əvvəlcə tələbəyə müəllim təyin edin" : undefined}
+            >
               {pending ? "Yadda saxlanılır..." : selected.length ? "Planı yadda saxla" : "Planı sil"}
             </Button>
           </DialogFooter>

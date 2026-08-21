@@ -92,6 +92,75 @@
   gap: 8px;
 }
 
+.teacherContext {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  color: #22334f;
+  background: linear-gradient(135deg, #f5f8ff, #fbfdff);
+  border: 1px solid #d9e4f5;
+  border-radius: 14px;
+}
+
+.teacherContext[data-empty="true"] {
+  color: #7b4a13;
+  background: linear-gradient(135deg, #fff8ee, #fffdf8);
+  border-color: #f0d8b5;
+}
+
+.teacherContextIcon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: #1769e8;
+  background: #fff;
+  border: 1px solid #d7e3f5;
+  border-radius: 12px;
+  box-shadow: 0 5px 14px rgba(37, 75, 132, .07);
+}
+
+.teacherContext[data-empty="true"] .teacherContextIcon {
+  color: #c76a13;
+  border-color: #efd7b6;
+}
+
+.teacherContextIcon svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 2;
+}
+
+.teacherContext small,
+.teacherContext strong {
+  display: block;
+}
+
+.teacherContext small {
+  color: #74829a;
+  font-size: 9px;
+  font-weight: 720;
+}
+
+.teacherContext strong {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 790;
+}
+
+.teacherContext p {
+  max-width: 245px;
+  margin: 0;
+  color: #5b6b83;
+  font-size: 10px;
+  font-weight: 580;
+  line-height: 1.45;
+  text-align: right;
+}
+
 .studentField > span,
 .startDateField > span {
   color: #303b50;
@@ -1106,9 +1175,12 @@
 
 .emptySlotDay {
   display: grid;
-  min-height: 72px;
+  min-height: 104px;
   place-items: center;
-  padding: 10px;
+  align-content: center;
+  grid-column: 1 / -1;
+  gap: 6px;
+  padding: 16px;
   color: var(--assignment-muted);
   background: #f8fafc;
   border: 1px dashed var(--assignment-line);
@@ -1117,10 +1189,55 @@
   text-align: center;
 }
 
+.emptySlotDay > svg {
+  position: static;
+  width: 22px;
+  height: 22px;
+  color: #8da1be;
+}
+
+.emptySlotDay > strong {
+  color: #40516c;
+  font-size: 11px;
+}
+
+.emptySlotDay > small {
+  color: #78869b;
+  font-size: 9px;
+  font-weight: 540;
+}
+
 :global(html.dark) .emptySlotDay {
   color: var(--dm-muted);
   background: var(--dm-surface-2);
   border-color: var(--dm-line-strong);
+}
+
+:global(html.dark) .emptySlotDay > strong {
+  color: var(--dm-text, #f4f7fc);
+}
+
+:global(html.dark) .emptySlotDay > small {
+  color: var(--dm-muted, #a9b4c8);
+}
+
+:global(html.dark) .teacherContext,
+:global(html.dark) .teacherContext[data-empty="true"] {
+  color: var(--dm-text, #f4f7fc);
+  background: var(--dm-surface-2, #202a3e);
+  border-color: var(--dm-line-strong, #344057);
+}
+
+:global(html.dark) .teacherContextIcon,
+:global(html.dark) .teacherContext[data-empty="true"] .teacherContextIcon {
+  color: #8ab5f5;
+  background: var(--dm-surface-1, #172033);
+  border-color: var(--dm-line-strong, #344057);
+}
+
+:global(html.dark) .teacherContext small,
+:global(html.dark) .teacherContext p {
+  color: var(--dm-muted, #a9b4c8);
 }
 
 .assignmentFooter :global([data-slot="button"]) {
@@ -1170,6 +1287,102 @@
   .slotDialogActions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Wide weekly planning surface */
+@media(min-width:861px) {
+  :global(.erp-frame[data-section="groups"]) {
+    padding: 14px;
+  }
+
+  :global(.erp-frame[data-section="groups"] .route-content-shell) {
+    max-width: none;
+  }
+
+  :global(.erp-frame[data-section="groups"] .global-search) {
+    width: min(100%, 760px);
+    margin-bottom: 12px;
+  }
+
+  :global(.erp-frame[data-section="groups"] .global-search-control) {
+    height: 44px;
+  }
+
+  .page {
+    margin: -2px;
+  }
+
+  .header {
+    gap: 18px;
+    padding: 0 2px 12px;
+  }
+
+  .heading h1 {
+    font-size: 28px;
+  }
+
+  .heading p {
+    margin-top: 5px;
+    font-size: 12px;
+  }
+
+  .filterBand {
+    margin: 8px 0 9px;
+    padding: 9px 10px;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) 270px;
+    height: clamp(450px, calc(100dvh - 270px), 900px);
+    min-height: 450px;
+    border-radius: 18px;
+  }
+
+  .timetable {
+    width: 100%;
+    min-width: 844px;
+    grid-template-columns: 60px repeat(var(--planner-days), minmax(112px, 1fr));
+  }
+
+  .corner,
+  .dayHead {
+    min-height: 46px;
+  }
+}
+
+@media(min-width:1600px) {
+  :global(.erp-frame[data-section="groups"]) {
+    padding: 16px;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) 286px;
+    height: clamp(560px, calc(100dvh - 258px), 960px);
+  }
+
+  .timetable {
+    min-width: 888px;
+    grid-template-columns: 62px repeat(var(--planner-days), minmax(118px, 1fr));
+  }
+}
+
+@media(min-width:1880px) {
+  .timetable {
+    min-width: 986px;
+    grid-template-columns: 62px repeat(var(--planner-days), minmax(132px, 1fr));
+  }
+}
+
+@media(max-width:720px) {
+  .teacherContext {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .teacherContext p {
+    grid-column: 1 / -1;
+    max-width: none;
+    text-align: left;
   }
 }
 

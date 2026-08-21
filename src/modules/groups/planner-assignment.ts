@@ -11,6 +11,10 @@ type AssignmentSlot = {
   weekday: GroupWeekdayCode;
 };
 
+type TeacherOwnedSlot = {
+  teacherId: string | null;
+};
+
 export function firstSlotOccurrenceDate(
   requestedDate: string,
   slot: Pick<AssignmentSlot, "validFrom" | "weekday">,
@@ -70,4 +74,20 @@ export function selectedSlotsFirst<T extends { id: string }>(
   });
 
   return [...selected, ...available];
+}
+
+export function slotsForAssignedTeacher<T extends TeacherOwnedSlot>(
+  slots: readonly T[],
+  teacherId: string | null,
+) {
+  if (!teacherId) return [];
+  return slots.filter((slot) => slot.teacherId === teacherId);
+}
+
+export function selectionMatchesAssignedTeacher(
+  slots: readonly TeacherOwnedSlot[],
+  teacherId: string | null,
+) {
+  if (!slots.length) return true;
+  return Boolean(teacherId) && slots.every((slot) => slot.teacherId === teacherId);
 }

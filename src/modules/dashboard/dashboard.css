@@ -314,7 +314,7 @@
 .owner-dashboard-insights-panel {
   position: relative;
   display: grid;
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 10px;
   min-height: 400px;
   padding: 16px;
@@ -348,7 +348,6 @@
 }
 
 .owner-dashboard-insight-conversion { background: linear-gradient(135deg, #f3f1ff, #fbfaff 72%); border-color: #e3dcff; }
-.owner-dashboard-insight-forecast { background: linear-gradient(135deg, #edfbf8, #fbfffe 72%); border-color: #cceee8; }
 .owner-dashboard-insight-churn { width: 100%; cursor: pointer; background: linear-gradient(135deg, #fff0f1, #fffafa 72%); border-color: #ffd6da; }
 .owner-dashboard-insight-churn:hover { border-color: rgb(210 78 96 / 42%); box-shadow: 0 10px 22px rgb(210 78 96 / 12%); transform: translateY(-2px); }
 .owner-dashboard-insight-churn:focus-visible { outline: 3px solid rgb(210 78 96 / 22%); outline-offset: 2px; }
@@ -362,13 +361,8 @@
 .owner-dashboard-insight-ring { width: 64px; height: 64px; flex: 0 0 64px; padding: 3px; background: rgb(255 255 255 / 72%); border: 1px solid rgb(255 255 255 / 80%); border-radius: 50%; box-shadow: 0 6px 14px rgb(35 43 67 / 7%); }
 .owner-dashboard-insight-ring.is-conversion { --chart-violet: #735fe0; }
 .owner-dashboard-insight-ring.is-churn { --chart-danger: #d34d60; }
-.owner-dashboard-insight-forecast .owner-dashboard-insight-copy > span svg { color: #149b88; }
-.owner-dashboard-insight-forecast .owner-dashboard-insight-copy strong { color: #087d70; }
 .owner-dashboard-insight-churn .owner-dashboard-insight-copy > span svg { color: #c94355; }
 .owner-dashboard-insight-churn .owner-dashboard-insight-copy strong { color: #c94355; }
-
-.owner-dashboard-insight-forecast { justify-content: space-between; }
-.owner-dashboard-insight-forecast-chart { width: 96px; height: 70px; flex: 0 0 96px; padding: 3px 2px 0; background: rgb(255 255 255 / 58%); border-radius: 11px; }
 
 .owner-dashboard-revenue-panel {
   position: relative;

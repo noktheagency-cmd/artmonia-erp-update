@@ -649,7 +649,12 @@ function toDistribution(counts: Map<string, number>) {
     name,
     count,
     percentage: total > 0 ? Math.round((count / total) * 100) : 0,
-  })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "az"));
+  })).sort((a, b) => b.count - a.count || compareStableText(a.name, b.name));
+}
+
+function compareStableText(left: string, right: string) {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
 }
 
 function parseCount(value: string | undefined) {

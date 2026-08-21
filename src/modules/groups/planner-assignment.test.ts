@@ -4,7 +4,9 @@ import {
   firstSlotOccurrenceDate,
   minimumAssignmentDate,
   preferredAssignmentDate,
+  selectionMatchesAssignedTeacher,
   selectedSlotsFirst,
+  slotsForAssignedTeacher,
 } from "./planner-assignment";
 
 const slots = [
@@ -54,4 +56,38 @@ test("places selected slots first while preserving the order of both groups", ()
     selectedSlotsFirst(slots, new Set(["evening"])).map((slot) => slot.id),
     ["evening", "morning", "future"],
   );
+});
+
+test("shows only slots owned by the student's assigned teacher", () => {
+  const teacherSlots = [
+    { id: "a-monday", teacherId: "teacher-a" },
+    { id: "b-monday", teacherId: "teacher-b" },
+    { id: "unassigned", teacherId: null },
+    { id: "a-friday", teacherId: "teacher-a" },
+  ];
+
+  assert.deepEqual(
+    slotsForAssignedTeacher(teacherSlots, "teacher-a").map((slot) => slot.id),
+    ["a-monday", "a-friday"],
+  );
+  assert.deepEqual(slotsForAssignedTeacher(teacherSlots, null), []);
+});
+
+test("rejects a mixed-teacher schedule while allowing an empty plan", () => {
+  assert.equal(
+    selectionMatchesAssignedTeacher(
+      [{ teacherId: "teacher-a" }, { teacherId: "teacher-a" }],
+      "teacher-a",
+    ),
+    true,
+  );
+  assert.equal(
+    selectionMatchesAssignedTeacher(
+      [{ teacherId: "teacher-a" }, { teacherId: "teacher-b" }],
+      "teacher-a",
+    ),
+    false,
+  );
+  assert.equal(selectionMatchesAssignedTeacher([{ teacherId: "teacher-a" }], null), false);
+  assert.equal(selectionMatchesAssignedTeacher([], null), true);
 });

@@ -42,6 +42,8 @@ export type PlannerEnrollment = {
   studentCode: string;
   studentName: string;
   program: string;
+  teacherId: string | null;
+  teacherName: string | null;
   lessonsPerMonth: number | null;
   slotIds: string[];
 };
@@ -181,6 +183,7 @@ export async function getPlannerWorkspaceData(input?: {
             id: true,
             lessonsPerMonth: true,
             program: { select: { name: true } },
+            teacher: { select: { id: true, fullName: true } },
             student: {
               select: {
                 id: true,
@@ -467,6 +470,8 @@ export async function getPlannerWorkspaceData(input?: {
       studentCode: enrollment.student.code,
       studentName: enrollment.student.contact.fullName,
       program: enrollment.program.name,
+      teacherId: enrollment.teacher?.id ?? null,
+      teacherName: enrollment.teacher?.fullName ?? null,
       lessonsPerMonth: enrollment.lessonsPerMonth,
       slotIds: [...new Set(enrollment.scheduleAssignments.map((assignment) => assignment.slotId))],
     })),

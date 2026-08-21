@@ -56,8 +56,6 @@ export type DashboardData = {
   tasks: string[];
   payoutPreview: string;
   payoutHelper: string;
-  revenueForecast: string;
-  revenueForecastHelper: string;
   waitingFamilies: number;
   waitingHelper: string;
   debtCenter: string;
@@ -609,7 +607,6 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const maxRevenue = Math.max(...revenueAmounts.map((item) => item.amount), 1);
   const totalRevenuePeriod = revenueAmounts.reduce((sum, item) => sum + item.amount, 0);
   const averageMonthlyRevenue = totalRevenuePeriod / revenueAmounts.length;
-  const currentMonthRevenue = revenueAmounts.at(-1)?.amount ?? 0;
   const bestRevenue = revenueAmounts.reduce(
     (best, item) => (item.amount > best.amount ? item : best),
     revenueAmounts[0] ?? { month: selectedMonthStart, amount: 0 }
@@ -619,11 +616,6 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   );
   const previousBestRevenue = bestRevenueIndex > 0 ? revenueAmounts[bestRevenueIndex - 1]?.amount ?? 0 : 0;
   const bestRevenueLift = bestRevenue.amount - previousBestRevenue;
-  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  const daysElapsed = Math.max(1, todayUtc.getUTCDate());
-  const daysInMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).getUTCDate();
-  const forecastAmount = Math.round((currentMonthRevenue / daysElapsed) * daysInMonth);
-  
   const debtByBucket = agingBuckets.map((bucket) => {
     const rawBucket = debtBucketRows.find((item) => item.label === bucket.label);
 
@@ -799,10 +791,6 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     })),
     tasks: taskRows.map((task) => task.title),
     payoutPreview: formatAmount(payoutPreview),
-    revenueForecast: formatAmount(forecastAmount),
-    revenueForecastHelper: `Cari temp qorunsa, ay sonuna qədər təxminən ${formatAmount(
-      Math.max(0, forecastAmount - currentMonthRevenue)
-    )} əlavə gəlir gözlənilir.`,
     payoutHelper: "Müəllimlərin cari ay üzrə hesablanmış maaşı.",
     waitingFamilies: waitingLeads,
     waitingHelper: "Növbəti əlaqə tarixi gəlmiş və ya yeni müraciətlər.",

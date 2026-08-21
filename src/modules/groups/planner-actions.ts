@@ -15,7 +15,10 @@ import {
   buildTeacherAvailabilityWhere,
   isTeacherScheduleOverlapError,
 } from "@/modules/groups/slot-availability";
-import { firstSlotOccurrenceDate } from "@/modules/groups/planner-assignment";
+import {
+  firstSlotOccurrenceDate,
+  selectionMatchesAssignedTeacher,
+} from "@/modules/groups/planner-assignment";
 import {
   dateFromInput,
   formatDateAz,
@@ -273,7 +276,20 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
   const studentId = await prisma.$transaction(async (tx) => {
     const enrollment = await tx.enrollment.findUnique({
       where: { id: input.enrollmentId },
-      include: { student: true },
+      select: {
+        id: true,
+        status: true,
+        teacherId: true,
+        studentId: true,
+        student: {
+          select: {
+            id: true,
+            code: true,
+            lifecycleStatus: true,
+            billingPaused: true,
+          },
+        },
+      },
     });
     if (
       !enrollment
@@ -291,6 +307,16 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       : [];
     if (slots.length !== uniqueSlotIds.length) {
       throw new Error("Seçilmiş slotlardan biri mövcud deyil");
+    }
+    if (uniqueSlotIds.length && !enrollment.teacherId) {
+      throw new PublicActionError(
+        "Tələbəyə müəllim təyin edilməyib. Əvvəlcə tələbə profilindən müəllim seçin.",
+      );
+    }
+    if (!selectionMatchesAssignedTeacher(slots, enrollment.teacherId)) {
+      throw new PublicActionError(
+        "Slot planına yalnız tələbəyə təyin edilmiş müəllimin slotlarını əlavə etmək olar.",
+      );
     }
 
     const startBySlotId = new Map(slots.map((slot) => [
@@ -360,25 +386,6 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       });
     }
 
-    const firstTeacherId = slots[0]?.teacherId ?? null;
-    const nextTeacherId = slots.length > 0 && slots.every((slot) => slot.teacherId === firstTeacherId)
-      ? firstTeacherId
-      : null;
-    if (enrollment.teacherId !== nextTeacherId) {
-      await tx.enrollment.update({ where: { id: enrollment.id }, data: { teacherId: nextTeacherId } });
-      await tx.teacherAssignmentHistory.create({
-        data: {
-          enrollmentId: enrollment.id,
-          oldTeacherId: enrollment.teacherId,
-          newTeacherId: nextTeacherId,
-          reason: nextTeacherId
-            ? "Slot planına əsasən müəllim təyin edildi"
-            : "Slot planında vahid müəllim olmadığı üçün əsas müəllim təyinatı silindi",
-          changedById: actor.id,
-        },
-      });
-    }
-
     if (slots.length) {
       await syncStudentActivationAndPayment(tx, {
         actorId: actor.id,
@@ -397,6 +404,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       before: before as unknown as Prisma.InputJsonValue,
       after: {
         slotIds: uniqueSlotIds,
+        teacherId: enrollment.teacherId,
         requestedValidFrom: input.validFrom,
         slotStartDates: Object.fromEntries(
           [...startBySlotId].map(([slotId, start]) => [slotId, start.toISOString().slice(0, 10)]),
