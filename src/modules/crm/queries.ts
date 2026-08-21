@@ -331,7 +331,6 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const totalLeads = toNumber(row?.totalLeads);
   const createdThisMonth = toNumber(row?.createdThisMonth);
   const openFollowUps = toNumber(row?.openFollowUps);
-  const qualifiedCount = toNumber(row?.qualifiedCount);
   const leadRows = asJsonArray<CrmLeadRawRow>(row?.leads);
   const conversionStats = asJsonObject<CrmConversionStatsRaw>(row?.conversionStats);
   const teamPerformanceRows = asJsonArray<CrmTeamPerformanceRaw>(row?.teamPerformance);
@@ -421,9 +420,9 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
         tone: "coral",
       },
       {
-        label: "Konversiya",
-        value: formatPercent(salesCount, totalLeads),
-        helper: `${formatCount(salesCount)} satış / ${formatCount(qualifiedCount)} uyğun müraciət`,
+        label: "Satış sayı",
+        value: formatCount(salesCount),
+        helper: `Konversiya ${formatPercent(salesCount, totalLeads)} · ${formatCount(salesCount)} satış / ${formatCount(totalLeads)} müraciət`,
         tone: "yellow",
       },
     ],
@@ -682,7 +681,10 @@ function getCrmRawData(
                 or l.stage = 'REGISTERED'::"erp"."LeadStage"
             )::int as sales_count
           from erp.leads l
-          left join erp.users m on m.id = l.manager_id
+          join erp.users m on m.id = l.manager_id and m.is_active = true
+          join erp.hr_employees he on he.user_id = m.id
+            and he.archived_at is null
+            and he.status in ('ACTIVE'::"erp"."HrEmployeeStatus", 'PROBATION'::"erp"."HrEmployeeStatus")
           where ${summarySql}
           group by coalesce(m.full_name, 'Təyin edilməyib')
           order by sales_count desc, total_count desc, manager_name asc

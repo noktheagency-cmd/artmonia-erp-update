@@ -31,7 +31,8 @@ test("task assignees must have a current HR profile and active ERP account", () 
     isActive: true,
     hrEmployeeProfile: {
       is: {
-        status: { not: "INACTIVE" },
+        status: { in: ["ACTIVE", "PROBATION"] },
+        archivedAt: null,
       },
     },
   });

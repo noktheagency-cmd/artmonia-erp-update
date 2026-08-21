@@ -17,6 +17,7 @@ import {
   Sparkles,
   Star,
   Target,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +78,7 @@ export function BonusWorkspace({
     approve: BonusAction;
     post: BonusAction;
     cancel: BonusAction;
+    remove: BonusAction;
     refresh: BonusAction;
   };
 }) {
@@ -85,6 +87,7 @@ export function BonusWorkspace({
   const [createOpen, setCreateOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [replayToken, setReplayToken] = useState(0);
   const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
@@ -186,7 +189,7 @@ export function BonusWorkspace({
           </div>
           {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
           {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Sadə hesab</strong><span>Tələbə sayına uyğun bonus seçilir, sonra həmin pillə üçün churn kəsintisi çıxılır.</span></div> : null}
-          {data.permissions.canManage ? <div className="hr-bonus-inspector-actions">{selected.metricKind !== "TEACHER_RETENTION_RATE" ? <Button variant="outline" onClick={() => setAdjustOpen(true)}>Nəticəyə düzəliş</Button> : null}<Button variant="ghost" onClick={() => setCancelOpen(true)}>Kampaniyanı ləğv et</Button></div> : null}
+          {data.permissions.canManage ? <div className="hr-bonus-inspector-actions">{selected.metricKind !== "TEACHER_RETENTION_RATE" ? <Button variant="outline" onClick={() => setAdjustOpen(true)}>Nəticəyə düzəliş</Button> : null}<Button variant="ghost" onClick={() => setCancelOpen(true)}>Kampaniyanı ləğv et</Button><Button variant="destructive" onClick={() => setDeleteOpen(true)}><Trash2 data-icon="inline-start" /> Birdəfəlik sil</Button></div> : null}
         </aside>
       </div>
 
@@ -198,6 +201,7 @@ export function BonusWorkspace({
       <CreateBonusDialog open={createOpen} departments={data.departments} teacherDepartments={data.teacherDepartments} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Bonus kampaniyası yaradıldı.", () => setCreateOpen(false))} />
       <AdjustmentDialog open={adjustOpen} campaign={selected} pending={pending} onClose={() => setAdjustOpen(false)} onSubmit={(formData) => run(() => actions.adjust(formData), "Nəticə düzəlişi qeydə alındı.", () => setAdjustOpen(false))} />
       <CancelDialog open={cancelOpen} campaign={selected} pending={pending} onClose={() => setCancelOpen(false)} onSubmit={(formData) => run(() => actions.cancel(formData), "Kampaniya ləğv edildi.", () => setCancelOpen(false))} />
+      <DeleteCampaignDialog open={deleteOpen} campaign={selected} pending={pending} onClose={() => setDeleteOpen(false)} onSubmit={(formData) => run(() => actions.remove(formData), "Kampaniya birdəfəlik silindi.", () => { setDeleteOpen(false); setSelectedId(""); })} />
     </section>
   );
 }
@@ -362,6 +366,8 @@ function CreateBonusDialog({ open, departments, teacherDepartments, pending, onC
 function AdjustmentDialog({ open, campaign, pending, onClose, onSubmit }: { open: boolean; campaign: HrBonusCampaignDto; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) { return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="hr-bonus-small-dialog"><DialogHeader><DialogTitle>Nəticəyə düzəliş</DialogTitle><DialogDescription>Avtomatik nəticəyə auditli müsbət və ya mənfi dəyişiklik əlavə edin.</DialogDescription></DialogHeader><form onSubmit={(event) => { event.preventDefault(); onSubmit(new FormData(event.currentTarget)); }}><input type="hidden" name="campaignId" value={campaign.id} /><FieldGroup><Field><FieldLabel htmlFor="adjustment-amount">Düzəliş</FieldLabel><Input id="adjustment-amount" name="amount" type="number" step="0.01" placeholder="Məsələn: 250 və ya -100" required /></Field><Field><FieldLabel htmlFor="adjustment-reason">Səbəb</FieldLabel><textarea id="adjustment-reason" name="reason" rows={4} minLength={3} maxLength={500} required /></Field></FieldGroup><DialogFooter><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>Düzəlişi saxla</Button></DialogFooter></form></DialogContent></Dialog>; }
 
 function CancelDialog({ open, campaign, pending, onClose, onSubmit }: { open: boolean; campaign: HrBonusCampaignDto; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) { return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="hr-bonus-small-dialog"><DialogHeader><DialogTitle>Kampaniyanı ləğv etmək?</DialogTitle><DialogDescription>“{campaign.name}” dayandırılacaq. Maliyyəyə göndərilmiş bonuslar varsa ləğv bloklanacaq.</DialogDescription></DialogHeader><form onSubmit={(event) => { event.preventDefault(); onSubmit(new FormData(event.currentTarget)); }}><input type="hidden" name="campaignId" value={campaign.id} /><Field><FieldLabel htmlFor="cancel-reason">Ləğv səbəbi</FieldLabel><textarea id="cancel-reason" name="reason" rows={4} minLength={3} maxLength={500} required /></Field><DialogFooter><Button type="button" variant="outline" onClick={onClose}>Geri qayıt</Button><Button type="submit" variant="destructive" disabled={pending}>Kampaniyanı ləğv et</Button></DialogFooter></form></DialogContent></Dialog>; }
+
+function DeleteCampaignDialog({ open, campaign, pending, onClose, onSubmit }: { open: boolean; campaign: HrBonusCampaignDto; pending: boolean; onClose: () => void; onSubmit: (formData: FormData) => void }) { return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="hr-bonus-small-dialog"><DialogHeader><DialogTitle>Kampaniyanı birdəfəlik silmək?</DialogTitle><DialogDescription>“{campaign.name}” və onun hesablanmamış bonus qeydləri geri qaytarılmadan silinəcək. Maliyyəyə göndərilmiş bonus varsa əməliyyat təhlükəsizlik üçün bloklanacaq.</DialogDescription></DialogHeader><form onSubmit={(event) => { event.preventDefault(); onSubmit(new FormData(event.currentTarget)); }}><input type="hidden" name="campaignId" value={campaign.id} /><Field><FieldLabel htmlFor="delete-campaign-reason">Silmə səbəbi</FieldLabel><textarea id="delete-campaign-reason" name="reason" rows={4} minLength={3} maxLength={500} required /></Field><DialogFooter><Button type="button" variant="outline" onClick={onClose}>Geri qayıt</Button><Button type="submit" variant="destructive" disabled={pending}><Trash2 data-icon="inline-start" /> Birdəfəlik sil</Button></DialogFooter></form></DialogContent></Dialog>; }
 
 function metricLabel(kind: HrBonusCampaignDto["metricKind"]) { return metricOptions.find((option) => option.value === kind)?.label ?? kind; }
 function metricDescription(kind: string) {

@@ -95,6 +95,7 @@ async function updateStaffActionImpl(formData: FormData) {
     include: { teacher: true },
   });
   if (!before) throw new PublicActionError("Əməkdaş tapılmadı", "NOT_FOUND");
+  if (before.archivedAt) throw new PublicActionError("Arxiv əməkdaşının məlumatları dəyişdirilə bilməz", "FORBIDDEN");
   const becomingTeacher = input.staffType === "TEACHER" && !before.teacherId;
   const leavingTeacher = input.staffType === "EMPLOYEE" && Boolean(before.teacherId);
   const uploadedProfilePhotoUrl = await persistProfilePhoto(formData.get("profilePhoto"));

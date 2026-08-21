@@ -1,6 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
-import { requireErpActor } from "@/server/auth/actor";
+import { requireErpActor, type ErpActor } from "@/server/auth/actor";
 import { formFilterString } from "@/modules/shared/form-values";
 import {
   addMonths,
@@ -30,6 +30,7 @@ export type FinanceFilters = {
 };
 
 export type FinanceData = {
+  accessMode: "FULL" | "ENTRY_ONLY";
   returnTo: string;
   permissions: {
     canRecordPayment: boolean;
@@ -58,6 +59,7 @@ export type FinanceData = {
     eventIncome: string;
     expense: string;
     operatingExpense: string;
+    coreExpense: string;
     eventExpense: string;
     net: string;
     grossProfit: string;
@@ -96,6 +98,11 @@ export type FinanceData = {
     count: number;
     sourceKind: "OPERATIONS" | "EVENT";
   }>;
+  costCenterBreakdown: Array<{
+    label: string;
+    value: number;
+    amount: string;
+  }>;
   categories: Array<{
     id: string;
     code: string;
@@ -131,6 +138,7 @@ export type FinanceData = {
     salaryBase: string;
     calculatedSalary: string;
   }>;
+  corporateCustomers: Array<{ id: string; name: string }>;
   payments: Array<{
     sourceKind: "STUDENT" | "WORKSHOP";
     sourceLabel: string;
@@ -245,6 +253,7 @@ type FinanceSummaryRow = {
   paymentCount: unknown;
   expense: unknown;
   operatingExpense: unknown;
+  coreExpense: unknown;
   workshopExpense: unknown;
   directCost: unknown;
   opex: unknown;
@@ -276,6 +285,11 @@ type ExpenseBreakdownRow = {
   value: unknown;
   count: unknown;
   sourceKind: "OPERATIONS" | "EVENT";
+};
+
+type CostCenterBreakdownRow = {
+  label: string;
+  value: unknown;
 };
 
 type StudentOptionRow = {
@@ -420,12 +434,19 @@ const movementTypes: Array<{ value: MovementType; label: string }> = [
 export async function getFinanceData(
   input: FinanceFilters = {}
 ): Promise<FinanceData> {
-  const actor = await requireErpActor("billing.payment.read");
+  const actor = await requireErpActor();
+  const financeReadPermissions = ["billing.invoice.read", "billing.payment.read", "billing.expense.read"] as const;
+  const canViewFinance = financeReadPermissions.some((permission) => actor.permissions.has(permission));
+  const canUseLimitedEntry = actor.permissions.has("billing.entry.create");
+  if (!canViewFinance && !canUseLimitedEntry) throw new Error("Missing permission: billing.finance.access");
   const prisma = getPrisma();
   const today = new Date();
   const monthStart = startOfMonth(today);
   const nextMonthStart = addMonths(monthStart, 1);
   const monthEnd = addDays(nextMonthStart, -1);
+  if (!canViewFinance) {
+    return getLimitedFinanceData({ actor, input, today, monthStart, monthEnd });
+  }
   const normalizedFilters = normalizeFinanceFilters(input, monthStart, monthEnd);
   const canReadWorkshopFinance = actor.permissions.has("workshop.finance.read");
   const includeStudentSource = normalizedFilters.source !== "workshop";
@@ -525,6 +546,7 @@ export async function getFinanceData(
     summaryRows,
     receivableSummaryRows,
     expenseBreakdownRows,
+    costCenterBreakdownRows,
     categoryRows,
     studentRows,
     staffRows,
@@ -534,6 +556,7 @@ export async function getFinanceData(
     payrollRows,
     debtRows,
     workshopDebtRows,
+    corporateCustomerRows,
   ] = await Promise.all([
     prisma.$queryRaw<FinanceSummaryRow[]>(Prisma.sql`
       with filtered_expenses as (
@@ -629,6 +652,15 @@ export async function getFinanceData(
           from filtered_expenses
           where financial_class = 'OPEX'::"erp"."FinanceFinancialClass"
         ), 0) as "operatingExpense",
+        coalesce((
+          select sum(amount)
+          from filtered_expenses
+          where workshop_event_id is null
+            and financial_class in (
+              'DIRECT_COST'::"erp"."FinanceFinancialClass",
+              'OPEX'::"erp"."FinanceFinancialClass"
+            )
+        ), 0) as "coreExpense",
         coalesce((
           select sum(amount)
           from filtered_expenses
@@ -735,6 +767,37 @@ export async function getFinanceData(
         case when fe.workshop_event_id is not null then 'EVENT' else 'OPERATIONS' end
       order by sum(fe.amount) desc
     `) : Promise.resolve([] as ExpenseBreakdownRow[]),
+    needsExpenses || needsPayroll ? prisma.$queryRaw<CostCenterBreakdownRow[]>(Prisma.sql`
+      select
+        case
+          when fe.workshop_event_id is not null then 'Tədbirlər'
+          when fe.cost_center is null then 'Təyin edilməyib'
+          else fe.cost_center::text
+        end as "label",
+        sum(fe.amount) as "value"
+      from erp.finance_expenses fe
+      join erp.finance_expense_categories fec on fec.id = fe.category_id
+      left join erp.users eu on eu.id = fe.employee_user_id
+      left join erp.teachers t on t.id = fe.teacher_id
+      where fe.expense_date >= ${fromDate}
+        and fe.expense_date < ${endDateExclusive}
+        and fe.voided_at is null
+        and fe.financial_class in (
+          'DIRECT_COST'::"erp"."FinanceFinancialClass",
+          'OPEX'::"erp"."FinanceFinancialClass"
+        )
+        ${expenseSourceSql}
+        ${expenseModeSql}
+        ${categorySql}
+        ${searchSql.expenses}
+      group by
+        case
+          when fe.workshop_event_id is not null then 'Tədbirlər'
+          when fe.cost_center is null then 'Təyin edilməyib'
+          else fe.cost_center::text
+        end
+      order by sum(fe.amount) desc
+    `) : Promise.resolve([] as CostCenterBreakdownRow[]),
     prisma.$queryRaw<CategoryRow[]>(Prisma.sql`
       select
         fec.id::text as "id",
@@ -1052,6 +1115,12 @@ export async function getFinanceData(
       order by we.event_date asc, "balanceDue" desc
       limit 70
     `) : Promise.resolve([] as WorkshopDebtRow[]),
+    prisma.hrCorporateCustomer.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      take: 500,
+      select: { id: true, name: true },
+    }),
   ]);
 
   const summary = summaryRows[0] ?? {
@@ -1061,6 +1130,7 @@ export async function getFinanceData(
     paymentCount: 0,
     expense: 0,
     operatingExpense: 0,
+    coreExpense: 0,
     workshopExpense: 0,
     directCost: 0,
     opex: 0,
@@ -1078,6 +1148,7 @@ export async function getFinanceData(
   const eventIncome = toNumber(summary.workshopIncome);
   const expense = toNumber(summary.expense);
   const operatingExpense = toNumber(summary.operatingExpense);
+  const coreExpense = toNumber(summary.coreExpense);
   const eventExpense = toNumber(summary.workshopExpense);
   const directCost = toNumber(summary.directCost);
   const opex = toNumber(summary.opex);
@@ -1136,10 +1207,11 @@ export async function getFinanceData(
       : "Cari ay";
 
   return {
+    accessMode: "FULL",
     returnTo: buildFinanceUrl(normalizedFilters),
     permissions: {
-      canRecordPayment: actor.permissions.has("billing.payment.create"),
-      canCreateExpense: actor.permissions.has("billing.expense.create"),
+      canRecordPayment: actor.permissions.has("billing.payment.create") || actor.permissions.has("billing.entry.create"),
+      canCreateExpense: actor.permissions.has("billing.expense.create") || actor.permissions.has("billing.entry.create"),
       canVoidExpense: actor.permissions.has("billing.expense.void"),
       canExport: actor.permissions.has("report.export"),
     },
@@ -1164,6 +1236,7 @@ export async function getFinanceData(
       eventIncome: formatAmount(eventIncome),
       expense: formatAmount(expense),
       operatingExpense: formatAmount(operatingExpense),
+      coreExpense: formatAmount(coreExpense),
       eventExpense: formatAmount(eventExpense),
       net: formatAmount(net),
       grossProfit: formatAmount(grossProfit),
@@ -1257,6 +1330,16 @@ export async function getFinanceData(
         sourceKind: item.sourceKind,
       };
     }),
+    costCenterBreakdown: costCenterBreakdownRows.map((item) => {
+      const value = toNumber(item.value);
+      return {
+        label: item.label === "Tədbirlər" || item.label === "Təyin edilməyib"
+          ? item.label
+          : getFinanceCostCenterLabel(item.label),
+        value,
+        amount: formatAmount(value),
+      };
+    }),
     categories: categoryRows.map((category) => ({
       id: category.id,
       code: category.code,
@@ -1297,6 +1380,7 @@ export async function getFinanceData(
       salaryBase: formatDecimalInput(staff.salaryBase),
       calculatedSalary: formatDecimalInput(staff.calculatedSalary),
     })),
+    corporateCustomers: corporateCustomerRows,
     payments: [
       ...paymentRows.map((payment) => ({
       sourceKind: "STUDENT" as const,
@@ -1651,6 +1735,140 @@ function mapExpenseRow(expenseRow: ExpenseRow) {
   };
 }
 
+async function getLimitedFinanceData({
+  actor,
+  input,
+  today,
+  monthStart,
+  monthEnd,
+}: {
+  actor: ErpActor;
+  input: FinanceFilters;
+  today: Date;
+  monthStart: Date;
+  monthEnd: Date;
+}): Promise<FinanceData> {
+  const prisma = getPrisma();
+  const normalizedFilters = normalizeFinanceFilters(input, monthStart, monthEnd);
+  const [categories, students, corporateCustomers] = await Promise.all([
+    prisma.financeExpenseCategory.findMany({
+      where: {
+        isActive: true,
+        requiresStaff: false,
+        requiresProject: false,
+        transactionType: { not: "INCOME" },
+      },
+      orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+      take: 300,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        isSystem: true,
+        isActive: true,
+        transactionType: true,
+        financialClass: true,
+        requiresStaff: true,
+        requiresProject: true,
+      },
+    }),
+    prisma.student.findMany({
+      where: { lifecycleStatus: { in: ["SLOT_WAITING", "ACTIVE", "DEBT"] } },
+      orderBy: { contact: { fullName: "asc" } },
+      take: 200,
+      select: {
+        id: true,
+        code: true,
+        contact: { select: { fullName: true, phoneDisplay: true } },
+        invoices: {
+          where: { status: { not: "VOID" }, balanceDue: { gt: 0 } },
+          select: { balanceDue: true },
+        },
+        enrollments: {
+          orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+          take: 1,
+          select: {
+            monthlyFee: true,
+            program: { select: { name: true } },
+            teacher: { select: { fullName: true } },
+          },
+        },
+      },
+    }),
+    prisma.hrCorporateCustomer.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      take: 500,
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const emptyAmount = "—";
+  return {
+    accessMode: "ENTRY_ONLY",
+    returnTo: "/finance",
+    permissions: {
+      canRecordPayment: actor.permissions.has("billing.entry.create"),
+      canCreateExpense: actor.permissions.has("billing.entry.create"),
+      canVoidExpense: false,
+      canExport: false,
+    },
+    filters: { ...normalizedFilters, type: "overview", activeCount: 0 },
+    filterLabels: { category: "", type: "", period: "Cari ay", source: "" },
+    summary: {
+      income: emptyAmount, studentIncome: emptyAmount, eventIncome: emptyAmount,
+      expense: emptyAmount, operatingExpense: emptyAmount, coreExpense: emptyAmount, eventExpense: emptyAmount,
+      net: emptyAmount, grossProfit: emptyAmount, operatingProfit: emptyAmount,
+      netCash: emptyAmount, directCost: emptyAmount, opex: emptyAmount, capex: emptyAmount,
+      financingIn: emptyAmount, financingOut: emptyAmount, legacyLiability: emptyAmount,
+      payroll: emptyAmount, debt: emptyAmount, paymentCount: "0", expenseCount: "0", debtors: "0",
+    },
+    receivableSummary: {
+      periodLabel: "Cari ay",
+      studentOutstanding: { count: 0, amount: emptyAmount, amountValue: 0 },
+      studentOverdue: { count: 0, amount: emptyAmount, amountValue: 0 },
+      studentFuture: { count: 0, amount: emptyAmount, amountValue: 0 },
+      workshop: { count: 0, amount: emptyAmount, amountValue: 0 },
+      masterclass: { count: 0, amount: emptyAmount, amountValue: 0 },
+    },
+    kpis: [],
+    expenseBreakdown: [],
+    costCenterBreakdown: [],
+    categories: categories.map((category) => ({
+      ...category,
+      name: formatFinanceCategoryName(category.name),
+      description: category.description ?? "",
+      transactionType: category.transactionType,
+      financialClass: category.financialClass ?? "",
+    })),
+    students: students.map((student) => {
+      const enrollment = student.enrollments[0];
+      const balance = student.invoices.reduce((total, invoice) => total + toNumber(invoice.balanceDue), 0);
+      const fallbackAmount = balance > 0 ? balance : toNumber(enrollment?.monthlyFee);
+      return {
+        id: student.id,
+        label: `${student.contact.fullName} / ${student.code}${balance > 0 ? ` / ${formatAmount(balance)}` : ""}`,
+        name: student.contact.fullName,
+        code: student.code,
+        phone: student.contact.phoneDisplay ?? "-",
+        program: enrollment?.program.name ?? "Proqram yoxdur",
+        teacher: enrollment?.teacher?.fullName ?? "Müəllim təyin edilməyib",
+        balance: balance > 0 ? formatAmount(balance) : "Açıq borc yoxdur",
+        defaultAmount: formatDecimalInput(fallbackAmount),
+        defaultPaymentDate: formatDateInput(today),
+      };
+    }),
+    staff: [],
+    corporateCustomers,
+    payments: [],
+    expenses: [],
+    debtors: [],
+    payrollItems: [],
+    alerts: [],
+  };
+}
+
 function formatFinanceCategoryName(value: string) {
   const normalized = normalizeFinanceKeyword(value);
 
@@ -1678,6 +1896,16 @@ function formatFinanceCategoryName(value: string) {
   }
 
   return value;
+}
+
+function getFinanceCostCenterLabel(value: string) {
+  return {
+    TEACHING: "Tədris",
+    SALES: "Satış",
+    MARKETING: "Marketinq",
+    OPERATIONS: "Əməliyyat",
+    MANAGEMENT: "Rəhbərlik",
+  }[value] ?? "Təyin edilməyib";
 }
 
 function normalizeFinanceKeyword(value: string) {

@@ -1,4 +1,4 @@
-import { TaskStatus } from "@/generated/prisma/client";
+import { AppRole, TaskStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
 import { canAdministerTasks } from "@/modules/tasks/task-permissions";
@@ -36,11 +36,12 @@ export async function getTaskData(input: { page?: string; pageSize?: string; tas
   const actor = await requireErpActor("task.read");
   const prisma = getPrisma();
   const canAdminister = await canAdministerTasks(actor);
+  const canViewAll = actor.roles.includes(AppRole.SUPER_ADMIN);
   const page = Math.max(1, Number.parseInt(input.page ?? "1", 10) || 1);
   const pageSize = Math.min(50, Math.max(10, Number.parseInt(input.pageSize ?? "25", 10) || 25));
   const selectedTaskId = /^[0-9a-f-]{36}$/i.test(input.task ?? "") ? input.task : undefined;
   const where = {
-    ...buildTaskWorkspaceWhere(canAdminister ? undefined : actor.id),
+    ...buildTaskWorkspaceWhere(canViewAll ? undefined : actor.id),
     ...(selectedTaskId ? { id: selectedTaskId } : {}),
   };
 

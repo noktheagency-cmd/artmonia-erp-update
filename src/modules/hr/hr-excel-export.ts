@@ -6,7 +6,7 @@ import type { TeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 import { downloadProfessionalExcel } from "@/modules/exports/excel-download";
 import type { ExcelExportDefinition } from "@/modules/exports/excel-workbook";
 
-type HrExportView = "overview" | "employees" | "teachers" | "corporate";
+type HrExportView = "overview" | "employees" | "archive" | "teachers" | "corporate";
 
 type HrExcelExportInput = {
   view: HrExportView;
@@ -40,14 +40,15 @@ function buildHrExport(input: HrExcelExportInput): { definition: ExcelExportDefi
   return buildEmployeeExport(input.employees, input.view);
 }
 
-function buildEmployeeExport(employees: HrEmployeeRow[], view: "overview" | "employees") {
+function buildEmployeeExport(employees: HrEmployeeRow[], view: "overview" | "employees" | "archive") {
+  const isArchive = view === "archive";
   return {
-    filename: "hr-emekdaslar.xlsx",
+    filename: isArchive ? "hr-komanda-arxivi.xlsx" : "hr-emekdaslar.xlsx",
     definition: {
-      title: view === "overview" ? "Artmonia · Əməkdaş icmalı" : "Artmonia · Əməkdaşlar",
-      worksheetName: "Əməkdaşlar",
+      title: view === "overview" ? "Artmonia · Əməkdaş icmalı" : isArchive ? "Artmonia · Komanda arxivi" : "Artmonia · Əməkdaşlar",
+      worksheetName: isArchive ? "Komanda arxivi" : "Əməkdaşlar",
       summary: [
-        `Əhatə: ${view === "overview" ? "HR icmalı" : "Mövcud filtrlər"}`,
+        `Əhatə: ${view === "overview" ? "HR icmalı" : isArchive ? "İşdən ayrılmış əməkdaşlar" : "Mövcud filtrlər"}`,
         `Nəticə sayı: ${employees.length}`,
       ],
       columns: [
@@ -57,6 +58,11 @@ function buildEmployeeExport(employees: HrEmployeeRow[], view: "overview" | "emp
         { key: "status", label: "Status", kind: "status", width: 17 },
         { key: "phone", label: "Telefon", width: 18 },
         { key: "address", label: "Ünvan", width: 34, wrap: true },
+        ...(isArchive ? [
+          { key: "employmentEndedAt", label: "İşdən çıxma tarixi", kind: "date" as const, width: 18 },
+          { key: "exitReason", label: "İşdən çıxma səbəbi", width: 38, wrap: true },
+          { key: "archivedByName", label: "Arxivləşdirən", width: 22 },
+        ] : []),
       ],
       rows: employees.map((employee) => ({
         fullName: employee.fullName,
@@ -65,6 +71,9 @@ function buildEmployeeExport(employees: HrEmployeeRow[], view: "overview" | "emp
         status: employeeStatusLabels[employee.status],
         phone: employee.phone,
         address: employee.address,
+        employmentEndedAt: employee.employmentEndedAt,
+        exitReason: employee.exitReason,
+        archivedByName: employee.archivedByName,
       })),
     } satisfies ExcelExportDefinition,
   };

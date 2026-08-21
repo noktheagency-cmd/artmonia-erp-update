@@ -57,7 +57,7 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
       u.auth_user_id::text as "authUserId",
       u.full_name as "fullName",
       u.email,
-      he.profile_photo_url as "profilePhotoUrl",
+      coalesce(u.profile_photo_url, he.profile_photo_url) as "profilePhotoUrl",
       coalesce(array_agg(r.code::text) filter (where r.code is not null), array[]::text[]) as "roles"
     from erp.users u
     left join erp.hr_employees he on he.user_id = u.id
@@ -65,7 +65,7 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
     left join erp.roles r on r.id = ur.role_id
     where u.auth_user_id = ${data.claims.sub}::uuid
       and u.is_active = true
-    group by u.id, he.profile_photo_url
+    group by u.id, u.profile_photo_url, he.profile_photo_url
     limit 1
   `);
 

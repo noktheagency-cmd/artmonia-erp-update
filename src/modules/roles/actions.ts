@@ -258,7 +258,16 @@ export async function deleteRoleAction(formData: FormData): Promise<DeleteRoleRe
       });
 
       if (userIds.length > 0) {
-        await tx.hrEmployee.deleteMany({ where: { userId: { in: userIds } } });
+        await tx.hrEmployee.updateMany({
+          where: { userId: { in: userIds }, archivedAt: null },
+          data: {
+            status: "INACTIVE",
+            employmentEndedAt: new Date(),
+            exitReason: `“${role.name}” rolu silindiyi üçün profil arxivləşdirildi`,
+            archivedAt: new Date(),
+            archivedById: actor.id,
+          },
+        });
         if (teacherIds.length > 0) {
           await tx.teacher.updateMany({
             where: { id: { in: teacherIds } },

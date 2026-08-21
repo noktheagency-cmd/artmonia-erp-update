@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import {
   BriefcaseBusiness,
+  Archive,
   Download,
   GraduationCap,
   LoaderCircle,
@@ -51,7 +52,7 @@ import "./hr.css";
 import "./hr-payroll.css";
 import "./staff.css";
 
-type View = "overview" | "employees" | "teachers" | "corporate" | "bonus";
+type View = "overview" | "employees" | "archive" | "teachers" | "corporate" | "bonus";
 type Action = (formData: FormData) => Promise<unknown>;
 const statusMeta = {
   ACTIVE: { label: "Aktiv", color: "#22a06b", className: "active" },
@@ -83,6 +84,7 @@ export function HrWorkspace({
     approveBonus: Action;
     postBonus: Action;
     cancelBonus: Action;
+    deleteBonus: Action;
     refreshBonuses: Action;
     createCorporate: Action;
     updateCorporate: Action;
@@ -141,6 +143,20 @@ export function HrWorkspace({
       }),
     [department, employeeData.employees, query, status],
   );
+  const archivedEmployees = useMemo(
+    () =>
+      employeeData.archivedEmployees.filter((item) => {
+        const needle = query.trim().toLocaleLowerCase("az");
+        return (
+          (!needle ||
+            `${item.fullName} ${item.position} ${item.department} ${item.email} ${item.phone} ${item.exitReason}`
+              .toLocaleLowerCase("az")
+              .includes(needle)) &&
+          (department === "all" || item.department === department)
+        );
+      }),
+    [department, employeeData.archivedEmployees, query],
+  );
   const teachers = useMemo(
     () =>
       teacherData.teachers.filter(
@@ -184,7 +200,12 @@ export function HrWorkspace({
     setExporting(true);
     setNotice("");
     try {
-      await exportHrExcel({ view, employees, teachers, corporateData });
+      await exportHrExcel({
+        view,
+        employees: view === "archive" ? archivedEmployees : employees,
+        teachers,
+        corporateData,
+      });
       notifySuccess("Excel ixracı hazırdır", "Peşəkar formatlı Excel faylı uğurla yaradıldı.");
     } catch (error) {
       setNotice(notifyCaughtError(error, "Excel ixracı hazırlanmadı.", "İxrac alınmadı"));
@@ -223,7 +244,7 @@ export function HrWorkspace({
               <Button onClick={() => setCorporateEditor("new")}>
                 <Plus data-icon="inline-start" /> Şirkət əlavə et
               </Button>
-            ) : view !== "bonus" && view !== "corporate" && employeeData.permissions.canManage ? (
+            ) : view !== "bonus" && view !== "corporate" && view !== "archive" && employeeData.permissions.canManage ? (
               <Button onClick={() => {
                 setNewStaffType(view === "teachers" ? "TEACHER" : "EMPLOYEE");
                 setEditor("new");
@@ -236,6 +257,7 @@ export function HrWorkspace({
         <TabsList variant="line" className="hr-command-tabs">
           {employeeData.permissions.canRead ? <TabsTrigger value="overview">İcmal</TabsTrigger> : null}
           {employeeData.permissions.canRead ? <TabsTrigger value="employees">Əməkdaşlar</TabsTrigger> : null}
+          {employeeData.permissions.canRead ? <TabsTrigger value="archive">Komanda arxivi</TabsTrigger> : null}
           {teacherData.permissions.canReadTeachers ? <TabsTrigger value="teachers">Müəllim göstəriciləri</TabsTrigger> : null}
           {corporateData.permissions.canRead ? <TabsTrigger value="corporate">Korporativ müştərilər</TabsTrigger> : null}
           {bonusData.permissions.canManage || bonusData.actorEmployeeId || bonusData.permissions.canSeeAll ? <TabsTrigger value="bonus">Bonus</TabsTrigger> : null}
@@ -265,7 +287,7 @@ export function HrWorkspace({
                   <option key={item}>{item}</option>
                 ))}
               </select>
-              <select
+              {view !== "archive" ? <select
                 aria-label="Status"
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
@@ -276,14 +298,14 @@ export function HrWorkspace({
                     {meta.label}
                   </option>
                 ))}
-              </select>
+              </select> : null}
             </>
           ) : null}
           <Button variant="ghost" onClick={clearFilters}>
             <SlidersHorizontal data-icon="inline-start" /> Təmizlə
           </Button>
           <span className="hr-result-count">
-            {view === "teachers" ? teachers.length : employees.length} nəticə
+            {view === "teachers" ? teachers.length : view === "archive" ? archivedEmployees.length : employees.length} nəticə
           </span>
         </div> : null}
         {notice ? (
@@ -307,6 +329,12 @@ export function HrWorkspace({
             canManage={employeeData.permissions.canManage}
             onEdit={setEditor}
             onDelete={setDeleting}
+          />
+        </TabsContent>
+        <TabsContent value="archive">
+          <ArchiveTable
+            employees={archivedEmployees}
+            allTimeEmployeeCount={employeeData.allTimeEmployeeCount}
           />
         </TabsContent>
         <TabsContent value="teachers">
@@ -335,6 +363,7 @@ export function HrWorkspace({
               approve: actions.approveBonus,
               post: actions.postBonus,
               cancel: actions.cancelBonus,
+              remove: actions.deleteBonus,
               refresh: actions.refreshBonuses,
             }}
           />
@@ -420,27 +449,38 @@ export function HrWorkspace({
         <Dialog open onOpenChange={(open) => !open && setDeleting(null)}>
           <DialogContent className="hr-confirm-dialog">
             <DialogHeader>
-              <DialogTitle>İşçini silmək?</DialogTitle>
+              <DialogTitle>İşçini arxivə göndərmək?</DialogTitle>
               <DialogDescription>
-                {deleting.fullName} HR bazasından həmişəlik silinəcək.
+                {deleting.fullName} cari komandadan çıxarılacaq, giriş hüquqları bağlanacaq,
+                lakin iş və maliyyə tarixçəsi komanda arxivində qorunacaq.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleting(null)}>
-                Ləğv et
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={pending}
-                onClick={() => {
-                  const form = new FormData();
-                  form.set("id", deleting.id);
-                  run(() => actions.remove(form), "İşçi silindi.");
-                }}
-              >
-                Sil
-              </Button>
-            </DialogFooter>
+            <form
+              className="hr-archive-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                form.set("id", deleting.id);
+                run(() => actions.remove(form), "İşçi komanda arxivinə göndərildi.");
+              }}
+            >
+              <label>
+                <span>İşdən çıxma tarixi</span>
+                <Input name="employmentEndedAt" type="date" defaultValue={employeeData.today} required />
+              </label>
+              <label>
+                <span>Səbəb</span>
+                <textarea name="exitReason" rows={3} minLength={3} maxLength={500} required placeholder="Məsələn: əmək müqaviləsinə xitam verildi" />
+              </label>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDeleting(null)}>
+                  Ləğv et
+                </Button>
+                <Button type="submit" variant="destructive" disabled={pending}>
+                  Arxivə göndər
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       ) : null}
@@ -824,6 +864,59 @@ function EmployeeTable({
                   <Empty text="Filtrə uyğun əməkdaş yoxdur. Yeni əməkdaş yaradaraq başlayın." />
                 </td>
               </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ArchiveTable({
+  employees,
+  allTimeEmployeeCount,
+}: {
+  employees: HrEmployeeRow[];
+  allTimeEmployeeCount: number;
+}) {
+  return (
+    <section className="hr-surface hr-table-section hr-archive-section">
+      <div className="hr-archive-summary">
+        <span aria-hidden="true"><Archive /></span>
+        <div>
+          <strong>{employees.length} arxiv qeydi</strong>
+          <small>Şirkətdə indiyədək {allTimeEmployeeCount} əməkdaş profili olub.</small>
+        </div>
+      </div>
+      <div className="hr-table-scroll" data-erp-table-scroll="">
+        <table data-erp-table="" data-erp-sticky-first="">
+          <thead>
+            <tr>
+              <th>Əməkdaş</th>
+              <th>Son vəzifə</th>
+              <th>İşə başlama</th>
+              <th>İşdən çıxma</th>
+              <th>Səbəb</th>
+              <th>Arxivləşdirən</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employees.length ? employees.map((employee) => (
+              <tr key={employee.id}>
+                <td>
+                  <Link href={`/hr/${employee.id}` as Route} className="hr-person hr-person-link">
+                    <span>{initials(employee.fullName)}</span>
+                    <div><strong>{employee.fullName}</strong><small>{employee.email || employee.phone || "Əlaqə qeyd edilməyib"}</small></div>
+                  </Link>
+                </td>
+                <td><strong>{employee.position}</strong><small className="hr-salary-mode">{employee.department}</small></td>
+                <td>{formatDate(employee.hireDate)}</td>
+                <td>{employee.employmentEndedAt ? formatDate(employee.employmentEndedAt) : "—"}</td>
+                <td><span className="hr-archive-reason">{employee.exitReason || "Qeyd edilməyib"}</span></td>
+                <td>{employee.archivedByName || "Sistem"}</td>
+              </tr>
+            )) : (
+              <tr><td colSpan={6}><Empty text="Komanda arxivində qeyd yoxdur." /></td></tr>
             )}
           </tbody>
         </table>

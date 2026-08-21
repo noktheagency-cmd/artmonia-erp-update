@@ -19,11 +19,17 @@ export type HrEmployeeRow = {
   salaryMode: "STATIC" | "PERCENT";
   salaryAmount: number;
   salaryPercent: number;
+  employmentEndedAt: string;
+  exitReason: string;
+  archivedAt: string;
+  archivedByName: string;
   updatedAt: string;
 };
 
 export type HrEmployeeData = {
   employees: HrEmployeeRow[];
+  archivedEmployees: HrEmployeeRow[];
+  allTimeEmployeeCount: number;
   today: string;
   lookups: { departments: string[]; positions: string[] };
   permissions: { canRead: boolean; canManage: boolean; canExport: boolean };
@@ -34,13 +40,19 @@ export async function getHrEmployeeData(): Promise<HrEmployeeData> {
   if (!actor.permissions.has("hr.employee.read")) {
     return {
       employees: [],
+      archivedEmployees: [],
+      allTimeEmployeeCount: 0,
       today: new Date().toISOString().slice(0, 10),
       lookups: { departments: [], positions: [] },
       permissions: { canRead: false, canManage: false, canExport: false },
     };
   }
   const [employees, lookups] = await Promise.all([
-    getPrisma().hrEmployee.findMany({ include: { teacher: true }, orderBy: [{ status: "asc" }, { updatedAt: "desc" }], take: 500 }),
+    getPrisma().hrEmployee.findMany({
+      include: { teacher: true, archivedBy: { select: { fullName: true } } },
+      orderBy: [{ archivedAt: "asc" }, { status: "asc" }, { updatedAt: "desc" }],
+      take: 1_000,
+    }),
     getPrisma().hrLookupOption.findMany({ where: { isActive: true }, orderBy: [{ kind: "asc" }, { name: "asc" }] }),
   ]);
   const employeeRows: HrEmployeeRow[] = employees.map((employee) => ({
@@ -67,15 +79,23 @@ export async function getHrEmployeeData(): Promise<HrEmployeeData> {
     salaryMode: employee.salaryMode === "PERCENT" ? "PERCENT" : "STATIC",
     salaryAmount: Number(employee.salaryAmount),
     salaryPercent: Number(employee.salaryPercent ?? 0),
+    employmentEndedAt: employee.employmentEndedAt?.toISOString().slice(0, 10) ?? "",
+    exitReason: employee.exitReason ?? "",
+    archivedAt: employee.archivedAt?.toISOString() ?? "",
+    archivedByName: employee.archivedBy?.fullName ?? "",
     updatedAt: employee.updatedAt.toISOString(),
   }));
+  const currentEmployees = employeeRows.filter((employee) => !employee.archivedAt);
+  const archivedEmployees = employeeRows.filter((employee) => employee.archivedAt);
 
   return {
     today: new Date().toISOString().slice(0, 10),
-    employees: employeeRows,
+    employees: currentEmployees,
+    archivedEmployees,
+    allTimeEmployeeCount: employeeRows.length,
     lookups: {
-      departments: [...new Set([...lookups.filter((item) => item.kind === "DEPARTMENT" && item.name !== "__new").map((item) => item.name), ...employeeRows.map((item) => item.department)])].toSorted((a, b) => a.localeCompare(b, "az")),
-      positions: [...new Set([...lookups.filter((item) => item.kind === "POSITION" && item.name !== "__new").map((item) => item.name), ...employeeRows.map((item) => item.position)])].toSorted((a, b) => a.localeCompare(b, "az")),
+      departments: [...new Set([...lookups.filter((item) => item.kind === "DEPARTMENT" && item.name !== "__new").map((item) => item.name), ...currentEmployees.map((item) => item.department)])].toSorted((a, b) => a.localeCompare(b, "az")),
+      positions: [...new Set([...lookups.filter((item) => item.kind === "POSITION" && item.name !== "__new").map((item) => item.name), ...currentEmployees.map((item) => item.position)])].toSorted((a, b) => a.localeCompare(b, "az")),
     },
     permissions: {
       canRead: true,

@@ -90,7 +90,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
   const [actorEmployee, departmentRows, teacherDepartmentRows] = await Promise.all([
     prisma.hrEmployee.findUnique({ where: { userId: actor.id }, select: { id: true, department: true, teacherId: true } }),
     canManage
-      ? prisma.hrEmployee.findMany({ distinct: ["department"], select: { department: true }, orderBy: { department: "asc" } })
+      ? prisma.hrEmployee.findMany({ where: { archivedAt: null, status: { in: ["ACTIVE", "PROBATION"] } }, distinct: ["department"], select: { department: true }, orderBy: { department: "asc" } })
       : Promise.resolve([]),
     canManage
       ? prisma.hrEmployee.findMany({

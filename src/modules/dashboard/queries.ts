@@ -1,4 +1,4 @@
-import { Prisma } from "@/generated/prisma/client";
+import { AppRole, Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
 import {
@@ -84,6 +84,8 @@ export type DashboardData = {
   }>;
   conversionRate: string;
   conversionHelper: string;
+  salesCount: number;
+  totalLeadCount: number;
   churnRate: string;
   churnCounts: {
     frozen: number;
@@ -206,6 +208,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const selectedMonthStart = startOfMonth(today);
   const firstRevenueMonth = addMonths(selectedMonthStart, -11);
   const nextRevenueMonth = addMonths(selectedMonthStart, 1);
+  const canViewAllTasks = actor.roles.includes(AppRole.SUPER_ADMIN);
   
   const fetchDashboardRawData = async () =>
     prisma.$queryRaw<DashboardRawRow[]>(Prisma.sql`
@@ -213,14 +216,14 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       coalesce((
         select count(*)::int
         from erp.students s
-        where s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+        where s.lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
       ), 0) as "activeStudents",
       coalesce((
         select sum(e.monthly_fee)
         from erp.enrollments e
         join erp.students s on s.id = e.student_id
         where e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and s.lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
       ), 0) as "activeMrr",
       coalesce((
         select count(*)::int
@@ -236,7 +239,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
               limit 1
             ),
             s.lifecycle_status
-          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          ) in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
       ), 0) as "previousActiveStudents",
       coalesce((
         select sum(p.amount)
@@ -370,6 +373,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             'OPEN'::"erp"."TaskStatus",
             'IN_PROGRESS'::"erp"."TaskStatus"
           )
+          and (${canViewAllTasks} or t.owner_user_id = ${actor.id}::uuid)
           and (
             t.due_at is null
             or (
@@ -481,7 +485,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           join erp.programs pr on pr.id = e.program_id
           join erp.students s on s.id = e.student_id
           where e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-            and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+            and s.lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
           group by pr.name
           order by count desc
           limit 4
@@ -533,7 +537,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             )::int as sales,
             coalesce(sum(p.amount), 0) as revenue
           from erp.leads l
-          left join erp.users u on u.id = l.manager_id
+          join erp.users u on u.id = l.manager_id and u.is_active = true
+          join erp.hr_employees he on he.user_id = u.id
+            and he.archived_at is null
+            and he.status in ('ACTIVE'::"erp"."HrEmployeeStatus", 'PROBATION'::"erp"."HrEmployeeStatus")
           left join erp.payments p
             on p.student_id = l.converted_student_id
             and p.paid_at >= ${periodStart}
@@ -556,6 +563,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       previousPeriodStart.toISOString(),
       previousPeriodEndExclusive.toISOString(),
       cachedToday.toISOString(),
+      canViewAllTasks ? "all-tasks" : actor.id,
     ],
     {
       revalidate: 30,
@@ -805,6 +813,8 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     teamPerformance,
     conversionRate,
     conversionHelper: `${convertedLeadsThisMonth} satış / ${totalLeadsThisMonth} müraciət`,
+    salesCount: convertedLeadsThisMonth,
+    totalLeadCount: totalLeadsThisMonth,
     churnRate,
     churnCounts: {
       frozen: frozenStudents,

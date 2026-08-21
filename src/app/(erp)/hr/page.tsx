@@ -7,6 +7,7 @@ import {
   approveBonusStageAwardsAction,
   cancelBonusCampaignAction,
   createBonusCampaignAction,
+  deleteBonusCampaignAction,
   postBonusStageAwardsAction,
   refreshBonusCampaignsAction,
 } from "@/modules/hr/bonus-actions";
@@ -27,5 +28,5 @@ export default async function HrPage() {
     getCorporateCustomerData(),
   ]);
 
-  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} corporateData={corporateData} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, deleteTeacher: deleteTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction, createCorporate: createCorporateCustomerAction, updateCorporate: updateCorporateCustomerAction, deleteCorporate: deleteCorporateCustomerAction }} />;
+  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} corporateData={corporateData} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, deleteTeacher: deleteTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, deleteBonus: deleteBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction, createCorporate: createCorporateCustomerAction, updateCorporate: updateCorporateCustomerAction, deleteCorporate: deleteCorporateCustomerAction }} />;
 }

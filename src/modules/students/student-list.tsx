@@ -9,7 +9,6 @@ import {
   Activity,
   AlertCircle,
   ArrowRight,
-  Banknote,
   BarChart3,
   BellRing,
   CalendarClock,
@@ -44,8 +43,6 @@ import { deleteProgramAction, saveProgramAction } from "@/modules/students/progr
 import { StudentPaymentDialogClient } from "@/modules/students/student-payment-dialog-client";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { StudentListData } from "@/modules/students/queries";
-import { completeStudentReminderAction } from "@/modules/students/reminder-actions";
-import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
 import { buildStudentPaginationItems } from "@/modules/students/student-pagination";
 
 type StudentRow = StudentListData["students"][number];
@@ -337,7 +334,6 @@ function CompactStudentAudit({
   onUnassigned: () => void;
 }) {
   const operations = data.operations;
-  const reminders = data.todayReminders.items;
 
   return (
     <section className="students-audit-compact students-enter" aria-labelledby="students-audit-compact-title">
@@ -351,43 +347,19 @@ function CompactStudentAudit({
       </header>
 
       <ul className="students-audit-compact-list">
-        <li data-tone="success">
-          <Banknote aria-hidden="true" />
-          <span>Cari ay planının <strong>{operations.collectionRate}%-i</strong> toplanıb: {operations.collectedAmount} / {operations.expectedAmount}.</span>
-        </li>
         <li data-tone="danger">
           <AlertCircle aria-hidden="true" />
-          <span>Ödəniş prioriteti: <button type="button" onClick={onOverdue}>{operations.overdueCount} gecikmiş</button>, {operations.dueTodayCount} bu gün ödənməli, {operations.unscheduledCount} tarixsiz qeyd.</span>
+          <span><strong>1. Ödəniş aksiyası:</strong> <button type="button" onClick={onOverdue}>{operations.overdueCount} gecikmiş</button> və {operations.dueTodayCount} bu gün ödənməli tələbə.</span>
         </li>
         <li data-tone="blue">
           <CalendarClock aria-hidden="true" />
-          <span>Gələcək planlı ödənişlər: <Link href="/finance?type=debts">{operations.futureCount} tələbə · {operations.futureAmount} — Maliyyədə alacaqlara bax</Link>.</span>
+          <span><strong>2. Ödəniş tarixi çatışmır:</strong> {operations.unscheduledCount} aktiv və ya borclu tələbə üçün növbəti ödəniş tarixi qeyd edilməyib.</span>
         </li>
         <li data-tone="amber">
           <GraduationCap aria-hidden="true" />
-          <span>Təyinat nəzarəti: <button type="button" onClick={onUnassigned}>{operations.activeWithoutTeacherCount} aktiv tələbədə müəllim təyin edilməyib</button>.</span>
+          <span><strong>3. Müəllim təyinatı:</strong> <button type="button" onClick={onUnassigned}>{operations.activeWithoutTeacherCount} aktiv və ya borclu tələbədə müəllim təyin edilməyib</button>.</span>
         </li>
       </ul>
-
-      <div className="students-audit-compact-reminders" aria-label="Bugünkü fərdi xatırlatmalar">
-        <strong>{data.todayReminders.dateLabel}:</strong>
-        {reminders.length > 0 ? (
-          <div>
-            {reminders.map((reminder) => (
-              <span key={reminder.id}>
-                <Link href={`/students/${reminder.studentId}` as Route}>
-                  {reminder.studentName} — {reminder.kindLabel.toLocaleLowerCase("az-AZ")}
-                </Link>
-                {reminder.canComplete ? (
-                  <CompleteStudentReminderButton reminderId={reminder.id} studentId={reminder.studentId} action={completeStudentReminderAction} compact />
-                ) : null}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span>bu gün üçün fərdi xatırlatma yoxdur.</span>
-        )}
-      </div>
     </section>
   );
 }

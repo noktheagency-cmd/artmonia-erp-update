@@ -30,11 +30,13 @@ const churnChartConfig = {
 export function DashboardInsights({
   conversionRate,
   conversionHelper,
+  salesCount,
   churnRate,
   churnCounts,
 }: {
   conversionRate: string;
   conversionHelper: string;
+  salesCount: number;
   churnRate: string;
   churnCounts: ChurnCounts;
 }) {
@@ -52,9 +54,9 @@ export function DashboardInsights({
       <section className="owner-dashboard-insight-card owner-dashboard-insight-conversion">
         <MetricRing value={conversionValue} config={conversionChartConfig} tone="conversion" />
         <div className="owner-dashboard-insight-copy">
-          <span><Percent size={15} aria-hidden="true" /> Konversiya</span>
-          <strong>{conversionRate}</strong>
-          <small>{conversionHelper}</small>
+          <span><Percent size={15} aria-hidden="true" /> Satış sayı</span>
+          <strong>{salesCount}</strong>
+          <small>Konversiya {conversionRate} · {conversionHelper}</small>
         </div>
       </section>
 

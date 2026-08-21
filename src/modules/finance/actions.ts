@@ -15,7 +15,7 @@ import {
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
-import { requireMutationActor } from "@/server/auth/actor";
+import { requireMutationActor, type ErpActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { optionalFormString } from "@/modules/shared/form-values";
@@ -228,6 +228,8 @@ const createExpenseSchema = z.object({
   amount: requiredAmount,
   expenseDate: z.string().trim().min(1).max(20),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
+  payeeMode: z.enum(["MANUAL", "COMPANY"]).default("MANUAL"),
+  corporateCustomerId: optionalText(80),
   vendor: optionalText(120),
   description: z.string().trim().min(3).max(700),
   costCenter: z.enum([
@@ -262,7 +264,8 @@ const deleteExpenseSchema = z.object({
 });
 
 async function recordFinancePaymentActionImpl(formData: FormData) {
-  const actor = await requireMutationActor("billing.payment.create");
+  const actor = await requireMutationActor();
+  assertFinanceEntryPermission(actor, "billing.payment.create");
   const input = recordFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
@@ -306,7 +309,8 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
 }
 
 async function createFinanceExpenseActionImpl(formData: FormData) {
-  const actor = await requireMutationActor("billing.expense.create");
+  const actor = await requireMutationActor();
+  assertFinanceEntryPermission(actor, "billing.expense.create");
   const input = createExpenseSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const expenseDate = parseDateInput(input.expenseDate, "Xərc tarixi");
@@ -323,7 +327,16 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
     const salarySnapshot = usesPayrollFlow
       ? await resolveStaffSalarySnapshot(tx, staff, expenseDate)
       : emptySalarySnapshot();
-    const vendor = salarySnapshot.payeeName ?? input.vendor;
+    const corporateCustomer = !usesPayrollFlow && input.payeeMode === "COMPANY"
+      ? await tx.hrCorporateCustomer.findFirst({
+          where: { id: input.corporateCustomerId, status: "ACTIVE" },
+          select: { id: true, name: true },
+        })
+      : null;
+    if (!usesPayrollFlow && input.payeeMode === "COMPANY" && !corporateCustomer) {
+      throw new PublicActionError("Seçilmiş şirkət aktiv korporativ müştəri deyil.", "NOT_FOUND");
+    }
+    const vendor = salarySnapshot.payeeName ?? corporateCustomer?.name ?? input.vendor;
 
     if (!vendor) {
       throw new PublicActionError("Kimə ödəniş edildiyi qeyd olunmalıdır.");
@@ -340,6 +353,7 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
         expenseDate,
         method: input.method as PaymentMethod,
         vendor,
+        corporateCustomerId: corporateCustomer?.id ?? null,
         description: input.description,
         employeeUserId: expenseStaff.employeeUserId,
         teacherId: expenseStaff.teacherId,
@@ -602,7 +616,16 @@ async function updateFinanceExpenseActionImpl(formData: FormData) {
     const salarySnapshot = usesPayrollFlow
       ? await resolveStaffSalarySnapshot(tx, staff, expenseDate)
       : emptySalarySnapshot();
-    const vendor = salarySnapshot.payeeName ?? input.vendor;
+    const corporateCustomer = !usesPayrollFlow && input.payeeMode === "COMPANY"
+      ? await tx.hrCorporateCustomer.findFirst({
+          where: { id: input.corporateCustomerId, status: "ACTIVE" },
+          select: { id: true, name: true },
+        })
+      : null;
+    if (!usesPayrollFlow && input.payeeMode === "COMPANY" && !corporateCustomer) {
+      throw new PublicActionError("Seçilmiş şirkət aktiv korporativ müştəri deyil.", "NOT_FOUND");
+    }
+    const vendor = salarySnapshot.payeeName ?? corporateCustomer?.name ?? input.vendor;
 
     if (!vendor) {
       throw new PublicActionError("Kimə ödəniş edildiyi qeyd olunmalıdır.");
@@ -620,6 +643,7 @@ async function updateFinanceExpenseActionImpl(formData: FormData) {
         expenseDate,
         method: input.method as PaymentMethod,
         vendor,
+        corporateCustomerId: corporateCustomer?.id ?? null,
         description: input.description,
         employeeUserId: expenseStaff.employeeUserId,
         teacherId: expenseStaff.teacherId,
@@ -681,6 +705,7 @@ async function deleteFinanceExpenseActionImpl(formData: FormData) {
         expenseDate: true,
         method: true,
         vendor: true,
+        corporateCustomerId: true,
         description: true,
         voidedAt: true,
       },
@@ -1376,6 +1401,18 @@ function invalidateFinanceCaches() {
   updateTag(erpCacheTags.finance);
   updateTag(erpCacheTags.students);
   updateTag(erpCacheTags.dashboard);
+}
+
+function assertFinanceEntryPermission(
+  actor: Pick<ErpActor, "permissions">,
+  fullPermission: "billing.payment.create" | "billing.expense.create",
+) {
+  if (
+    !actor.permissions.has(fullPermission) &&
+    !actor.permissions.has("billing.entry.create")
+  ) {
+    throw new PublicActionError("Maliyyə əməliyyatı əlavə etmək icazəniz yoxdur.", "FORBIDDEN");
+  }
 }
 
 export const recordFinancePaymentAction = safeServerAction(

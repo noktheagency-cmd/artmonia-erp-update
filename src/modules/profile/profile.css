@@ -1,0 +1,20 @@
+.profile-page-stack { display: grid; gap: 20px; }
+.profile-photo-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 18px; align-items: center; padding: 22px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; }
+.profile-photo-current { position: relative; display: grid; width: 112px; height: 112px; overflow: hidden; place-items: center; color: #4c55bd; background: linear-gradient(145deg, #eef1ff, #f9efff); border: 4px solid #fff; border-radius: 36px; box-shadow: 0 12px 32px rgb(60 72 150 / 16%); }
+.profile-photo-current img { object-fit: cover; }
+.profile-photo-current span { font-size: 30px; font-weight: 800; }
+.profile-photo-copy { display: grid; justify-items: start; gap: 5px; }
+.profile-photo-copy > span { color: #5d64c9; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.profile-photo-copy h2 { margin: 0; font-size: 20px; }
+.profile-photo-copy p { margin: 0 0 8px; color: var(--muted-foreground); font-size: 12px; }
+.profile-photo-editor { grid-column: 1 / -1; display: grid; grid-template-columns: 220px minmax(220px, 1fr); gap: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.profile-photo-crop-window { position: relative; width: 220px; aspect-ratio: 1; overflow: hidden; background: #111827; border-radius: 28px; }
+.profile-photo-crop-window::after { position: absolute; inset: 12px; border: 2px solid rgb(255 255 255 / 80%); border-radius: 50%; content: ""; pointer-events: none; }
+.profile-photo-crop-window img { width: 100%; height: 100%; object-fit: cover; transition: transform 120ms ease, object-position 120ms ease; }
+.profile-photo-controls { display: grid; align-content: center; gap: 13px; }
+.profile-photo-controls label { display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: center; color: var(--muted-foreground); font-size: 11px; font-weight: 700; }
+.profile-photo-controls input { width: 100%; accent-color: #5d64c9; }
+.profile-photo-editor-actions { grid-column: 2; display: flex; justify-content: flex-end; gap: 8px; }
+.profile-photo-notice { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin: 0; color: #4c55bd; font-size: 12px; font-weight: 700; }
+.profile-photo-notice svg { width: 15px; }
+@media (max-width: 720px) { .profile-photo-card, .profile-photo-editor { grid-template-columns: 1fr; } .profile-photo-current { width: 92px; height: 92px; } .profile-photo-editor-actions { grid-column: 1; } .profile-photo-crop-window { width: min(100%, 280px); } .profile-photo-controls label { grid-template-columns: 1fr; } }

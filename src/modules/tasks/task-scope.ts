@@ -20,7 +20,8 @@ export function buildCurrentTaskAssigneeWhere(userId?: string): Prisma.UserWhere
     isActive: true,
     hrEmployeeProfile: {
       is: {
-        status: { not: "INACTIVE" },
+        status: { in: ["ACTIVE", "PROBATION"] },
+        archivedAt: null,
       },
     },
   };

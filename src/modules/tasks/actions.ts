@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { Prisma, TaskStatus } from "@/generated/prisma/client";
+import { AppRole, Prisma, TaskStatus } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import {
   broadcastNotificationChange,
@@ -108,7 +108,7 @@ async function updateTaskStatusActionImpl(formData: FormData) {
   const actor = await requireMutationActor("task.read");
   const input = updateStatusSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
-  const canAdminister = await canAdministerTasks(actor);
+  const canManageAnyTask = actor.roles.includes(AppRole.SUPER_ADMIN);
 
   await prisma.$transaction(async (tx) => {
     const current = await tx.task.findFirst({
@@ -120,7 +120,7 @@ async function updateTaskStatusActionImpl(formData: FormData) {
       throw new Error("Task tapılmadı");
     }
 
-    if (current.ownerUserId !== actor.id && !canAdminister) {
+    if (current.ownerUserId !== actor.id && !canManageAnyTask) {
       throw new PublicActionError(
         "Bu taskın statusunu dəyişmək icazəniz yoxdur.",
         "FORBIDDEN",
@@ -153,12 +153,17 @@ async function updateTaskStatusActionImpl(formData: FormData) {
 
 async function deleteTaskActionImpl(formData: FormData) {
   const actor = await requireMutationActor();
-  await assertCanAdministerTasks(actor);
+  const canAdminister = await canAdministerTasks(actor);
+  if (!canAdminister) await assertCanAdministerTasks(actor);
   const input = deleteTaskSchema.parse(Object.fromEntries(formData));
+  const canManageAnyTask = actor.roles.includes(AppRole.SUPER_ADMIN);
 
   await getPrisma().$transaction(async (tx) => {
     const task = await tx.task.findFirst({
-      where: { id: input.taskId, ...buildTaskWorkspaceWhere() },
+      where: {
+        id: input.taskId,
+        ...buildTaskWorkspaceWhere(canManageAnyTask ? undefined : actor.id),
+      },
       select: {
         id: true,
         title: true,

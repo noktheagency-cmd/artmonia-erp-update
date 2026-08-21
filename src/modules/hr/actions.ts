@@ -11,6 +11,7 @@ import {
   PublicActionError,
   safeServerAction,
 } from "@/server/actions/safe-action";
+import { getSupabaseAdminClient } from "@/server/supabase/admin";
 
 const teacherAccountSchema = z.object({
   teacherId: z.string().uuid(),
@@ -240,15 +241,134 @@ function currentMonth() { const now = new Date(); return new Date(Date.UTC(now.g
 
 async function deleteEmployeeActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.employee.manage");
-  const id = z.string().uuid().parse(formData.get("id"));
-  const before = await getPrisma().hrEmployee.findUnique({ where: { id } });
-  if (!before) throw new PublicActionError("İşçi tapılmadı", "NOT_FOUND");
-  await getPrisma().$transaction(async (tx) => {
-    await tx.hrEmployee.delete({ where: { id } });
-    await writeAuditLog(tx, { actorUserId: actor.id, action: "hr.employee.delete", entityType: "hr_employee", entityId: id, before, after: null, reason: "İşçi profili silindi" });
+  const input = z.object({
+    id: z.string().uuid(),
+    employmentEndedAt: z.string().date(),
+    exitReason: z.string().trim().min(3, "İşdən ayrılma səbəbini qeyd edin").max(500),
+  }).parse(Object.fromEntries(formData));
+  const before = await getPrisma().hrEmployee.findUnique({
+    where: { id: input.id },
+    include: {
+      user: { select: { id: true, authUserId: true, isActive: true } },
+      teacher: { select: { id: true, isActive: true } },
+    },
   });
+  if (!before) throw new PublicActionError("İşçi tapılmadı", "NOT_FOUND");
+  if (before.archivedAt) throw new PublicActionError("İşçi artıq arxivdədir", "CONFLICT");
+
+  if (before.teacherId) {
+    const [activeEnrollments, activeAssignments] = await Promise.all([
+      getPrisma().enrollment.count({
+        where: { teacherId: before.teacherId, status: { in: ["ACTIVE", "PAUSED"] } },
+      }),
+      getPrisma().studentScheduleAssignment.count({
+        where: {
+          validTo: null,
+          slot: { teacherId: before.teacherId },
+        },
+      }),
+    ]);
+    if (activeEnrollments || activeAssignments) {
+      throw new PublicActionError(
+        "Müəllimi arxivləməzdən əvvəl aktiv tələbə və slot təyinatlarını başqa müəllimə keçirin.",
+        "CONFLICT",
+      );
+    }
+  }
+
+  const employmentEndedAt = new Date(`${input.employmentEndedAt}T00:00:00.000Z`);
+  const archivedAt = new Date();
+  const userId = before.user?.id ?? null;
+  await getPrisma().$transaction(async (tx) => {
+    const [leadDisconnect, studentDisconnect, taskDisconnect] = userId
+      ? await Promise.all([
+          tx.lead.updateMany({
+            where: { managerId: userId, stage: { notIn: ["REGISTERED", "LOST"] } },
+            data: { managerId: null },
+          }),
+          tx.student.updateMany({
+            where: { managerId: userId, lifecycleStatus: { in: ["SLOT_WAITING", "ACTIVE", "DEBT"] } },
+            data: { managerId: null },
+          }),
+          tx.task.updateMany({
+            where: { ownerUserId: userId, status: { in: ["OPEN", "IN_PROGRESS"] } },
+            data: { ownerUserId: null },
+          }),
+        ])
+      : [{ count: 0 }, { count: 0 }, { count: 0 }];
+
+    if (before.teacherId) {
+      await tx.teacher.update({
+        where: { id: before.teacherId },
+        data: { isActive: false, userId: null },
+      });
+    }
+    if (userId) {
+      await tx.userRole.deleteMany({ where: { userId } });
+      await tx.authSessionRecord.updateMany({
+        where: { userId, revokedAt: null },
+        data: {
+          revokedAt: archivedAt,
+          revokedById: actor.id,
+          revokeReason: `HR arxiv: ${input.exitReason}`,
+        },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { isActive: false, authUserId: null },
+      });
+    }
+    await tx.hrEmployee.update({
+      where: { id: input.id },
+      data: {
+        status: "INACTIVE",
+        employmentEndedAt,
+        exitReason: input.exitReason,
+        archivedAt,
+        archivedById: actor.id,
+      },
+    });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "hr.employee.archive",
+      entityType: "hr_employee",
+      entityId: input.id,
+      before: {
+        id: before.id,
+        fullName: before.fullName,
+        status: before.status,
+        userId,
+        teacherId: before.teacherId,
+      },
+      after: {
+        status: "INACTIVE",
+        employmentEndedAt: input.employmentEndedAt,
+        archivedAt: archivedAt.toISOString(),
+        disconnectedLeadCount: leadDisconnect.count,
+        disconnectedStudentCount: studentDisconnect.count,
+        disconnectedTaskCount: taskDisconnect.count,
+        accessDisabled: Boolean(userId),
+      },
+      reason: input.exitReason,
+    });
+  });
+  if (before.user?.authUserId) {
+    const { error } = await getSupabaseAdminClient().auth.admin.deleteUser(before.user.authUserId);
+    if (error) {
+      console.error("Archived employee auth cleanup failed", {
+        employeeId: before.id,
+        authUserId: before.user.authUserId,
+        message: error.message,
+      });
+    }
+  }
   revalidatePath("/hr");
   revalidatePath("/tasks");
+  revalidatePath("/crm");
+  revalidatePath("/students");
+  revalidatePath("/dashboard");
+  revalidatePath("/finance");
+  return { id: before.id, archived: true };
 }
 
 async function linkTeacherAccountActionImpl(formData: FormData) {
@@ -325,7 +445,7 @@ export const deleteTeacherAction = safeServerAction(
 );
 export const deleteEmployeeAction = safeServerAction(
   deleteEmployeeActionImpl,
-  "İşçi silinə bilmədi.",
+  "İşçi arxivə göndərilə bilmədi.",
 );
 export const linkTeacherAccountAction = safeServerAction(
   linkTeacherAccountActionImpl,

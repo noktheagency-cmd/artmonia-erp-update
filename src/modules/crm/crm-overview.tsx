@@ -188,8 +188,8 @@ export function CrmOverview({
               </PieChart>
             </ChartContainer>
             <div className="crm-donut-center" aria-hidden="true">
-              <strong>{Math.round(conversionRate)}%</strong>
-              <span>konversiya</span>
+              <strong>{data.dashboardStats.salesCount}</strong>
+              <span>satış · {Math.round(conversionRate)}%</span>
             </div>
           </div>
           <dl className="crm-conversion-stats">

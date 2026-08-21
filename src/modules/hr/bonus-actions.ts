@@ -269,6 +269,57 @@ async function cancelBonusCampaignActionImpl(formData: FormData) {
   revalidateBonusPaths();
 }
 
+async function deleteBonusCampaignActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("hr.bonus.manage");
+  const input = z.object({
+    campaignId: z.string().uuid(),
+    reason: z.string().trim().min(3).max(500),
+  }).parse(Object.fromEntries(formData));
+
+  await getPrisma().$transaction(async (tx) => {
+    const campaign = await tx.hrBonusCampaign.findUnique({
+      where: { id: input.campaignId },
+      include: {
+        stages: {
+          include: { awards: { select: { id: true, status: true } } },
+        },
+      },
+    });
+    if (!campaign) throw new PublicActionError("Bonus kampaniyası tapılmadı", "NOT_FOUND");
+
+    const awardIds = campaign.stages.flatMap((stage) => stage.awards.map((award) => award.id));
+    const postedExpenseCount = awardIds.length
+      ? await tx.financeExpense.count({ where: { bonusAwardId: { in: awardIds } } })
+      : 0;
+    if (postedExpenseCount > 0) {
+      throw new PublicActionError(
+        "Maliyyəyə göndərilmiş bonus kampaniyası hüquqi maliyyə tarixçəsinə görə birdəfəlik silinə bilməz. Onu ləğv edin.",
+        "CONFLICT",
+      );
+    }
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "hr.bonus.campaign.delete",
+      entityType: "hr_bonus_campaign",
+      entityId: campaign.id,
+      before: {
+        name: campaign.name,
+        department: campaign.department,
+        startsAt: campaign.startsAt.toISOString(),
+        endsAt: campaign.endsAt.toISOString(),
+        status: campaign.status,
+        stageCount: campaign.stages.length,
+        awardCount: awardIds.length,
+      },
+      after: { permanentlyDeleted: true },
+      reason: input.reason,
+    });
+    await tx.hrBonusCampaign.delete({ where: { id: campaign.id } });
+  });
+  revalidateBonusPaths();
+}
+
 async function refreshBonusCampaignsActionImpl() {
   const actor = await requireMutationActor("hr.bonus.manage");
   await syncActiveBonusCampaigns(actor.id);
@@ -294,6 +345,10 @@ export const postBonusStageAwardsAction = safeServerAction(
 export const cancelBonusCampaignAction = safeServerAction(
   cancelBonusCampaignActionImpl,
   "Bonus kampaniyası ləğv edilə bilmədi.",
+);
+export const deleteBonusCampaignAction = safeServerAction(
+  deleteBonusCampaignActionImpl,
+  "Bonus kampaniyası birdəfəlik silinə bilmədi.",
 );
 export const refreshBonusCampaignsAction = safeServerAction(
   refreshBonusCampaignsActionImpl,

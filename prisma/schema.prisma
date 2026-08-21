@@ -383,14 +383,15 @@ enum HrNotificationStatus {
 }
 
 model User {
-  id         String   @id @default(uuid()) @db.Uuid
-  authUserId String?  @unique @map("auth_user_id") @db.Uuid
-  fullName   String   @map("full_name")
-  email      String   @unique
-  phone      String?
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid()) @db.Uuid
+  authUserId      String?  @unique @map("auth_user_id") @db.Uuid
+  fullName        String   @map("full_name")
+  email           String   @unique
+  phone           String?
+  profilePhotoUrl String?  @map("profile_photo_url")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   roles                            UserRole[]
   managedLeads                     Lead[]                      @relation("LeadManager")
@@ -447,6 +448,7 @@ model User {
   updatedHrEmployeeNotes           HrEmployeeNote[]            @relation("HrEmployeeNoteUpdater")
   uploadedHrEmployeeDocuments      HrEmployeeDocument[]        @relation("HrEmployeeDocumentUploader")
   createdCorporateCustomers        HrCorporateCustomer[]       @relation("HrCorporateCustomerCreator")
+  archivedHrEmployees              HrEmployee[]                @relation("HrEmployeeArchiver")
   createdDropdownCatalogOptions    DropdownCatalogOption[]     @relation("DropdownCatalogOptionCreator")
   updatedAboutProfiles             AboutProfile[]              @relation("AboutProfileUpdater")
   createdKnowledgeCategories       KnowledgeCategory[]         @relation("KnowledgeCategoryCreator")
@@ -544,27 +546,31 @@ model KnowledgeArticle {
 }
 
 model HrEmployee {
-  id              String            @id @default(uuid()) @db.Uuid
-  userId          String?           @unique @map("user_id") @db.Uuid
-  teacherId       String?           @unique @map("teacher_id") @db.Uuid
-  staffType       HrStaffType       @default(EMPLOYEE) @map("staff_type")
-  fullName        String            @map("full_name")
-  email           String?
-  phone           String?
-  address         String?
-  department      String
-  position        String
-  hireDate        DateTime          @map("hire_date") @db.Date
-  status          HrEmployeeStatus  @default(ACTIVE)
-  contractType    String            @default("FULL_TIME") @map("contract_type")
-  salaryMode      FinanceSalaryMode @default(STATIC) @map("salary_mode")
-  salaryAmount    Decimal           @default(0) @map("salary_amount") @db.Decimal(12, 2)
-  salaryPercent   Decimal?          @map("salary_percent") @db.Decimal(5, 2)
-  profilePhotoUrl String?           @map("profile_photo_url")
-  note            String?
-  createdById     String?           @map("created_by_id") @db.Uuid
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
+  id                String            @id @default(uuid()) @db.Uuid
+  userId            String?           @unique @map("user_id") @db.Uuid
+  teacherId         String?           @unique @map("teacher_id") @db.Uuid
+  staffType         HrStaffType       @default(EMPLOYEE) @map("staff_type")
+  fullName          String            @map("full_name")
+  email             String?
+  phone             String?
+  address           String?
+  department        String
+  position          String
+  hireDate          DateTime          @map("hire_date") @db.Date
+  status            HrEmployeeStatus  @default(ACTIVE)
+  contractType      String            @default("FULL_TIME") @map("contract_type")
+  salaryMode        FinanceSalaryMode @default(STATIC) @map("salary_mode")
+  salaryAmount      Decimal           @default(0) @map("salary_amount") @db.Decimal(12, 2)
+  salaryPercent     Decimal?          @map("salary_percent") @db.Decimal(5, 2)
+  profilePhotoUrl   String?           @map("profile_photo_url")
+  note              String?
+  employmentEndedAt DateTime?         @map("employment_ended_at") @db.Date
+  exitReason        String?           @map("exit_reason") @db.VarChar(500)
+  archivedAt        DateTime?         @map("archived_at")
+  archivedById      String?           @map("archived_by_id") @db.Uuid
+  createdById       String?           @map("created_by_id") @db.Uuid
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
 
   user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   teacher              Teacher?              @relation(fields: [teacherId], references: [id], onDelete: SetNull)
@@ -573,8 +579,12 @@ model HrEmployee {
   notifications        HrStaffNotification[]
   notes                HrEmployeeNote[]
   documents            HrEmployeeDocument[]
+  archivedBy           User?                 @relation("HrEmployeeArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([archivedAt])
+  @@index([employmentEndedAt])
+  @@index([archivedById])
   @@index([department])
   @@map("hr_employees")
   @@schema("erp")
@@ -633,8 +643,9 @@ model HrCorporateCustomer {
   createdAt     DateTime                  @default(now()) @map("created_at")
   updatedAt     DateTime                  @updatedAt @map("updated_at")
 
-  createdBy User?                @relation("HrCorporateCustomerCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  contacts  HrCorporateContact[]
+  createdBy       User?                @relation("HrCorporateCustomerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  contacts        HrCorporateContact[]
+  financeExpenses FinanceExpense[]
 
   @@index([status, updatedAt])
   @@index([name])
@@ -1829,6 +1840,7 @@ model FinanceExpense {
   receiptReference             String?                @map("receipt_reference")
   idempotencyKey               String?                @unique @map("idempotency_key") @db.Uuid
   workshopEventId              String?                @map("workshop_event_id") @db.Uuid
+  corporateCustomerId          String?                @map("corporate_customer_id") @db.Uuid
   createdById                  String?                @map("created_by_id") @db.Uuid
   voidedAt                     DateTime?              @map("voided_at")
   voidedById                   String?                @map("voided_by_id") @db.Uuid
@@ -1839,20 +1851,22 @@ model FinanceExpense {
   createdAt                    DateTime               @default(now()) @map("created_at")
   updatedAt                    DateTime               @updatedAt @map("updated_at")
 
-  category        FinanceExpenseCategory @relation(fields: [categoryId], references: [id])
-  employeeUser    User?                  @relation("FinanceExpenseEmployee", fields: [employeeUserId], references: [id])
-  hrEmployee      HrEmployee?            @relation("FinanceExpenseHrEmployee", fields: [hrEmployeeId], references: [id], onDelete: SetNull)
-  bonusAward      HrBonusAward?          @relation(fields: [bonusAwardId], references: [id], onDelete: Restrict)
-  teacher         Teacher?               @relation("FinanceExpenseTeacher", fields: [teacherId], references: [id])
-  createdBy       User?                  @relation("FinanceExpenseCreator", fields: [createdById], references: [id])
-  workshopEvent   WorkshopEvent?         @relation(fields: [workshopEventId], references: [id], onDelete: Restrict)
-  voidedBy        User?                  @relation("FinanceExpenseVoider", fields: [voidedById], references: [id])
-  replacesExpense FinanceExpense?        @relation("FinanceExpenseReplacement", fields: [replacesExpenseId], references: [id], onDelete: Restrict)
-  replacement     FinanceExpense?        @relation("FinanceExpenseReplacement")
+  category          FinanceExpenseCategory @relation(fields: [categoryId], references: [id])
+  employeeUser      User?                  @relation("FinanceExpenseEmployee", fields: [employeeUserId], references: [id])
+  hrEmployee        HrEmployee?            @relation("FinanceExpenseHrEmployee", fields: [hrEmployeeId], references: [id], onDelete: SetNull)
+  bonusAward        HrBonusAward?          @relation(fields: [bonusAwardId], references: [id], onDelete: Restrict)
+  teacher           Teacher?               @relation("FinanceExpenseTeacher", fields: [teacherId], references: [id])
+  createdBy         User?                  @relation("FinanceExpenseCreator", fields: [createdById], references: [id])
+  workshopEvent     WorkshopEvent?         @relation(fields: [workshopEventId], references: [id], onDelete: Restrict)
+  corporateCustomer HrCorporateCustomer?   @relation(fields: [corporateCustomerId], references: [id], onDelete: SetNull)
+  voidedBy          User?                  @relation("FinanceExpenseVoider", fields: [voidedById], references: [id])
+  replacesExpense   FinanceExpense?        @relation("FinanceExpenseReplacement", fields: [replacesExpenseId], references: [id], onDelete: Restrict)
+  replacement       FinanceExpense?        @relation("FinanceExpenseReplacement")
 
   @@index([categoryId, expenseDate])
   @@index([financialClass, expenseDate])
   @@index([transactionType, expenseDate])
+  @@index([corporateCustomerId, expenseDate])
   @@index([employeeUserId])
   @@index([hrEmployeeId])
   @@index([teacherId])

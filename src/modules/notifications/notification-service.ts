@@ -63,7 +63,7 @@ export async function generateTaskDeadlineNotifications({
   now?: Date;
 } = {}) {
   const prisma = getPrisma();
-  const soonThreshold = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const soonThreshold = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
   const tasks = await prisma.task.findMany({
     where: {
       ...(recipientUserId ? { ownerUserId: recipientUserId } : { ownerUserId: { not: null } }),
@@ -83,6 +83,7 @@ export async function generateTaskDeadlineNotifications({
   const candidates = tasks.flatMap((task) => {
     if (!task.ownerUserId || !task.dueAt) return [];
     const stage = getTaskDeadlineStage(task.dueAt, now);
+    if (!stage) return [];
     const isOverdue = stage === "overdue";
     const type = isOverdue
       ? PersonalNotificationType.TASK_OVERDUE
@@ -91,8 +92,12 @@ export async function generateTaskDeadlineNotifications({
     return [{
       recipientUserId: task.ownerUserId,
       type,
-      title: isOverdue ? "Task gecikib" : "Task deadline-ı yaxınlaşır",
-      message: `${task.title} · Deadline: ${formatBakuDate(task.dueAt)} · Status: ${task.status}`,
+      title: isOverdue
+        ? "Task gecikib"
+        : stage === "two-days"
+          ? "Task deadline-na 2 gün qalıb"
+          : "Task deadline-na 1 gün qalıb",
+      message: `${task.title} · Deadline: ${formatBakuDate(task.dueAt)} · ${stage === "two-days" ? "2 gün qalıb" : stage === "one-day" ? "1 gün qalıb" : "gecikib"} · Status: ${task.status}`,
       href: `/tasks?task=${task.id}`,
       relatedEntityType: "task",
       relatedEntityId: task.id,

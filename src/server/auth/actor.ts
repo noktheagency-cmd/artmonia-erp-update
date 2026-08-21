@@ -84,7 +84,7 @@ const getDevelopmentActor = cache(async (): Promise<ErpActor> => {
       u.auth_user_id::text as "authUserId",
       u.full_name as "fullName",
       u.email,
-      he.profile_photo_url as "profilePhotoUrl",
+      coalesce(u.profile_photo_url, he.profile_photo_url) as "profilePhotoUrl",
       coalesce(array_agg(r.code::text) filter (where r.code is not null), array[]::text[]) as "roles"
     from erp.users u
     left join erp.hr_employees he on he.user_id = u.id
@@ -92,7 +92,7 @@ const getDevelopmentActor = cache(async (): Promise<ErpActor> => {
     left join erp.roles r on r.id = ur.role_id
     where u.is_active = true
       and ${actorWhere}
-    group by u.id, he.profile_photo_url
+    group by u.id, u.profile_photo_url, he.profile_photo_url
     order by u.created_at asc
     limit 1
   `);

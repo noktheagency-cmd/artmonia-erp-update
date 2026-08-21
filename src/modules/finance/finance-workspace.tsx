@@ -23,6 +23,7 @@ import {
   Plus,
   ReceiptText,
   Search,
+  ShieldCheck,
   Trash2,
   Upload,
   UserRound,
@@ -30,10 +31,9 @@ import {
   XCircle,
 } from "lucide-react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
+  ComposedChart,
   CartesianGrid,
   Cell,
   Line,
@@ -244,6 +244,29 @@ export function FinanceWorkspace({
     setToast({ ...message, id: Date.now() });
   }
 
+  if (data.accessMode === "ENTRY_ONLY") {
+    return (
+      <section className="finance-command-page finance-page finance-entry-only">
+        <FinanceOperationToast toast={toast} onToastChange={setToast} />
+        <header className="finance-hero finance-entry-hero">
+          <div>
+            <span>Məhdud maliyyə girişi</span>
+            <h1>Ödəniş və xərc əlavə et</h1>
+            <p>Bu rol yalnız yeni əməliyyat daxil edə bilər. Maliyyə göstəriciləri, balanslar və əməliyyat siyahıları göstərilmir.</p>
+          </div>
+          <div className="finance-header-actions">
+            <ExpenseDialog data={data} action={createExpenseAction} onNotify={showToast} />
+            <PaymentDialog data={data} action={recordPaymentAction} onNotify={showToast} />
+          </div>
+        </header>
+        <div className="finance-entry-safety-note">
+          <ShieldCheck />
+          <div><strong>Maliyyə məlumatları qorunur</strong><span>Daxil etdiyiniz əməliyyat audit jurnalına yazılır, tam hesabatları isə yalnız maliyyə icazəsi olan şəxslər görür.</span></div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="finance-command-page finance-page">
       <FinanceOperationToast toast={toast} onToastChange={setToast} />
@@ -281,26 +304,7 @@ export function FinanceWorkspace({
         <FinanceCommandBar key={`filters-${data.returnTo}`} data={data} />
       </header>
 
-      <div className="finance-kpi-grid" aria-label="Maliyyə göstəriciləri">
-        {data.kpis.map((kpi, index) => {
-          const Icon = financeKpiIcons[index] ?? BarChart3;
-
-          return (
-            <article className={`finance-kpi is-${kpi.tone}`} key={kpi.label}>
-              <div className="finance-kpi-top">
-                <span className="finance-kpi-label">{kpi.label}</span>
-                <span className="finance-kpi-icon">
-                  <Icon size={12} />
-                </span>
-              </div>
-              <strong>{kpi.value}</strong>
-              <div className="finance-kpi-footer">
-                <small>{kpi.helper}</small>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+      <FinancePrimaryKpis data={data} />
 
       <FinanceTabs data={data} />
 
@@ -864,6 +868,7 @@ function ExpenseDialog({
   const [isOpen, setIsOpen] = useState(false);
   const [categoryValue, setCategoryValue] = useState("");
   const [staffTarget, setStaffTarget] = useState("");
+  const [payeeMode, setPayeeMode] = useState<"MANUAL" | "COMPANY">("MANUAL");
   const selectedStaff = data.staff.find((staff) => staff.id === staffTarget);
   const [amount, setAmount] = useState("");
   const availableCategories = data.categories.filter(
@@ -880,6 +885,7 @@ function ExpenseDialog({
   function resetExpenseForm() {
     setCategoryValue("");
     setStaffTarget("");
+    setPayeeMode("MANUAL");
     setAmount("");
   }
 
@@ -1085,20 +1091,41 @@ function ExpenseDialog({
               <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
             </label>
             <div className="field-grid">
-              <label className="form-field">
-                <span>{usesPayrollFlow ? "Ödəniş alan əməkdaş" : "Kimə ödənilib"}</span>
-                <Input
-                  name="vendor"
-                  placeholder={usesPayrollFlow ? selectedStaff?.label ?? "Əməkdaş seçimindən doldurulur" : "Şəxs və ya şirkət"}
-                  disabled={usesPayrollFlow}
-                  required={!usesPayrollFlow}
-                />
-              </label>
+              {usesPayrollFlow ? (
+                <label className="form-field">
+                  <span>Ödəniş alan əməkdaş</span>
+                  <Input name="vendor" placeholder={selectedStaff?.label ?? "Əməkdaş seçimindən doldurulur"} disabled />
+                  <input type="hidden" name="payeeMode" value="MANUAL" />
+                </label>
+              ) : (
+                <label className="form-field">
+                  <span>Ödəniş alan növü</span>
+                  <FormSelect
+                    name="payeeMode"
+                    value={payeeMode}
+                    onValueChange={(value) => setPayeeMode(value === "COMPANY" ? "COMPANY" : "MANUAL")}
+                    options={[{ value: "MANUAL", label: "Manual daxil et" }, { value: "COMPANY", label: "Korporativ şirkət seç" }]}
+                  />
+                </label>
+              )}
               <label className="form-field">
                 <span>Xərc mərkəzi</span>
                 <FormSelect name="costCenter" defaultValue="OPERATIONS" options={financeCostCenterOptions} required />
               </label>
             </div>
+            {!usesPayrollFlow ? (
+              payeeMode === "COMPANY" ? (
+                <label className="form-field">
+                  <span>HR korporativ müştərisi</span>
+                  <FormSelect name="corporateCustomerId" emptyLabel="Şirkət seç" searchable searchPlaceholder="Şirkət axtar..." options={data.corporateCustomers.map((company) => ({ value: company.id, label: company.name }))} required />
+                </label>
+              ) : (
+                <label className="form-field">
+                  <span>Kimə ödənilib</span>
+                  <Input name="vendor" placeholder="Şəxsin və ya şirkətin adını yazın" maxLength={120} required />
+                </label>
+              )
+            ) : null}
             <div className="field-grid">
               <label className="form-field">
                 <span>Qəbz nömrəsi</span>
@@ -1150,55 +1177,36 @@ function CashFlowChart({ data }: { data: FinanceData }) {
     () => [...data.expenses, ...data.payrollItems],
     [data.expenses, data.payrollItems]
   );
-  const dates = useMemo(() => {
-    const set = new Set<string>();
-    data.payments.forEach((payment) => {
-      if (payment.dateKey) {
-        set.add(payment.dateKey);
-      }
-    });
-    expenseMovements.forEach((expense) => {
-      if (expense.dateKey) {
-        set.add(expense.dateKey);
-      }
-    });
-    return buildFinanceTimelineDates(data.filters.from, data.filters.to, Array.from(set));
-  }, [data.filters.from, data.filters.to, data.payments, expenseMovements]);
-
   const trendPoints = useMemo(() => {
-    if (dates.length === 0) {
-      return [
-        { date: "", income: 0, expense: 0, net: 0 },
-        { date: "", income: 0, expense: 0, net: 0 },
-      ];
-    }
-    let accumulatedIncome = 0;
-    let accumulatedExpense = 0;
-    return dates.map(date => {
-      const dayIncome = data.payments
-        .filter((payment) => payment.dateKey === date)
-        .reduce((sum, payment) => sum + payment.amountValue, 0) + expenseMovements
-        .filter((movement) => movement.dateKey === date && isCashInflow(movement.transactionType))
-        .reduce((sum, movement) => sum + movement.amountValue, 0);
-      const dayExpense = expenseMovements
-        .filter((expense) => expense.dateKey === date && !isCashInflow(expense.transactionType))
-        .reduce((sum, expense) => sum + expense.amountValue, 0);
-      accumulatedIncome += dayIncome;
-      accumulatedExpense += dayExpense;
-      return {
-        date,
-        income: accumulatedIncome,
-        expense: accumulatedExpense,
-        net: accumulatedIncome - accumulatedExpense,
-      };
+    const rangeDays = Math.max(1, Math.ceil((Date.parse(data.filters.to) - Date.parse(data.filters.from)) / 86_400_000) + 1);
+    const grouping: "day" | "week" | "month" = rangeDays <= 45 ? "day" : rangeDays <= 180 ? "week" : "month";
+    const buckets = new Map<string, { date: string; income: number; expense: number }>();
+    const ensure = (date: string) => {
+      const key = cashFlowBucketKey(date, grouping);
+      const current = buckets.get(key) ?? { date: key, income: 0, expense: 0 };
+      buckets.set(key, current);
+      return current;
+    };
+    data.payments.forEach((payment) => {
+      if (payment.dateKey) ensure(payment.dateKey).income += payment.amountValue;
     });
-  }, [dates, data.payments, expenseMovements]);
+    expenseMovements.forEach((movement) => {
+      if (!movement.dateKey) return;
+      const bucket = ensure(movement.dateKey);
+      if (isCashInflow(movement.transactionType)) bucket.income += movement.amountValue;
+      else bucket.expense += movement.amountValue;
+    });
+    const points = [...buckets.values()]
+      .sort((first, second) => first.date.localeCompare(second.date))
+      .map((point) => ({ ...point, net: point.income - point.expense, grouping }));
+    return points.length ? points : [{ date: data.filters.from, income: 0, expense: 0, net: 0, grouping }];
+  }, [data.filters.from, data.filters.to, data.payments, expenseMovements]);
 
   const reduceMotion = useReducedMotion();
   const chartData = useMemo(
     () => trendPoints.map((point) => ({
       ...point,
-      label: point.date ? formatShortDate(point.date) : "—",
+      label: point.date ? formatCashFlowBucketLabel(point.date, point.grouping) : "—",
     })),
     [trendPoints]
   );
@@ -1219,17 +1227,7 @@ function CashFlowChart({ data }: { data: FinanceData }) {
         ))}
       </div>
       <ChartContainer config={chartConfig} className="finance-cash-flow-chart" initialDimension={{ width: 720, height: 280 }}>
-        <AreaChart data={chartData} margin={{ top: 12, right: 16, left: -10, bottom: 0 }} accessibilityLayer>
-          <defs>
-            <linearGradient id="financeIncomeFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-income)" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="var(--color-income)" stopOpacity={0.01} />
-            </linearGradient>
-            <linearGradient id="financeExpenseFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-expense)" stopOpacity={0.14} />
-              <stop offset="100%" stopColor="var(--color-expense)" stopOpacity={0.01} />
-            </linearGradient>
-          </defs>
+        <ComposedChart data={chartData} margin={{ top: 12, right: 16, left: -10, bottom: 0 }} accessibilityLayer>
           <CartesianGrid vertical={false} strokeDasharray="4 6" />
           <XAxis dataKey="label" axisLine={false} tickLine={false} tickMargin={12} minTickGap={26} />
           <YAxis axisLine={false} tickLine={false} width={54} tickFormatter={formatCompactAmount} />
@@ -1243,25 +1241,19 @@ function CashFlowChart({ data }: { data: FinanceData }) {
               </div>
             )} />}
           />
-          <Area
-            type="monotone"
+          <Bar
             dataKey="income"
-            stroke="var(--color-income)"
-            fill="url(#financeIncomeFill)"
-            strokeWidth={2.25}
-            dot={{ r: 3, fill: "var(--color-income)", stroke: "#fff", strokeWidth: 2 }}
-            activeDot={{ r: 5, strokeWidth: 2 }}
+            fill="var(--color-income)"
+            radius={[6, 6, 0, 0]}
+            maxBarSize={24}
             isAnimationActive={!reduceMotion}
             animationDuration={800}
           />
-          <Area
-            type="monotone"
+          <Bar
             dataKey="expense"
-            stroke="var(--color-expense)"
-            fill="url(#financeExpenseFill)"
-            strokeWidth={2.25}
-            dot={{ r: 3, fill: "var(--color-expense)", stroke: "#fff", strokeWidth: 2 }}
-            activeDot={{ r: 5, strokeWidth: 2 }}
+            fill="var(--color-expense)"
+            radius={[6, 6, 0, 0]}
+            maxBarSize={24}
             isAnimationActive={!reduceMotion}
             animationDuration={950}
           />
@@ -1270,13 +1262,13 @@ function CashFlowChart({ data }: { data: FinanceData }) {
             dataKey="net"
             stroke="var(--color-net)"
             strokeWidth={2.25}
-            strokeDasharray="6 5"
+            strokeDasharray="5 4"
             dot={{ r: 3, fill: "var(--color-net)", stroke: "#fff", strokeWidth: 2 }}
             activeDot={{ r: 5, strokeWidth: 2 }}
             isAnimationActive={!reduceMotion}
             animationDuration={1100}
           />
-        </AreaChart>
+        </ComposedChart>
       </ChartContainer>
     </div>
   );
@@ -1312,6 +1304,71 @@ function CategoryDistributionList({ data }: { data: FinanceData }) {
       slices={slices}
     />
   );
+}
+
+function FinancePrimaryKpis({ data }: { data: FinanceData }) {
+  const [selected, setSelected] = useState<"income" | "expense" | "profit" | "receivables" | "details" | null>(null);
+  const cards = [
+    { key: "income" as const, label: "Ümumi gəlir", value: data.summary.income, helper: `Təhsil ${data.summary.studentIncome} · Tədbirlər ${data.summary.eventIncome}`, tone: "success", icon: WalletCards },
+    { key: "expense" as const, label: "Ümumi xərc", value: data.summary.expense, helper: `Əsas xərclər ${data.summary.coreExpense} · Tədbirlər ${data.summary.eventExpense}`, tone: "warning", icon: ReceiptText },
+    { key: "profit" as const, label: "Xalis mənfəət", value: data.summary.operatingProfit, helper: "Ümumi gəlir − əsas və əməliyyat xərcləri", tone: "neutral", icon: BarChart3 },
+    { key: "receivables" as const, label: "Alacaqlar ödənişləri", value: data.summary.debt, helper: "Ay sonunadək aktiv/borclu tələbə + workshop və masterclass qalığı", tone: "warning", icon: BadgeDollarSign },
+  ];
+  const detailRows = selected === "income"
+    ? [["Tələbə ödənişləri", data.summary.studentIncome], ["Workshop / Masterclass", data.summary.eventIncome]]
+    : selected === "expense"
+      ? [["Direct Cost", data.summary.directCost], ["OPEX", data.summary.opex], ["Tədbir xərcləri", data.summary.eventExpense], ["Əməkhaqqı", data.summary.payroll], ...data.costCenterBreakdown.map((item) => [`Xərc mərkəzi · ${item.label}`, item.amount])]
+      : selected === "profit"
+        ? [["Ümumi gəlir", data.summary.income], ["Ümumi xərc", data.summary.expense], ["Operating Profit", data.summary.operatingProfit], ["Net Cash Flow", data.summary.netCash]]
+        : selected === "receivables"
+          ? [["Aktiv və borclu tələbələr", data.receivableSummary.studentOutstanding.amount], ["Workshop", data.receivableSummary.workshop.amount], ["Masterclass", data.receivableSummary.masterclass.amount]]
+          : [];
+  const selectedCard = cards.find((card) => card.key === selected);
+
+  return (
+    <>
+      <div className="finance-primary-kpi-grid" aria-label="Əsas maliyyə göstəriciləri">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return <button type="button" className={`finance-kpi finance-primary-kpi is-${card.tone}`} onClick={() => setSelected(card.key)} key={card.key}><div className="finance-kpi-top"><span className="finance-kpi-label">{card.label}</span><span className="finance-kpi-icon"><Icon size={13} /></span></div><strong>{card.value}</strong><div className="finance-kpi-footer"><small>{card.helper}</small><span>Detala bax <ArrowRight /></span></div></button>;
+        })}
+        <button type="button" className="finance-kpi finance-primary-kpi finance-details-kpi" onClick={() => setSelected("details")}><div className="finance-kpi-top"><span className="finance-kpi-label">Ətraflı bax</span><span className="finance-kpi-icon"><Eye size={13} /></span></div><strong>5 KPI</strong><div className="finance-kpi-footer"><small>Revenue-dən Net Cash Flow-a qədər bütün maliyyə kartları</small><span>Kartları aç <ArrowRight /></span></div></button>
+      </div>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="finance-dialog finance-kpi-detail-dialog">
+          <DialogHeader>
+            <DialogTitle>{selected === "details" ? "Ətraflı maliyyə KPI-ları" : selectedCard?.label}</DialogTitle>
+            <DialogDescription>{selected === "details" ? "Mövcud maliyyə kartlarının aydın hesablanma qaydası və nəticəsi." : selectedCard?.helper}</DialogDescription>
+          </DialogHeader>
+          {selected === "details" ? (
+            <div className="finance-detailed-kpi-grid">
+              {data.kpis.filter((kpi) => kpi.label !== "Receivables").map((kpi, index) => { const Icon = financeKpiIcons[index] ?? BarChart3; return <article className={`finance-kpi is-${kpi.tone}`} key={kpi.label}><div className="finance-kpi-top"><span className="finance-kpi-label">{kpi.label}</span><span className="finance-kpi-icon"><Icon size={12} /></span></div><strong>{kpi.value}</strong><div className="finance-kpi-footer"><small>{kpi.helper}</small></div></article>; })}
+            </div>
+          ) : (
+            <dl className="finance-kpi-breakdown">{detailRows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function cashFlowBucketKey(value: string, grouping: "day" | "week" | "month") {
+  if (grouping === "day") return value;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (grouping === "month") return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const weekday = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - weekday);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatCashFlowBucketLabel(value: string, grouping: "day" | "week" | "month") {
+  if (grouping === "month") {
+    return new Intl.DateTimeFormat("az-AZ", { month: "short", year: "2-digit", timeZone: "UTC" })
+      .format(new Date(`${value}T00:00:00.000Z`));
+  }
+  const label = formatShortDate(value);
+  return grouping === "week" ? `${label} həftəsi` : label;
 }
 
 function ExpenseBreakdownBarChart({
@@ -1763,27 +1820,6 @@ function formatCompactAmount(value: number) {
     return `${value < 0 ? "-" : ""}${(absolute / 1000).toLocaleString("az-AZ", { maximumFractionDigits: 1 })}k`;
   }
   return Math.round(value).toLocaleString("az-AZ");
-}
-
-function buildFinanceTimelineDates(from: string, to: string, eventDates: string[]) {
-  const validRange = /^\d{4}-\d{2}-\d{2}$/;
-  if (!validRange.test(from) || !validRange.test(to) || from > to) {
-    return eventDates.toSorted();
-  }
-
-  const start = new Date(`${from}T00:00:00.000Z`);
-  const end = new Date(`${to}T00:00:00.000Z`);
-  const dayCount = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
-
-  if (dayCount > 92) {
-    return Array.from(new Set([from, ...eventDates, to])).toSorted();
-  }
-
-  return Array.from({ length: dayCount }, (_, index) => {
-    const date = new Date(start);
-    date.setUTCDate(start.getUTCDate() + index);
-    return date.toISOString().slice(0, 10);
-  });
 }
 
 function useReducedMotion() {

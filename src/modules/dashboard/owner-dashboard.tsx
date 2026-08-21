@@ -81,6 +81,7 @@ export function OwnerDashboard({
         <DashboardInsights
           conversionRate={data.conversionRate}
           conversionHelper={data.conversionHelper}
+          salesCount={data.salesCount}
           churnRate={data.churnRate}
           churnCounts={data.churnCounts}
         />

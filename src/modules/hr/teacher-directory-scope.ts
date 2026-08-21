@@ -16,7 +16,7 @@ export function buildTeacherDirectoryScope(ownTeacherId?: string) {
     where ${retainedTeacher}
       and (
         he.id is null
-        or he.status = 'ACTIVE'::"erp"."HrEmployeeStatus"
+        or (he.status = 'ACTIVE'::"erp"."HrEmployeeStatus" and he.archived_at is null)
       )
   `;
 }
