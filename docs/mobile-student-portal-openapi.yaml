@@ -1,0 +1,365 @@
+openapi: 3.1.0
+info:
+  title: Artmonia ERP Mobile Student Portal API
+  version: 1.0.0
+servers:
+  - url: https://erp.artmoniya.com
+paths:
+  /api/mobile/v1/me:
+    get:
+      operationId: getMobileMe
+      summary: Resolve the signed-in student's ERP mobile account
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      responses:
+        '200':
+          description: Account identity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/profile:
+    get:
+      operationId: getMobileProfile
+      summary: Get the student's ERP profile and academy details
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      responses:
+        '200':
+          description: Student profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      operationId: updateMobileProfile
+      summary: Update student-owned ERP profile fields
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                phone: { type: string, minLength: 7, maxLength: 30 }
+                avatarObjectPath:
+                  type: [string, 'null']
+                  maxLength: 240
+                  pattern: '^[0-9a-f-]{36}/avatar\.(jpg|jpeg|png|webp)$'
+      responses:
+        '200':
+          description: Updated student profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/BadRequest' }
+        '415': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/home:
+    get:
+      operationId: getMobileHome
+      summary: Get ERP-owned data for the student's home dashboard
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      responses:
+        '200':
+          description: Home dashboard data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Home' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/lessons:
+    get:
+      operationId: listMobileLessons
+      summary: List the student's lessons and journal entries
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/RequestId' }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: status
+          in: query
+          schema:
+            type: string
+            default: all
+            enum: [all, scheduled, completed, cancelled, rescheduled, pending, present, absent, excused]
+        - name: cursor
+          in: query
+          description: Opaque cursor returned by nextCursor
+          schema: { type: string, maxLength: 500 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Paginated lesson list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor, serverTime]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/LessonEntry' }
+                  nextCursor: { type: [string, 'null'] }
+                  serverTime: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/lessons/{lessonId}:
+    get:
+      operationId: getMobileLesson
+      summary: Get one student-owned lesson journal entry
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/RequestId' }
+        - name: lessonId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Lesson entry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LessonEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/attendance/summary:
+    get:
+      operationId: getMobileAttendanceSummary
+      summary: Get the student's attendance summary
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/RequestId' }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Attendance summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+components:
+  securitySchemes:
+    serverToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque ERP server token
+    studentToken:
+      type: apiKey
+      in: header
+      name: X-Student-Authorization
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
+  schemas:
+    AccountStatus:
+      type: string
+      enum: [invited, active, disabled]
+    Me:
+      type: object
+      required: [accountStatus, displayName, email, serverTime]
+      properties:
+        accountStatus: { $ref: '#/components/schemas/AccountStatus' }
+        displayName: { type: string }
+        email: { type: string, format: email }
+        serverTime: { type: string, format: date-time }
+    Academy:
+      type: object
+      required: [programCode, programName, groupName, studioName, teacherName, studentLevel, enrollmentStatus]
+      properties:
+        programCode: { type: string }
+        programName: { type: string }
+        groupName: { type: [string, 'null'] }
+        studioName: { type: [string, 'null'] }
+        teacherName: { type: [string, 'null'] }
+        studentLevel: { type: [string, 'null'] }
+        enrollmentStatus: { type: string, enum: [active] }
+    Profile:
+      type: object
+      required: [displayName, email, phone, avatarUrl, avatarObjectPath, accountStatus, academy, editableFields, updatedAt]
+      properties:
+        displayName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        avatarObjectPath: { type: [string, 'null'] }
+        accountStatus: { $ref: '#/components/schemas/AccountStatus' }
+        academy:
+          anyOf:
+            - { $ref: '#/components/schemas/Academy' }
+            - { type: 'null' }
+        editableFields:
+          type: array
+          items: { type: string, enum: [phone, avatarObjectPath] }
+        updatedAt: { type: string, format: date-time }
+    LessonSummary:
+      type: object
+      required: [id, courseCode, title, startsAt, endsAt, location, teacherName, status]
+      properties:
+        id: { type: string, format: uuid }
+        courseCode: { type: string }
+        title: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        location: { type: [string, 'null'] }
+        teacherName: { type: [string, 'null'] }
+        status: { type: string, enum: [scheduled, completed, cancelled, rescheduled] }
+    Home:
+      type: object
+      required: [profile, attendance, nextLesson, nextAction, academyNotice, updatedAt]
+      properties:
+        profile:
+          type: object
+          required: [displayName, avatarUrl, programName]
+          properties:
+            displayName: { type: string }
+            avatarUrl: { type: [string, 'null'], format: uri }
+            programName: { type: string }
+        attendance:
+          type: object
+          required: [weeklyPercent, attendedCount, absentCount, excusedCount, scheduledCount]
+          properties:
+            weeklyPercent: { type: integer, minimum: 0, maximum: 100 }
+            attendedCount: { type: integer, minimum: 0 }
+            absentCount: { type: integer, minimum: 0 }
+            excusedCount: { type: integer, minimum: 0 }
+            scheduledCount: { type: integer, minimum: 0 }
+        nextLesson:
+          anyOf:
+            - { $ref: '#/components/schemas/LessonSummary' }
+            - { type: 'null' }
+        nextAction:
+          type: [object, 'null']
+          properties:
+            type: { type: string, enum: [homework, teacher_note] }
+            entityId: { type: string, format: uuid }
+            title: { type: string }
+            body: { type: string }
+        academyNotice:
+          type: [object, 'null']
+          properties:
+            id: { type: string, format: uuid }
+            title: { type: string }
+            body: { type: string }
+            publishedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Attendance:
+      type: object
+      required: [status, markedAt, source]
+      properties:
+        status: { type: string, enum: [pending, present, absent, excused] }
+        markedAt: { type: [string, 'null'], format: date-time }
+        source: { type: [string, 'null'], enum: [manual, mobile_qr, automatic, null] }
+    Homework:
+      type: object
+      required: [id, title, description, status, dueAt, completedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        status: { type: string, enum: [pending, completed, overdue] }
+        dueAt: { type: [string, 'null'], format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+    LessonEntry:
+      type: object
+      required: [id, date, courseCode, title, objective, startsAt, endsAt, location, teacher, lessonStatus, attendance, teacherNote, homework, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        date: { type: string, format: date }
+        courseCode: { type: string }
+        title: { type: string }
+        objective: { type: [string, 'null'] }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        location: { type: [string, 'null'] }
+        teacher:
+          type: [object, 'null']
+          properties:
+            id: { type: string, format: uuid }
+            displayName: { type: string }
+        lessonStatus: { type: string, enum: [scheduled, completed, cancelled, rescheduled] }
+        attendance: { $ref: '#/components/schemas/Attendance' }
+        teacherNote:
+          type: [object, 'null']
+          properties:
+            text: { type: string }
+            createdAt: { type: string, format: date-time }
+        homework:
+          anyOf:
+            - { $ref: '#/components/schemas/Homework' }
+            - { type: 'null' }
+        updatedAt: { type: string, format: date-time }
+    AttendanceSummary:
+      type: object
+      required: [from, to, attendancePercent, attendedCount, absentCount, excusedCount, pendingCount, scheduledCount, serverTime]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        attendancePercent: { type: integer, minimum: 0, maximum: 100 }
+        attendedCount: { type: integer, minimum: 0 }
+        absentCount: { type: integer, minimum: 0 }
+        excusedCount: { type: integer, minimum: 0 }
+        pendingCount: { type: integer, minimum: 0 }
+        scheduledCount: { type: integer, minimum: 0 }
+        serverTime: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string, format: uuid }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Server or student authentication failed
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Mapping, account, or enrollment is unavailable
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Student-owned entity was not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationError:
+      description: Profile field validation failed
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InternalError:
+      description: Internal ERP failure
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

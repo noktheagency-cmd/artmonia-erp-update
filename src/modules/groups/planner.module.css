@@ -899,6 +899,57 @@
   min-height: 0;
 }
 
+.attendanceLessonFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 14px;
+  margin-top: 12px;
+  background: #f8faff;
+  border: 1px solid #dfe7f5;
+  border-radius: 12px;
+}
+
+.attendanceLessonFields label {
+  display: grid;
+  gap: 5px;
+}
+
+.attendanceLessonFields label:last-child {
+  grid-column: 1 / -1;
+  max-width: 220px;
+}
+
+.attendanceLessonFields span {
+  color: var(--p-muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.attendanceLessonFields input,
+.attendanceLessonFields textarea {
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--p-ink);
+  background: #fff;
+  border: 1px solid var(--p-line);
+  border-radius: 8px;
+  outline: none;
+  font: inherit;
+  font-size: 10px;
+  resize: vertical;
+}
+
+.attendanceLessonFields input {
+  height: 38px;
+}
+
+.attendanceLessonFields input:focus,
+.attendanceLessonFields textarea:focus {
+  border-color: #8bb5f4;
+  box-shadow: 0 0 0 3px rgba(23, 105, 232, .1);
+}
+
 .attendanceToolbar {
   display: flex;
   align-items: end;
@@ -960,6 +1011,12 @@
   border-color: #f0cfcc;
 }
 
+.attendanceStats span[data-state="excused"] {
+  color: #8a6418;
+  background: #fff9e9;
+  border-color: #eadba8;
+}
+
 .attendanceList {
   display: grid;
   min-height: 120px;
@@ -1001,6 +1058,7 @@
 
 .attendanceMarks {
   display: flex;
+  flex-wrap: wrap;
   gap: 5px;
 }
 
@@ -1031,6 +1089,12 @@
   color: #b43f3b;
   background: #fff0ef;
   border-color: #e8aaa6;
+}
+
+.attendanceMarks button[data-state="excused"][data-active] {
+  color: #805f16;
+  background: #fff8df;
+  border-color: #d9c06d;
 }
 
 .attendanceMarks .clearMark {
@@ -1881,6 +1945,7 @@
 .journalSessionStats button { display: inline-flex; height: 29px; align-items: center; gap: 4px; padding: 0 8px; border-radius: 8px; font: inherit; font-size: 8px; font-weight: 700; }
 .journalSessionStats span[data-state="present"] { color: #177552; background: #eaf8f2; border: 1px solid #c3e6d8; }
 .journalSessionStats span[data-state="absent"] { color: #aa4540; background: #fff0ef; border: 1px solid #ecc4c1; }
+.journalSessionStats span[data-state="excused"] { color: #805f16; background: #fff8df; border: 1px solid #e2cc84; }
 .journalSessionStats span svg { width: 12px; height: 12px; color: currentColor; }
 .journalSessionStats button { color: #1769e8; background: #fff; border: 1px solid #bcd0ef; cursor: pointer; }
 .journalRecords { display: grid; }
@@ -1896,6 +1961,7 @@ button.historyStatus { cursor: pointer; }
 .historyStatus svg { width: 12px; height: 12px; }
 .historyStatus_present { color: #14734f; background: #eaf8f2; border: 1px solid #bfe4d4; }
 .historyStatus_absent { color: #a9433f; background: #fff0ef; border: 1px solid #ebc0bd; }
+.historyStatus_excused { color: #805f16; background: #fff8df; border: 1px solid #e2cc84; }
 .historyStatus_unmarked { color: #66738a; background: #f3f5f8; border: 1px solid #dde3ec; }
 .historyNote { text-align: right; }
 .slotDetailEmpty { display: grid; min-height: 260px; place-items: center; align-content: center; padding: 30px; color: var(--p-muted); text-align: center; }

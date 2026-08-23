@@ -6,6 +6,7 @@ import {
   BookOpenCheck,
   CalendarDays,
   Check,
+  CircleMinus,
   Clock3,
   DoorOpen,
   Edit3,
@@ -106,7 +107,7 @@ export function SlotDetailDialog({
             <div>
               <span className={styles.slotDetailEyebrow}><Check /> Seçilmiş slot</span>
               <DialogTitle>
-                {weekdayMeta[slot.weekday].label} · {slot.startTime}–{slot.endTime}
+                {slot.displayName ?? `${weekdayMeta[slot.weekday].label} · ${slot.startTime}–${slot.endTime}`}
               </DialogTitle>
               <DialogDescription>
                 {shiftLabels[slot.shift]} növbəsi · {slot.teacherName} · {slot.room}
@@ -463,6 +464,9 @@ function JournalHistory({
               <div className={styles.journalSessionStats}>
                 <span data-state="present"><Check /> {session.presentCount} gəldi</span>
                 <span data-state="absent"><X /> {session.absentCount} gəlmədi</span>
+                {session.excusedCount ? (
+                  <span data-state="excused"><CircleMinus /> {session.excusedCount} üzrlü</span>
+                ) : null}
                 {canManageAttendance ? (
                   <button type="button" onClick={() => onOpenJournal(session.date)}>Redaktə et</button>
                 ) : null}
@@ -482,12 +486,12 @@ function JournalHistory({
                         onClick={() => onOpenJournal(session.date)}
                         aria-label={`${record.studentName} üçün davamiyyət statusunu dəyiş`}
                       >
-                        {status === "present" ? <Check /> : status === "absent" ? <X /> : <Clock3 />}
-                        {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : "Qeyd yoxdur"}
+                        {status === "present" ? <Check /> : status === "absent" ? <X /> : status === "excused" ? <CircleMinus /> : <Clock3 />}
+                        {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : status === "excused" ? "Üzrlü" : "Qeyd yoxdur"}
                       </button>
                     ) : (
                       <span className={cx(styles.historyStatus, styles[`historyStatus_${status}`])}>
-                        {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : "Qeyd yoxdur"}
+                        {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : status === "excused" ? "Üzrlü" : "Qeyd yoxdur"}
                       </span>
                     )}
                     <small className={styles.historyNote}>{record.note || "Qeyd yoxdur"}</small>

@@ -9,8 +9,10 @@ import {
   EnrollmentStatus,
   GroupWeekday,
   Prisma,
+  SlotSessionStatus,
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
+import { bakuLocalDateTimeToUtc } from "@/modules/attendance/attendance-time";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import {
   buildTeacherAvailabilityWhere,
@@ -53,6 +55,7 @@ const slotSchema = z.object({
   shift: z.enum(ClassShift),
   startTime: timeSchema,
   endTime: timeSchema,
+  displayName: z.string().trim().max(120).optional(),
   room: z.string().trim().max(80).optional(),
   capacity: z.coerce.number().int().min(1).max(100),
   validFrom: z.string().date(),
@@ -76,12 +79,17 @@ const assignmentSchema = z.object({
 
 const attendanceItemSchema = z.object({
   enrollmentId: z.string().uuid(),
-  status: z.enum(["present", "absent"]).nullable(),
+  status: z.enum(["present", "absent", "excused"]).nullable(),
   note: z.string().trim().max(500).default(""),
 });
 const attendanceSchema = z.object({
   slotId: z.string().uuid(),
   date: z.string().date(),
+  title: z.string().trim().max(160).default(""),
+  objective: z.string().trim().max(1000).default(""),
+  homeworkTitle: z.string().trim().max(160).default(""),
+  homeworkDescription: z.string().trim().max(2000).default(""),
+  homeworkDueDate: z.string().date().or(z.literal("")).default(""),
   items: z.string().transform((value, context) => {
     try {
       return z.array(attendanceItemSchema).max(100).parse(JSON.parse(value));
@@ -113,6 +121,7 @@ async function createClassSlotActionImpl(formData: FormData) {
         shift: input.shift,
         startTime: input.startTime,
         endTime: input.endTime,
+        displayName: input.displayName || null,
         room: input.room || null,
         capacity: input.capacity,
         validFrom,
@@ -151,6 +160,7 @@ async function updateClassSlotActionImpl(formData: FormData) {
         shift: true,
         startTime: true,
         endTime: true,
+        displayName: true,
         room: true,
         capacity: true,
         validFrom: true,
@@ -182,6 +192,7 @@ async function updateClassSlotActionImpl(formData: FormData) {
         shift: input.shift,
         startTime: input.startTime,
         endTime: input.endTime,
+        displayName: input.displayName || null,
         room: input.room || null,
         capacity: input.capacity,
         validFrom,
@@ -478,19 +489,58 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
     }
 
     const hasMarkedItem = input.items.some((item) => item.status !== null);
+    const hasLessonContent = Boolean(input.title || input.objective || input.homeworkTitle);
     let session = await tx.slotSession.findUnique({
       where: { slotId_sessionDate: { slotId: slot.id, sessionDate: date } },
     });
-    if (!session && hasMarkedItem) {
+    if (!session && (hasMarkedItem || hasLessonContent)) {
       session = await tx.slotSession.create({
         data: {
           slotId: slot.id,
           sessionDate: date,
           startTime: slot.startTime,
           endTime: slot.endTime,
+          status: input.date < today ? SlotSessionStatus.COMPLETED : SlotSessionStatus.SCHEDULED,
+          title: input.title || null,
+          objective: input.objective || null,
           createdById: actor.id,
         },
       });
+    }
+
+    if (session) {
+      session = await tx.slotSession.update({
+        where: { id: session.id },
+        data: {
+          title: input.title || null,
+          objective: input.objective || null,
+        },
+      });
+      if (input.homeworkTitle) {
+        await tx.lessonHomework.upsert({
+          where: { sessionId: session.id },
+          create: {
+            sessionId: session.id,
+            title: input.homeworkTitle,
+            description: input.homeworkDescription || null,
+            dueAt: input.homeworkDueDate
+              ? bakuLocalDateTimeToUtc(input.homeworkDueDate, "23:59")
+              : null,
+            createdById: actor.id,
+            updatedById: actor.id,
+          },
+          update: {
+            title: input.homeworkTitle,
+            description: input.homeworkDescription || null,
+            dueAt: input.homeworkDueDate
+              ? bakuLocalDateTimeToUtc(input.homeworkDueDate, "23:59")
+              : null,
+            updatedById: actor.id,
+          },
+        });
+      } else {
+        await tx.lessonHomework.deleteMany({ where: { sessionId: session.id } });
+      }
     }
 
     const previousTeacherIds = session
@@ -525,14 +575,14 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
           sessionId: session.id,
           enrollmentId: item.enrollmentId,
           teacherId: slot.teacherId,
-          status: item.status === "present" ? AttendanceMark.PRESENT : AttendanceMark.ABSENT,
+          status: mapAttendanceInput(item.status),
           source: AttendanceCaptureSource.MANUAL,
           note: item.note || null,
           markedById: actor.id,
         },
         update: {
           teacherId: slot.teacherId,
-          status: item.status === "present" ? AttendanceMark.PRESENT : AttendanceMark.ABSENT,
+          status: mapAttendanceInput(item.status),
           source: AttendanceCaptureSource.MANUAL,
           note: item.note || null,
           markedById: actor.id,
@@ -541,7 +591,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       });
     }
 
-    if (session && !hasMarkedItem) {
+    if (session && !hasMarkedItem && !hasLessonContent) {
       await tx.slotSession.delete({ where: { id: session.id } });
     }
 
@@ -558,6 +608,12 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
 
   await recalculateTeacherPayoutsForMonth(date, actor.id, affectedTeacherIds);
   revalidatePlanner();
+}
+
+function mapAttendanceInput(status: "present" | "absent" | "excused") {
+  if (status === "present") return AttendanceMark.PRESENT;
+  if (status === "excused") return AttendanceMark.EXCUSED;
+  return AttendanceMark.ABSENT;
 }
 
 async function syncStudentActivationAndPayment(

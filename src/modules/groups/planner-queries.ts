@@ -29,6 +29,7 @@ export type PlannerSlot = {
   endTime: string;
   teacherId: string | null;
   teacherName: string;
+  displayName: string | null;
   room: string;
   capacity: number;
   validFrom: string;
@@ -49,7 +50,7 @@ export type PlannerEnrollment = {
 };
 
 export type PlannerJournalMember = PlannerMember & {
-  attendanceStatus: "present" | "absent" | null;
+  attendanceStatus: "present" | "absent" | "excused" | null;
   note: string;
 };
 
@@ -84,6 +85,7 @@ export type PlannerJournalHistoryItem = {
   endTime: string;
   presentCount: number;
   absentCount: number;
+  excusedCount: number;
   records: Array<PlannerJournalMember & { markedAt: string }>;
 };
 
@@ -106,9 +108,17 @@ export type PlannerWorkspaceData = {
     slotId: string;
     date: string;
     dateLabel: string;
+    title: string;
+    objective: string;
+    homework: {
+      title: string;
+      description: string;
+      dueDate: string;
+    };
     members: PlannerJournalMember[];
     presentCount: number;
     absentCount: number;
+    excusedCount: number;
     unmarkedCount: number;
   };
 };
@@ -139,6 +149,7 @@ export async function getPlannerWorkspaceData(input?: {
         shift: true,
         startTime: true,
         endTime: true,
+        displayName: true,
         room: true,
         capacity: true,
         validFrom: true,
@@ -208,6 +219,7 @@ export async function getPlannerWorkspaceData(input?: {
     endTime: slot.endTime,
     teacherId: slot.teacher?.id ?? null,
     teacherName: slot.teacher?.fullName ?? "Müəllim təyin edilməyib",
+    displayName: slot.displayName,
     room: slot.room ?? "Otaq seçilməyib",
     capacity: slot.capacity,
     validFrom: toDateInput(slot.validFrom),
@@ -268,6 +280,11 @@ export async function getPlannerWorkspaceData(input?: {
             },
           },
           select: {
+            title: true,
+            objective: true,
+            homework: {
+              select: { title: true, description: true, dueAt: true },
+            },
             attendance: {
               select: { enrollmentId: true, status: true, note: true },
             },
@@ -380,6 +397,8 @@ export async function getPlannerWorkspaceData(input?: {
         ? "present"
         : attendance?.status === "ABSENT"
           ? "absent"
+          : attendance?.status === "EXCUSED"
+            ? "excused"
           : null,
       note: attendance?.note ?? "",
     };
@@ -439,7 +458,11 @@ export async function getPlannerWorkspaceData(input?: {
       studentCode: record.enrollment.student.code,
       studentName: record.enrollment.student.contact.fullName,
       program: record.enrollment.program.name,
-      attendanceStatus: record.status === "PRESENT" ? "present" as const : "absent" as const,
+      attendanceStatus: record.status === "PRESENT"
+        ? "present" as const
+        : record.status === "EXCUSED"
+          ? "excused" as const
+          : "absent" as const,
       note: record.note ?? "",
       markedAt: record.markedAt.toISOString(),
     }));
@@ -451,6 +474,7 @@ export async function getPlannerWorkspaceData(input?: {
       endTime: session.endTime,
       presentCount: records.filter((record) => record.attendanceStatus === "present").length,
       absentCount: records.filter((record) => record.attendanceStatus === "absent").length,
+      excusedCount: records.filter((record) => record.attendanceStatus === "excused").length,
       records,
     };
   });
@@ -484,9 +508,19 @@ export async function getPlannerWorkspaceData(input?: {
       slotId: selectedSlotId,
       date: journalDate,
       dateLabel: formatDateAz(journalDate),
+      title: journalSession?.title ?? "",
+      objective: journalSession?.objective ?? "",
+      homework: {
+        title: journalSession?.homework?.title ?? "",
+        description: journalSession?.homework?.description ?? "",
+        dueDate: journalSession?.homework?.dueAt
+          ? toDateInput(journalSession.homework.dueAt)
+          : "",
+      },
       members: journalMembers,
       presentCount: journalMembers.filter((member) => member.attendanceStatus === "present").length,
       absentCount: journalMembers.filter((member) => member.attendanceStatus === "absent").length,
+      excusedCount: journalMembers.filter((member) => member.attendanceStatus === "excused").length,
       unmarkedCount: journalMembers.filter((member) => member.attendanceStatus === null).length,
     },
   };

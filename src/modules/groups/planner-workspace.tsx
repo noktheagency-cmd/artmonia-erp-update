@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Check,
   ChevronRight,
+  CircleMinus,
   Clock3,
   DoorOpen,
   Edit3,
@@ -784,6 +785,15 @@ function SlotDialog({
             </label>
             <TimeSelect label="Başlama · Bakı vaxtı" name="startTime" defaultValue={slot?.startTime ?? "09:00"} />
             <TimeSelect label="Bitmə · Bakı vaxtı" name="endTime" defaultValue={slot?.endTime ?? "10:30"} />
+            <label className={styles.fullField}>
+              <span>Qrup adı · mobil tətbiqdə görünür</span>
+              <input
+                name="displayName"
+                defaultValue={slot?.displayName ?? ""}
+                placeholder="Məsələn: Rəsm – Başlanğıc qrupu"
+                maxLength={120}
+              />
+            </label>
             <label><span>Otaq</span><input name="room" defaultValue={room} placeholder="Məsələn: Rəsm otağı 1" maxLength={80} /></label>
             <label><span>Tutum</span><input name="capacity" type="number" min={1} max={100} defaultValue={slot?.capacity ?? 10} required /></label>
             <label className={styles.fullField}>
@@ -1192,7 +1202,8 @@ function AttendanceDialog({
 
   const presentCount = rows.filter((row) => row.attendanceStatus === "present").length;
   const absentCount = rows.filter((row) => row.attendanceStatus === "absent").length;
-  const unmarkedCount = rows.length - presentCount - absentCount;
+  const excusedCount = rows.filter((row) => row.attendanceStatus === "excused").length;
+  const unmarkedCount = rows.length - presentCount - absentCount - excusedCount;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -1205,6 +1216,28 @@ function AttendanceDialog({
         </DialogHeader>
         <form className={styles.attendanceForm} onSubmit={submit}>
           <input name="slotId" type="hidden" value={slot.id} />
+          <section className={styles.attendanceLessonFields} key={journal.date}>
+            <label>
+              <span>Dərsin mövzusu</span>
+              <input name="title" defaultValue={journal.title} maxLength={160} placeholder="Məsələn: Rəng nəzəriyyəsi" />
+            </label>
+            <label>
+              <span>Dərsin məqsədi</span>
+              <textarea name="objective" defaultValue={journal.objective} maxLength={1000} rows={2} placeholder="Bu dərsdə öyrəniləcək mövzu və məqsəd" />
+            </label>
+            <label>
+              <span>Ev tapşırığı</span>
+              <input name="homeworkTitle" defaultValue={journal.homework.title} maxLength={160} placeholder="Tapşırıq başlığı" />
+            </label>
+            <label>
+              <span>Tapşırığın izahı</span>
+              <textarea name="homeworkDescription" defaultValue={journal.homework.description} maxLength={2000} rows={2} placeholder="Tapşırığın detalları" />
+            </label>
+            <label>
+              <span>Son tarix</span>
+              <input name="homeworkDueDate" type="date" defaultValue={journal.homework.dueDate} min={journal.date} />
+            </label>
+          </section>
           <div className={styles.attendanceToolbar}>
             <label>
               <span>Dərs tarixi</span>
@@ -1222,11 +1255,13 @@ function AttendanceDialog({
               <div className={styles.attendanceStats} aria-label="Davamiyyət xülasəsi">
                 <span data-state="present"><b>{presentCount}</b> Gəldi</span>
                 <span data-state="absent"><b>{absentCount}</b> Gəlmədi</span>
+                <span data-state="excused"><b>{excusedCount}</b> Üzrlü</span>
                 <span><b>{unmarkedCount}</b> Statussuz</span>
               </div>
               <div className={styles.attendanceBulkActions} aria-label="Kütləvi status dəyişimi">
                 <button type="button" onClick={() => markAll("present")}><Check /> Hamısı gəldi</button>
                 <button type="button" onClick={() => markAll("absent")}><X /> Hamısı gəlmədi</button>
+                <button type="button" onClick={() => markAll("excused")}><CircleMinus /> Hamısı üzrlü</button>
                 <button type="button" onClick={() => markAll(null)}><RotateCcw /> Təmizlə</button>
               </div>
             </div>
@@ -1258,6 +1293,15 @@ function AttendanceDialog({
                     aria-label={`${row.studentName}: gəlmədi`}
                   >
                     <X size={15} /> Gəlmədi
+                  </button>
+                  <button
+                    type="button"
+                    data-active={row.attendanceStatus === "excused" || undefined}
+                    data-state="excused"
+                    onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "excused" })}
+                    aria-label={`${row.studentName}: üzrlü`}
+                  >
+                    <CircleMinus size={15} /> Üzrlü
                   </button>
                   <button
                     type="button"

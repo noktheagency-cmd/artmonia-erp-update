@@ -1,4 +1,8 @@
-import { AttendanceCaptureSource, AttendanceMark } from "@/generated/prisma/client";
+import {
+  AttendanceCaptureSource,
+  AttendanceMark,
+  SlotSessionStatus,
+} from "@/generated/prisma/client";
 import { buildAttendanceWindow } from "@/modules/attendance/attendance-time";
 import { dateFromInput, todayInBaku } from "@/modules/groups/shared";
 import { getPrisma } from "@/server/db/prisma";
@@ -85,7 +89,10 @@ export async function finalizeDueAttendanceSessions(now = new Date(), batchSize 
     }
     await tx.slotSession.updateMany({
       where: { id: { in: sessionIds }, attendanceFinalizedAt: null },
-      data: { attendanceFinalizedAt: now },
+      data: {
+        attendanceFinalizedAt: now,
+        status: SlotSessionStatus.COMPLETED,
+      },
     });
     await tx.auditLog.createMany({
       data: dueSessions.map((session) => ({

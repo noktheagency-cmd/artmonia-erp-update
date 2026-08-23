@@ -247,6 +247,16 @@ enum ClassShift {
 enum AttendanceMark {
   PRESENT
   ABSENT
+  EXCUSED
+
+  @@schema("erp")
+}
+
+enum SlotSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
 
   @@schema("erp")
 }
@@ -451,6 +461,10 @@ model User {
   createdSlotSessions              SlotSession[]               @relation("SlotSessionCreator")
   createdAttendanceQrChallenges    AttendanceQrChallenge[]     @relation("AttendanceQrChallengeCreator")
   markedAttendanceRecords          AttendanceRecord[]          @relation("AttendanceMarker")
+  createdLessonHomeworks           LessonHomework[]            @relation("LessonHomeworkCreator")
+  updatedLessonHomeworks           LessonHomework[]            @relation("LessonHomeworkUpdater")
+  createdAcademyAnnouncements      AcademyAnnouncement[]       @relation("AcademyAnnouncementCreator")
+  updatedAcademyAnnouncements      AcademyAnnouncement[]       @relation("AcademyAnnouncementUpdater")
   createdWorkshopEvents            WorkshopEvent[]             @relation("WorkshopEventCreator")
   assignedWorkshopParticipants     WorkshopParticipant[]       @relation("WorkshopParticipantAssigner")
   cancelledWorkshopParticipants    WorkshopParticipant[]       @relation("WorkshopParticipantCanceller")
@@ -1328,6 +1342,7 @@ model Program {
   pricingVersions ProgramPricingVersion[]
   enrollments     Enrollment[]
   targets         Target[]
+  announcements   AcademyAnnouncement[]
 
   @@map("programs")
   @@schema("erp")
@@ -1429,6 +1444,7 @@ model StudentMobileAccount {
   studentId        String                     @unique @map("student_id") @db.Uuid
   authUserId       String                     @unique @map("auth_user_id") @db.Uuid
   loginEmail       String                     @unique @map("login_email")
+  avatarObjectPath String?                    @map("avatar_object_path")
   status           StudentMobileAccountStatus @default(INVITED)
   invitedAt        DateTime                   @default(now()) @map("invited_at")
   lastInviteSentAt DateTime                   @default(now()) @map("last_invite_sent_at")
@@ -1514,6 +1530,7 @@ model Enrollment {
   attendanceRecords   AttendanceRecord[]
   bonusTeacherCohorts HrBonusTeacherCohort[]
   mobileCheckIns      MobileAttendanceCheckIn[]
+  homeworkCompletions HomeworkCompletion[]
 
   @@index([studentId])
   @@index([teacherId, status])
@@ -1530,6 +1547,7 @@ model ClassSlot {
   startTime   String       @map("start_time")
   endTime     String       @map("end_time")
   room        String?
+  displayName String?      @map("display_name")
   capacity    Int
   validFrom   DateTime     @map("valid_from") @db.Date
   createdById String?      @map("created_by_id") @db.Uuid
@@ -1571,21 +1589,25 @@ model StudentScheduleAssignment {
 }
 
 model SlotSession {
-  id                    String    @id @default(uuid()) @db.Uuid
-  slotId                String    @map("slot_id") @db.Uuid
-  sessionDate           DateTime  @map("session_date") @db.Date
-  startTime             String    @map("start_time")
-  endTime               String    @map("end_time")
-  attendanceFinalizedAt DateTime? @map("attendance_finalized_at")
-  createdById           String?   @map("created_by_id") @db.Uuid
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
+  id                    String            @id @default(uuid()) @db.Uuid
+  slotId                String            @map("slot_id") @db.Uuid
+  sessionDate           DateTime          @map("session_date") @db.Date
+  startTime             String            @map("start_time")
+  endTime               String            @map("end_time")
+  status                SlotSessionStatus @default(SCHEDULED)
+  title                 String?
+  objective             String?
+  attendanceFinalizedAt DateTime?         @map("attendance_finalized_at")
+  createdById           String?           @map("created_by_id") @db.Uuid
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
 
   slot           ClassSlot                 @relation(fields: [slotId], references: [id], onDelete: Cascade)
   createdBy      User?                     @relation("SlotSessionCreator", fields: [createdById], references: [id], onDelete: SetNull)
   attendance     AttendanceRecord[]
   qrChallenges   AttendanceQrChallenge[]
   mobileCheckIns MobileAttendanceCheckIn[]
+  homework       LessonHomework?
 
   @@unique([slotId, sessionDate])
   @@index([sessionDate])
@@ -1618,6 +1640,72 @@ model AttendanceRecord {
   @@index([teacherId, status])
   @@index([markedById])
   @@map("attendance_records")
+  @@schema("erp")
+}
+
+model LessonHomework {
+  id          String    @id @default(uuid()) @db.Uuid
+  sessionId   String    @unique @map("session_id") @db.Uuid
+  title       String
+  description String?
+  dueAt       DateTime? @map("due_at")
+  createdById String?   @map("created_by_id") @db.Uuid
+  updatedById String?   @map("updated_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  session     SlotSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdBy   User?                @relation("LessonHomeworkCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?                @relation("LessonHomeworkUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  completions HomeworkCompletion[]
+
+  @@index([dueAt])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("lesson_homeworks")
+  @@schema("erp")
+}
+
+model HomeworkCompletion {
+  id           String   @id @default(uuid()) @db.Uuid
+  homeworkId   String   @map("homework_id") @db.Uuid
+  enrollmentId String   @map("enrollment_id") @db.Uuid
+  completedAt  DateTime @default(now()) @map("completed_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  homework   LessonHomework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  enrollment Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([homeworkId, enrollmentId])
+  @@index([enrollmentId, completedAt(sort: Desc)])
+  @@map("homework_completions")
+  @@schema("erp")
+}
+
+model AcademyAnnouncement {
+  id          String    @id @default(uuid()) @db.Uuid
+  programId   String?   @map("program_id") @db.Uuid
+  title       String
+  body        String
+  publishedAt DateTime  @default(now()) @map("published_at")
+  expiresAt   DateTime? @map("expires_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdById String?   @map("created_by_id") @db.Uuid
+  updatedById String?   @map("updated_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  program   Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("AcademyAnnouncementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?    @relation("AcademyAnnouncementUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([isActive, publishedAt(sort: Desc)])
+  @@index([programId, isActive, publishedAt(sort: Desc)])
+  @@index([expiresAt])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("academy_announcements")
   @@schema("erp")
 }
 
@@ -2095,21 +2183,21 @@ model TeacherPayoutLine {
 }
 
 model Task {
-  id             String     @id @default(uuid()) @db.Uuid
+  id             String       @id @default(uuid()) @db.Uuid
   title          String
   description    String?
   type           String
-  entityType     String?    @map("entity_type")
-  entityId       String?    @map("entity_id") @db.Uuid
-  ownerUserId    String?    @map("owner_user_id") @db.Uuid
-  status         TaskStatus @default(OPEN)
+  entityType     String?      @map("entity_type")
+  entityId       String?      @map("entity_id") @db.Uuid
+  ownerUserId    String?      @map("owner_user_id") @db.Uuid
+  status         TaskStatus   @default(OPEN)
   priority       TaskPriority @default(NORMAL)
-  dueAt          DateTime?  @map("due_at")
-  completedAt    DateTime?  @map("completed_at")
-  idempotencyKey String?    @unique @map("idempotency_key")
-  createdById    String?    @map("created_by_id") @db.Uuid
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  dueAt          DateTime?    @map("due_at")
+  completedAt    DateTime?    @map("completed_at")
+  idempotencyKey String?      @unique @map("idempotency_key")
+  createdById    String?      @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
 
   ownerUser     User?                  @relation("TaskOwner", fields: [ownerUserId], references: [id])
   createdBy     User?                  @relation("TaskCreator", fields: [createdById], references: [id])

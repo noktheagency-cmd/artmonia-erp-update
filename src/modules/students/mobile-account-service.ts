@@ -1,6 +1,10 @@
 import "server-only";
 
-import { StudentMobileAccountStatus, type Prisma } from "@/generated/prisma/client";
+import {
+  StudentLifecycleStatus,
+  StudentMobileAccountStatus,
+  type Prisma,
+} from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { PublicActionError } from "@/server/actions/safe-action";
 import { getPrisma } from "@/server/db/prisma";
@@ -62,7 +66,6 @@ export async function inviteStudentMobileAccount(input: {
     redirectTo: getStudentMobileSetupUrl(),
     data: {
       account_type: "student",
-      erp_student_id: student.id,
       full_name: student.contact.fullName,
     },
   });
@@ -75,7 +78,6 @@ export async function inviteStudentMobileAccount(input: {
       app_metadata: {
         ...data.user.app_metadata,
         account_type: "student",
-        erp_student_id: student.id,
       },
     });
     if (metadataError) throw metadataError;
@@ -202,8 +204,31 @@ export async function setStudentMobileAccountDisabled(input: {
 }
 
 export async function resolveStudentMobileIdentity(accessToken: string) {
+  const resolution = await resolveStudentMobileIdentityDetailed(accessToken);
+  return resolution.ok ? resolution.identity : null;
+}
+
+export type StudentMobileIdentityResolution =
+  | {
+      ok: true;
+      identity: {
+        authUserId: string;
+        studentId: string;
+        studentCode: string;
+        lifecycleStatus: string;
+        loginEmail: string;
+      };
+    }
+  | {
+      ok: false;
+      code: "STUDENT_AUTH_INVALID" | "STUDENT_MAPPING_NOT_FOUND" | "MOBILE_ACCOUNT_DISABLED";
+    };
+
+export async function resolveStudentMobileIdentityDetailed(
+  accessToken: string,
+): Promise<StudentMobileIdentityResolution> {
   const { data, error } = await getSupabaseAdminClient().auth.getUser(accessToken);
-  if (error || !data.user) return null;
+  if (error || !data.user) return { ok: false, code: "STUDENT_AUTH_INVALID" };
 
   const prisma = getPrisma();
   const account = await prisma.studentMobileAccount.findUnique({
@@ -211,12 +236,19 @@ export async function resolveStudentMobileIdentity(accessToken: string) {
     select: {
       id: true,
       studentId: true,
+      loginEmail: true,
       status: true,
       activatedAt: true,
       student: { select: { code: true, lifecycleStatus: true } },
     },
   });
-  if (!account || account.status === StudentMobileAccountStatus.DISABLED) return null;
+  if (!account) return { ok: false, code: "STUDENT_MAPPING_NOT_FOUND" };
+  if (account.status === StudentMobileAccountStatus.DISABLED) {
+    return { ok: false, code: "MOBILE_ACCOUNT_DISABLED" };
+  }
+  if (isMobileDisabledStudentStatus(account.student.lifecycleStatus)) {
+    return { ok: false, code: "MOBILE_ACCOUNT_DISABLED" };
+  }
 
   if (account.status === StudentMobileAccountStatus.INVITED) {
     await prisma.studentMobileAccount.update({
@@ -229,11 +261,22 @@ export async function resolveStudentMobileIdentity(accessToken: string) {
   }
 
   return {
-    authUserId: data.user.id,
-    studentId: account.studentId,
-    studentCode: account.student.code,
-    lifecycleStatus: account.student.lifecycleStatus,
+    ok: true,
+    identity: {
+      authUserId: data.user.id,
+      studentId: account.studentId,
+      studentCode: account.student.code,
+      lifecycleStatus: account.student.lifecycleStatus,
+      loginEmail: account.loginEmail,
+    },
   };
+}
+
+function isMobileDisabledStudentStatus(status: StudentLifecycleStatus) {
+  return status === StudentLifecycleStatus.FROZEN
+    || status === StudentLifecycleStatus.STOPPED
+    || status === StudentLifecycleStatus.DECLINED
+    || status === StudentLifecycleStatus.COMPLETED;
 }
 
 export async function deleteStudentMobileAuthUser(authUserId: string) {
