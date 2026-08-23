@@ -1437,6 +1437,7 @@ model StudentMobileAccount {
 
   @@index([status])
   @@index([createdById])
+  @@index([updatedById])
   @@map("student_mobile_accounts")
   @@schema("erp")
 }
