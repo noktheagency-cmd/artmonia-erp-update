@@ -63,6 +63,10 @@ GET /api/mobile/v1/me/profile
 
 Ad və email yalnız oxunur. Tələbə `phone` və `avatarObjectPath` sahələrini dəyişə bilər; dəyişiklik ERP-də dərhal qüvvəyə minir.
 
+- Telefon string olaraq göndərilirsə, trim edilmiş uzunluq `7..30` simvol, rəqəm olmayan simvollar çıxarıldıqdan sonra isə `7..15` rəqəm olmalıdır. Məsələn: `+994501234567`.
+- Mövcud telefon nömrəsini silmək üçün `{"phone": null}` göndərilir.
+- Boş string (`{"phone": ""}`) qəbul edilmir.
+
 ```http
 PATCH /api/mobile/v1/me/profile
 Content-Type: application/json

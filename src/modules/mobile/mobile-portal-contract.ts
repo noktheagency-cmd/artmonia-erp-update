@@ -14,7 +14,7 @@ const lessonFilterValues = [
 ] as const;
 
 export const mobileProfilePatchSchema = z.object({
-  phone: z.string().trim().min(7).max(30).optional(),
+  phone: z.string().trim().min(7).max(30).nullable().optional(),
   avatarObjectPath: z.string().trim().max(240).nullable().optional(),
 }).strict().refine(
   (value) => value.phone !== undefined || value.avatarObjectPath !== undefined,

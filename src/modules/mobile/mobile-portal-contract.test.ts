@@ -24,6 +24,8 @@ test("mobile lesson filters reject unknown fields and oversized pages", () => {
 
 test("profile patch only accepts student-owned fields", () => {
   assert.equal(mobileProfilePatchSchema.safeParse({ phone: "+994501234567" }).success, true);
+  assert.equal(mobileProfilePatchSchema.safeParse({ phone: null }).success, true);
+  assert.equal(mobileProfilePatchSchema.safeParse({ phone: "" }).success, false);
   assert.equal(mobileProfilePatchSchema.safeParse({ avatarObjectPath: null }).success, true);
   assert.equal(mobileProfilePatchSchema.safeParse({}).success, false);
   assert.equal(mobileProfilePatchSchema.safeParse({ displayName: "Changed" }).success, false);

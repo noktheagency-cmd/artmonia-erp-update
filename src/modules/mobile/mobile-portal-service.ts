@@ -57,8 +57,14 @@ export async function updateMobileProfile(
   input: MobileProfilePatch,
 ) {
   const prisma = getPrisma();
-  const phoneNormalized = input.phone === undefined ? undefined : normalizePhone(input.phone);
-  if (input.phone !== undefined && (!phoneNormalized || phoneNormalized.length < 7 || phoneNormalized.length > 15)) {
+  const phoneNormalized = input.phone === undefined || input.phone === null
+    ? input.phone
+    : normalizePhone(input.phone);
+  if (
+    input.phone !== undefined
+    && input.phone !== null
+    && (!phoneNormalized || phoneNormalized.length < 7 || phoneNormalized.length > 15)
+  ) {
     throw new MobilePortalError("INVALID_PHONE", 422, "Telefon nömrəsi düzgün deyil.");
   }
   if (
@@ -108,7 +114,7 @@ export async function updateMobileProfile(
           avatarObjectPath: current.mobileAccount.avatarObjectPath,
         },
         afterJson: {
-          phone: input.phone ?? current.contact.phoneDisplay,
+          phone: input.phone === undefined ? current.contact.phoneDisplay : input.phone,
           avatarObjectPath: input.avatarObjectPath === undefined
             ? current.mobileAccount.avatarObjectPath
             : input.avatarObjectPath,

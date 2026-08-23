@@ -49,7 +49,11 @@ paths:
               additionalProperties: false
               minProperties: 1
               properties:
-                phone: { type: string, minLength: 7, maxLength: 30 }
+                phone:
+                  type: [string, 'null']
+                  minLength: 7
+                  maxLength: 30
+                  description: Use null to remove the current phone number. A string must contain 7 to 15 digits after normalization.
                 avatarObjectPath:
                   type: [string, 'null']
                   maxLength: 240
