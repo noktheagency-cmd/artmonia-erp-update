@@ -39,11 +39,13 @@ export function OwnerDashboard({
   actorName,
   taskData,
   createTaskAction,
+  updateTaskStatusAction,
 }: {
   data: DashboardData;
   actorName: string;
   taskData: TaskData | null;
   createTaskAction: TaskAction;
+  updateTaskStatusAction: TaskAction;
 }) {
   return (
     <section className="owner-dashboard" aria-labelledby="owner-dashboard-title">
@@ -92,6 +94,7 @@ export function OwnerDashboard({
           <DashboardTasksPanel
             data={taskData}
             createTaskAction={createTaskAction}
+            updateTaskStatusAction={updateTaskStatusAction}
           />
         </div>
       ) : null}

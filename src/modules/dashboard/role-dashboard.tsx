@@ -13,7 +13,7 @@ type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 const icons = { sales: Target, teacher: BookOpen, marketing: Megaphone } as const;
 const kpiIcons = [UsersRound, CircleDot, CheckCircle2, Sparkles] as const;
 
-export function RoleDashboard({ data, taskData, createTaskAction }: { data: RoleDashboardData; taskData: TaskData; createTaskAction: TaskAction }) {
+export function RoleDashboard({ data, taskData, createTaskAction, updateTaskStatusAction }: { data: RoleDashboardData; taskData: TaskData; createTaskAction: TaskAction; updateTaskStatusAction: TaskAction }) {
   const HeroIcon = icons[data.kind];
   return <section className={`role-dashboard is-${data.kind}`}>
     <Card className="role-dashboard-hero">
@@ -45,7 +45,7 @@ export function RoleDashboard({ data, taskData, createTaskAction }: { data: Role
         <CardContent><div className="role-dashboard-recent">{data.recent.length ? data.recent.map((item) => <div key={`${item.title}-${item.meta}`}><span>{initials(item.title)}</span><div><strong>{item.title}</strong><small>{item.meta}</small></div><Badge variant="secondary">{item.status}</Badge></div>) : <p>Hələ məlumat yoxdur.</p>}</div></CardContent>
       </Card>
     </div>
-    <DashboardTasksPanel data={taskData} createTaskAction={createTaskAction} />
+    <DashboardTasksPanel data={taskData} createTaskAction={createTaskAction} updateTaskStatusAction={updateTaskStatusAction} />
   </section>;
 }
 

@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import type { TaskData, TaskRow } from "@/modules/tasks/queries";
+import { TaskDetailsDialog, taskPriorityOptions } from "@/modules/tasks/task-details-dialog";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 
@@ -33,17 +34,18 @@ type DeadlineTone = "calm" | "near" | "overdue";
 export function DashboardTasksPanel({
   data,
   createTaskAction,
+  updateTaskStatusAction,
 }: {
   data: TaskData;
   createTaskAction: TaskAction;
+  updateTaskStatusAction: TaskAction;
 }) {
   const router = useRouter();
-  const [dismissedTaskIds, setDismissedTaskIds] = useState<Set<string>>(() => new Set());
+  const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const activeTasks = data.tasks
     .filter(
       (task) =>
-        task.status !== "CANCELLED" &&
-        !dismissedTaskIds.has(task.id)
+        task.status !== "CANCELLED" && task.status !== "DONE"
     )
     .toSorted((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
     .slice(0, 4);
@@ -71,9 +73,8 @@ export function DashboardTasksPanel({
             <DashboardDeadlineTask
               key={task.id}
               task={task}
-              onDismiss={() =>
-                setDismissedTaskIds((current) => new Set([...current, task.id]))
-              }
+              onOpen={() => setSelectedTask(task)}
+              updateTaskStatusAction={updateTaskStatusAction}
             />
           ))}
         </div>
@@ -92,21 +93,47 @@ export function DashboardTasksPanel({
         Bütün tapşırıqlara keç
         <ArrowRight size={16} aria-hidden="true" />
       </Link>
+      <TaskDetailsDialog
+        key={selectedTask?.id ?? "closed"}
+        task={selectedTask}
+        open={Boolean(selectedTask)}
+        onOpenChange={(open) => !open && setSelectedTask(null)}
+        updateTaskStatusAction={updateTaskStatusAction}
+      />
     </article>
   );
 }
 
 function DashboardDeadlineTask({
   task,
-  onDismiss,
+  onOpen,
+  updateTaskStatusAction,
 }: {
   task: TaskRow;
-  onDismiss: () => void;
+  onOpen: () => void;
+  updateTaskStatusAction: TaskAction;
 }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const deadline = getDeadlinePresentation(task);
 
+  function markDone() {
+    const formData = new FormData();
+    formData.set("taskId", task.id);
+    formData.set("status", "DONE");
+    startTransition(async () => {
+      try {
+        unwrapActionResult(await updateTaskStatusAction(formData));
+        router.refresh();
+      } catch (caught) {
+        notifyCaughtError(caught, "Task tamamlanmadı", "Status yenilənmədi");
+      }
+    });
+  }
+
   return (
-    <article className={`owner-dashboard-deadline-task is-${deadline.tone}`}>
+    <article className={`owner-dashboard-deadline-task is-${deadline.tone}${isPending ? " is-pending" : ""}`}>
+      <button className="owner-dashboard-task-open" type="button" onClick={onOpen} aria-label={`${task.title} taskının detallarını aç`} />
       <span
         className={`owner-dashboard-task-mascot is-${deadline.tone}`}
         aria-label={deadline.mascotLabel}
@@ -125,9 +152,10 @@ function DashboardDeadlineTask({
         className="owner-dashboard-task-done"
         type="button"
         variant="ghost"
-        onClick={onDismiss}
-        title="İzləmə siyahısından çıxar"
-        aria-label={`${task.title} taskını son tapşırıqlar siyahısından çıxar`}
+        onClick={markDone}
+        disabled={isPending || !task.canUpdateStatus}
+        title="Taskı tamamla"
+        aria-label={`${task.title} taskını tamamla`}
       >
         <Check size={16} strokeWidth={2.5} />
       </Button>
@@ -183,8 +211,12 @@ function CreateDashboardTaskDialog({ employees, action }: { employees: TaskData[
             <Input name="dueDate" type="date" required />
           </label>
           <label>
-            <span>Qısa qeyd <small>(istəyə bağlı)</small></span>
-            <textarea name="description" rows={3} maxLength={500} placeholder="Əlavə məlumat..." />
+            <span>Prioritet</span>
+            <FormSelect name="priority" defaultValue="NORMAL" options={[...taskPriorityOptions]} required />
+          </label>
+          <label>
+            <span>Ətraflı açıqlama <small>(istəyə bağlı)</small></span>
+            <textarea name="description" rows={5} maxLength={2000} placeholder="Tapşırığın bütün vacib detallarını qeyd edin..." />
           </label>
           {error ? <p className="owner-dashboard-task-error" role="alert">{error}</p> : null}
           <DialogFooter>

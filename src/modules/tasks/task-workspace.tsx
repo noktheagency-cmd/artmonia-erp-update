@@ -31,6 +31,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import type { TaskData, TaskRow, TaskStatusValue } from "@/modules/tasks/queries";
+import {
+  TaskDetailsDialog,
+  taskPriorityOptions,
+  taskStatusOptions,
+} from "@/modules/tasks/task-details-dialog";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import "./tasks.css";
@@ -38,12 +43,7 @@ import "./tasks.css";
 type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 type TaskFilter = "ACTIVE" | TaskStatusValue;
 
-const statusOptions = [
-  { value: "OPEN", label: "Gözləyir" },
-  { value: "IN_PROGRESS", label: "İcradadır" },
-  { value: "DONE", label: "Tamamlandı" },
-  { value: "CANCELLED", label: "Ləğv edildi" },
-];
+const statusOptions = [...taskStatusOptions];
 
 export function TaskWorkspace({
   data,
@@ -58,8 +58,10 @@ export function TaskWorkspace({
   deleteTaskAction: TaskAction;
   markNotificationsReadAction: () => unknown | Promise<unknown>;
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
+  const [selectedTask, setSelectedTask] = useState<TaskRow | null>(data.selectedTask);
   const didMarkNotificationsRead = useRef(false);
   const normalizedQuery = query.trim().toLocaleLowerCase("az");
   const filteredTasks = useMemo(
@@ -89,6 +91,26 @@ export function TaskWorkspace({
       })
       .catch(() => undefined);
   }, [markNotificationsReadAction]);
+
+  function openTask(task: TaskRow) {
+    setSelectedTask(task);
+    const params = new URLSearchParams(window.location.search);
+    params.set("task", task.id);
+    routerReplace(params);
+  }
+
+  function closeTask(open: boolean) {
+    if (open) return;
+    setSelectedTask(null);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("task");
+    routerReplace(params);
+  }
+
+  function routerReplace(params: URLSearchParams) {
+    const search = params.toString();
+    router.replace(`${window.location.pathname}${search ? `?${search}` : ""}` as Route, { scroll: false });
+  }
 
   return (
     <section className="page-stack tasks-page">
@@ -155,7 +177,8 @@ export function TaskWorkspace({
                 updateTaskStatusAction={updateTaskStatusAction}
                 deleteTaskAction={deleteTaskAction}
                 canDelete={data.permissions.canAdminister}
-                isHighlighted={data.selectedTaskId === task.id}
+                isHighlighted={selectedTask?.id === task.id}
+                onOpen={() => openTask(task)}
               />
             ))}
           </div>
@@ -174,6 +197,13 @@ export function TaskWorkspace({
           </nav>
         ) : null}
       </div>
+      <TaskDetailsDialog
+        key={selectedTask?.id ?? "closed"}
+        task={selectedTask}
+        open={Boolean(selectedTask)}
+        onOpenChange={closeTask}
+        updateTaskStatusAction={updateTaskStatusAction}
+      />
     </section>
   );
 }
@@ -193,12 +223,14 @@ function TaskListRow({
   deleteTaskAction,
   canDelete,
   isHighlighted,
+  onOpen,
 }: {
   task: TaskRow;
   updateTaskStatusAction: TaskAction;
   deleteTaskAction: TaskAction;
   canDelete: boolean;
   isHighlighted: boolean;
+  onOpen: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -224,9 +256,10 @@ function TaskListRow({
 
   return (
     <article id={`task-${task.id}`} className={cx("task-row", task.isOverdue && "is-overdue", isHighlighted && "is-highlighted", isPending && "is-pending")}>
+      <button className="task-row-open" type="button" onClick={onOpen} aria-label={`${task.title} taskının detallarını aç`} />
       <span className={cx("task-status-mark", `is-${optimisticStatus.toLowerCase()}`)} aria-hidden="true" />
       <div className="task-main">
-        <h3>{task.title}</h3>
+        <div className="task-main-title"><h3>{task.title}</h3><span className={cx("task-priority-badge", `is-${task.priority.toLowerCase()}`)}>{taskPriorityOptions.find((item) => item.value === task.priority)?.label}</span></div>
         {task.description ? <p>{task.description}</p> : null}
       </div>
       <div className="task-owner">
@@ -354,8 +387,12 @@ function CreateTaskDialog({ employees, action }: { employees: TaskData["employee
             <DatePicker name="dueDate" required allowClear={false} popoverPlacement="floating" />
           </label>
           <label>
-            <span>Qısa qeyd <small>(istəyə bağlı)</small></span>
-            <textarea name="description" rows={3} maxLength={500} placeholder="Əlavə məlumat..." />
+            <span>Prioritet</span>
+            <FormSelect name="priority" defaultValue="NORMAL" options={[...taskPriorityOptions]} required />
+          </label>
+          <label>
+            <span>Ətraflı açıqlama <small>(istəyə bağlı)</small></span>
+            <textarea name="description" rows={5} maxLength={2000} placeholder="Tapşırığın bütün vacib detallarını qeyd edin..." />
           </label>
           {error ? <p className="task-form-error" role="alert">{error}</p> : null}
           <DialogFooter>

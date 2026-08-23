@@ -138,6 +138,14 @@ enum TaskStatus {
   @@schema("erp")
 }
 
+enum TaskPriority {
+  URGENT
+  NORMAL
+  LOW
+
+  @@schema("erp")
+}
+
 enum PersonalNotificationType {
   TASK_ASSIGNED
   TASK_DUE_SOON
@@ -2095,6 +2103,7 @@ model Task {
   entityId       String?    @map("entity_id") @db.Uuid
   ownerUserId    String?    @map("owner_user_id") @db.Uuid
   status         TaskStatus @default(OPEN)
+  priority       TaskPriority @default(NORMAL)
   dueAt          DateTime?  @map("due_at")
   completedAt    DateTime?  @map("completed_at")
   idempotencyKey String?    @unique @map("idempotency_key")

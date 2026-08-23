@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AppRole, Prisma, TaskStatus } from "@/generated/prisma/client";
+import { AppRole, Prisma, TaskPriority, TaskStatus } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import {
   broadcastNotificationChange,
@@ -22,9 +22,10 @@ import {
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
-  description: z.string().trim().max(500).optional(),
+  description: z.string().trim().max(2000, "Task açıqlaması 2000 simvoldan uzun ola bilməz").optional(),
   ownerUserId: z.string().uuid(),
   dueDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
+  priority: z.nativeEnum(TaskPriority).default(TaskPriority.NORMAL),
 });
 
 const updateStatusSchema = z.object({
@@ -61,6 +62,7 @@ async function createTaskActionImpl(formData: FormData) {
         ownerUserId: owner.id,
         dueAt,
         status: TaskStatus.OPEN,
+        priority: input.priority,
         createdById: actor.id,
       },
       select: {
@@ -69,6 +71,7 @@ async function createTaskActionImpl(formData: FormData) {
         description: true,
         ownerUserId: true,
         status: true,
+        priority: true,
         dueAt: true,
         createdAt: true,
       },
@@ -89,6 +92,7 @@ async function createTaskActionImpl(formData: FormData) {
         ownerUserId: owner.id,
         ownerName: owner.fullName,
         status: task.status,
+        priority: task.priority,
         dueAt: task.dueAt?.toISOString() ?? null,
         createdAt: task.createdAt.toISOString(),
       } satisfies Prisma.InputJsonValue,

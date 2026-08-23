@@ -712,7 +712,11 @@
 .owner-dashboard-task-create { min-height: 34px; padding: 0 11px; color: #ffffff; background: #147b9f; border: 0; border-radius: 10px; box-shadow: 0 9px 18px rgb(20 123 159 / 20%); font-size: 10.5px; }
 .owner-dashboard-task-create:hover { color: #ffffff; background: #0f6888; transform: translateY(-1px); }
 .owner-dashboard-deadline-list { display: grid; gap: 8px; margin-top: 15px; }
-.owner-dashboard-deadline-task { display: grid; grid-template-columns: 42px minmax(0, 1fr) 32px; gap: 10px; align-items: center; padding: 7px 8px 7px 7px; background: rgb(255 255 255 / 84%); border: 1px solid #e1edf2; border-radius: 14px; box-shadow: 0 7px 14px rgb(23 66 90 / 4%); transition: transform 180ms ease, box-shadow 180ms ease; }
+.owner-dashboard-deadline-task { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 32px; gap: 10px; align-items: center; padding: 7px 8px 7px 7px; background: rgb(255 255 255 / 84%); border: 1px solid #e1edf2; border-radius: 14px; box-shadow: 0 7px 14px rgb(23 66 90 / 4%); transition: transform 180ms ease, box-shadow 180ms ease; }
+.owner-dashboard-task-open { position: absolute; z-index: 0; inset: 0; padding: 0; cursor: pointer; background: transparent; border: 0; border-radius: inherit; }
+.owner-dashboard-task-open:focus-visible { outline: 2px solid #4f6ce0; outline-offset: 2px; }
+.owner-dashboard-deadline-task > :not(.owner-dashboard-task-open) { position: relative; z-index: 1; pointer-events: none; }
+.owner-dashboard-deadline-task > .owner-dashboard-task-done { pointer-events: auto; }
 .owner-dashboard-deadline-task:hover { box-shadow: 0 10px 20px rgb(23 66 90 / 9%); transform: translateY(-1px); }
 .owner-dashboard-deadline-task.is-near { border-color: #f5dfb6; }
 .owner-dashboard-deadline-task.is-overdue { border-color: #f4c8cf; }

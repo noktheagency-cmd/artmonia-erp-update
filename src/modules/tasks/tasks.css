@@ -59,6 +59,10 @@
 .tasks-list { display: flex; flex-direction: column; }
 
 .task-row { position: relative; display: grid; grid-template-columns: 6px minmax(220px, 1fr) minmax(150px, .36fr) minmax(145px, .32fr) 194px; gap: 16px; align-items: center; min-height: 82px; padding: 14px 20px 14px 14px; border-bottom: 1px solid #e3e9f0; transition: background 160ms ease, opacity 160ms ease; }
+.task-row-open { position: absolute; z-index: 0; inset: 0; padding: 0; cursor: pointer; background: transparent; border: 0; }
+.task-row-open:focus-visible { outline: 2px solid #506ce0; outline-offset: -3px; border-radius: 12px; }
+.task-row > :not(.task-row-open) { position: relative; z-index: 1; pointer-events: none; }
+.task-row-controls { pointer-events: auto !important; }
 .task-row:last-child { border-bottom: 0; }
 .task-row:hover { background: #f3f6fa; }
 .task-row.is-highlighted { background: #edf1ff; box-shadow: inset 0 0 0 2px rgb(80 108 224 / 25%); }
@@ -68,8 +72,13 @@
 .task-status-mark.is-in_progress { background: #5b78ea; }
 .task-status-mark.is-done { background: #25a66e; }
 .task-main { min-width: 0; }
+.task-main-title { display: flex; min-width: 0; align-items: center; gap: 7px; }
+.task-main-title h3 { min-width: 0; }
 .task-main h3 { margin: 0; overflow: hidden; color: #252d3d; font-size: 13px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
 .task-main p { display: -webkit-box; max-width: 620px; margin: 5px 0 0; overflow: hidden; color: #7a8495; font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+.task-priority-badge { flex: 0 0 auto; padding: 3px 6px; color: #3457c6; background: #eef2ff; border: 1px solid #d7e0ff; border-radius: 999px; font-size: 8px; font-weight: 850; text-transform: uppercase; }
+.task-priority-badge.is-urgent { color: #b63e37; background: #fff0ee; border-color: #f4c9c5; }
+.task-priority-badge.is-low { color: #64748b; background: #f1f5f9; border-color: #dbe3ed; }
 .task-owner, .task-deadline { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .task-avatar { display: grid; flex: 0 0 auto; place-items: center; width: 34px; height: 34px; color: #4667e8; background: #e8edfb; border: 1px solid #dbe3ff; border-radius: 11px; font-size: 10px; font-weight: 800; }
 .task-owner div, .task-deadline div { display: flex; min-width: 0; flex-direction: column; }
