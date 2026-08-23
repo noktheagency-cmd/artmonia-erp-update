@@ -12,6 +12,7 @@ paths:
       summary: Record attendance from a mobile QR scan
       security:
         - serverToken: []
+          studentToken: []
       parameters:
         - name: Idempotency-Key
           in: header
@@ -21,6 +22,11 @@ paths:
           in: header
           required: false
           schema: { type: string, format: uuid }
+        - name: X-Student-Authorization
+          in: header
+          required: true
+          description: Bearer followed by the signed-in student's Supabase access token
+          schema: { type: string, pattern: '^Bearer .+$' }
       requestBody:
         required: true
         content:
@@ -52,13 +58,21 @@ components:
       type: http
       scheme: bearer
       bearerFormat: opaque server token
+    studentToken:
+      type: apiKey
+      in: header
+      name: X-Student-Authorization
   schemas:
     CheckInRequest:
       type: object
       additionalProperties: false
-      required: [erpStudentId, clientEventId, qrToken, scannedAt]
+      required: [clientEventId, qrToken, scannedAt]
       properties:
-        erpStudentId: { type: string, format: uuid }
+        erpStudentId:
+          type: string
+          format: uuid
+          deprecated: true
+          description: Optional legacy field; ERP derives and validates the student from the JWT.
         clientEventId: { type: string, format: uuid }
         qrToken:
           type: string
@@ -105,10 +119,10 @@ components:
       description: Invalid request or QR token
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Unauthorized:
-      description: Invalid server token
+      description: Invalid server token or missing student access token
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Forbidden:
-      description: Student is not enrolled in the lesson
+      description: Student account is invalid/disabled, identity mismatch, or student is not enrolled
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     NotFound:
       description: Student or lesson not found

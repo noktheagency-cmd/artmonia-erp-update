@@ -188,6 +188,7 @@ type CrmLeadFocusRow = {
   nextActionTypeLabel: string;
   nextFollowUpAt: string;
   manager: string;
+  category: "general" | "workshop_masterclass";
 };
 
 type CrmPeriodRange = { gte?: Date; lt?: Date } | null;
@@ -223,11 +224,23 @@ type CrmRawRow = {
   teamPerformance: unknown;
   sourceStats: unknown;
   programStats: unknown;
+  attentionLeads: unknown;
   leads: unknown;
   programs: unknown;
   managers: unknown;
   campaigns: unknown;
   sources: unknown;
+};
+
+type CrmAttentionRawRow = {
+  id: string;
+  source: string | null;
+  priority: string | null;
+  nextActionType: string | null;
+  nextFollowUpAt: string;
+  fullName: string;
+  phone: string | null;
+  managerName: string | null;
 };
 
 type CrmLeadRawRow = {
@@ -336,6 +349,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const teamPerformanceRows = asJsonArray<CrmTeamPerformanceRaw>(row?.teamPerformance);
   const sourceStatsRows = asJsonArray<CrmBreakdownRaw>(row?.sourceStats);
   const programStatsRows = asJsonArray<CrmBreakdownRaw>(row?.programStats);
+  const attentionRows = asJsonArray<CrmAttentionRawRow>(row?.attentionLeads);
   const programs = asJsonArray<{ id: string; name: string }>(row?.programs);
   const managers = asJsonArray<{ id: string; fullName: string }>(row?.managers);
   const campaigns = asJsonArray<{ id: string; name: string }>(row?.campaigns);
@@ -432,7 +446,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       value: formatCount(stageCounts[stage] ?? 0),
       tone: leadStageTones[stage],
     })),
-    attentionFocus: buildAttentionFocus(formattedLeads, todayStart, tomorrowStart),
+    attentionFocus: attentionRows.map((lead) => formatAttentionRow(lead, todayStart)),
     dashboardStats: {
       salesCount: formatCount(salesCount),
       conversionRate: formatPercent(salesCount, totalLeads),
@@ -476,7 +490,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data-v3"],
+  ["crm-pipeline-data-v5"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -674,21 +688,25 @@ function getCrmRawData(
         )
         from (
           select
-            coalesce(m.full_name, 'Təyin edilməyib') as manager_name,
-            count(*)::int as total_count,
+            u.full_name as manager_name,
+            count(l.id)::int as total_count,
             count(*) filter (
               where l.converted_student_id is not null
                 or l.stage = 'REGISTERED'::"erp"."LeadStage"
             )::int as sales_count
-          from erp.leads l
-          join erp.users m on m.id = l.manager_id and m.is_active = true
-          join erp.hr_employees he on he.user_id = m.id
-            and he.archived_at is null
-            and he.status in ('ACTIVE'::"erp"."HrEmployeeStatus", 'PROBATION'::"erp"."HrEmployeeStatus")
-          where ${summarySql}
-          group by coalesce(m.full_name, 'Təyin edilməyib')
+          from erp.users u
+          left join erp.hr_employees he on he.user_id = u.id
+          left join erp.leads l on l.manager_id = u.id and ${periodSql}
+          where ${managerScopeSql}
+            and (
+              he.id is null
+              or (
+                he.archived_at is null
+                and he.status in ('ACTIVE'::"erp"."HrEmployeeStatus", 'PROBATION'::"erp"."HrEmployeeStatus")
+              )
+            )
+          group by u.id, u.full_name
           order by sales_count desc, total_count desc, manager_name asc
-          limit 6
         ) team
       ), '[]'::jsonb) as "teamPerformance",
       coalesce((
@@ -726,6 +744,47 @@ function getCrmRawData(
           limit 6
         ) program_rows
       ), '[]'::jsonb) as "programStats",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', attention_rows.id::text,
+            'source', attention_rows.source,
+            'priority', attention_rows.priority::text,
+            'nextActionType', attention_rows.next_action_type::text,
+            'nextFollowUpAt', attention_rows.next_follow_up_at,
+            'fullName', attention_rows.full_name,
+            'phone', attention_rows.phone_display,
+            'managerName', attention_rows.manager_name
+          )
+          order by attention_rows.next_follow_up_at asc, attention_rows.full_name asc
+        )
+        from (
+          select
+            l.id,
+            l.source,
+            l.priority,
+            l.next_action_type,
+            l.next_follow_up_at,
+            c.full_name,
+            c.phone_display,
+            m.full_name as manager_name
+          from erp.leads l
+          join erp.contacts c on c.id = l.contact_id
+          left join erp.users m on m.id = l.manager_id
+          where ${scopeSql}
+            and l.stage in (
+              'NEW'::"erp"."LeadStage",
+              'CONTACTED'::"erp"."LeadStage",
+              'QUALIFIED'::"erp"."LeadStage",
+              'TRIAL_LESSON'::"erp"."LeadStage",
+              'TRIAL_CONSULTATION'::"erp"."LeadStage",
+              'NURTURE'::"erp"."LeadStage"
+            )
+            and l.next_follow_up_at is not null
+            and l.next_follow_up_at < ${input.tomorrowStart}
+          order by l.next_follow_up_at asc, c.full_name asc
+        ) attention_rows
+      ), '[]'::jsonb) as "attentionLeads",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -859,12 +918,19 @@ function buildManagerScopeSql(actor: CrmCacheActor) {
   if (isPrivilegedActor(actor)) {
     return Prisma.sql`
       u.is_active = true
-      and exists (
-        select 1
-        from erp.user_roles ur
-        join erp.roles r on r.id = ur.role_id
-        where ur.user_id = u.id
-          and r.code::text in ('OWNER', 'ADMIN', 'SALES')
+      and (
+        exists (
+          select 1
+          from erp.user_roles ur
+          join erp.roles r on r.id = ur.role_id
+          where ur.user_id = u.id
+            and r.code::text in ('OWNER', 'ADMIN', 'SALES')
+        )
+        or exists (
+          select 1
+          from erp.leads manager_lead
+          where manager_lead.manager_id = u.id
+        )
       )
     `;
   }
@@ -1118,54 +1184,31 @@ function resolveCrmPeriodRange({
   return getCrmPeriodRange(period, reference);
 }
 
-function isIsoDateInRange(value: string | null, start: Date, end: Date) {
-  if (!value) {
-    return false;
-  }
-
-  const date = new Date(value);
-  return date >= start && date < end;
-}
-
-function buildAttentionFocus(
-  leads: CrmData["leads"],
-  todayStart: Date,
-  tomorrowStart: Date
-) {
-  const today: CrmLeadFocusRow[] = [];
-  const overdue: CrmLeadFocusRow[] = [];
-
-  for (const lead of leads) {
-    if (lead.stage === LeadStage.REGISTERED || !lead.nextFollowUpIso) {
-      continue;
-    }
-
-    const followUpDate = new Date(lead.nextFollowUpIso);
-
-    if (isIsoDateInRange(lead.nextFollowUpIso, todayStart, tomorrowStart)) {
-      today.push(toFocusRow(lead, "today"));
-    } else if (followUpDate < todayStart) {
-      overdue.push(toFocusRow(lead, "overdue"));
-    }
-  }
-
-  return [...today.slice(0, 4), ...overdue.slice(0, 4)];
-}
-
-function toFocusRow(
-  lead: CrmData["leads"][number],
-  bucket: CrmLeadFocusRow["bucket"]
+function formatAttentionRow(
+  lead: CrmAttentionRawRow,
+  todayStart: Date
 ): CrmLeadFocusRow {
+  const priority = normalizePriority(lead.priority ?? undefined) ?? leadPriorityOptions[0];
+  const nextActionType = normalizeNextActionTypeValue(lead.nextActionType);
+  const source = lead.source?.trim().toLocaleLowerCase("az-AZ") ?? "";
+
   return {
     id: lead.id,
-    name: lead.name,
-    phone: lead.phone,
-    bucket,
-    priorityLabel: lead.priorityLabel,
-    priorityTone: lead.priorityTone,
-    nextActionTypeLabel: lead.nextActionTypeLabel,
-    nextFollowUpAt: lead.nextFollowUpAt,
-    manager: lead.manager,
+    name: lead.fullName,
+    phone: lead.phone ?? "-",
+    bucket: new Date(lead.nextFollowUpAt) < todayStart ? "overdue" : "today",
+    priorityLabel: formatLeadPriorityLabel(priority),
+    priorityTone: leadPriorityTones[priority],
+    nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),
+    nextFollowUpAt: formatShortDate(lead.nextFollowUpAt),
+    manager: lead.managerName ?? "Təyin edilməyib",
+    category:
+      source.includes("workshop") ||
+      source.includes("masterclass") ||
+      source.includes("master class") ||
+      source.includes("ustad")
+        ? "workshop_masterclass"
+        : "general",
   };
 }
 

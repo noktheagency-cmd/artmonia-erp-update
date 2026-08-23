@@ -51,14 +51,19 @@ export function DashboardInsights({
 
   return (
     <aside className="owner-dashboard-panel owner-dashboard-insights-panel owner-dashboard-entrance">
-      <section className="owner-dashboard-insight-card owner-dashboard-insight-conversion">
+      <Link
+        href="/crm?salesDetails=1"
+        className="owner-dashboard-insight-card owner-dashboard-insight-conversion"
+        aria-haspopup="dialog"
+        aria-label="Satış sayı və konversiya detallarını aç"
+      >
         <MetricRing value={conversionValue} config={conversionChartConfig} tone="conversion" />
         <div className="owner-dashboard-insight-copy">
           <span><Percent size={15} aria-hidden="true" /> Satış sayı</span>
           <strong>{salesCount}</strong>
           <small>Konversiya {conversionRate} · {conversionHelper}</small>
         </div>
-      </section>
+      </Link>
 
       <button
         type="button"

@@ -28,7 +28,7 @@ import {
 } from "@/modules/students/student-create-rules";
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
-import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
+import { notify, notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
 type CreateOptions = StudentListData["createOptions"];
 type StudentFormValues = {
@@ -44,6 +44,7 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
   return {
     fullName: "",
     phone: "",
+    email: "",
     source: "Manual",
     educationLevel: "",
     programId: "",
@@ -84,12 +85,14 @@ export function StudentCreateDialogClient({
   const [open, setOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [acceptPayment, setAcceptPayment] = useState(false);
+  const [sendMobileInvite, setSendMobileInvite] = useState(true);
   const [values, setValues] = useState(() => buildInitialStudentValues(createOptions));
   const isGift = isGiftDiscount(values.discountType);
 
   function resetCreateForm() {
     setSelectedLeadId("");
     setAcceptPayment(false);
+    setSendMobileInvite(true);
     setValues(buildInitialStudentValues(createOptions));
   }
 
@@ -107,6 +110,7 @@ export function StudentCreateDialogClient({
         ...current,
         fullName: "",
         phone: "",
+        email: "",
         source: "Manual",
         educationLevel: "",
         programId: "",
@@ -184,10 +188,24 @@ export function StudentCreateDialogClient({
     try {
       const result = unwrapActionResult(await createStudentAction(formData)) as {
         redirectTo: string;
+        mobileInviteSent: boolean;
+        mobileInviteFailed: boolean;
       };
       setOpen(false);
       resetCreateForm();
-      notifySuccess("Tələbə yaradıldı", "Yeni tələbə siyahıya əlavə olundu.");
+      notifySuccess(
+        "Tələbə yaradıldı",
+        result.mobileInviteSent
+          ? "Yeni tələbə əlavə olundu və mobil dəvət göndərildi."
+          : "Yeni tələbə siyahıya əlavə olundu.",
+      );
+      if (result.mobileInviteFailed) {
+        notify({
+          title: "Mobil dəvət göndərilmədi",
+          message: "Tələbə yaradılıb. Profilindən mobil dəvəti yenidən göndərin.",
+          tone: "warning",
+        });
+      }
       router.replace(result.redirectTo as Route, { scroll: false });
       router.refresh();
     } catch (error) {
@@ -396,6 +414,30 @@ export function StudentCreateDialogClient({
                   popoverPlacement="floating"
                   required
                 />
+              </label>
+              <label className="form-field">
+                <span>E-poçt</span>
+                <Input
+                  name="email"
+                  type="email"
+                  value={values.email}
+                  onChange={(event) => updateValue("email", event.target.value)}
+                  maxLength={320}
+                  placeholder="telebe@example.com"
+                />
+              </label>
+              <label className="student-mobile-invite-toggle">
+                <input
+                  name="sendMobileInvite"
+                  type="checkbox"
+                  checked={sendMobileInvite && Boolean(values.email.trim())}
+                  disabled={!values.email.trim()}
+                  onChange={(event) => setSendMobileInvite(event.target.checked)}
+                />
+                <span>
+                  <strong>Mobil hesab yarat</strong>
+                  <small>Tələbəyə parol yaratma linki göndəriləcək.</small>
+                </span>
               </label>
               <label className="form-field">
                 <span>İlk dərs tarixi</span>

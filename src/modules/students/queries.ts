@@ -388,11 +388,18 @@ export async function getStudentListData(
   const programFilter = formFilterString(input.program);
   const teacherFilter = formFilterString(input.teacher);
   const paymentFilter = normalizePaymentFilter(input.payment);
-  const dateFromFilter = normalizeDateFilter(input.from);
-  const dateToFilter = normalizeDateFilter(input.to);
   const activeTab = normalizeStudentTab(input.tab);
   let page = activeTab === "list" ? normalizeStudentPage(input.page) : 1;
   const today = startOfToday();
+  const hasExplicitDateRange = Boolean(input.from?.trim() || input.to?.trim());
+  const defaultDateFrom = new Date(today);
+  defaultDateFrom.setUTCMonth(defaultDateFrom.getUTCMonth() - 1);
+  const dateFromFilter = normalizeDateFilter(
+    hasExplicitDateRange ? input.from : defaultDateFrom.toISOString().slice(0, 10)
+  );
+  const dateToFilter = normalizeDateFilter(
+    hasExplicitDateRange ? input.to : today.toISOString().slice(0, 10)
+  );
   const [initialRawData, todayReminders] = await Promise.all([
     readStudentListRawData({
       search,
@@ -744,6 +751,12 @@ type StudentDetailRawRow = StudentListRawRow & {
   discountType: string | null;
   lessonsPerMonth: number | null;
   firstLessonAt: Date | string | null;
+  mobileAccountId: string | null;
+  mobileLoginEmail: string | null;
+  mobileAccountStatus: "INVITED" | "ACTIVE" | "DISABLED" | null;
+  mobileInvitedAt: Date | string | null;
+  mobileLastInviteSentAt: Date | string | null;
+  mobileActivatedAt: Date | string | null;
 };
 
 type StudentInvoiceRecord = {
@@ -1021,7 +1034,13 @@ async function getStudentRows(
       clv.paid_months as "paidMonths",
       inv.invoices,
       pay.payments,
-      hist.timeline
+      hist.timeline,
+      ma.id::text as "mobileAccountId",
+      ma.login_email as "mobileLoginEmail",
+      ma.status::text as "mobileAccountStatus",
+      ma.invited_at as "mobileInvitedAt",
+      ma.last_invite_sent_at as "mobileLastInviteSentAt",
+      ma.activated_at as "mobileActivatedAt"
     from paged_students ps
     left join lateral (
       select
@@ -1130,6 +1149,7 @@ async function getStudentRows(
         limit 5
       ) ordered
     ) hist on true
+    left join erp.student_mobile_accounts ma on ma.student_id = ps.id
     order by ps."registeredAt" desc, ps."createdAt" desc
   `);
 
@@ -2455,6 +2475,19 @@ export async function getStudentDetailData(studentId: string) {
       },
       detail: {
         email: student.contactEmail ?? "",
+        mobileAccount: student.mobileAccountId && student.mobileLoginEmail && student.mobileAccountStatus
+          ? {
+              loginEmail: student.mobileLoginEmail,
+              status: student.mobileAccountStatus,
+              invitedAt: student.mobileInvitedAt ? formatShortDate(student.mobileInvitedAt) : "—",
+              lastInviteSentAt: student.mobileLastInviteSentAt
+                ? formatShortDate(student.mobileLastInviteSentAt)
+                : "—",
+              activatedAt: student.mobileActivatedAt
+                ? formatShortDate(student.mobileActivatedAt)
+                : "",
+            }
+          : null,
         source: student.source ?? "",
         educationLevel: student.educationLevel ?? "",
         managerId: student.managerId ?? "",

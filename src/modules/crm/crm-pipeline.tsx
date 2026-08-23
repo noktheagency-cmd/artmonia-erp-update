@@ -65,7 +65,9 @@ export function CrmPipeline({ data }: { data: CrmData }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  const [conversionDetailsOpen, setConversionDetailsOpen] = useState(false);
+  const [conversionDetailsOpen, setConversionDetailsOpen] = useState(
+    () => searchParams.get("salesDetails") === "1"
+  );
   const activeTab: CrmTab = searchParams.get("tab") === "list" ? "list" : "overview";
   const showCreateToast = searchParams.get("leadCreated") === "1";
 

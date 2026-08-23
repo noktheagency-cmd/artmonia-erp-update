@@ -7,9 +7,10 @@ ERP is the source of truth for lesson sessions, enrollment, and attendance. The 
 1. An authorized ERP user opens the QR dialog for today's class slot.
 2. ERP creates a 60-second opaque QR token and stores only its SHA-256 hash.
 3. The mobile app scans `artmonia://attendance/check-in?v=1&token=...`.
-4. The mobile backend/Edge Function resolves the signed-in user to the immutable ERP `Student.id` UUID.
-5. The mobile backend calls `POST /api/mobile/v1/attendance/check-ins` using its server-only token.
-6. ERP validates the token, time window, active enrollment, and slot assignment before writing `PRESENT`.
+4. The mobile backend/Edge Function forwards the signed-in student's Supabase access token to ERP.
+5. ERP validates that JWT and resolves it through the one-to-one mobile account mapping. The client cannot choose a `Student.id`.
+6. The mobile backend calls `POST /api/mobile/v1/attendance/check-ins` using its server-only token.
+7. ERP validates the token, time window, active enrollment, and slot assignment before writing `PRESENT`.
 7. `POST /api/cron/attendance-finalize` marks the remaining scheduled students `ABSENT` after the window closes.
 
 ## Mobile backend configuration
@@ -28,6 +29,7 @@ Do not put `ERP_ATTENDANCE_SERVER_TOKEN` in Expo `EXPO_PUBLIC_*`, application so
 ```http
 POST /api/mobile/v1/attendance/check-ins
 Authorization: Bearer <ERP_ATTENDANCE_SERVER_TOKEN>
+X-Student-Authorization: Bearer <SUPABASE_STUDENT_ACCESS_TOKEN>
 Idempotency-Key: <UUID>
 X-Request-Id: <UUID>
 Content-Type: application/json
@@ -35,14 +37,13 @@ Content-Type: application/json
 
 ```json
 {
-  "erpStudentId": "f5ad90e2-13ba-460b-bf76-4a8519685b58",
   "clientEventId": "7d94f164-a19b-48fc-86fd-50889a667ad2",
   "qrToken": "K8mQf2pX9dN4sV7yT1cR6w",
   "scannedAt": "2026-08-23T12:20:41.225Z"
 }
 ```
 
-The server uses its own receive time for attendance decisions. `scannedAt` is audit metadata only. A retry must reuse the same `Idempotency-Key` and body.
+The server uses its own receive time for attendance decisions. `scannedAt` is audit metadata only. A retry must reuse the same `Idempotency-Key` and body. `erpStudentId` is no longer required; if a legacy client sends it, ERP rejects the request unless it matches the authenticated student's mapping.
 
 ## Operational configuration
 

@@ -1,7 +1,7 @@
 # Artmonia Mobile ↔ ERP — production handoff
 
 Tarix: 23 avqust 2026
-Status: mobil tərəfin hazırlanması üçün müqavilə hazırdır; ERP production deployment gözləyir.
+Status: ERP attendance və mobil tələbə hesabı inteqrasiyası production üçün hazırlanıb.
 
 ## Mobil developer üçün təsdiqlənmiş məlumatlar
 
@@ -24,8 +24,8 @@ API public HTTPS üzərindən əlçatandır. Hazırda əlavə IP allowlist və V
    ```
 
 3. Mobil tətbiq istifadəçi JWT-si və QR məlumatını Supabase Edge Function-a göndərir.
-4. Edge Function istifadəçini dəyişdirilə bilməyən `erp_student_id` UUID ilə uyğunlaşdırır.
-5. Edge Function ERP-yə server-to-server check-in sorğusu göndərir.
+4. Edge Function tələbənin Supabase access tokenini ERP-yə ayrıca header-də ötürür.
+5. ERP JWT-ni yoxlayır və tələbəni server-side one-to-one mapping-dən müəyyən edir.
 6. `ERP_ATTENDANCE_SERVER_TOKEN` yalnız Edge Function secret-i kimi saxlanılır; Expo koduna və `EXPO_PUBLIC_*` dəyişəninə yazılmır.
 
 ## ERP check-in sorğusu
@@ -33,6 +33,7 @@ API public HTTPS üzərindən əlçatandır. Hazırda əlavə IP allowlist və V
 ```http
 POST https://erp.artmoniya.com/api/mobile/v1/attendance/check-ins
 Authorization: Bearer <ERP_ATTENDANCE_SERVER_TOKEN>
+X-Student-Authorization: Bearer <SUPABASE_STUDENT_ACCESS_TOKEN>
 Idempotency-Key: <UUID>
 X-Request-Id: <UUID>
 Content-Type: application/json
@@ -40,7 +41,6 @@ Content-Type: application/json
 
 ```json
 {
-  "erpStudentId": "<ERP Student.id UUID>",
   "clientEventId": "<UUID>",
   "qrToken": "<QR-dən oxunan token>",
   "scannedAt": "<ISO 8601 UTC timestamp>"
@@ -48,6 +48,7 @@ Content-Type: application/json
 ```
 
 Retry zamanı eyni body və eyni `Idempotency-Key` istifadə olunmalıdır. ERP davamiyyət qərarında mobil cihazın `scannedAt` dəyərinə deyil, server vaxtına əsaslanır.
+Mobil tətbiq və Edge Function `Student.id` seçmir və saxlamır; ERP onu JWT-dən müəyyən edir.
 
 Tam request/response müqaviləsi `mobile-attendance-openapi.yaml` faylındadır.
 
@@ -70,17 +71,14 @@ Server tokenini mobil repository-yə, loglara, analytics-ə və client bundle-a 
 - Uğurlu skan ERP jurnalında `PRESENT` / “Gəldi” yazır.
 - Pəncərə bağlandıqdan sonra qalan tələbələr avtomatik `ABSENT` / “Gəlmədi” qeyd olunur.
 
-## Production testindən əvvəl ERP tərəfindən tamamlanacaq işlər
+## Mobil giriş qaydası
 
-- Attendance Prisma migration production bazaya tətbiq olunacaq.
-- `MOBILE_ATTENDANCE_SERVER_TOKENS` Railway secret-i yaradılacaq.
-- Mobil developerə uyğun server tokeni təhlükəsiz kanalla veriləcək.
-- Xüsusi test tələbəsi, aktiv enrollment və dərs assignment-i yaradılacaq.
-- Test tələbəsinin ERP `Student.id` UUID-si veriləcək.
-- QR yaradan ERP hesabı və test dərs sessiyası təqdim olunacaq.
-- Attendance finalizer hər 5 dəqiqədən bir işləyəcək şəkildə planlaşdırılacaq.
-- Production endpoint və tam QR axını birlikdə smoke test ediləcək.
+- ERP-də hər tələbə üçün maksimum bir Supabase Auth hesabı yaradılır.
+- ERP əməkdaşı parol görmür və təyin etmir; tələbə dəvət linkində parolunu özü yaradır.
+- Mobil tətbiq `signInWithPassword({ email, password })` istifadə edir.
+- Mobil hesab deaktiv ediləndə ERP-yə bütün yeni mobil sorğular dərhal bloklanır.
+- `service_role`/secret key mobil tətbiqə verilmir.
 
 ## Hazırkı vacib qeyd
 
-Mobil developer Edge Function, JWT yoxlaması, `erp_student_id` mapping-i, idempotency və client QR axınını indidən hazırlaya bilər. Real production check-in testi isə ERP deployment, migration, server tokeni və test məlumatları tamamlandıqdan sonra aparılmalıdır.
+Mobil developer Edge Function-u JWT tələb edən rejimdə deploy etməli, mobil istifadəçinin access tokenini ERP-yə `X-Student-Authorization` header-i ilə ötürməli və idempotency qaydasını saxlamalıdır.

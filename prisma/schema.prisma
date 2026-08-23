@@ -84,6 +84,14 @@ enum StudentLifecycleStatus {
   @@schema("erp")
 }
 
+enum StudentMobileAccountStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+
+  @@schema("erp")
+}
+
 enum EnrollmentStatus {
   ACTIVE
   PAUSED
@@ -423,6 +431,8 @@ model User {
   auditLogs                        AuditLog[]                  @relation("AuditActor")
   authSessions                     AuthSessionRecord[]         @relation("AuthSessionUser")
   revokedAuthSessions              AuthSessionRecord[]         @relation("AuthSessionRevoker")
+  createdStudentMobileAccounts     StudentMobileAccount[]      @relation("StudentMobileAccountCreator")
+  updatedStudentMobileAccounts     StudentMobileAccount[]      @relation("StudentMobileAccountUpdater")
   exports                          DataExport[]                @relation("ExportRequestedBy")
   createdFinanceExpenses           FinanceExpense[]            @relation("FinanceExpenseCreator")
   employeeFinanceExpenses          FinanceExpense[]            @relation("FinanceExpenseEmployee")
@@ -1395,6 +1405,7 @@ model Student {
   workshopParticipants WorkshopParticipant[]
   bonusTeacherCohorts  HrBonusTeacherCohort[]
   mobileCheckIns       MobileAttendanceCheckIn[]
+  mobileAccount        StudentMobileAccount?
 
   @@index([contactId])
   @@index([lifecycleStatus])
@@ -1402,6 +1413,31 @@ model Student {
   @@index([registeredAt])
   @@index([campaignId, registeredAt])
   @@map("students")
+  @@schema("erp")
+}
+
+model StudentMobileAccount {
+  id               String                     @id @default(uuid()) @db.Uuid
+  studentId        String                     @unique @map("student_id") @db.Uuid
+  authUserId       String                     @unique @map("auth_user_id") @db.Uuid
+  loginEmail       String                     @unique @map("login_email")
+  status           StudentMobileAccountStatus @default(INVITED)
+  invitedAt        DateTime                   @default(now()) @map("invited_at")
+  lastInviteSentAt DateTime                   @default(now()) @map("last_invite_sent_at")
+  activatedAt      DateTime?                  @map("activated_at")
+  disabledAt       DateTime?                  @map("disabled_at")
+  createdById      String?                    @map("created_by_id") @db.Uuid
+  updatedById      String?                    @map("updated_by_id") @db.Uuid
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("StudentMobileAccountCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?   @relation("StudentMobileAccountUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdById])
+  @@map("student_mobile_accounts")
   @@schema("erp")
 }
 

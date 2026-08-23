@@ -10,6 +10,13 @@ import {
 } from "@/modules/students/actions";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StudentDetailActions } from "@/modules/students/student-detail-actions";
+import { StudentMobileAccountCard } from "@/modules/students/student-mobile-account-card";
+import {
+  disableStudentMobileAccountAction,
+  enableStudentMobileAccountAction,
+  inviteStudentMobileAccountAction,
+  resendStudentMobileInviteAction,
+} from "@/modules/students/mobile-account-actions";
 import {
   completeStudentReminderAction,
   createStudentReminderAction,
@@ -92,6 +99,17 @@ export default async function StudentDetailPage({
           <span><small>Açıq balans</small><strong>{student.balance}</strong></span>
         </div>
       </div>
+
+      <StudentMobileAccountCard
+        studentId={student.id}
+        contactEmail={student.detail.email}
+        account={student.detail.mobileAccount}
+        canManage={permissions.canUpdateStudent}
+        inviteAction={inviteStudentMobileAccountAction}
+        resendAction={resendStudentMobileInviteAction}
+        disableAction={disableStudentMobileAccountAction}
+        enableAction={enableStudentMobileAccountAction}
+      />
 
       <section className="student-reminder-section" aria-labelledby="student-reminder-title">
         <div className="student-reminder-section-head">

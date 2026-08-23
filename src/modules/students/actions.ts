@@ -43,6 +43,10 @@ import {
   syncActivationBilling as syncSharedActivationBilling,
 } from "@/modules/students/lifecycle-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
+import {
+  deleteStudentMobileAuthUser,
+  inviteStudentMobileAccount,
+} from "@/modules/students/mobile-account-service";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -87,6 +91,14 @@ const createStudentSchema = z.object({
   leadId: optionalUuid("Müraciət"),
   fullName: z.string().trim().min(2).max(120),
   phone: z.string().trim().min(5).max(40),
+  email: z.preprocess(
+    optionalFormString,
+    z.string().email("E-poçt ünvanı düzgün deyil.").max(320).optional(),
+  ),
+  sendMobileInvite: z.preprocess(
+    (value) => value === "on" || value === "true",
+    z.boolean(),
+  ),
   source: optionalText(60),
   educationLevel: optionalText(80),
   programId: requiredUuid("Proqram"),
@@ -233,12 +245,10 @@ async function createStudentActionImpl(formData: FormData) {
     where: { creationIdempotencyKey: input.idempotencyKey },
     select: { id: true },
   });
-  if (existingStudent) {
-    return { redirectTo: safeStudentsRedirect(input.returnTo) };
-  }
+  let studentId = existingStudent?.id ?? null;
 
-  try {
-    await prisma.$transaction(async (tx) => {
+  if (!existingStudent) try {
+    studentId = await prisma.$transaction(async (tx) => {
       const [program, discountType] = await Promise.all([
         tx.program.findUnique({
           where: { id: input.programId },
@@ -291,12 +301,14 @@ async function createStudentActionImpl(formData: FormData) {
           fullName: input.fullName,
           phone: input.phone,
           phoneNormalized,
+          email: input.email ?? null,
           source: input.source ?? "Manual",
         })
       : await createStudentContact(tx, {
           fullName: input.fullName,
           phone: input.phone,
           phoneNormalized,
+          email: input.email ?? null,
           source: input.source ?? "Manual",
         });
     const studentCode = await generateStudentCode(tx);
@@ -439,6 +451,7 @@ async function createStudentActionImpl(formData: FormData) {
         reason: input.paymentNote ?? `${student.code} üçün ilkin ödəniş qəbul edildi`,
       });
     }
+    return student.id;
     });
   } catch (error) {
     const recoveredStudent = await prisma.student.findUnique({
@@ -446,6 +459,22 @@ async function createStudentActionImpl(formData: FormData) {
       select: { id: true },
     });
     if (!recoveredStudent) throw error;
+    studentId = recoveredStudent.id;
+  }
+
+  let mobileInviteSent = false;
+  let mobileInviteFailed = false;
+  if (input.sendMobileInvite && studentId) {
+    try {
+      await inviteStudentMobileAccount({ studentId, actorId: actor.id });
+      mobileInviteSent = true;
+    } catch (error) {
+      mobileInviteFailed = true;
+      console.error("Student created but mobile invitation failed", {
+        studentId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 
   revalidatePath("/students");
@@ -454,7 +483,11 @@ async function createStudentActionImpl(formData: FormData) {
   revalidatePath("/finance");
   revalidatePath("/marketing");
   invalidateStudentCaches();
-  return { redirectTo: safeStudentsRedirect(input.returnTo) };
+  return {
+    redirectTo: safeStudentsRedirect(input.returnTo),
+    mobileInviteSent,
+    mobileInviteFailed,
+  };
 }
 
 async function recordStudentPaymentActionImpl(formData: FormData) {
@@ -888,16 +921,23 @@ async function deleteStudentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.delete");
   const input = deleteStudentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
+  let mobileAuthUserId: string | null = null;
 
   await prisma.$transaction(async (tx) => {
     const student = await tx.student.findUnique({
       where: { id: input.studentId },
-      select: { id: true, code: true, contactId: true },
+      select: {
+        id: true,
+        code: true,
+        contactId: true,
+        mobileAccount: { select: { authUserId: true } },
+      },
     });
 
     if (!student) {
       throw new Error("Tələbə tapılmadı");
     }
+    mobileAuthUserId = student.mobileAccount?.authUserId ?? null;
 
     const enrollmentIds = (
       await tx.enrollment.findMany({
@@ -985,6 +1025,17 @@ async function deleteStudentActionImpl(formData: FormData) {
     });
   });
 
+  if (mobileAuthUserId) {
+    try {
+      await deleteStudentMobileAuthUser(mobileAuthUserId);
+    } catch (error) {
+      console.error("Student deleted but Supabase Auth cleanup failed", {
+        authUserId: mobileAuthUserId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
   revalidatePath("/students");
   revalidatePath("/crm");
   revalidatePath("/dashboard");
@@ -1036,6 +1087,7 @@ async function updateLeadContact(
     fullName: string;
     phone: string;
     phoneNormalized: string;
+    email: string | null;
     source: string;
   }
 ) {
@@ -1061,6 +1113,7 @@ async function updateLeadContact(
         fullName: input.fullName,
         phoneDisplay: input.phone,
         phoneNormalized: input.phoneNormalized,
+        email: input.email,
         source: input.source,
       },
       select: { id: true },
@@ -1075,6 +1128,7 @@ async function updateLeadContact(
       fullName: input.fullName,
       phoneDisplay: input.phone,
       phoneNormalized: input.phoneNormalized,
+      email: input.email,
       source: input.source,
     },
   });
@@ -1088,6 +1142,7 @@ async function createStudentContact(
     fullName: string;
     phone: string;
     phoneNormalized: string;
+    email: string | null;
     source: string;
   }
 ) {
@@ -1096,6 +1151,7 @@ async function createStudentContact(
       fullName: input.fullName,
       phoneDisplay: input.phone,
       phoneNormalized: input.phoneNormalized,
+      email: input.email,
       source: input.source,
     },
     select: { id: true },

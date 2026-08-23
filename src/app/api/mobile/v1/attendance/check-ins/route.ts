@@ -3,6 +3,7 @@ import { z } from "zod";
 import { hasValidMobileAttendanceAuthorization } from "@/modules/attendance/mobile-attendance-auth";
 import { mobileCheckInBodySchema } from "@/modules/attendance/mobile-attendance-contract";
 import { processMobileAttendanceCheckIn } from "@/modules/attendance/mobile-attendance-service";
+import { resolveStudentMobileIdentity } from "@/modules/students/mobile-account-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ export async function POST(request: Request) {
   if (!hasValidMobileAttendanceAuthorization(request.headers.get("authorization"))) {
     return json({ code: "UNAUTHORIZED", message: "Server autentifikasiyası uğursuz oldu.", requestId }, 401, requestId);
   }
+  const studentAccessToken = readBearerToken(request.headers.get("x-student-authorization"));
+  if (!studentAccessToken) {
+    return json({ code: "STUDENT_AUTH_REQUIRED", message: "Tələbə autentifikasiyası tələb olunur.", requestId }, 401, requestId);
+  }
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     return json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Content-Type application/json olmalıdır.", requestId }, 415, requestId);
   }
@@ -33,8 +38,18 @@ export async function POST(request: Request) {
     if (Buffer.byteLength(rawBody, "utf8") > MAX_REQUEST_BODY_BYTES) {
       return json({ code: "PAYLOAD_TOO_LARGE", message: "Sorğu body-si çox böyükdür.", requestId }, 413, requestId);
     }
-    const input = mobileCheckInBodySchema.parse(JSON.parse(rawBody));
-    const result = await processMobileAttendanceCheckIn(input, {
+    const requestInput = mobileCheckInBodySchema.parse(JSON.parse(rawBody));
+    const identity = await resolveStudentMobileIdentity(studentAccessToken);
+    if (!identity) {
+      return json({ code: "STUDENT_AUTH_INVALID", message: "Mobil tələbə hesabı etibarsız və ya deaktivdir.", requestId }, 403, requestId);
+    }
+    if (requestInput.erpStudentId && requestInput.erpStudentId !== identity.studentId) {
+      return json({ code: "STUDENT_ID_MISMATCH", message: "Sorğudakı tələbə kimliyi giriş hesabı ilə uyğun deyil.", requestId }, 403, requestId);
+    }
+    const result = await processMobileAttendanceCheckIn({
+      ...requestInput,
+      erpStudentId: identity.studentId,
+    }, {
       idempotencyKey: idempotencyKey as string,
       requestId,
     });
@@ -49,6 +64,12 @@ export async function POST(request: Request) {
     });
     return json({ code: "INTERNAL_ERROR", message: "Davamiyyət qeydə alına bilmədi.", requestId }, 500, requestId);
   }
+}
+
+function readBearerToken(value: string | null) {
+  if (!value?.startsWith("Bearer ")) return null;
+  const token = value.slice("Bearer ".length).trim();
+  return token || null;
 }
 
 function json(body: object, status: number, requestId: string, retryAfter = false) {

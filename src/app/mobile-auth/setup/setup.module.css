@@ -1,0 +1,36 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #182035;
+  background: radial-gradient(circle at top, #eef2ff, #f8fafc 48%, #edf2f7);
+}
+
+.card {
+  width: min(100%, 440px);
+  padding: 34px;
+  background: #fff;
+  border: 1px solid #dce4f2;
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgb(33 52 96 / 14%);
+}
+
+.brand { color: #4667e8; font-size: 12px; font-weight: 850; letter-spacing: .18em; }
+.card h1 { margin: 13px 0 8px; font-size: 27px; line-height: 1.15; }
+.card > p { margin: 0 0 24px; color: #667085; font-size: 14px; line-height: 1.6; }
+.form { display: grid; gap: 16px; }
+.form label { display: grid; gap: 7px; color: #344054; font-size: 13px; font-weight: 700; }
+.form input { height: 46px; padding: 0 13px; color: #182035; background: #fff; border: 1px solid #cfd8e8; border-radius: 11px; outline: none; font: inherit; }
+.form input:focus { border-color: #6d83e8; box-shadow: 0 0 0 4px rgb(70 103 232 / 11%); }
+.form button { height: 46px; color: #fff; background: #4667e8; border: 0; border-radius: 11px; font: inherit; font-weight: 800; cursor: pointer; }
+.form button:disabled { opacity: .65; cursor: wait; }
+.feedback, .error, .success { padding: 13px; border-radius: 11px; font-size: 13px; line-height: 1.55; }
+.feedback { color: #526075; background: #f2f5fa; }
+.error { color: #a83b4c; background: #fff0f2; border: 1px solid #f4cbd2; }
+.success { color: #14745a; background: #eaf8f2; border: 1px solid #c4eadc; }
+
+@media (max-width: 520px) {
+  .page { padding: 14px; }
+  .card { padding: 24px 20px; border-radius: 18px; }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -91,6 +91,7 @@ export function CrmOverview({
   onLeadSelect: (leadName: string) => void;
 }) {
   const reducedMotion = useReducedMotion();
+  const [followUpCategory, setFollowUpCategory] = useState<"all" | "workshop_masterclass">("all");
   const total = parseValue(data.metrics[0]?.value ?? "0");
   const sales = parseValue(data.dashboardStats.salesCount);
   const conversionRate = parseValue(data.dashboardStats.conversionRate);
@@ -112,8 +113,14 @@ export function CrmOverview({
     conversionRate: item.conversionRate,
   }));
   const teamMax = Math.max(...teamData.map((item) => item.leads), 1);
-  const todayAttention = data.attentionFocus.filter((item) => item.bucket === "today");
-  const overdueAttention = data.attentionFocus.filter((item) => item.bucket === "overdue");
+  const workshopMasterclassCount = data.attentionFocus.filter(
+    (item) => item.category === "workshop_masterclass"
+  ).length;
+  const visibleAttention = followUpCategory === "workshop_masterclass"
+    ? data.attentionFocus.filter((item) => item.category === "workshop_masterclass")
+    : data.attentionFocus;
+  const todayAttention = visibleAttention.filter((item) => item.bucket === "today");
+  const overdueAttention = visibleAttention.filter((item) => item.bucket === "overdue");
 
   return (
     <section className="crm-overview-grid" aria-label="CRM analitikası">
@@ -222,9 +229,25 @@ export function CrmOverview({
           icon={AlertTriangle}
           title="Əlaqə gözləyən müraciətlər"
           description="Cari günə planlanan və vaxtı keçmiş əlaqələr"
-          meta={`${data.attentionFocus.length} müraciət`}
+          meta={`${visibleAttention.length} müraciət`}
           tone="coral"
         />
+        <div className="crm-attention-category-tabs" role="group" aria-label="Follow-up kateqoriyası">
+          <button
+            type="button"
+            data-active={followUpCategory === "all"}
+            onClick={() => setFollowUpCategory("all")}
+          >
+            Bütün follow-up <span>{data.attentionFocus.length}</span>
+          </button>
+          <button
+            type="button"
+            data-active={followUpCategory === "workshop_masterclass"}
+            onClick={() => setFollowUpCategory("workshop_masterclass")}
+          >
+            Workshop / Masterclass <span>{workshopMasterclassCount}</span>
+          </button>
+        </div>
         <div className="crm-attention-groups">
           <AttentionGroup
             title="Bu gün"
@@ -252,8 +275,13 @@ export function CrmOverview({
           tone="blue"
         />
         {teamData.length > 0 ? (
-          <ChartContainer config={teamConfig} className="crm-team-chart">
-            <BarChart accessibilityLayer data={teamData} layout="vertical" margin={{ left: 2, right: 12 }}>
+          <div className="crm-team-chart-scroll">
+            <ChartContainer
+              config={teamConfig}
+              className="crm-team-chart"
+              style={{ height: `${Math.max(118, teamData.length * 34)}px` }}
+            >
+              <BarChart accessibilityLayer data={teamData} layout="vertical" margin={{ left: 2, right: 12 }}>
               <CartesianGrid horizontal={false} />
               <XAxis
                 type="number"
@@ -286,8 +314,9 @@ export function CrmOverview({
                 isAnimationActive={!reducedMotion}
                 animationDuration={850}
               />
-            </BarChart>
-          </ChartContainer>
+              </BarChart>
+            </ChartContainer>
+          </div>
         ) : (
           <div className="crm-inline-empty is-compact">
             <UserRoundCheck aria-hidden="true" />

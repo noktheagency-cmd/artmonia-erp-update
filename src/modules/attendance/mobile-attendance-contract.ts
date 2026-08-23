@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export const mobileCheckInBodySchema = z.object({
-  erpStudentId: z.string().uuid(),
+  // Backward-compatible only. The ERP always derives the authoritative student ID
+  // from X-Student-Authorization and rejects a mismatching supplied value.
+  erpStudentId: z.string().uuid().optional(),
   clientEventId: z.string().uuid(),
   qrToken: z.string().min(16).max(512).regex(/^[A-Za-z0-9_-]+$/),
   scannedAt: z.string().datetime({ offset: true }),
@@ -19,7 +21,10 @@ export const mobileAttendanceErrorCodes = [
   "INTERNAL_ERROR",
 ] as const;
 
-export type MobileCheckInInput = z.infer<typeof mobileCheckInBodySchema>;
+export type MobileCheckInRequest = z.infer<typeof mobileCheckInBodySchema>;
+export type MobileCheckInInput = Omit<MobileCheckInRequest, "erpStudentId"> & {
+  erpStudentId: string;
+};
 export type MobileAttendanceErrorCode = typeof mobileAttendanceErrorCodes[number];
 
 export type MobileAttendanceResponseBody = Record<string, unknown> & {
