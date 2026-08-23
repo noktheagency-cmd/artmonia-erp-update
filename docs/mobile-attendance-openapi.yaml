@@ -1,0 +1,130 @@
+openapi: 3.1.0
+info:
+  title: Artmonia ERP Mobile Attendance API
+  version: 1.0.0
+servers:
+  - url: https://development.example.com
+    description: Development; replace with the provisioned ERP URL
+paths:
+  /api/mobile/v1/attendance/check-ins:
+    post:
+      operationId: createMobileAttendanceCheckIn
+      summary: Record attendance from a mobile QR scan
+      security:
+        - serverToken: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Request-Id
+          in: header
+          required: false
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInRequest'
+      responses:
+        '200':
+          description: New or previously recorded check-in
+          headers:
+            X-Request-Id:
+              schema: { type: string, format: uuid }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInSuccess'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Expired' }
+        '422': { $ref: '#/components/responses/WindowClosed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+components:
+  securitySchemes:
+    serverToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque server token
+  schemas:
+    CheckInRequest:
+      type: object
+      additionalProperties: false
+      required: [erpStudentId, clientEventId, qrToken, scannedAt]
+      properties:
+        erpStudentId: { type: string, format: uuid }
+        clientEventId: { type: string, format: uuid }
+        qrToken:
+          type: string
+          minLength: 16
+          maxLength: 512
+          pattern: '^[A-Za-z0-9_-]+$'
+        scannedAt: { type: string, format: date-time }
+    Lesson:
+      type: object
+      required: [id, title, startsAt, endsAt, teacherName, location]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        teacherName: { type: string }
+        location: { type: string }
+    CheckInSuccess:
+      type: object
+      required: [checkInId, status, message, requestId, lesson, attendance]
+      properties:
+        checkInId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [checked_in, already_checked_in]
+        message: { type: string }
+        requestId: { type: string, format: uuid }
+        lesson: { $ref: '#/components/schemas/Lesson' }
+        attendance:
+          type: object
+          required: [status, checkedInAt]
+          properties:
+            status: { type: string, const: present }
+            checkedInAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string, format: uuid }
+  responses:
+    BadRequest:
+      description: Invalid request or QR token
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Invalid server token
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Student is not enrolled in the lesson
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Student or lesson not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Idempotency key conflict
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Expired:
+      description: QR token expired
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    WindowClosed:
+      description: Check-in window is not open
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: Too many requests for the student
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InternalError:
+      description: Internal ERP failure
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

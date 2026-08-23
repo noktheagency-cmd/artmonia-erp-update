@@ -18,6 +18,7 @@ import {
   DoorOpen,
   Edit3,
   Plus,
+  QrCode,
   RotateCcw,
   Search,
   Trash2,
@@ -60,6 +61,7 @@ import {
 } from "@/modules/groups/planner-assignment";
 import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
 import { SlotDetailDialog } from "@/modules/groups/slot-detail-dialog";
+import { AttendanceQrDialog } from "@/modules/groups/attendance-qr-dialog";
 import styles from "./planner.module.css";
 
 type PlannerActions = {
@@ -170,6 +172,7 @@ export function PlannerWorkspace({
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [assignmentEnrollmentId, setAssignmentEnrollmentId] = useState<string>();
   const [attendanceOpen, setAttendanceOpen] = useState(initialAttendanceOpen);
+  const [attendanceQrOpen, setAttendanceQrOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
 
   const teacherSlotStyles = useMemo(
@@ -398,20 +401,31 @@ export function PlannerWorkspace({
               {data.canManage || data.canManageAttendance ? (
                 <div className={styles.inspectorActions}>
                   {data.canManageAttendance ? (
-                    <Button
-                      type="button"
-                      onClick={() => openAttendance(selectedSlot)}
-                      disabled={selectedJournalDisabled || !selectedSlot.teacherId}
-                      title={
-                        !selectedSlot.teacherId
-                          ? "Əvvəlcə slota müəllim təyin edin"
-                          : selectedJournalDisabled
-                            ? "Slotun ilk dərs tarixi hələ çatmayıb"
-                            : undefined
-                      }
-                    >
-                      <BookOpenCheck data-icon="inline-start" /> Davamiyyət
-                    </Button>
+                    <>
+                      <Button
+                        type="button"
+                        onClick={() => setAttendanceQrOpen(true)}
+                        disabled={!selectedSlot.teacherId}
+                        title={!selectedSlot.teacherId ? "Əvvəlcə slota müəllim təyin edin" : undefined}
+                      >
+                        <QrCode data-icon="inline-start" /> QR aç
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => openAttendance(selectedSlot)}
+                        disabled={selectedJournalDisabled || !selectedSlot.teacherId}
+                        title={
+                          !selectedSlot.teacherId
+                            ? "Əvvəlcə slota müəllim təyin edin"
+                            : selectedJournalDisabled
+                              ? "Slotun ilk dərs tarixi hələ çatmayıb"
+                              : undefined
+                        }
+                      >
+                        <BookOpenCheck data-icon="inline-start" /> Davamiyyət
+                      </Button>
+                    </>
                   ) : null}
                   {data.canManage ? (
                     <>
@@ -535,6 +549,18 @@ export function PlannerWorkspace({
               router.replace(`/groups?slot=${selectedSlot.id}` as Route);
             },
           )}
+        />
+      ) : null}
+
+      {attendanceQrOpen && selectedSlot && data.canManageAttendance ? (
+        <AttendanceQrDialog
+          key={`${selectedSlot.id}-${data.today}`}
+          slot={selectedSlot}
+          date={data.today}
+          onClose={() => {
+            setAttendanceQrOpen(false);
+            router.refresh();
+          }}
         />
       ) : null}
     </section>

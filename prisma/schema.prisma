@@ -235,6 +235,14 @@ enum AttendanceMark {
   @@schema("erp")
 }
 
+enum AttendanceCaptureSource {
+  MANUAL
+  MOBILE_QR
+  AUTOMATIC
+
+  @@schema("erp")
+}
+
 enum WorkshopEventType {
   WORKSHOP
   MASTERCLASS
@@ -423,6 +431,7 @@ model User {
   createdClassSlots                ClassSlot[]                 @relation("ClassSlotCreator")
   assignedStudentSchedules         StudentScheduleAssignment[] @relation("StudentScheduleAssigner")
   createdSlotSessions              SlotSession[]               @relation("SlotSessionCreator")
+  createdAttendanceQrChallenges    AttendanceQrChallenge[]     @relation("AttendanceQrChallengeCreator")
   markedAttendanceRecords          AttendanceRecord[]          @relation("AttendanceMarker")
   createdWorkshopEvents            WorkshopEvent[]             @relation("WorkshopEventCreator")
   assignedWorkshopParticipants     WorkshopParticipant[]       @relation("WorkshopParticipantAssigner")
@@ -1373,9 +1382,9 @@ model Student {
   createdAt              DateTime               @default(now()) @map("created_at")
   updatedAt              DateTime               @updatedAt @map("updated_at")
 
-  contact              Contact                @relation(fields: [contactId], references: [id])
-  manager              User?                  @relation("StudentManager", fields: [managerId], references: [id])
-  campaign             MarketingCampaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contact              Contact                   @relation(fields: [contactId], references: [id])
+  manager              User?                     @relation("StudentManager", fields: [managerId], references: [id])
+  campaign             MarketingCampaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   relationships        StudentRelationship[]
   statusHistory        StudentStatusHistory[]
   enrollments          Enrollment[]
@@ -1385,6 +1394,7 @@ model Student {
   lessons              Lesson[]
   workshopParticipants WorkshopParticipant[]
   bonusTeacherCohorts  HrBonusTeacherCohort[]
+  mobileCheckIns       MobileAttendanceCheckIn[]
 
   @@index([contactId])
   @@index([lifecycleStatus])
@@ -1458,6 +1468,7 @@ model Enrollment {
   scheduleAssignments StudentScheduleAssignment[]
   attendanceRecords   AttendanceRecord[]
   bonusTeacherCohorts HrBonusTeacherCohort[]
+  mobileCheckIns      MobileAttendanceCheckIn[]
 
   @@index([studentId])
   @@index([teacherId, status])
@@ -1515,47 +1526,110 @@ model StudentScheduleAssignment {
 }
 
 model SlotSession {
-  id          String   @id @default(uuid()) @db.Uuid
-  slotId      String   @map("slot_id") @db.Uuid
-  sessionDate DateTime @map("session_date") @db.Date
-  startTime   String   @map("start_time")
-  endTime     String   @map("end_time")
-  createdById String?  @map("created_by_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                    String    @id @default(uuid()) @db.Uuid
+  slotId                String    @map("slot_id") @db.Uuid
+  sessionDate           DateTime  @map("session_date") @db.Date
+  startTime             String    @map("start_time")
+  endTime               String    @map("end_time")
+  attendanceFinalizedAt DateTime? @map("attendance_finalized_at")
+  createdById           String?   @map("created_by_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  slot       ClassSlot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  createdBy  User?              @relation("SlotSessionCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  attendance AttendanceRecord[]
+  slot           ClassSlot                 @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  createdBy      User?                     @relation("SlotSessionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  attendance     AttendanceRecord[]
+  qrChallenges   AttendanceQrChallenge[]
+  mobileCheckIns MobileAttendanceCheckIn[]
 
   @@unique([slotId, sessionDate])
   @@index([sessionDate])
+  @@index([attendanceFinalizedAt, sessionDate])
   @@index([createdById])
   @@map("slot_sessions")
   @@schema("erp")
 }
 
 model AttendanceRecord {
-  id           String         @id @default(uuid()) @db.Uuid
-  sessionId    String         @map("session_id") @db.Uuid
-  enrollmentId String         @map("enrollment_id") @db.Uuid
-  teacherId    String         @map("teacher_id") @db.Uuid
+  id           String                  @id @default(uuid()) @db.Uuid
+  sessionId    String                  @map("session_id") @db.Uuid
+  enrollmentId String                  @map("enrollment_id") @db.Uuid
+  teacherId    String                  @map("teacher_id") @db.Uuid
   status       AttendanceMark
+  source       AttendanceCaptureSource @default(MANUAL)
   note         String?
-  markedById   String?        @map("marked_by_id") @db.Uuid
-  markedAt     DateTime       @default(now()) @map("marked_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  markedById   String?                 @map("marked_by_id") @db.Uuid
+  markedAt     DateTime                @default(now()) @map("marked_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
 
-  session    SlotSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  enrollment Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  teacher    Teacher     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  markedBy   User?       @relation("AttendanceMarker", fields: [markedById], references: [id], onDelete: SetNull)
+  session        SlotSession               @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrollment     Enrollment                @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  teacher        Teacher                   @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  markedBy       User?                     @relation("AttendanceMarker", fields: [markedById], references: [id], onDelete: SetNull)
+  mobileCheckIns MobileAttendanceCheckIn[]
 
   @@unique([sessionId, enrollmentId])
   @@index([enrollmentId])
   @@index([teacherId, status])
   @@index([markedById])
   @@map("attendance_records")
+  @@schema("erp")
+}
+
+model AttendanceQrChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  sessionId   String    @map("session_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  session        SlotSession               @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdBy      User?                     @relation("AttendanceQrChallengeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  mobileCheckIns MobileAttendanceCheckIn[]
+
+  @@index([sessionId, expiresAt])
+  @@index([expiresAt])
+  @@index([createdById])
+  @@map("attendance_qr_challenges")
+  @@schema("erp")
+}
+
+model MobileAttendanceCheckIn {
+  id                 String    @id @default(uuid()) @db.Uuid
+  idempotencyKey     String    @unique @map("idempotency_key") @db.Uuid
+  clientEventId      String    @unique @map("client_event_id") @db.Uuid
+  requestId          String    @unique @map("request_id") @db.Uuid
+  requestHash        String    @map("request_hash") @db.Char(64)
+  erpStudentId       String    @map("erp_student_id") @db.Uuid
+  qrTokenFingerprint String    @map("qr_token_fingerprint") @db.Char(16)
+  scannedAt          DateTime  @map("scanned_at")
+  receivedAt         DateTime  @default(now()) @map("received_at")
+  completedAt        DateTime? @map("completed_at")
+  httpStatus         Int?      @map("http_status")
+  resultCode         String    @default("PENDING") @map("result_code")
+  responseJson       Json?     @map("response_json")
+  studentId          String?   @map("student_id") @db.Uuid
+  enrollmentId       String?   @map("enrollment_id") @db.Uuid
+  sessionId          String?   @map("session_id") @db.Uuid
+  challengeId        String?   @map("challenge_id") @db.Uuid
+  attendanceRecordId String?   @map("attendance_record_id") @db.Uuid
+
+  student          Student?               @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  enrollment       Enrollment?            @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  session          SlotSession?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  challenge        AttendanceQrChallenge? @relation(fields: [challengeId], references: [id], onDelete: SetNull)
+  attendanceRecord AttendanceRecord?      @relation(fields: [attendanceRecordId], references: [id], onDelete: SetNull)
+
+  @@index([erpStudentId, receivedAt(sort: Desc)])
+  @@index([sessionId, receivedAt(sort: Desc)])
+  @@index([resultCode, receivedAt(sort: Desc)])
+  @@index([studentId])
+  @@index([enrollmentId])
+  @@index([challengeId])
+  @@index([attendanceRecordId])
+  @@map("mobile_attendance_check_ins")
   @@schema("erp")
 }
 

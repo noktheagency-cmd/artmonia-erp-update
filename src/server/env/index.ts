@@ -15,6 +15,13 @@ const commaSeparatedUuids = z.string().refine(
   },
   { message: "Expected a comma-separated list of UUIDs" },
 );
+const commaSeparatedSecrets = z.string().refine(
+  (value) => {
+    const items = value.split(",").map((item) => item.trim()).filter(Boolean);
+    return items.length > 0 && items.every((item) => item.length >= 32);
+  },
+  { message: "Expected comma-separated secrets with at least 32 characters each" },
+);
 
 const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -29,6 +36,12 @@ const envSchema = z.object({
   CLOUDFLARE_R2_SECRET_ACCESS_KEY: z.string().optional(),
   CLOUDFLARE_R2_HR_BUCKET: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+  MOBILE_ATTENDANCE_SERVER_TOKENS: commaSeparatedSecrets.optional(),
+  ATTENDANCE_CRON_SECRET: z.string().min(32).optional(),
+  ATTENDANCE_QR_TTL_SECONDS: z.coerce.number().int().min(30).max(120).default(60),
+  ATTENDANCE_QR_REFRESH_SECONDS: z.coerce.number().int().min(15).max(60).default(30),
+  ATTENDANCE_CHECKIN_OPEN_MINUTES_BEFORE: z.coerce.number().int().min(0).max(120).default(15),
+  ATTENDANCE_CHECKIN_CLOSE_MINUTES_AFTER: z.coerce.number().int().min(0).max(240).default(30),
   MCP_PUBLIC_URL: z.string().url().optional(),
   MCP_OAUTH_CLIENT_ID: z.string().uuid().optional(),
   MCP_OAUTH_CLIENT_IDS: commaSeparatedUuids.optional(),

@@ -3,6 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import {
+  AttendanceCaptureSource,
   AttendanceMark,
   ClassShift,
   EnrollmentStatus,
@@ -525,12 +526,14 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
           enrollmentId: item.enrollmentId,
           teacherId: slot.teacherId,
           status: item.status === "present" ? AttendanceMark.PRESENT : AttendanceMark.ABSENT,
+          source: AttendanceCaptureSource.MANUAL,
           note: item.note || null,
           markedById: actor.id,
         },
         update: {
           teacherId: slot.teacherId,
           status: item.status === "present" ? AttendanceMark.PRESENT : AttendanceMark.ABSENT,
+          source: AttendanceCaptureSource.MANUAL,
           note: item.note || null,
           markedById: actor.id,
           markedAt: new Date(),
