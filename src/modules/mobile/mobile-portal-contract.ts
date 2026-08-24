@@ -34,6 +34,11 @@ export const mobileAttendanceSummaryQuerySchema = z.object({
   to: dateSchema.optional(),
 }).strict();
 
+export const mobileHomeworkCompletionSchema = z.object({
+  completed: z.boolean(),
+}).strict();
+
 export type MobileLessonsQuery = z.infer<typeof mobileLessonsQuerySchema>;
 export type MobileLessonFilter = typeof lessonFilterValues[number];
 export type MobileProfilePatch = z.infer<typeof mobileProfilePatchSchema>;
+export type MobileHomeworkCompletion = z.infer<typeof mobileHomeworkCompletionSchema>;

@@ -534,6 +534,7 @@ export function PlannerWorkspace({
           slot={selectedSlot}
           journal={data.journal}
           today={data.today}
+          canManageLesson={data.canManage}
           pending={pending}
           onClose={() => {
             setAttendanceOpen(false);
@@ -1161,6 +1162,7 @@ function AttendanceDialog({
   slot,
   journal,
   today,
+  canManageLesson,
   pending,
   onClose,
   onDateChange,
@@ -1169,12 +1171,14 @@ function AttendanceDialog({
   slot: PlannerSlot;
   journal: PlannerWorkspaceData["journal"];
   today: string;
+  canManageLesson: boolean;
   pending: boolean;
   onClose: () => void;
   onDateChange: (date: string) => void;
   onSubmit: (formData: FormData) => void;
 }) {
   const [rows, setRows] = useState<PlannerJournalMember[]>(journal.members);
+  const [sessionStatus, setSessionStatus] = useState(journal.status);
 
   function updateRow(
     enrollmentId: string,
@@ -1204,6 +1208,8 @@ function AttendanceDialog({
   const absentCount = rows.filter((row) => row.attendanceStatus === "absent").length;
   const excusedCount = rows.filter((row) => row.attendanceStatus === "excused").length;
   const unmarkedCount = rows.length - presentCount - absentCount - excusedCount;
+  const isFuture = journal.date > today;
+  const attendanceDisabled = isFuture || sessionStatus === "CANCELLED";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -1217,6 +1223,40 @@ function AttendanceDialog({
         <form className={styles.attendanceForm} onSubmit={submit}>
           <input name="slotId" type="hidden" value={slot.id} />
           <section className={styles.attendanceLessonFields} key={journal.date}>
+            <label>
+              <span>Dərs statusu</span>
+              <select
+                name="sessionStatus"
+                value={sessionStatus}
+                disabled={!canManageLesson}
+                onChange={(event) => {
+                  const next = event.target.value as typeof sessionStatus;
+                  setSessionStatus(next);
+                  if (next === "CANCELLED") markAll(null);
+                }}
+              >
+                <option value="SCHEDULED">Planlaşdırılıb</option>
+                <option value="COMPLETED">Tamamlanıb</option>
+                <option value="CANCELLED">Ləğv edilib</option>
+                <option value="RESCHEDULED">Vaxtı/otağı dəyişib</option>
+              </select>
+              {!canManageLesson ? <input type="hidden" name="sessionStatus" value={sessionStatus} /> : null}
+            </label>
+            <label>
+              <span>Başlama saatı</span>
+              <input name="sessionStartTime" type="time" defaultValue={journal.startTime} disabled={!canManageLesson} required />
+              {!canManageLesson ? <input type="hidden" name="sessionStartTime" value={journal.startTime} /> : null}
+            </label>
+            <label>
+              <span>Bitmə saatı</span>
+              <input name="sessionEndTime" type="time" defaultValue={journal.endTime} disabled={!canManageLesson} required />
+              {!canManageLesson ? <input type="hidden" name="sessionEndTime" value={journal.endTime} /> : null}
+            </label>
+            <label>
+              <span>Otaq / məkan</span>
+              <input name="sessionLocation" defaultValue={journal.location} maxLength={80} disabled={!canManageLesson} placeholder="Məsələn: Studio 2" />
+              {!canManageLesson ? <input type="hidden" name="sessionLocation" value={journal.location} /> : null}
+            </label>
             <label>
               <span>Dərsin mövzusu</span>
               <input name="title" defaultValue={journal.title} maxLength={160} placeholder="Məsələn: Rəng nəzəriyyəsi" />
@@ -1246,7 +1286,6 @@ function AttendanceDialog({
                 type="date"
                 value={journal.date}
                 min={slot.validFrom}
-                max={today}
                 onChange={(event) => onDateChange(event.target.value)}
                 required
               />
@@ -1259,10 +1298,10 @@ function AttendanceDialog({
                 <span><b>{unmarkedCount}</b> Statussuz</span>
               </div>
               <div className={styles.attendanceBulkActions} aria-label="Kütləvi status dəyişimi">
-                <button type="button" onClick={() => markAll("present")}><Check /> Hamısı gəldi</button>
-                <button type="button" onClick={() => markAll("absent")}><X /> Hamısı gəlmədi</button>
-                <button type="button" onClick={() => markAll("excused")}><CircleMinus /> Hamısı üzrlü</button>
-                <button type="button" onClick={() => markAll(null)}><RotateCcw /> Təmizlə</button>
+                <button type="button" disabled={attendanceDisabled} onClick={() => markAll("present")}><Check /> Hamısı gəldi</button>
+                <button type="button" disabled={attendanceDisabled} onClick={() => markAll("absent")}><X /> Hamısı gəlmədi</button>
+                <button type="button" disabled={attendanceDisabled} onClick={() => markAll("excused")}><CircleMinus /> Hamısı üzrlü</button>
+                <button type="button" disabled={isFuture} onClick={() => markAll(null)}><RotateCcw /> Təmizlə</button>
               </div>
             </div>
           </div>
@@ -1278,6 +1317,7 @@ function AttendanceDialog({
                 <div className={styles.attendanceMarks}>
                   <button
                     type="button"
+                    disabled={attendanceDisabled}
                     data-active={row.attendanceStatus === "present" || undefined}
                     data-state="present"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "present" })}
@@ -1287,6 +1327,7 @@ function AttendanceDialog({
                   </button>
                   <button
                     type="button"
+                    disabled={attendanceDisabled}
                     data-active={row.attendanceStatus === "absent" || undefined}
                     data-state="absent"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "absent" })}
@@ -1296,6 +1337,7 @@ function AttendanceDialog({
                   </button>
                   <button
                     type="button"
+                    disabled={attendanceDisabled}
                     data-active={row.attendanceStatus === "excused" || undefined}
                     data-state="excused"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "excused" })}
@@ -1305,6 +1347,7 @@ function AttendanceDialog({
                   </button>
                   <button
                     type="button"
+                    disabled={isFuture}
                     className={styles.clearMark}
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: null })}
                     aria-label={`${row.studentName}: qeydi təmizlə`}

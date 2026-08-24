@@ -1594,6 +1594,7 @@ model SlotSession {
   sessionDate           DateTime          @map("session_date") @db.Date
   startTime             String            @map("start_time")
   endTime               String            @map("end_time")
+  locationOverride      String?           @map("location_override")
   status                SlotSessionStatus @default(SCHEDULED)
   title                 String?
   objective             String?

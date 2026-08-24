@@ -927,6 +927,7 @@
 }
 
 .attendanceLessonFields input,
+.attendanceLessonFields select,
 .attendanceLessonFields textarea {
   width: 100%;
   padding: 9px 10px;
@@ -945,6 +946,7 @@
 }
 
 .attendanceLessonFields input:focus,
+.attendanceLessonFields select:focus,
 .attendanceLessonFields textarea:focus {
   border-color: #8bb5f4;
   box-shadow: 0 0 0 3px rgba(23, 105, 232, .1);

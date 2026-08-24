@@ -17,6 +17,7 @@ import {
 import type {
   MobileLessonFilter,
   MobileLessonsQuery,
+  MobileHomeworkCompletion,
   MobileProfilePatch,
 } from "@/modules/mobile/mobile-portal-contract";
 import type { MobileStudentIdentity } from "@/modules/mobile/mobile-api";
@@ -238,6 +239,96 @@ export async function getMobileLessonDetail(
   return lesson;
 }
 
+export async function setMobileHomeworkCompletion(
+  identity: MobileStudentIdentity,
+  homeworkId: string,
+  input: MobileHomeworkCompletion,
+) {
+  const prisma = getPrisma();
+  const homework = await prisma.lessonHomework.findUnique({
+    where: { id: homeworkId },
+    select: {
+      id: true,
+      updatedAt: true,
+      session: { select: { slotId: true, sessionDate: true, status: true } },
+    },
+  });
+  if (!homework || homework.session.status === SlotSessionStatus.CANCELLED) {
+    throw new MobilePortalError("HOMEWORK_NOT_FOUND", 404, "Ev tapşırığı tapılmadı.");
+  }
+
+  const enrollment = await prisma.enrollment.findFirst({
+    where: {
+      studentId: identity.studentId,
+      status: EnrollmentStatus.ACTIVE,
+      scheduleAssignments: {
+        some: {
+          slotId: homework.session.slotId,
+          validFrom: { lte: homework.session.sessionDate },
+          OR: [{ validTo: null }, { validTo: { gte: homework.session.sessionDate } }],
+        },
+      },
+    },
+    select: { id: true },
+  });
+  if (!enrollment) {
+    throw new MobilePortalError("HOMEWORK_NOT_FOUND", 404, "Ev tapşırığı tapılmadı.");
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    if (input.completed) {
+      const existing = await tx.homeworkCompletion.findUnique({
+        where: { homeworkId_enrollmentId: { homeworkId, enrollmentId: enrollment.id } },
+        select: { completedAt: true, updatedAt: true },
+      });
+      const completion = existing ?? await tx.homeworkCompletion.create({
+        data: { homeworkId, enrollmentId: enrollment.id },
+        select: { completedAt: true, updatedAt: true },
+      });
+      if (!existing) {
+        await tx.auditLog.create({
+          data: {
+            action: "student.homework.complete",
+            entityType: "lesson_homework",
+            entityId: homeworkId,
+            afterJson: { studentId: identity.studentId, enrollmentId: enrollment.id },
+            reason: "Tələbə mobil tətbiqdən ev tapşırığını tamamladı",
+          },
+        });
+      }
+      return {
+        homeworkId,
+        status: "completed" as const,
+        completedAt: completion.completedAt.toISOString(),
+        updatedAt: completion.updatedAt.toISOString(),
+      };
+    }
+
+    const deleted = await tx.homeworkCompletion.deleteMany({
+      where: { homeworkId, enrollmentId: enrollment.id },
+    });
+    const updatedAt = deleted.count ? new Date() : homework.updatedAt;
+    if (deleted.count) {
+      await tx.auditLog.create({
+        data: {
+          action: "student.homework.reopen",
+          entityType: "lesson_homework",
+          entityId: homeworkId,
+          afterJson: { studentId: identity.studentId, enrollmentId: enrollment.id },
+          reason: "Tələbə mobil tətbiqdən ev tapşırığını yenidən açdı",
+        },
+      });
+    }
+    return {
+      homeworkId,
+      status: "pending" as const,
+      completedAt: null,
+      updatedAt: updatedAt.toISOString(),
+    };
+  });
+  return result;
+}
+
 export async function getMobileAttendanceSummary(
   identity: MobileStudentIdentity,
   input: { from?: string; to?: string },
@@ -426,6 +517,7 @@ async function getStudentLessonEntries(
       sessionDate: true,
       startTime: true,
       endTime: true,
+      locationOverride: true,
       status: true,
       title: true,
       objective: true,
@@ -500,7 +592,7 @@ async function getStudentLessonEntries(
       objective: session.objective,
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
-      location: session.slot.room,
+      location: session.locationOverride ?? session.slot.room,
       teacher: session.slot.teacher ? {
         id: session.slot.teacher.id,
         displayName: session.slot.teacher.fullName,
@@ -642,7 +734,9 @@ function summarizeLesson(entry: StudentLessonEntry) {
 
 function buildNextAction(entries: StudentLessonEntry[], now: Date) {
   const homeworkEntry = entries
-    .filter((entry) => entry.homework && entry.homework.status !== "completed")
+    .filter((entry) => entry.lessonStatus !== "cancelled"
+      && entry.homework
+      && entry.homework.status !== "completed")
     .toSorted((left, right) => (
       (left.homework?.dueAt ?? "9999").localeCompare(right.homework?.dueAt ?? "9999")
     ))[0];

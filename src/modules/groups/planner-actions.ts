@@ -85,6 +85,10 @@ const attendanceItemSchema = z.object({
 const attendanceSchema = z.object({
   slotId: z.string().uuid(),
   date: z.string().date(),
+  sessionStatus: z.enum(SlotSessionStatus),
+  sessionStartTime: timeSchema,
+  sessionEndTime: timeSchema,
+  sessionLocation: z.string().trim().max(80).default(""),
   title: z.string().trim().max(160).default(""),
   objective: z.string().trim().max(1000).default(""),
   homeworkTitle: z.string().trim().max(160).default(""),
@@ -98,6 +102,9 @@ const attendanceSchema = z.object({
       return z.NEVER;
     }
   }),
+}).refine((value) => value.sessionEndTime > value.sessionStartTime, {
+  path: ["sessionEndTime"],
+  message: "Dərsin bitmə saatı başlama saatından sonra olmalıdır",
 });
 
 const updateSlotSchema = slotSchema.and(z.object({ slotId: z.string().uuid() }));
@@ -439,7 +446,13 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
     throw new Error("Davamiyyət siyahısında eyni tələbə təkrar olunub");
   }
   const today = todayInBaku();
-  if (input.date > today) throw new Error("Gələcək tarix üçün davamiyyət yazmaq olmaz");
+  if (input.date > today && input.items.some((item) => item.status !== null)) {
+    throw new Error("Gələcək tarix üçün davamiyyət yazmaq olmaz");
+  }
+  if (input.sessionStatus === SlotSessionStatus.CANCELLED
+    && input.items.some((item) => item.status !== null)) {
+    throw new Error("Ləğv edilmiş dərsdə davamiyyət statusu saxlanıla bilməz");
+  }
   const date = dateFromInput(input.date);
   const prisma = getPrisma();
   const canManageAll = scopeFor(actor.permissions, "attendance.manage") === "ALL";
@@ -458,6 +471,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
         weekday: true,
         startTime: true,
         endTime: true,
+        room: true,
         validFrom: true,
       },
     });
@@ -475,6 +489,15 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       throw new Error("Bu slotun davamiyyətini dəyişmək icazəniz yoxdur");
     }
 
+    const scheduleChanged = input.sessionStartTime !== slot.startTime
+      || input.sessionEndTime !== slot.endTime
+      || input.sessionLocation !== (slot.room ?? "")
+      || input.sessionStatus === SlotSessionStatus.CANCELLED
+      || input.sessionStatus === SlotSessionStatus.RESCHEDULED;
+    if (scheduleChanged && !actor.permissions.has("group.manage")) {
+      throw new Error("Dərsin vaxtını, otağını və statusunu yalnız qrup idarəçisi dəyişə bilər");
+    }
+
     const assignments = await tx.studentScheduleAssignment.findMany({
       where: {
         slotId: slot.id,
@@ -490,17 +513,24 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
 
     const hasMarkedItem = input.items.some((item) => item.status !== null);
     const hasLessonContent = Boolean(input.title || input.objective || input.homeworkTitle);
+    const defaultStatus = input.date < today
+      ? SlotSessionStatus.COMPLETED
+      : SlotSessionStatus.SCHEDULED;
+    const hasSessionOverride = scheduleChanged || input.sessionStatus !== defaultStatus;
     let session = await tx.slotSession.findUnique({
       where: { slotId_sessionDate: { slotId: slot.id, sessionDate: date } },
     });
-    if (!session && (hasMarkedItem || hasLessonContent)) {
+    if (!session && (hasMarkedItem || hasLessonContent || hasSessionOverride)) {
       session = await tx.slotSession.create({
         data: {
           slotId: slot.id,
           sessionDate: date,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          status: input.date < today ? SlotSessionStatus.COMPLETED : SlotSessionStatus.SCHEDULED,
+          startTime: input.sessionStartTime,
+          endTime: input.sessionEndTime,
+          locationOverride: input.sessionLocation === (slot.room ?? "")
+            ? null
+            : input.sessionLocation || null,
+          status: input.sessionStatus,
           title: input.title || null,
           objective: input.objective || null,
           createdById: actor.id,
@@ -514,6 +544,12 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
         data: {
           title: input.title || null,
           objective: input.objective || null,
+          startTime: input.sessionStartTime,
+          endTime: input.sessionEndTime,
+          locationOverride: input.sessionLocation === (slot.room ?? "")
+            ? null
+            : input.sessionLocation || null,
+          status: input.sessionStatus,
         },
       });
       if (input.homeworkTitle) {
@@ -591,7 +627,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       });
     }
 
-    if (session && !hasMarkedItem && !hasLessonContent) {
+    if (session && !hasMarkedItem && !hasLessonContent && !hasSessionOverride) {
       await tx.slotSession.delete({ where: { id: session.id } });
     }
 
@@ -600,8 +636,16 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       action: "attendance.batch.update",
       entityType: "class_slot",
       entityId: slot.id,
-      after: { slotId: slot.id, date: input.date, items: input.items } as Prisma.InputJsonValue,
-      reason: "Slot davamiyyəti yeniləndi",
+      after: {
+        slotId: slot.id,
+        date: input.date,
+        status: input.sessionStatus,
+        startTime: input.sessionStartTime,
+        endTime: input.sessionEndTime,
+        location: input.sessionLocation,
+        items: input.items,
+      } as Prisma.InputJsonValue,
+      reason: "Dərs jurnalı, qrafiki və davamiyyəti yeniləndi",
     });
     return [...new Set([slot.teacherId, ...previousTeacherIds.map((item) => item.teacherId)])];
   });

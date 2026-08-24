@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   mobileAttendanceSummaryQuerySchema,
+  mobileHomeworkCompletionSchema,
   mobileLessonsQuerySchema,
   mobileProfilePatchSchema,
 } from "./mobile-portal-contract";
@@ -15,6 +16,13 @@ test("mobile lesson filters receive stable defaults", () => {
     status: "excused",
     limit: 50,
   });
+});
+
+test("homework completion mutation is strict and idempotent-shaped", () => {
+  assert.deepEqual(mobileHomeworkCompletionSchema.parse({ completed: true }), { completed: true });
+  assert.deepEqual(mobileHomeworkCompletionSchema.parse({ completed: false }), { completed: false });
+  assert.equal(mobileHomeworkCompletionSchema.safeParse({}).success, false);
+  assert.equal(mobileHomeworkCompletionSchema.safeParse({ completed: true, studentId: crypto.randomUUID() }).success, false);
 });
 
 test("mobile lesson filters reject unknown fields and oversized pages", () => {

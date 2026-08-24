@@ -37,6 +37,7 @@ PATCH /api/mobile/v1/me/profile
 GET   /api/mobile/v1/me/home
 GET   /api/mobile/v1/me/lessons
 GET   /api/mobile/v1/me/lessons/{lessonId}
+PUT   /api/mobile/v1/me/homeworks/{homeworkId}/completion
 GET   /api/mobile/v1/me/attendance/summary
 ```
 
@@ -131,6 +132,28 @@ List cavabı:
 
 Dərs obyekti real ERP jurnalından `lessonStatus`, `attendance`, `teacherNote`, `homework`, mövzu və məqsədi qaytarır. Gələcək dərs sessiyaları aktiv həftəlik slot assignment-larından idempotent şəkildə yaradılır. Keçmiş tarixlər süni şəkildə yaradılmır və retroaktiv davamiyyətsizlik yazılmır.
 
+ERP qrup idarəçisi konkret dərsin ümumi slotdan fərqli başlama/bitmə saatını, otağını və `scheduled | completed | cancelled | rescheduled` statusunu təyin edə bilər. Bu dəyişikliklər dərhal mobil dərs siyahısında və Home-dakı növbəti dərsdə görünür. Ləğv olunmuş dərs avtomatik `absent` yaratmır.
+
+### Ev tapşırığını tamamlamaq və yenidən açmaq
+
+```http
+PUT /api/mobile/v1/me/homeworks/{homeworkId}/completion
+Content-Type: application/json
+
+{"completed": true}
+```
+
+`PUT` idempotentdir. Tələbə yalnız aktiv enrollment və öz dərs planına aid tapşırığı dəyişə bilər; `Student.id` göndərilmir. Yenidən açmaq üçün `{"completed": false}` göndərilir.
+
+```json
+{
+  "homeworkId": "uuid",
+  "status": "completed",
+  "completedAt": "2026-08-24T15:00:00.000Z",
+  "updatedAt": "2026-08-24T15:00:00.000Z"
+}
+```
+
 ### Davamiyyət xülasəsi
 
 ```http
@@ -181,6 +204,7 @@ INVALID_CURSOR               400
 INVALID_PHONE                422
 INVALID_AVATAR_PATH          422
 LESSON_NOT_FOUND             404
+HOMEWORK_NOT_FOUND           404
 UNSUPPORTED_MEDIA_TYPE       415
 PAYLOAD_TOO_LARGE            413
 INTERNAL_ERROR               500
@@ -201,6 +225,8 @@ Standart xəta cavabı:
 - Qruplar planlayıcısında slot üçün mobil tətbiqdə görünən qrup adı yazılır.
 - Jurnalda dərsin mövzusu və məqsədi yazılır.
 - Jurnalda ev tapşırığı, açıqlaması və son tarixi yazılır.
+- Qrup idarəçisi konkret dərsi ləğv edir və ya həmin dərsin saatını/otağını dəyişərək `rescheduled` edir.
+- Qruplar səhifəsində bütün tələbələr və ya seçilmiş proqram üçün mobil akademiya elanı yaradılır, planlanır və deaktiv edilir.
 - Davamiyyət `Gəldi`, `Gəlmədi`, `Üzrlü` və ya statussuz saxlanılır.
 - QR finalizer yekunlaşdırdığı sessiyanı `completed` edir.
 

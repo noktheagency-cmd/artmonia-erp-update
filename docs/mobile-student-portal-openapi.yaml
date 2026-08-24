@@ -151,6 +151,38 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/homeworks/{homeworkId}/completion:
+    put:
+      operationId: setMobileHomeworkCompletion
+      summary: Idempotently complete or reopen a student-owned homework
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/RequestId' }
+        - name: homeworkId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [completed]
+              properties:
+                completed: { type: boolean }
+      responses:
+        '200':
+          description: Current homework completion state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HomeworkCompletion' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/mobile/v1/me/attendance/summary:
     get:
       operationId: getMobileAttendanceSummary
@@ -299,6 +331,14 @@ components:
         status: { type: string, enum: [pending, completed, overdue] }
         dueAt: { type: [string, 'null'], format: date-time }
         completedAt: { type: [string, 'null'], format: date-time }
+    HomeworkCompletion:
+      type: object
+      required: [homeworkId, status, completedAt, updatedAt]
+      properties:
+        homeworkId: { type: string, format: uuid }
+        status: { type: string, enum: [pending, completed] }
+        completedAt: { type: [string, 'null'], format: date-time }
+        updatedAt: { type: string, format: date-time }
     LessonEntry:
       type: object
       required: [id, date, courseCode, title, objective, startsAt, endsAt, location, teacher, lessonStatus, attendance, teacherNote, homework, updatedAt]

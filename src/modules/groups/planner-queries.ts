@@ -110,6 +110,10 @@ export type PlannerWorkspaceData = {
     dateLabel: string;
     title: string;
     objective: string;
+    status: "SCHEDULED" | "COMPLETED" | "CANCELLED" | "RESCHEDULED";
+    startTime: string;
+    endTime: string;
+    location: string;
     homework: {
       title: string;
       description: string;
@@ -282,6 +286,10 @@ export async function getPlannerWorkspaceData(input?: {
           select: {
             title: true,
             objective: true,
+            status: true,
+            startTime: true,
+            endTime: true,
+            locationOverride: true,
             homework: {
               select: { title: true, description: true, dueAt: true },
             },
@@ -510,6 +518,12 @@ export async function getPlannerWorkspaceData(input?: {
       dateLabel: formatDateAz(journalDate),
       title: journalSession?.title ?? "",
       objective: journalSession?.objective ?? "",
+      status: journalSession?.status
+        ?? (journalDate < today ? "COMPLETED" : "SCHEDULED"),
+      startTime: journalSession?.startTime ?? selectedSlot?.startTime ?? "",
+      endTime: journalSession?.endTime ?? selectedSlot?.endTime ?? "",
+      location: journalSession?.locationOverride
+        ?? (selectedSlot?.room === "Otaq seçilməyib" ? "" : selectedSlot?.room ?? ""),
       homework: {
         title: journalSession?.homework?.title ?? "",
         description: journalSession?.homework?.description ?? "",

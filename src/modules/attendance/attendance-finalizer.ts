@@ -14,6 +14,7 @@ export async function finalizeDueAttendanceSessions(now = new Date(), batchSize 
   const candidates = await prisma.slotSession.findMany({
     where: {
       attendanceFinalizedAt: null,
+      status: { in: [SlotSessionStatus.SCHEDULED, SlotSessionStatus.RESCHEDULED] },
       sessionDate: { lte: dateFromInput(todayInBaku()) },
       slot: { teacherId: { not: null } },
     },

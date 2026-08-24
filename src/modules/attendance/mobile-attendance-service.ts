@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { AttendanceCaptureSource, AttendanceMark, EnrollmentStatus, Prisma } from "@/generated/prisma/client";
+import { AttendanceCaptureSource, AttendanceMark, EnrollmentStatus, Prisma, SlotSessionStatus } from "@/generated/prisma/client";
 import { attendanceQrTokenFingerprint, hashAttendanceQrToken } from "@/modules/attendance/attendance-qr-service";
 import { attendanceWindowState, buildAttendanceWindow, formatBakuIso } from "@/modules/attendance/attendance-time";
 import type {
@@ -141,6 +141,7 @@ export async function processMobileAttendanceCheckIn(
             sessionDate: true,
             startTime: true,
             endTime: true,
+            status: true,
             attendanceFinalizedAt: true,
             slot: {
               select: {
@@ -168,6 +169,13 @@ export async function processMobileAttendanceCheckIn(
     }
 
     const session = challenge.session;
+    if (session.status === SlotSessionStatus.CANCELLED) {
+      return finish(errorResult("CHECK_IN_WINDOW_CLOSED", 422, "Bu dərs ləğv edilib.", metadata.requestId), {
+        studentId: student.id,
+        sessionId: session.id,
+        challengeId: challenge.id,
+      });
+    }
     if (!session.slot.teacherId) {
       return finish(errorResult("LESSON_NOT_FOUND", 404, "Dərs müəllimi tapılmadı.", metadata.requestId), {
         studentId: student.id,

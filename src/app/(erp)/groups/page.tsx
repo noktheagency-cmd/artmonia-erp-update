@@ -7,6 +7,12 @@ import {
   saveSlotAttendanceAction,
   updateClassSlotAction,
 } from "@/modules/groups/planner-actions";
+import { AcademyAnnouncementPanel } from "@/modules/academy/announcement-panel";
+import { getAcademyAnnouncementsData } from "@/modules/academy/announcement-queries";
+import {
+  saveAcademyAnnouncementAction,
+  toggleAcademyAnnouncementAction,
+} from "@/modules/academy/announcement-actions";
 
 export default async function GroupsPage({
   searchParams,
@@ -19,24 +25,31 @@ export default async function GroupsPage({
   }>;
 }) {
   const params = await searchParams;
-  const plannerData = await getPlannerWorkspaceData({
-    slotId: params.slot,
-    date: params.date,
-  });
+  const [plannerData, announcementData] = await Promise.all([
+    getPlannerWorkspaceData({ slotId: params.slot, date: params.date }),
+    getAcademyAnnouncementsData(),
+  ]);
 
   return (
-    <PlannerWorkspace
-      key={`${plannerData.selectedSlotId}-${plannerData.journal.date}-${params.attendance ?? "0"}`}
-      data={plannerData}
-      initialAttendanceOpen={params.attendance === "1"}
-      initialDetailsOpen={params.details === "1"}
-      actions={{
-        createSlot: createClassSlotAction,
-        updateSlot: updateClassSlotAction,
-        deleteSlot: deleteClassSlotAction,
-        replaceSchedule: replaceStudentScheduleAction,
-        saveAttendance: saveSlotAttendanceAction,
-      }}
-    />
+    <>
+      <PlannerWorkspace
+        key={`${plannerData.selectedSlotId}-${plannerData.journal.date}-${params.attendance ?? "0"}`}
+        data={plannerData}
+        initialAttendanceOpen={params.attendance === "1"}
+        initialDetailsOpen={params.details === "1"}
+        actions={{
+          createSlot: createClassSlotAction,
+          updateSlot: updateClassSlotAction,
+          deleteSlot: deleteClassSlotAction,
+          replaceSchedule: replaceStudentScheduleAction,
+          saveAttendance: saveSlotAttendanceAction,
+        }}
+      />
+      <AcademyAnnouncementPanel
+        data={announcementData}
+        saveAction={saveAcademyAnnouncementAction}
+        toggleAction={toggleAcademyAnnouncementAction}
+      />
+    </>
   );
 }
