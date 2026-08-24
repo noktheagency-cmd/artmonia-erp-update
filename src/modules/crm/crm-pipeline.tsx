@@ -45,6 +45,7 @@ import { leadStageLabels, leadStageSelectOptions } from "@/modules/crm/stage";
 
 const followUpLabels = {
   all: "İzləmə",
+  workshop_masterclass: "Masterclass & Workshop",
   attention: "Diqqət tələb edir",
   overdue: "Gecikmiş",
   today: "Bugünkü",

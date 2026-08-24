@@ -43,6 +43,7 @@ import { scopeFor, type PermissionScope } from "@/server/rbac/permissions";
 
 export type CrmFollowUpFilter =
   | "all"
+  | "workshop_masterclass"
   | "attention"
   | "overdue"
   | "today"
@@ -1024,6 +1025,11 @@ function buildCrmListWhereSql(input: {
       )
       and (l.next_follow_up_at is null or l.next_follow_up_at <= ${input.today})
     `);
+  } else if (input.followUpFilter === "workshop_masterclass") {
+    conditions.push(Prisma.sql`
+      l.next_follow_up_at is not null
+      and lower(coalesce(l.source, '')) ~ '(workshop|masterclass|master class|masterklass|ustad)'
+    `);
   } else if (input.followUpFilter === "overdue") {
     conditions.push(Prisma.sql`l.next_follow_up_at < ${input.todayStart}`);
   } else if (input.followUpFilter === "today") {
@@ -1144,6 +1150,7 @@ function normalizeNextActionTypeValue(value: string | null | undefined): NextAct
 function normalizeFollowUp(value: string | undefined): CrmFollowUpFilter {
   const allowed: CrmFollowUpFilter[] = [
     "all",
+    "workshop_masterclass",
     "attention",
     "overdue",
     "today",
@@ -1206,6 +1213,7 @@ function formatAttentionRow(
       source.includes("workshop") ||
       source.includes("masterclass") ||
       source.includes("master class") ||
+      source.includes("masterklass") ||
       source.includes("ustad")
         ? "workshop_masterclass"
         : "general",

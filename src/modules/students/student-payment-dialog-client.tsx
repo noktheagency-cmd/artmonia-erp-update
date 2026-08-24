@@ -39,19 +39,26 @@ export function StudentPaymentDialogClient({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [studentId, setStudentId] = useState(students[0]?.id ?? "");
+  const paymentEligibleStudents = useMemo(
+    () => students.filter((student) => student.lifecycleStatusValue !== "COMPLETED"),
+    [students],
+  );
+  const [studentId, setStudentId] = useState(paymentEligibleStudents[0]?.id ?? "");
+  const effectiveStudentId = paymentEligibleStudents.some((student) => student.id === studentId)
+    ? studentId
+    : paymentEligibleStudents[0]?.id ?? "";
   const selectedStudent = useMemo(
-    () => students.find((student) => student.id === studentId) ?? students[0],
-    [studentId, students]
+    () => paymentEligibleStudents.find((student) => student.id === effectiveStudentId),
+    [effectiveStudentId, paymentEligibleStudents]
   );
   const studentOptions = useMemo(
     () =>
-      students.map((student) => ({
+      paymentEligibleStudents.map((student) => ({
         value: student.id,
         label: `${student.name} · ${student.code}`,
         searchText: `${student.name} ${student.code} ${student.phone}`,
       })),
-    [students]
+    [paymentEligibleStudents]
   );
 
   async function recordPayment(formData: FormData) {
@@ -75,7 +82,7 @@ export function StudentPaymentDialogClient({
           type="button"
           variant="secondary"
           className="students-payment-action"
-          disabled={!canRecordPayment || students.length === 0}
+          disabled={!canRecordPayment || paymentEligibleStudents.length === 0}
         >
           <Banknote data-icon="inline-start" />
           Ödəniş qəbul et
@@ -101,7 +108,7 @@ export function StudentPaymentDialogClient({
               <span>Tələbə</span>
               <FormSelect
                 name="studentPicker"
-                value={studentId}
+                value={effectiveStudentId}
                 onValueChange={setStudentId}
                 options={studentOptions}
                 searchable

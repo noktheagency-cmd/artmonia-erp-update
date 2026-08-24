@@ -1,9 +1,9 @@
 import {
   EnrollmentStatus,
   InvoiceStatus,
+  Prisma,
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
-import type { Prisma } from "@/generated/prisma/client";
 import { toNumber } from "@/modules/shared/format";
 
 export function isBillingPausedStatus(status: StudentLifecycleStatus) {
@@ -62,7 +62,58 @@ export function getStatusChangeReason(status: StudentLifecycleStatus) {
     return "Tələbə dayandırıldı";
   }
 
+  if (status === StudentLifecycleStatus.COMPLETED) {
+    return "Tələbə tədrisi tamamladı və maliyyə öhdəliyi bağlandı";
+  }
+
   return "Tələbə statusu yeniləndi";
+}
+
+export async function closeCompletedStudentBilling(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  effectiveAt: Date,
+) {
+  const [enrollments, invoices, scheduleAssignmentCount] = await Promise.all([
+    tx.enrollment.updateMany({
+      where: {
+        studentId,
+        status: {
+          in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED],
+        },
+      },
+      data: {
+        status: EnrollmentStatus.COMPLETED,
+      },
+    }),
+    tx.invoice.updateMany({
+      where: {
+        studentId,
+        status: { not: InvoiceStatus.VOID },
+        balanceDue: { gt: 0 },
+      },
+      data: {
+        status: InvoiceStatus.VOID,
+        balanceDue: 0,
+      },
+    }),
+    tx.$executeRaw(Prisma.sql`
+      update erp.student_schedule_assignments ssa
+      set
+        valid_to = greatest(ssa.valid_from, ${effectiveAt}::date),
+        updated_at = now()
+      from erp.enrollments e
+      where ssa.enrollment_id = e.id
+        and e.student_id = ${studentId}::uuid
+        and ssa.valid_to is null
+    `),
+  ]);
+
+  return {
+    completedEnrollmentCount: enrollments.count,
+    voidedInvoiceCount: invoices.count,
+    closedScheduleAssignmentCount: scheduleAssignmentCount,
+  };
 }
 
 export async function syncActivationBilling(
@@ -77,7 +128,11 @@ export async function syncActivationBilling(
     where: {
       studentId: input.studentId,
       status: {
-        in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED],
+        in: [
+          EnrollmentStatus.ACTIVE,
+          EnrollmentStatus.PAUSED,
+          EnrollmentStatus.COMPLETED,
+        ],
       },
     },
     orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],

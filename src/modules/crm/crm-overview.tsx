@@ -245,7 +245,7 @@ export function CrmOverview({
             data-active={followUpCategory === "workshop_masterclass"}
             onClick={() => setFollowUpCategory("workshop_masterclass")}
           >
-            Workshop / Masterclass <span>{workshopMasterclassCount}</span>
+            Masterclass &amp; Workshop <span>{workshopMasterclassCount}</span>
           </button>
         </div>
         <div className="crm-attention-groups">

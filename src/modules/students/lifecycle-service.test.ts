@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Prisma } from "@/generated/prisma/client";
-import { syncActivationBilling } from "./lifecycle-service";
+import {
+  closeCompletedStudentBilling,
+  syncActivationBilling,
+} from "./lifecycle-service";
 
 function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -83,4 +86,59 @@ test("activation fills the automatic first lesson date from the active slot", as
       firstLessonAt: slotStartedAt,
     },
   });
+});
+
+test("completion closes enrollment and outstanding invoices without deleting history", async () => {
+  let enrollmentUpdate: unknown;
+  let invoiceUpdate: unknown;
+  let scheduleUpdateCalled = false;
+  const tx = {
+    enrollment: {
+      updateMany: async (args: unknown) => {
+        enrollmentUpdate = args;
+        return { count: 1 };
+      },
+    },
+    invoice: {
+      updateMany: async (args: unknown) => {
+        invoiceUpdate = args;
+        return { count: 2 };
+      },
+    },
+    $executeRaw: async () => {
+      scheduleUpdateCalled = true;
+      return 1;
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  const result = await closeCompletedStudentBilling(
+    tx,
+    "student-1",
+    utcDate("2026-08-24"),
+  );
+
+  assert.deepEqual(result, {
+    completedEnrollmentCount: 1,
+    voidedInvoiceCount: 2,
+    closedScheduleAssignmentCount: 1,
+  });
+  assert.deepEqual(enrollmentUpdate, {
+    where: {
+      studentId: "student-1",
+      status: { in: ["ACTIVE", "PAUSED"] },
+    },
+    data: { status: "COMPLETED" },
+  });
+  assert.deepEqual(invoiceUpdate, {
+    where: {
+      studentId: "student-1",
+      status: { not: "VOID" },
+      balanceDue: { gt: 0 },
+    },
+    data: {
+      status: "VOID",
+      balanceDue: 0,
+    },
+  });
+  assert.equal(scheduleUpdateCalled, true);
 });

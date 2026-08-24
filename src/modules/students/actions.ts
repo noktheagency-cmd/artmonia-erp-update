@@ -36,8 +36,10 @@ import {
   resolveStudentNextPaymentAt,
   restartStudentPaymentScheduleForActiveSlot,
 } from "@/modules/students/payment-schedule-service";
+import { ensureMissingStudentMonthlyInvoices } from "@/modules/students/monthly-invoice-service";
 import {
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
+  closeCompletedStudentBilling,
   getStatusChangeReason as getSharedStatusChangeReason,
   isBillingPausedStatus as isSharedBillingPausedStatus,
   syncActivationBilling as syncSharedActivationBilling,
@@ -570,6 +572,8 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       },
     });
 
+    let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
+
     if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
       await syncSharedActivationBilling(tx, {
         studentId: current.id,
@@ -581,6 +585,9 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       });
     } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
       await clearStudentPaymentSchedules(tx, [current.id]);
+      if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
+        completionResult = await closeCompletedStudentBilling(tx, current.id, effectiveAt);
+      }
     }
 
     await writeAuditLog(tx, {
@@ -596,6 +603,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         lifecycleStatus: input.lifecycleStatus,
         billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
         effectiveAt: effectiveAt.toISOString(),
+        ...(completionResult ?? {}),
       },
       reason: input.note ?? getSharedStatusChangeReason(input.lifecycleStatus),
     });
@@ -823,6 +831,8 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         },
       });
 
+      let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
+
       if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
         await syncSharedActivationBilling(tx, {
           studentId: current.id,
@@ -834,6 +844,9 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         });
       } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
         await clearStudentPaymentSchedules(tx, [current.id]);
+        if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
+          completionResult = await closeCompletedStudentBilling(tx, current.id, statusEffectiveAt);
+        }
       }
 
       await writeAuditLog(tx, {
@@ -849,6 +862,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           lifecycleStatus: input.lifecycleStatus,
           billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
           effectiveAt: statusEffectiveAt.toISOString(),
+          ...(completionResult ?? {}),
         },
         reason: input.statusNote ?? getSharedStatusChangeReason(input.lifecycleStatus),
       });
@@ -1174,6 +1188,26 @@ async function createPaymentAndAllocate(
     idempotencyKey: string;
   }
 ) {
+  const paymentStudent = await tx.student.findUnique({
+    where: { id: input.studentId },
+    select: { lifecycleStatus: true },
+  });
+
+  if (!paymentStudent) {
+    throw new Error("Tələbə tapılmadı");
+  }
+
+  if (paymentStudent.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
+    throw new PublicActionError(
+      "Tədrisi tamamlamış tələbənin maliyyə öhdəliyi bağlıdır və ödəniş qəbul edilmir.",
+    );
+  }
+
+  await ensureMissingStudentMonthlyInvoices(tx, {
+    studentId: input.studentId,
+    throughDate: input.paidAt,
+  });
+
   const student = await tx.student.findUnique({
     where: { id: input.studentId },
     select: {

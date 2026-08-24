@@ -29,6 +29,7 @@ import {
   clearStudentPaymentSchedules,
   resolveStudentNextPaymentAt,
 } from "@/modules/students/payment-schedule-service";
+import { ensureMissingStudentMonthlyInvoices } from "@/modules/students/monthly-invoice-service";
 import { isStudentDebtDue } from "@/modules/students/student-debt-status";
 import { getBakuDateInput } from "@/modules/students/student-reminders";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
@@ -908,6 +909,26 @@ async function createPaymentAndAllocate(
     idempotencyKey: string;
   }
 ) {
+  const paymentStudent = await tx.student.findUnique({
+    where: { id: input.studentId },
+    select: { lifecycleStatus: true },
+  });
+
+  if (!paymentStudent) {
+    throw new Error("Tələbə tapılmadı");
+  }
+
+  if (paymentStudent.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
+    throw new PublicActionError(
+      "Tədrisi tamamlamış tələbənin maliyyə öhdəliyi bağlıdır və ödəniş qəbul edilmir.",
+    );
+  }
+
+  await ensureMissingStudentMonthlyInvoices(tx, {
+    studentId: input.studentId,
+    throughDate: input.paidAt,
+  });
+
   const student = await tx.student.findUnique({
     where: { id: input.studentId },
     select: {

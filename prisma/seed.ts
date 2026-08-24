@@ -118,6 +118,8 @@ async function seedRolesAndUsers() {
     { roleKey: "sales", code: "crm.lead.delete", scope: PermissionScope.ASSIGNED },
     { roleKey: "sales", code: "crm.lead.convert", scope: PermissionScope.ASSIGNED },
     { roleKey: "sales", code: "student.read", scope: PermissionScope.ALL },
+    { roleKey: "sales", code: "billing.payment.read", scope: PermissionScope.ALL },
+    { roleKey: "sales", code: "billing.payment.create", scope: PermissionScope.ALL },
     { roleKey: "sales", code: "task.read", scope: PermissionScope.ASSIGNED },
     { roleKey: "sales", code: "task.manage", scope: PermissionScope.ASSIGNED },
     { roleKey: "sales", code: "playbook.read", scope: PermissionScope.ALL },

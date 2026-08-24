@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useTransition, type CSSProperties } from "react";
+import { useEffect, useTransition, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -8,10 +8,14 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
+  Banknote,
   BarChart3,
   BellRing,
+  CalendarCheck2,
   CalendarClock,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CirclePause,
@@ -43,20 +47,12 @@ import { deleteProgramAction, saveProgramAction } from "@/modules/students/progr
 import { StudentPaymentDialogClient } from "@/modules/students/student-payment-dialog-client";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { StudentListData } from "@/modules/students/queries";
+import { completeStudentReminderAction } from "@/modules/students/reminder-actions";
+import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
 import { buildStudentPaginationItems } from "@/modules/students/student-pagination";
 
 type StudentRow = StudentListData["students"][number];
 type DashboardTab = "overview" | "list" | "programs";
-
-const visibleStatuses = [
-  "ACTIVE",
-  "DEBT",
-  "SLOT_WAITING",
-  "FROZEN",
-  "STOPPED",
-  "DECLINED",
-  "COMPLETED",
-] as const;
 
 const metricIcons: readonly LucideIcon[] = [
   GraduationCap,
@@ -66,6 +62,7 @@ const metricIcons: readonly LucideIcon[] = [
   CirclePause,
   CircleX,
   UserRoundCheck,
+  Banknote,
 ];
 
 export function StudentList({ data }: { data: StudentListData }) {
@@ -105,22 +102,16 @@ export function StudentList({ data }: { data: StudentListData }) {
     if (key === "payment" && value) {
       params.delete("status");
       params.delete("churn");
+      if (["open", "overdue", "planned", "archive"].includes(value)) {
+        params.delete("from");
+        params.delete("to");
+      }
     }
     if (value) {
       params.set(key, value);
     } else {
       params.delete(key);
     }
-    params.set("tab", "list");
-    navigate(`/students?${params.toString()}`);
-  }
-
-  function handleDebtQuickFilter() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("page");
-    params.delete("status");
-    params.delete("churn");
-    params.set("payment", "open");
     params.set("tab", "list");
     navigate(`/students?${params.toString()}`);
   }
@@ -206,10 +197,21 @@ export function StudentList({ data }: { data: StudentListData }) {
               <TrendingUp />
             </span>
           </div>
-          <strong>{data.clv.averagePaid}</strong>
+          <strong data-insufficient={data.clv.hasEnoughData ? undefined : "true"}>
+            {data.clv.hasEnoughData
+              ? data.clv.averageClv
+              : "Hesablama üçün kifayət qədər məlumat yoxdur"}
+          </strong>
+          {data.clv.hasEnoughData ? (
+            <p className="students-kpi-clv-formula">
+              {data.clv.arpu}/ay <span aria-hidden="true">×</span> {data.clv.averageLifetime} ay
+            </p>
+          ) : null}
           <div className="students-kpi-foot">
-            <span>Toplam {data.clv.totalPaid}</span>
-            <small>{data.clv.paidMonths} ödəniş ayı</small>
+            <span>{data.clv.studentCount} tələbə · son 12 ay</span>
+            <small>
+              {data.clv.hasEnoughData ? data.clv.comparisonLabel : "minimum 5 tələbə"}
+            </small>
           </div>
         </article>
 
@@ -220,13 +222,7 @@ export function StudentList({ data }: { data: StudentListData }) {
               type="button"
               className={`students-kpi students-kpi-${item.tone} students-enter`}
               style={sequenceStyle(index + 1)}
-              onClick={() => {
-                if (index === 1) {
-                  handleDebtQuickFilter();
-                  return;
-                }
-                handleQuickFilter("status", visibleStatuses[index] ?? "");
-              }}
+              onClick={() => handleQuickFilter(item.filter.key, item.filter.value)}
               key={item.label}
               aria-label={`${item.label} siyahısını aç`}
             >
@@ -294,7 +290,7 @@ export function StudentList({ data }: { data: StudentListData }) {
             programs={data.operations.programs}
             teachers={data.operations.teachers}
           />
-          <CompactStudentAudit
+          <StudentAttentionAudit
             data={data}
             onOverdue={() => handleQuickFilter("payment", "overdue")}
             onUnassigned={() => handleQuickFilter("teacher", "unassigned")}
@@ -324,7 +320,7 @@ export function StudentList({ data }: { data: StudentListData }) {
   );
 }
 
-function CompactStudentAudit({
+function StudentAttentionAudit({
   data,
   onOverdue,
   onUnassigned,
@@ -334,33 +330,178 @@ function CompactStudentAudit({
   onUnassigned: () => void;
 }) {
   const operations = data.operations;
+  const reminders = data.todayReminders.items;
+  const dueTodayStudents = operations.dueTodayStudents ?? [];
+  const overdueStudents = operations.overdueStudents ?? [];
+  const todayAttentionCount = operations.dueTodayCount + reminders.length;
 
   return (
-    <section className="students-audit-compact students-enter" aria-labelledby="students-audit-compact-title">
-      <header className="students-audit-compact-head">
+    <section className="students-attention-audit students-enter" aria-labelledby="students-attention-title">
+      <header className="students-attention-heading">
+        <span className="students-attention-heading-icon" aria-hidden="true">
+          <BellRing />
+        </span>
         <div>
-          <BellRing aria-hidden="true" />
-          <h2 id="students-audit-compact-title">Audit qeydləri</h2>
-          <span>{operations.periodLabel}</span>
+          <h2 id="students-attention-title">Ödəniş və xatırlatma nəzarəti</h2>
+          <p>{data.todayReminders.dateLabel} üçün tələbə əməliyyatları</p>
         </div>
-        <span className="students-live-badge"><i aria-hidden="true" /> Canlı</span>
+        <span className="students-attention-meta">
+          <i aria-hidden="true" /> Canlı · {todayAttentionCount + operations.overdueCount} qeyd
+        </span>
       </header>
 
-      <ul className="students-audit-compact-list">
-        <li data-tone="danger">
-          <AlertCircle aria-hidden="true" />
-          <span><strong>1. Ödəniş aksiyası:</strong> <button type="button" onClick={onOverdue}>{operations.overdueCount} gecikmiş</button> və {operations.dueTodayCount} bu gün ödənməli tələbə.</span>
-        </li>
-        <li data-tone="blue">
-          <CalendarClock aria-hidden="true" />
-          <span><strong>2. Ödəniş tarixi çatışmır:</strong> {operations.unscheduledCount} aktiv və ya borclu tələbə üçün növbəti ödəniş tarixi qeyd edilməyib.</span>
-        </li>
-        <li data-tone="amber">
-          <GraduationCap aria-hidden="true" />
-          <span><strong>3. Müəllim təyinatı:</strong> <button type="button" onClick={onUnassigned}>{operations.activeWithoutTeacherCount} aktiv və ya borclu tələbədə müəllim təyin edilməyib</button>.</span>
-        </li>
-      </ul>
+      <div className="students-attention-groups">
+        <StudentAttentionGroup
+          title="Bu gün"
+          description="Ödəniş günü və bugünkü xatırlatmalar"
+          tone="today"
+          count={todayAttentionCount}
+        >
+          {dueTodayStudents.map((student) => (
+            <StudentPaymentAttentionRow student={student} tone="today" key={`payment-${student.id}`} />
+          ))}
+          {reminders.map((reminder) => (
+            <StudentReminderAttentionRow reminder={reminder} key={`reminder-${reminder.id}`} />
+          ))}
+          {todayAttentionCount === 0 ? (
+            <StudentAttentionEmpty>Bu gün üçün ödəniş və xatırlatma yoxdur</StudentAttentionEmpty>
+          ) : null}
+          {operations.dueTodayCount > dueTodayStudents.length ? (
+            <p className="students-attention-list-note">
+              Daha {operations.dueTodayCount - dueTodayStudents.length} ödəniş qeydi siyahıda göstərilmir.
+            </p>
+          ) : null}
+        </StudentAttentionGroup>
+
+        <StudentAttentionGroup
+          title="Gecikənlər"
+          description="Ödəniş tarixi keçmiş tələbələr"
+          tone="overdue"
+          count={operations.overdueCount}
+        >
+          {overdueStudents.map((student) => (
+            <StudentPaymentAttentionRow student={student} tone="overdue" key={student.id} />
+          ))}
+          {operations.overdueCount === 0 ? (
+            <StudentAttentionEmpty>Gecikən tələbə ödənişi yoxdur</StudentAttentionEmpty>
+          ) : null}
+          {operations.overdueCount > overdueStudents.length ? (
+            <p className="students-attention-list-note">
+              Daha {operations.overdueCount - overdueStudents.length} gecikən qeyd siyahıda göstərilmir.
+            </p>
+          ) : null}
+          {operations.overdueCount > 0 ? (
+            <button type="button" className="students-attention-more" onClick={onOverdue}>
+              Bütün gecikənləri aç <ArrowRight aria-hidden="true" />
+            </button>
+          ) : null}
+        </StudentAttentionGroup>
+      </div>
+
+      <footer className="students-attention-footer">
+        <span><CalendarClock aria-hidden="true" /> {operations.unscheduledCount} tələbədə növbəti ödəniş tarixi yoxdur.</span>
+        <button type="button" onClick={onUnassigned}>
+          <GraduationCap aria-hidden="true" /> {operations.activeWithoutTeacherCount} tələbədə müəllim təyin edilməyib.
+        </button>
+      </footer>
     </section>
+  );
+}
+
+function StudentAttentionGroup({
+  title,
+  description,
+  tone,
+  count,
+  children,
+}: {
+  title: string;
+  description: string;
+  tone: "today" | "overdue";
+  count: number;
+  children: ReactNode;
+}) {
+  const Icon = tone === "today" ? CalendarCheck2 : AlertTriangle;
+
+  return (
+    <section className={`students-attention-group is-${tone}`}>
+      <header className="students-attention-group-heading">
+        <span aria-hidden="true"><Icon /></span>
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        <strong>{count}</strong>
+      </header>
+      <div className="students-attention-list">{children}</div>
+    </section>
+  );
+}
+
+function StudentPaymentAttentionRow({
+  student,
+  tone,
+}: {
+  student: StudentListData["operations"]["dueTodayStudents"][number];
+  tone: "today" | "overdue";
+}) {
+  return (
+    <Link
+      href={`/students/${student.id}` as Route}
+      className="students-attention-row"
+      data-kind="payment"
+      aria-label={`${student.name}: ${student.balance} ödəniş, ${student.dueDate}`}
+    >
+      <span className="students-attention-avatar" aria-hidden="true">{getInitials(student.name)}</span>
+      <span className="students-attention-person">
+        <strong>{student.name}</strong>
+        <small>{student.code} · {student.program}</small>
+      </span>
+      <StatusChip tone={tone === "overdue" ? "danger" : "warning"}>{student.balance}</StatusChip>
+      <span className="students-attention-action">
+        <strong><Banknote aria-hidden="true" /> Ödəniş alınmalıdır</strong>
+        <small><CalendarClock aria-hidden="true" /> {tone === "overdue" ? `${student.overdueDays} gün gecikir · ` : ""}{student.dueDate}</small>
+      </span>
+      <ArrowRight className="students-attention-open" aria-hidden="true" />
+    </Link>
+  );
+}
+
+function StudentReminderAttentionRow({
+  reminder,
+}: {
+  reminder: StudentListData["todayReminders"]["items"][number];
+}) {
+  return (
+    <article className="students-attention-row is-reminder" data-kind={reminder.kind.toLowerCase()}>
+      <span className="students-attention-avatar is-reminder" aria-hidden="true"><BellRing /></span>
+      <span className="students-attention-person">
+        <Link href={`/students/${reminder.studentId}` as Route}>{reminder.studentName}</Link>
+        <small>{reminder.studentCode} · {reminder.ownerName}</small>
+      </span>
+      <StatusChip tone="info">{reminder.kindLabel}</StatusChip>
+      <span className="students-attention-action">
+        <strong>{reminder.note}</strong>
+        <small><CalendarClock aria-hidden="true" /> Xatırlatma günü: {reminder.dueDate}</small>
+      </span>
+      {reminder.canComplete ? (
+        <CompleteStudentReminderButton
+          reminderId={reminder.id}
+          studentId={reminder.studentId}
+          action={completeStudentReminderAction}
+          compact
+        />
+      ) : null}
+    </article>
+  );
+}
+
+function StudentAttentionEmpty({ children }: { children: ReactNode }) {
+  return (
+    <div className="students-attention-empty">
+      <CheckCircle2 aria-hidden="true" />
+      <span>{children}</span>
+    </div>
   );
 }
 

@@ -49,6 +49,7 @@ export function StudentDetailDialogClient({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const paymentClosed = student.lifecycleStatusValue === "COMPLETED";
 
   async function recordPayment(formData: FormData) {
     try {
@@ -101,6 +102,32 @@ export function StudentDetailDialogClient({
           </div>
         </div>
 
+        <section className="student-detail-section student-slot-section">
+          <div className="student-detail-section-title">
+            <CalendarDays />
+            <span>Tədris slotları</span>
+          </div>
+          {student.detail.slots.length > 0 ? (
+            <div className="student-slot-list">
+              {student.detail.slots.map((slot) => (
+                <article className="student-slot-item" data-active={slot.isActive} key={slot.id}>
+                  <div>
+                    <strong>{slot.name}</strong>
+                    <span>{slot.schedule}</span>
+                  </div>
+                  <div>
+                    <span>{slot.teacher}</span>
+                    <span>{slot.room}</span>
+                  </div>
+                  <small>{slot.period}</small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="student-detail-empty">Tələbə heç bir slota təyin edilməyib</div>
+          )}
+        </section>
+
         <div className="student-detail-layout">
           <section className="student-detail-section">
             <div className="student-detail-section-title">
@@ -114,18 +141,20 @@ export function StudentDetailDialogClient({
                 <span>Balans</span>
                 <span>Status</span>
               </div>
-              {student.detail.invoices.length > 0 ? (
-                student.detail.invoices.map((invoice) => (
-                  <div className="student-mini-table-row" key={invoice.id}>
-                    <span>{invoice.period}</span>
-                    <span>{invoice.dueDate}</span>
-                    <span>{invoice.balance}</span>
-                    <StatusChip tone={invoice.tone}>{invoice.status}</StatusChip>
-                  </div>
-                ))
-              ) : (
-                <div className="student-detail-empty">Faktura yoxdur</div>
-              )}
+              <div className="student-mini-table-body">
+                {student.detail.invoices.length > 0 ? (
+                  student.detail.invoices.map((invoice) => (
+                    <div className="student-mini-table-row" key={invoice.id}>
+                      <span>{invoice.period}</span>
+                      <span>{invoice.dueDate}</span>
+                      <span>{invoice.balance}</span>
+                      <StatusChip tone={invoice.tone}>{invoice.status}</StatusChip>
+                    </div>
+                  ))
+                ) : (
+                  <div className="student-detail-empty">Faktura yoxdur</div>
+                )}
+              </div>
             </div>
           </section>
 
@@ -190,7 +219,9 @@ export function StudentDetailDialogClient({
               </label>
 
               <p className="payment-policy-note">
-                Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmır.
+                {paymentClosed
+                  ? "Tədris tamamlanıb: maliyyə öhdəliyi bağlıdır və yeni ödəniş tələb olunmur."
+                  : "Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmır."}
               </p>
 
               <DialogFooter>
@@ -199,7 +230,7 @@ export function StudentDetailDialogClient({
                     Ləğv et
                   </Button>
                 </DialogClose>
-                <Button type="submit" disabled={!canRecordPayment}>
+                <Button type="submit" disabled={!canRecordPayment || paymentClosed}>
                   <Banknote data-icon="inline-start" />
                   Ödənişi qeyd et
                 </Button>
