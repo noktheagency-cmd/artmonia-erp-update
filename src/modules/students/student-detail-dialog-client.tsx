@@ -138,6 +138,7 @@ export function StudentDetailDialogClient({
               <div className="student-mini-table-head">
                 <span>Ay</span>
                 <span>Son tarix</span>
+                <span>Məbləğ</span>
                 <span>Balans</span>
                 <span>Status</span>
               </div>
@@ -147,6 +148,7 @@ export function StudentDetailDialogClient({
                     <div className="student-mini-table-row" key={invoice.id}>
                       <span>{invoice.period}</span>
                       <span>{invoice.dueDate}</span>
+                      <span>{invoice.amount}</span>
                       <span>{invoice.balance}</span>
                       <StatusChip tone={invoice.tone}>{invoice.status}</StatusChip>
                     </div>
@@ -253,7 +255,7 @@ export function StudentDetailDialogClient({
                     <span>
                       {payment.paidAt} - {payment.scheduleType} - {payment.method} - {payment.createdBy}
                     </span>
-                    <small>Növbəti ödəniş: {payment.nextPaymentDate} · {payment.note}</small>
+                    <small>Cari billing tarixi: {payment.nextPaymentDate} · {payment.note}</small>
                   </div>
                 ))
               ) : (

@@ -213,11 +213,15 @@
     z-index: auto;
   }
 
-  .global-search {
+  .erp-command-header {
     z-index: 980;
     width: 100%;
     max-width: 680px;
     margin-bottom: 16px;
+  }
+
+  .global-search {
+    width: auto;
   }
 
   .global-search.is-open {
@@ -585,7 +589,7 @@
     padding-top: calc(74px + env(safe-area-inset-top));
   }
 
-  .global-search {
+  .erp-command-header {
     top: calc(70px + env(safe-area-inset-top));
   }
 

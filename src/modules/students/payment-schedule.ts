@@ -1,33 +1,30 @@
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const AZ_DATE_PATTERN = /^(\d{2})[./](\d{2})[./](\d{4})$/;
 
-/**
- * Returns the next monthly payment date anchored to an active slot assignment.
- * Students without an active slot do not have a next-payment schedule.
- */
+/** Returns a monthly due date anchored only to the confirmed first lesson. */
 export function resolveNextPaymentAt({
-  slotStartedAt,
+  billingAnchorDate,
   paymentMonth,
 }: {
-  slotStartedAt: Date | null;
+  billingAnchorDate: Date | null;
   paymentMonth: Date;
 }) {
-  if (!slotStartedAt) {
+  if (!billingAnchorDate) {
     return null;
   }
 
-  const joinedMonthIndex = monthIndex(slotStartedAt);
+  const joinedMonthIndex = monthIndex(billingAnchorDate);
   const paymentMonthIndex = monthIndex(paymentMonth);
   const targetMonthIndex = Math.max(joinedMonthIndex + 1, paymentMonthIndex + 1);
 
-  return utcDateInMonth(targetMonthIndex, slotStartedAt.getUTCDate());
+  return utcDateInMonth(targetMonthIndex, billingAnchorDate.getUTCDate());
 }
 
 export function resolveNextPaymentDateInput({
-  slotStartedAt,
+  billingAnchorDate,
   paidAt,
 }: {
-  slotStartedAt: string | null | undefined;
+  billingAnchorDate: string | null | undefined;
   paidAt: string;
 }) {
   const paidDate = parseDateInput(paidAt);
@@ -36,9 +33,9 @@ export function resolveNextPaymentDateInput({
     return "";
   }
 
-  const startedDate = slotStartedAt ? parseDateInput(slotStartedAt) : null;
+  const anchorDate = billingAnchorDate ? parseDateInput(billingAnchorDate) : null;
   const nextPaymentAt = resolveNextPaymentAt({
-    slotStartedAt: startedDate,
+    billingAnchorDate: anchorDate,
     paymentMonth: new Date(Date.UTC(paidDate.getUTCFullYear(), paidDate.getUTCMonth(), 1)),
   });
 

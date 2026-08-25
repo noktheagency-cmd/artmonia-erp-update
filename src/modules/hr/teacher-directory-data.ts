@@ -178,11 +178,8 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
       where cs.teacher_id = t.id
         and ssa.valid_to is null
         and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-        and s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus",
-          'SLOT_WAITING'::"erp"."StudentLifecycleStatus"
-        )
+        and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+        and s.is_test_data = false
     ) active_counts on true
     left join lateral (
       select
@@ -245,11 +242,8 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
         where cs.teacher_id = t.id
           and ssa.valid_to is null
           and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-          and s.lifecycle_status in (
-            'ACTIVE'::"erp"."StudentLifecycleStatus",
-            'DEBT'::"erp"."StudentLifecycleStatus",
-            'SLOT_WAITING'::"erp"."StudentLifecycleStatus"
-          )
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and s.is_test_data = false
         order by s.id, e.start_date desc, e.created_at desc
       ) student_rows
     ) students on true
@@ -285,6 +279,7 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
         join erp.contacts c on c.id = s.contact_id
         join erp.programs p on p.id = e.program_id
         where ar.teacher_id = t.id
+          and s.is_test_data = false
         order by ss.session_date desc, ss.start_time desc
         limit 18
       ) lesson_rows
@@ -317,7 +312,8 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
         join erp.students s on s.id = e.student_id
         join erp.contacts c on c.id = s.contact_id
         join erp.programs p on p.id = e.program_id
-        where h.new_teacher_id = t.id or h.old_teacher_id = t.id
+        where (h.new_teacher_id = t.id or h.old_teacher_id = t.id)
+          and s.is_test_data = false
         order by h.created_at desc
         limit 12
       ) assignment_rows
@@ -419,8 +415,6 @@ function formatStudentStatus(value: string) {
       return "Slot gözləyir";
     case "ACTIVE":
       return "Aktiv";
-    case "DEBT":
-      return "Borc";
     case "FROZEN":
       return "Dondurulub";
     default:

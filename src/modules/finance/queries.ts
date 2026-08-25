@@ -64,6 +64,7 @@ export type FinanceData = {
     net: string;
     grossProfit: string;
     operatingProfit: string;
+    netProfit: string;
     netCash: string;
     directCost: string;
     opex: string;
@@ -84,6 +85,21 @@ export type FinanceData = {
     studentFuture: { count: number; amount: string; amountValue: number };
     workshop: { count: number; amount: string; amountValue: number };
     masterclass: { count: number; amount: string; amountValue: number };
+  };
+  educationCollectionReconciliation: {
+    paidEducationTotal: string;
+    legacyActiveOnlyTotal: string;
+    difference: string;
+    rows: Array<{
+      id: string;
+      studentName: string;
+      studentCode: string;
+      amount: string;
+      paidAt: string;
+      paymentMonth: string;
+      lifecycleStatus: string;
+      status: string;
+    }>;
   };
   kpis: Array<{
     label: string;
@@ -249,6 +265,7 @@ export type FinanceData = {
 type FinanceSummaryRow = {
   income: unknown;
   studentIncome: unknown;
+  activeStudentIncome: unknown;
   workshopIncome: unknown;
   paymentCount: unknown;
   expense: unknown;
@@ -321,6 +338,7 @@ type PaymentRow = {
   studentId: string;
   studentName: string;
   studentCode: string;
+  lifecycleStatus: string;
   payerName: string | null;
   amount: unknown;
   paidAt: string;
@@ -485,16 +503,16 @@ export async function getFinanceData(
       : Prisma.empty;
   const studentReceivableCtes = Prisma.sql`
     current_enrollment as (
-      select distinct on (e.student_id)
+      select
         e.student_id,
-        e.monthly_fee,
-        p.name as program_name,
-        t.full_name as teacher_name
+        sum(e.monthly_fee) as monthly_fee,
+        string_agg(distinct p.name, ', ' order by p.name) as program_name,
+        string_agg(distinct t.full_name, ', ' order by t.full_name) filter (where t.full_name is not null) as teacher_name
       from erp.enrollments e
       join erp.programs p on p.id = e.program_id
       left join erp.teachers t on t.id = e.teacher_id
       where e.status in ('ACTIVE'::"erp"."EnrollmentStatus", 'PAUSED'::"erp"."EnrollmentStatus")
-      order by e.student_id, e.start_date desc, e.created_at desc
+      group by e.student_id
     ),
     student_receivable_base as (
       select
@@ -504,36 +522,31 @@ export async function getFinanceData(
         c.phone_display as phone,
         ce.program_name,
         ce.teacher_name,
-        greatest(
-          coalesce((
-            select sum(i.balance_due)
-            from erp.invoices i
-            where i.student_id = s.id
-              and i.status <> 'VOID'::"erp"."InvoiceStatus"
-              and i.balance_due > 0
-              and i.period_month >= ${activePeriodStart}::date
-              and i.period_month < ${activePeriodEnd}::date
-          ), 0),
-          greatest(coalesce(ce.monthly_fee, 0) - coalesce((
-            select sum(p.amount)
-            from erp.payments p
-            where p.student_id = s.id
-              and p.paid_at >= ${activePeriodStart}
-              and p.paid_at < ${activePeriodEnd}
-          ), 0), 0)
-        ) as balance_due,
+        coalesce((
+          select sum(i.balance_due)
+          from erp.invoices i
+          where i.student_id = s.id
+            and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            and i.balance_due > 0
+        ), 0) as balance_due,
         (
-          select p.next_payment_at
-          from erp.payments p
-          where p.student_id = s.id
-            and p.next_payment_at is not null
-          order by p.paid_at desc, p.created_at desc
+          select cycle.due_date
+          from erp.student_billing_cycles cycle
+          where cycle.student_id = s.id
+            and cycle.status in (
+              'DRAFT'::"erp"."InvoiceStatus",
+              'OPEN'::"erp"."InvoiceStatus",
+              'PARTIAL'::"erp"."InvoiceStatus",
+              'OVERDUE'::"erp"."InvoiceStatus"
+            )
+          order by cycle.due_date asc, cycle.created_at asc
           limit 1
         ) as next_due_date
       from erp.students s
       join erp.contacts c on c.id = s.contact_id
       left join current_enrollment ce on ce.student_id = s.id
-      where s.lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+      where true
+        and s.is_test_data = false
         ${studentSourceSql}
         ${searchSql.debts}
     ),
@@ -585,6 +598,7 @@ export async function getFinanceData(
           join erp.contacts c on c.id = s.contact_id
           where p.paid_at >= ${fromDate}
             and p.paid_at < ${endDateExclusive}
+            and s.is_test_data = false
             ${studentSourceSql}
             ${searchSql.payments}
         ), 0) + coalesce((
@@ -605,9 +619,22 @@ export async function getFinanceData(
           join erp.contacts c on c.id = s.contact_id
           where p.paid_at >= ${fromDate}
             and p.paid_at < ${endDateExclusive}
+            and s.is_test_data = false
             ${studentSourceSql}
             ${searchSql.payments}
         ), 0) as "studentIncome",
+        coalesce((
+          select sum(p.amount)
+          from erp.payments p
+          join erp.students s on s.id = p.student_id
+          join erp.contacts c on c.id = s.contact_id
+          where p.paid_at >= ${fromDate}
+            and p.paid_at < ${endDateExclusive}
+            and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+            and s.is_test_data = false
+            ${studentSourceSql}
+            ${searchSql.payments}
+        ), 0) as "activeStudentIncome",
         coalesce((
           select sum(wp.amount)
           from erp.workshop_payments wp
@@ -626,6 +653,7 @@ export async function getFinanceData(
           join erp.contacts c on c.id = s.contact_id
           where p.paid_at >= ${fromDate}
             and p.paid_at < ${endDateExclusive}
+            and s.is_test_data = false
             ${studentSourceSql}
             ${searchSql.payments}
         ), 0) + coalesce((
@@ -847,6 +875,7 @@ export async function getFinanceData(
         limit 1
       ) ae on true
       where s.lifecycle_status <> 'DECLINED'::"erp"."StudentLifecycleStatus"
+        and s.is_test_data = false
       order by c.full_name asc, s.code asc
       limit 140
     `),
@@ -923,14 +952,15 @@ export async function getFinanceData(
         s.id::text as "studentId",
         c.full_name as "studentName",
         s.code as "studentCode",
+        s.lifecycle_status::text as "lifecycleStatus",
         p.payer_name as "payerName",
         p.amount,
         to_char(p.paid_at, 'DD.MM.YYYY') as "paidAt",
         to_char(p.paid_at, 'YYYY-MM-DD') as "dateKey",
         to_char(p.paid_at, 'YYYY-MM-DD') as "paidDateValue",
         case
-          when p.schedule_type = 'ONE_TIME'::"erp"."PaymentScheduleType" then 'Tam ödənilib'
-          else coalesce(to_char(p.next_payment_at, 'DD.MM.YYYY'), '—')
+          when p.schedule_type = 'ONE_TIME'::"erp"."PaymentScheduleType" then 'Birdəfəlik'
+          else to_char(p.payment_month, 'MM.YYYY')
         end as "paymentMonth",
         p.schedule_type::text as "scheduleType",
         p.method::text as "method",
@@ -943,6 +973,7 @@ export async function getFinanceData(
       join erp.contacts c on c.id = s.contact_id
       where p.paid_at >= ${fromDate}
         and p.paid_at < ${endDateExclusive}
+        and s.is_test_data = false
         ${studentSourceSql}
         ${searchSql.payments}
       order by p.paid_at desc, p.created_at desc
@@ -1177,7 +1208,7 @@ export async function getFinanceData(
     toNumber(receivableSummary.studentOutstandingCount) +
     toNumber(receivableSummary.workshopCount) +
     toNumber(receivableSummary.masterclassCount);
-  const { grossProfit, operatingProfit, netCash } = calculateFinanceStatement({
+  const { grossProfit, operatingProfit, netProfit, netCash } = calculateFinanceStatement({
     operatingIncome: income,
     directCost,
     opex,
@@ -1187,7 +1218,7 @@ export async function getFinanceData(
     legacyLiability,
   });
   const grossMargin = income > 0 ? (grossProfit / income) * 100 : 0;
-  const net = operatingProfit;
+  const net = netProfit;
   const expenses = expenseRows.map(mapExpenseRow);
   const payrollItems = payrollRows.map(mapExpenseRow);
   const categoryLabel =
@@ -1205,6 +1236,8 @@ export async function getFinanceData(
     normalizedFilters.from !== defaultFrom || normalizedFilters.to !== defaultTo
       ? `${formatDisplayDateInput(normalizedFilters.from) || "..."} - ${formatDisplayDateInput(normalizedFilters.to) || "..."}`
       : "Cari ay";
+  const activeStudentIncome = toNumber(summary.activeStudentIncome);
+  const educationCollectionDifference = studentIncome - activeStudentIncome;
 
   return {
     accessMode: "FULL",
@@ -1241,6 +1274,7 @@ export async function getFinanceData(
       net: formatAmount(net),
       grossProfit: formatAmount(grossProfit),
       operatingProfit: formatAmount(operatingProfit),
+      netProfit: formatAmount(netProfit),
       netCash: formatAmount(netCash),
       directCost: formatAmount(directCost),
       opex: formatAmount(opex),
@@ -1282,6 +1316,23 @@ export async function getFinanceData(
         amountValue: masterclassReceivableAmount,
       },
     },
+    educationCollectionReconciliation: {
+      paidEducationTotal: formatAmount(studentIncome),
+      legacyActiveOnlyTotal: formatAmount(activeStudentIncome),
+      difference: formatAmount(educationCollectionDifference),
+      rows: paymentRows
+        .filter((payment) => payment.lifecycleStatus !== "ACTIVE")
+        .map((payment) => ({
+          id: payment.id,
+          studentName: payment.studentName,
+          studentCode: payment.studentCode,
+          amount: formatAmount(payment.amount),
+          paidAt: payment.paidAt,
+          paymentMonth: payment.paymentMonth,
+          lifecycleStatus: payment.lifecycleStatus,
+          status: "Ödənilib",
+        })),
+    },
     kpis: [
       {
         label: "Revenue",
@@ -1306,6 +1357,12 @@ export async function getFinanceData(
         value: formatAmount(operatingProfit),
         helper: `OPEX ${formatAmount(opex)} · Event expense ${formatAmount(eventExpense)}`,
         tone: expense > income ? "danger" : "neutral",
+      },
+      {
+        label: "Net Profit",
+        value: formatAmount(netProfit),
+        helper: "Operating Profit − vergi, faiz və digər qeyri-əməliyyat maddələri",
+        tone: netProfit >= 0 ? "success" : "danger",
       },
       {
         label: "Net Cash Flow",
@@ -1774,7 +1831,7 @@ async function getLimitedFinanceData({
       },
     }),
     prisma.student.findMany({
-      where: { lifecycleStatus: { in: ["SLOT_WAITING", "ACTIVE", "DEBT"] } },
+      where: { lifecycleStatus: { in: ["SLOT_WAITING", "ACTIVE"] } },
       orderBy: { contact: { fullName: "asc" } },
       take: 200,
       select: {
@@ -1819,7 +1876,7 @@ async function getLimitedFinanceData({
     summary: {
       income: emptyAmount, studentIncome: emptyAmount, eventIncome: emptyAmount,
       expense: emptyAmount, operatingExpense: emptyAmount, coreExpense: emptyAmount, eventExpense: emptyAmount,
-      net: emptyAmount, grossProfit: emptyAmount, operatingProfit: emptyAmount,
+      net: emptyAmount, grossProfit: emptyAmount, operatingProfit: emptyAmount, netProfit: emptyAmount,
       netCash: emptyAmount, directCost: emptyAmount, opex: emptyAmount, capex: emptyAmount,
       financingIn: emptyAmount, financingOut: emptyAmount, legacyLiability: emptyAmount,
       payroll: emptyAmount, debt: emptyAmount, paymentCount: "0", expenseCount: "0", debtors: "0",
@@ -1831,6 +1888,12 @@ async function getLimitedFinanceData({
       studentFuture: { count: 0, amount: emptyAmount, amountValue: 0 },
       workshop: { count: 0, amount: emptyAmount, amountValue: 0 },
       masterclass: { count: 0, amount: emptyAmount, amountValue: 0 },
+    },
+    educationCollectionReconciliation: {
+      paidEducationTotal: emptyAmount,
+      legacyActiveOnlyTotal: emptyAmount,
+      difference: emptyAmount,
+      rows: [],
     },
     kpis: [],
     expenseBreakdown: [],

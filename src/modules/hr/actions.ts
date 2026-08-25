@@ -287,7 +287,7 @@ async function deleteEmployeeActionImpl(formData: FormData) {
             data: { managerId: null },
           }),
           tx.student.updateMany({
-            where: { managerId: userId, lifecycleStatus: { in: ["SLOT_WAITING", "ACTIVE", "DEBT"] } },
+            where: { managerId: userId, lifecycleStatus: { in: ["SLOT_WAITING", "ACTIVE"] } },
             data: { managerId: null },
           }),
           tx.task.updateMany({

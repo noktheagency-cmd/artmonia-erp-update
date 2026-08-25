@@ -1,5 +1,10 @@
 export const STUDENT_REMINDER_ENTITY_TYPE = "student";
 
+export const STUDENT_REMINDER_TASK_TYPES = [
+  "student_payment_reminder",
+  "student_general_reminder",
+] as const;
+
 export const studentReminderKinds = ["PAYMENT", "GENERAL"] as const;
 
 export type StudentReminderKind = (typeof studentReminderKinds)[number];
@@ -10,11 +15,11 @@ export const studentReminderMeta: Record<
 > = {
   PAYMENT: {
     label: "Ödəniş xatırlatması",
-    taskType: "student_payment_reminder",
+    taskType: STUDENT_REMINDER_TASK_TYPES[0],
   },
   GENERAL: {
     label: "Ümumi bildiriş",
-    taskType: "student_general_reminder",
+    taskType: STUDENT_REMINDER_TASK_TYPES[1],
   },
 };
 

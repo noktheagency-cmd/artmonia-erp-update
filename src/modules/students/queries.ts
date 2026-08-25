@@ -1,5 +1,6 @@
 import {
   AppRole,
+  EnrollmentStatus,
   InvoiceStatus,
   Prisma,
   StudentLifecycleStatus,
@@ -24,8 +25,6 @@ import {
   STUDENT_LIST_PAGE_SIZE,
 } from "@/modules/students/student-pagination";
 import {
-  isStudentDebtDue,
-  resolveStudentLifecycleStatus,
   resolveStudentPaymentStatus,
 } from "@/modules/students/student-debt-status";
 import {
@@ -40,7 +39,7 @@ import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 
 type SummaryTone = "blue" | "coral" | "yellow" | "mint";
 type StudentTone = "success" | "warning" | "danger" | "neutral" | "info";
-type StudentPaymentFilter = "all" | "paid" | "open" | "overdue" | "planned" | "archive";
+type StudentPaymentFilter = "all" | "paid" | "open" | "overdue" | "archive";
 type FilterOption = { value: string; label: string };
 
 export type StudentListFilters = {
@@ -92,8 +91,6 @@ export type StudentListData = {
     actionableAmount: string;
     overdueCount: number;
     overdueAmount: string;
-    futureCount: number;
-    futureAmount: string;
     unscheduledCount: number;
     dueTodayCount: number;
     dueTodayStudents: StudentPaymentAttentionItem[];
@@ -102,8 +99,8 @@ export type StudentListData = {
     expectedAmount: string;
     collectedAmount: string;
     collectionRate: number;
-    programs: Array<{ name: string; count: number; percentage: number }>;
-    teachers: Array<{ name: string; count: number; percentage: number }>;
+    programs: Array<{ name: string; count: number; percentage: number; capacity: number | null; utilization: number | null }>;
+    teachers: Array<{ name: string; count: number; percentage: number; capacity: number | null; utilization: number | null }>;
   };
   permissions: {
     canCreateStudent: boolean;
@@ -329,8 +326,6 @@ type StudentOperationsRawRow = {
   actionableAmount: unknown;
   overdueCount: unknown;
   overdueAmount: unknown;
-  futureCount: unknown;
-  futureAmount: unknown;
   unscheduledCount: unknown;
   dueTodayCount: unknown;
   dueTodayStudents: unknown;
@@ -347,7 +342,6 @@ const lifecycleMeta: Record<
   { label: string; tone: StudentTone }
 > = {
   [StudentLifecycleStatus.ACTIVE]: { label: "Aktiv", tone: "success" },
-  [StudentLifecycleStatus.DEBT]: { label: "Borclu", tone: "danger" },
   [StudentLifecycleStatus.SLOT_WAITING]: {
     label: "Slot gözləyir",
     tone: "warning",
@@ -366,11 +360,6 @@ const summaryMeta: Record<
     label: "Aktiv tələbələr",
     tone: "blue",
     delta: "Təhsil davam edir",
-  },
-  [StudentLifecycleStatus.DEBT]: {
-    label: "Borclu tələbələr",
-    tone: "coral",
-    delta: "Ödəniş izləməsi",
   },
   [StudentLifecycleStatus.SLOT_WAITING]: {
     label: "Slot gözləyir",
@@ -402,9 +391,8 @@ const summaryMeta: Record<
 const paymentOptions: Array<FilterOption & { value: StudentPaymentFilter }> = [
   { value: "all", label: "Ödəniş" },
   { value: "paid", label: "Ödənilib" },
-  { value: "open", label: "Bütün borclular" },
+  { value: "open", label: "Mövcud borclular" },
   { value: "overdue", label: "Gecikmiş ödəniş" },
-  { value: "planned", label: "Planlı qalıq" },
   { value: "archive", label: "Arxiv borcu" },
 ];
 
@@ -430,27 +418,29 @@ export async function getStudentListData(
   const activeTab = normalizeStudentTab(input.tab);
   let page = activeTab === "list" ? normalizeStudentPage(input.page) : 1;
   const today = startOfToday();
-  const debtListMode = statusFilter === StudentLifecycleStatus.DEBT
-    || paymentFilter === "open"
+  const debtListMode = paymentFilter === "open"
     || paymentFilter === "overdue"
-    || paymentFilter === "planned"
     || paymentFilter === "archive";
   const hasExplicitDateRange = Boolean(input.from?.trim() || input.to?.trim());
-  const defaultDateFrom = new Date(today);
-  defaultDateFrom.setUTCMonth(defaultDateFrom.getUTCMonth() - 1);
+  const statusListMode = Boolean(statusFilter) || churnOnly;
+  const defaultDateFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const dateFromFilter = normalizeDateFilter(
     debtListMode
       ? undefined
       : hasExplicitDateRange
         ? input.from
-        : defaultDateFrom.toISOString().slice(0, 10)
+        : statusListMode
+          ? undefined
+          : defaultDateFrom.toISOString().slice(0, 10)
   );
   const dateToFilter = normalizeDateFilter(
     debtListMode
       ? undefined
       : hasExplicitDateRange
         ? input.to
-        : today.toISOString().slice(0, 10)
+        : statusListMode
+          ? undefined
+          : today.toISOString().slice(0, 10)
   );
   const [initialRawData, todayReminders] = await Promise.all([
     readStudentListRawData({
@@ -499,15 +489,8 @@ export async function getStudentListData(
       balance,
     ])
   );
-  const activeDebtPool =
-    (summaryCounts.get(StudentLifecycleStatus.ACTIVE) ?? 0) +
-    (summaryCounts.get(StudentLifecycleStatus.DEBT) ?? 0);
-  summaryCounts.set(StudentLifecycleStatus.DEBT, options.debtCount);
-  summaryCounts.set(StudentLifecycleStatus.ACTIVE, activeDebtPool);
-  summaryBalances.set(StudentLifecycleStatus.DEBT, options.debtBalance);
   const visibleStatuses = [
     StudentLifecycleStatus.ACTIVE,
-    StudentLifecycleStatus.DEBT,
     StudentLifecycleStatus.SLOT_WAITING,
     StudentLifecycleStatus.FROZEN,
     StudentLifecycleStatus.STOPPED,
@@ -627,26 +610,30 @@ export async function getStudentListData(
     statusSummary: [
       ...visibleStatuses.map((status) => {
       const outstandingBalance = formatAmount(summaryBalances.get(status) ?? 0);
-      const isOutstandingStatus =
-        status === StudentLifecycleStatus.DEBT ||
-        status === StudentLifecycleStatus.SLOT_WAITING;
+        const isOutstandingStatus = status === StudentLifecycleStatus.SLOT_WAITING;
 
       return {
         label: summaryMeta[status].label,
         value: formatCount(summaryCounts.get(status) ?? 0),
         delta:
-          status === StudentLifecycleStatus.DEBT
-            ? `${formatCount(options.overdueDebtCount)} vaxtı çatmış · ${formatCount(options.plannedDebtCount)} planlı`
-            : status === StudentLifecycleStatus.SLOT_WAITING
+          status === StudentLifecycleStatus.SLOT_WAITING
               ? `Qalan ödəniş: ${outstandingBalance}`
               : summaryMeta[status].delta,
         amount: isOutstandingStatus ? outstandingBalance : undefined,
         tone: summaryMeta[status].tone,
-        filter: status === StudentLifecycleStatus.DEBT
-          ? { key: "payment" as const, value: "open" }
-          : { key: "status" as const, value: status },
+        filter: { key: "status" as const, value: status },
       };
       }),
+      {
+        label: "Borclu tələbələr",
+        value: formatCount(options.debtCount),
+        delta: options.unscheduledDebtCount > 0
+          ? `${formatCount(options.overdueDebtCount)} gecikmiş · ${formatCount(options.unscheduledDebtCount)} tarixsiz`
+          : `${formatCount(options.overdueDebtCount)} gecikmiş`,
+        amount: formatAmount(options.debtBalance),
+        tone: "coral" as const,
+        filter: { key: "payment" as const, value: "open" },
+      },
       {
         label: "Arxiv borcu",
         value: formatCount(options.archiveDebtCount),
@@ -675,14 +662,9 @@ export async function getStudentListData(
       const currentMonthPaid = toNumber(student.currentMonthPaid);
       const paidMonths = toNumber(student.paidMonths);
       const nextPaymentAt = student.nextDueDate ? new Date(student.nextDueDate) : null;
-      const debtDue = isStudentDebtDue({ balance, nextPaymentAt, today });
-      const effectiveLifecycleStatus = resolveStudentLifecycleStatus({
-        lifecycleStatus: student.lifecycleStatus,
-        debtDue,
-      }) as StudentLifecycleStatus;
-      const lifecycleStatus = lifecycleMeta[effectiveLifecycleStatus];
+      const lifecycleStatus = lifecycleMeta[student.lifecycleStatus];
       const paymentStatus = student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
-        ? { label: "Öhdəlik yoxdur", tone: "success" as const }
+        ? { code: "PAID" as const, label: "Öhdəlik yoxdur", tone: "success" as const }
         : resolveStudentPaymentStatus({ balance, nextPaymentAt, today });
       const overdueDays = getOverdueDays(
         nextPaymentAt ?? undefined,
@@ -746,8 +728,8 @@ export async function getStudentListData(
             paymentMonth: formatMonthInput(payment.paymentMonth),
             nextPaymentDate: payment.scheduleType === "ONE_TIME"
               ? "Tam ödənilib"
-              : payment.nextPaymentAt
-                ? formatShortDate(payment.nextPaymentAt)
+              : student.nextDueDate
+                ? formatShortDate(student.nextDueDate)
                 : "—",
             scheduleType: getStudentPaymentScheduleTypeLabel(payment.scheduleType),
             method: getStudentPaymentMethodLabel(payment.method),
@@ -821,6 +803,7 @@ type StudentDetailRawRow = StudentListRawRow & {
   discountType: string | null;
   lessonsPerMonth: number | null;
   firstLessonAt: Date | string | null;
+  billingAnchorDate: Date | string | null;
   mobileAccountId: string | null;
   mobileLoginEmail: string | null;
   mobileAccountStatus: "INVITED" | "ACTIVE" | "DISABLED" | null;
@@ -1128,9 +1111,9 @@ async function getStudentRows(
     from paged_students ps
     left join lateral (
       select
-        e.monthly_fee,
-        p.name as program_name,
-        t.full_name as teacher_name
+        sum(e.monthly_fee) as monthly_fee,
+        string_agg(distinct p.name, ', ' order by p.name) as program_name,
+        string_agg(distinct t.full_name, ', ' order by t.full_name) filter (where t.full_name is not null) as teacher_name
       from erp.enrollments e
       join erp.programs p on p.id = e.program_id
       left join erp.teachers t on t.id = e.teacher_id
@@ -1139,18 +1122,11 @@ async function getStudentRows(
           'ACTIVE'::"erp"."EnrollmentStatus",
           'PAUSED'::"erp"."EnrollmentStatus"
         )
-      order by e.start_date desc, e.created_at desc
-      limit 1
     ) ae on true
     left join lateral (
       select
         ${buildStudentOutstandingBalanceValueSql({
           studentId: Prisma.sql`ps.id`,
-          billingEligible: Prisma.sql`(
-            ps."lifecycleStatus" in ('ACTIVE', 'DEBT')
-            and ps."billingPaused" = false
-          )`,
-          today: input.today,
         })} as balance_due,
         ${buildStudentEffectiveDueDateSql(Prisma.sql`ps.id`)} as next_due_date,
         coalesce((
@@ -1256,7 +1232,7 @@ type StudentCreateOptionRows = {
   debtCount: number;
   debtBalance: number;
   overdueDebtCount: number;
-  plannedDebtCount: number;
+  unscheduledDebtCount: number;
   archiveDebtCount: number;
   archiveDebtBalance: number;
   programs: Array<{
@@ -1281,7 +1257,7 @@ type StudentCreateOptionsRawRow = {
   debtCount: unknown;
   debtBalance: unknown;
   overdueDebtCount: unknown;
-  plannedDebtCount: unknown;
+  unscheduledDebtCount: unknown;
   archiveDebtCount: unknown;
   archiveDebtBalance: unknown;
   programs: unknown;
@@ -1295,7 +1271,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v14"],
+  ["student-list-data-v16"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -1530,14 +1506,6 @@ async function getStudentPaymentSummary(
       select
         ${buildStudentOutstandingBalanceValueSql({
           studentId: Prisma.sql`s.id`,
-          billingEligible: Prisma.sql`(
-            s.lifecycle_status in (
-              'ACTIVE'::"erp"."StudentLifecycleStatus",
-              'DEBT'::"erp"."StudentLifecycleStatus"
-            )
-            and s.billing_paused = false
-          )`,
-          today: input.today,
         })} as balance_due,
         ${buildStudentEffectiveDueDateSql()} as next_due_date
     ) balance on true
@@ -1557,13 +1525,13 @@ async function getStudentOperationsOverview(
 ): Promise<StudentListData["operations"]> {
   const [row] = await prisma.$queryRaw<StudentOperationsRawRow[]>(Prisma.sql`
     with current_enrollment as (
-      select distinct on (e.student_id)
+      select
         e.student_id,
-        e.monthly_fee,
-        e.program_id,
-        e.teacher_id,
-        p.name as program_name,
-        t.full_name as teacher_name
+        sum(e.monthly_fee) as monthly_fee,
+        min(e.program_id::text)::uuid as program_id,
+        case when count(*) filter (where e.teacher_id is null) > 0 then null else min(e.teacher_id::text)::uuid end as teacher_id,
+        string_agg(distinct p.name, ', ' order by p.name) as program_name,
+        string_agg(distinct t.full_name, ', ' order by t.full_name) filter (where t.full_name is not null) as teacher_name
       from erp.enrollments e
       join erp.programs p on p.id = e.program_id
       left join erp.teachers t on t.id = e.teacher_id
@@ -1571,7 +1539,7 @@ async function getStudentOperationsOverview(
         'ACTIVE'::"erp"."EnrollmentStatus",
         'PAUSED'::"erp"."EnrollmentStatus"
       )
-      order by e.student_id, e.start_date desc, e.created_at desc
+      group by e.student_id
     ),
     student_month as (
       select
@@ -1598,78 +1566,55 @@ async function getStudentOperationsOverview(
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
         ), 0) as invoice_balance,
-        ${buildStudentMissingMonthlyBalanceSql({
-          studentId: Prisma.sql`s.id`,
-          billingEligible: Prisma.sql`(
-            s.lifecycle_status in (
-              'ACTIVE'::"erp"."StudentLifecycleStatus",
-              'DEBT'::"erp"."StudentLifecycleStatus"
-            )
-            and s.billing_paused = false
-          )`,
-          today,
-        })} as missing_month_balance,
         ${buildStudentEffectiveDueDateSql()} as next_due_date
       from erp.students s
       join erp.contacts c on c.id = s.contact_id
       left join current_enrollment ce on ce.student_id = s.id
+      where s.is_test_data = false
     ),
     student_finance as (
       select
         sm.*,
         greatest(
-          sm.invoice_balance + sm.missing_month_balance,
-          greatest(coalesce(sm.monthly_fee, 0) - sm.current_month_paid, 0)
+          sm.invoice_balance,
+          0
         ) as balance_due
       from student_month sm
     )
     select
-      count(*) filter (where lifecycle_status in (
-        'ACTIVE'::"erp"."StudentLifecycleStatus",
-        'DEBT'::"erp"."StudentLifecycleStatus"
-      ))::int as "activeCount",
+      count(*) filter (where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus")::int as "activeCount",
       count(*) filter (where lifecycle_status = 'SLOT_WAITING'::"erp"."StudentLifecycleStatus")::int as "slotWaitingCount",
       count(*) filter (where lifecycle_status in (
         'FROZEN'::"erp"."StudentLifecycleStatus",
         'STOPPED'::"erp"."StudentLifecycleStatus"
       ))::int as "frozenOrStoppedCount",
       count(*) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and balance_due > 0
           and (next_due_date is null or next_due_date <= ${today}::date)
       )::int as "actionableCount",
       coalesce(sum(balance_due) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and balance_due > 0
           and (next_due_date is null or next_due_date <= ${today}::date)
       ), 0) as "actionableAmount",
       count(*) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and balance_due > 0
           and next_due_date < ${today}::date
       )::int as "overdueCount",
       coalesce(sum(balance_due) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and balance_due > 0
           and next_due_date < ${today}::date
       ), 0) as "overdueAmount",
       count(*) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
-          and balance_due > 0
-          and next_due_date > ${today}::date
-      )::int as "futureCount",
-      coalesce(sum(balance_due) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
-          and balance_due > 0
-          and next_due_date > ${today}::date
-      ), 0) as "futureAmount",
-      count(*) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and balance_due > 0
           and next_due_date is null
       )::int as "unscheduledCount",
       count(*) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and balance_due > 0
           and next_due_date = ${today}::date
       )::int as "dueTodayCount",
@@ -1690,7 +1635,7 @@ async function getStudentOperationsOverview(
         from (
           select id, code, student_name, phone, program_name, balance_due, next_due_date
           from student_finance
-          where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+          where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
             and balance_due > 0
             and next_due_date = ${today}::date
           order by student_name asc
@@ -1714,7 +1659,7 @@ async function getStudentOperationsOverview(
         from (
           select id, code, student_name, phone, program_name, balance_due, next_due_date
           from student_finance
-          where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+          where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
             and balance_due > 0
             and next_due_date < ${today}::date
           order by next_due_date asc, student_name asc
@@ -1722,33 +1667,45 @@ async function getStudentOperationsOverview(
         ) overdue_rows
       ), '[]'::jsonb) as "overdueStudents",
       count(*) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and teacher_id is null
       )::int as "activeWithoutTeacherCount",
       coalesce(sum(monthly_fee) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "expectedAmount",
-      coalesce(sum(current_month_paid) filter (
-        where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+      coalesce((
+        select sum(p.amount)
+        from erp.payments p
+        where p.paid_at >= date_trunc('month', ${today}::date)
+          and p.paid_at < date_trunc('month', ${today}::date) + interval '1 month'
       ), 0) as "collectedAmount",
       coalesce((
         select jsonb_agg(jsonb_build_object('name', grouped.name, 'count', grouped.count) order by grouped.count desc, grouped.name asc)
         from (
-          select program_name as name, count(*)::int as count
-          from student_finance
-          where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
-            and program_name is not null
-          group by program_name
+          select p.name, count(distinct e.student_id)::int as count
+          from erp.enrollments e
+          join erp.programs p on p.id = e.program_id
+          join erp.students s on s.id = e.student_id
+          where e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
+            and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          group by p.id, p.name
         ) grouped
       ), '[]'::jsonb) as programs,
       coalesce((
-        select jsonb_agg(jsonb_build_object('name', grouped.name, 'count', grouped.count) order by grouped.count desc, grouped.name asc)
+        select jsonb_agg(jsonb_build_object('name', grouped.name, 'count', grouped.count, 'capacity', grouped.capacity) order by grouped.utilization desc nulls last, grouped.count desc, grouped.name asc)
         from (
-          select teacher_name as name, count(*)::int as count
-          from student_finance
-          where lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
-            and teacher_name is not null
-          group by teacher_name
+          select
+            t.full_name as name,
+            (count(distinct e.student_id) filter (where s.id is not null))::int as count,
+            t.capacity,
+            case when t.capacity is not null and t.capacity > 0
+              then count(distinct e.student_id) filter (where s.id is not null)::numeric / t.capacity
+            end as utilization
+          from erp.teachers t
+          left join erp.enrollments e on e.teacher_id = t.id and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
+          left join erp.students s on s.id = e.student_id and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          where t.is_active = true
+          group by t.id, t.full_name, t.capacity
         ) grouped
       ), '[]'::jsonb) as teachers
     from student_finance
@@ -1774,8 +1731,6 @@ async function getStudentOperationsOverview(
     actionableAmount: formatAmount(row?.actionableAmount),
     overdueCount: toNumber(row?.overdueCount),
     overdueAmount: formatAmount(row?.overdueAmount),
-    futureCount: toNumber(row?.futureCount),
-    futureAmount: formatAmount(row?.futureAmount),
     unscheduledCount: toNumber(row?.unscheduledCount),
     dueTodayCount: toNumber(row?.dueTodayCount),
     dueTodayStudents: toStudentPaymentAttentionItems(row?.dueTodayStudents),
@@ -1822,6 +1777,7 @@ async function getStudentCreateOptions(
         from (
           select s.lifecycle_status::text as lifecycle_status, count(*)::int as total_count
           from erp.students s
+          where s.is_test_data = false
           group by s.lifecycle_status
         ) summary
       ), '{}'::jsonb) as "summaryCounts",
@@ -1836,77 +1792,62 @@ async function getStudentCreateOptions(
             on i.student_id = s.id
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
             and i.balance_due > 0
+          where s.is_test_data = false
           group by s.lifecycle_status
         ) summary
       ), '{}'::jsonb) as "summaryBalances",
       coalesce((
         select count(*)::int
         from erp.students s
-        where s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus"
-        )
-          and ${buildStudentOutstandingBalanceSql(today)}
+        where s.is_test_data = false
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and ${buildStudentDebtDueSql(today)}
       ), 0) as "debtCount",
       coalesce((
         select sum(${buildStudentOutstandingBalanceValueSql({
           studentId: Prisma.sql`s.id`,
-          billingEligible: Prisma.sql`(
-            s.lifecycle_status in (
-              'ACTIVE'::"erp"."StudentLifecycleStatus",
-              'DEBT'::"erp"."StudentLifecycleStatus"
-            )
-            and s.billing_paused = false
-          )`,
-          today,
         })})
         from erp.students s
-        where s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus"
-        )
-          and ${buildStudentOutstandingBalanceSql(today)}
+        where s.is_test_data = false
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and ${buildStudentDebtDueSql(today)}
       ), 0) as "debtBalance",
       coalesce((
         select count(*)::int
         from erp.students s
-        where s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus"
-        )
-          and ${buildStudentDebtDueSql(today)}
+        where s.is_test_data = false
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and ${buildStudentDebtDueSql(today, true)}
       ), 0) as "overdueDebtCount",
       coalesce((
         select count(*)::int
         from erp.students s
-        where s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus"
-        )
-          and ${buildStudentOutstandingBalanceSql(today)}
-          and ${buildStudentEffectiveDueDateSql()} > ${today}::date
-      ), 0) as "plannedDebtCount",
+        where s.is_test_data = false
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and ${buildStudentOutstandingBalanceSql()}
+          and ${buildStudentEffectiveDueDateSql()} is null
+      ), 0) as "unscheduledDebtCount",
       coalesce((
         select count(*)::int
         from erp.students s
-        where s.lifecycle_status in (
+        where s.is_test_data = false
+          and s.lifecycle_status in (
           'FROZEN'::"erp"."StudentLifecycleStatus",
           'STOPPED'::"erp"."StudentLifecycleStatus"
         )
-          and ${buildStudentOutstandingBalanceSql(today)}
+          and ${buildStudentOutstandingBalanceSql()}
       ), 0) as "archiveDebtCount",
       coalesce((
         select sum(${buildStudentOutstandingBalanceValueSql({
           studentId: Prisma.sql`s.id`,
-          billingEligible: Prisma.sql`false`,
-          today,
         })})
         from erp.students s
-        where s.lifecycle_status in (
+        where s.is_test_data = false
+          and s.lifecycle_status in (
           'FROZEN'::"erp"."StudentLifecycleStatus",
           'STOPPED'::"erp"."StudentLifecycleStatus"
         )
-          and ${buildStudentOutstandingBalanceSql(today)}
+          and ${buildStudentOutstandingBalanceSql()}
       ), 0) as "archiveDebtBalance",
       coalesce((
         select jsonb_agg(
@@ -2017,7 +1958,7 @@ async function getStudentCreateOptions(
     debtCount: toNumber(row?.debtCount),
     debtBalance: toNumber(row?.debtBalance),
     overdueDebtCount: toNumber(row?.overdueDebtCount),
-    plannedDebtCount: toNumber(row?.plannedDebtCount),
+    unscheduledDebtCount: toNumber(row?.unscheduledDebtCount),
     archiveDebtCount: toNumber(row?.archiveDebtCount),
     archiveDebtBalance: toNumber(row?.archiveDebtBalance),
     programs: asJsonArray<StudentCreateOptionRows["programs"][number]>(
@@ -2034,160 +1975,37 @@ async function getStudentCreateOptions(
   };
 }
 
-function buildStudentMissingMonthlyBalanceSql({
-  studentId,
-  billingEligible,
-  today,
-}: {
-  studentId: Prisma.Sql;
-  billingEligible: Prisma.Sql;
-  today: Date;
-}) {
-  return Prisma.sql`coalesce((
-    select sum(greatest(e.monthly_fee - coalesce((
-      select sum(p.amount)
-      from erp.payments p
-      where p.student_id = ${studentId}
-        and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
-        and date_trunc('month', p.payment_month) = billing_month.period_month
-    ), 0), 0))
-    from lateral (
-      select e.start_date, e.monthly_fee
-      from erp.enrollments e
-      where e.student_id = ${studentId}
-        and e.status in (
-          'ACTIVE'::"erp"."EnrollmentStatus",
-          'PAUSED'::"erp"."EnrollmentStatus"
-        )
-      order by e.start_date desc, e.created_at desc
-      limit 1
-    ) e
-    cross join lateral (
-      select greatest(
-        date_trunc('month', e.start_date)::date,
-        least(
-          coalesce((
-            select min(i.period_month)
-            from erp.invoices i
-            where i.student_id = ${studentId}
-              and i.status <> 'VOID'::"erp"."InvoiceStatus"
-          ), (date_trunc('month', ${today}::date) + interval '1 month')::date),
-          coalesce((
-            select min(p.payment_month)
-            from erp.payments p
-            where p.student_id = ${studentId}
-              and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
-          ), (date_trunc('month', ${today}::date) + interval '1 month')::date)
-        )
-      ) as first_billing_month
-    ) evidence
-    cross join lateral generate_series(
-      evidence.first_billing_month,
-      date_trunc('month', ${today}::date)::date,
-      interval '1 month'
-    ) as billing_month(period_month)
-    where ${billingEligible}
-      and not exists (
-        select 1
-        from erp.invoices i
-        where i.student_id = ${studentId}
-          and i.status <> 'VOID'::"erp"."InvoiceStatus"
-          and date_trunc('month', i.period_month) = billing_month.period_month
-      )
-  ), 0)`;
-}
-
 function buildStudentOutstandingBalanceValueSql({
   studentId,
-  billingEligible,
-  today,
 }: {
   studentId: Prisma.Sql;
-  billingEligible: Prisma.Sql;
-  today: Date;
 }) {
-  return Prisma.sql`greatest(
-    (
-      coalesce((
-        select sum(i.balance_due)
-        from erp.invoices i
-        where i.student_id = ${studentId}
-          and i.status <> 'VOID'::"erp"."InvoiceStatus"
-          and i.balance_due > 0
-      ), 0)
-      + ${buildStudentMissingMonthlyBalanceSql({ studentId, billingEligible, today })}
-    ),
-    case
-      when ${billingEligible} then greatest(
-        coalesce((
-          select e.monthly_fee
-          from erp.enrollments e
-          where e.student_id = ${studentId}
-            and e.status in (
-              'ACTIVE'::"erp"."EnrollmentStatus",
-              'PAUSED'::"erp"."EnrollmentStatus"
-            )
-          order by e.start_date desc, e.created_at desc
-          limit 1
-        ), 0) - coalesce((
-          select sum(p.amount)
-          from erp.payments p
-          where p.student_id = ${studentId}
-            and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)
-        ), 0),
-        0
-      )
-      else 0
-    end
-  )`;
-}
-
-function buildStudentOutstandingBalanceSql(today: Date) {
-  return Prisma.sql`${buildStudentOutstandingBalanceValueSql({
-    studentId: Prisma.sql`s.id`,
-    billingEligible: Prisma.sql`(
-      s.lifecycle_status in (
-        'ACTIVE'::"erp"."StudentLifecycleStatus",
-        'DEBT'::"erp"."StudentLifecycleStatus"
-      )
-      and s.billing_paused = false
-    )`,
-    today,
-  })} > 0`;
-}
-
-function buildStudentInvoiceDueDateSql(studentId: Prisma.Sql = Prisma.sql`s.id`) {
-  return Prisma.sql`(
-    select min(i.due_date)
+  return Prisma.sql`coalesce((
+    select sum(i.balance_due)
     from erp.invoices i
     where i.student_id = ${studentId}
       and i.status <> 'VOID'::"erp"."InvoiceStatus"
       and i.balance_due > 0
-  )`;
+  ), 0)`;
 }
 
-function buildStudentNextPaymentDateSql(studentId: Prisma.Sql = Prisma.sql`s.id`) {
-  return Prisma.sql`(
-    select p.next_payment_at
-    from erp.payments p
-    where p.student_id = ${studentId}
-      and p.next_payment_at is not null
-    order by p.paid_at desc, p.created_at desc
-    limit 1
-  )`;
+function buildStudentOutstandingBalanceSql() {
+  return Prisma.sql`${buildStudentOutstandingBalanceValueSql({
+    studentId: Prisma.sql`s.id`,
+  })} > 0`;
 }
 
 function buildStudentEffectiveDueDateSql(studentId: Prisma.Sql = Prisma.sql`s.id`) {
-  const invoiceDueDateSql = buildStudentInvoiceDueDateSql(studentId);
-  const nextPaymentDateSql = buildStudentNextPaymentDateSql(studentId);
-
   return Prisma.sql`(
-    select min(due_dates.due_at)
-    from (
-      select ${invoiceDueDateSql} as due_at
-      union all
-      select ${nextPaymentDateSql} as due_at
-    ) due_dates
+    select min(cycle.due_date)
+    from erp.student_billing_cycles cycle
+    where cycle.student_id = ${studentId}
+      and cycle.status in (
+        'DRAFT'::"erp"."InvoiceStatus",
+        'OPEN'::"erp"."InvoiceStatus",
+        'PARTIAL'::"erp"."InvoiceStatus",
+        'OVERDUE'::"erp"."InvoiceStatus"
+      )
   )`;
 }
 
@@ -2197,7 +2015,7 @@ function buildStudentDebtDueSql(today: Date, overdueOnly = false) {
     ? Prisma.sql`${effectiveDueDateSql} < ${today}::date`
     : Prisma.sql`(${effectiveDueDateSql} is null or ${effectiveDueDateSql} <= ${today}::date)`;
 
-  return Prisma.sql`(${dueDateCondition} and ${buildStudentOutstandingBalanceSql(today)})`;
+  return Prisma.sql`(${dueDateCondition} and ${buildStudentOutstandingBalanceSql()})`;
 }
 
 function buildStudentWhereSql({
@@ -2221,8 +2039,8 @@ function buildStudentWhereSql({
   dateFrom: Date | null;
   dateTo: Date | null;
 }) {
-  const conditions: Prisma.Sql[] = [Prisma.sql`true`];
-  const outstandingBalanceSql = buildStudentOutstandingBalanceSql(today);
+  const conditions: Prisma.Sql[] = [Prisma.sql`s.is_test_data = false`];
+  const outstandingBalanceSql = buildStudentOutstandingBalanceSql();
 
   if (search.length > 0) {
     const searchPattern = `%${search}%`;
@@ -2241,26 +2059,9 @@ function buildStudentWhereSql({
   }
 
   if (statusFilter) {
-    if (statusFilter === StudentLifecycleStatus.DEBT) {
-      conditions.push(Prisma.sql`(
-        s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus"
-        )
-        and ${outstandingBalanceSql}
-      )`);
-    } else if (statusFilter === StudentLifecycleStatus.ACTIVE) {
-      conditions.push(Prisma.sql`(
-        s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus"
-        )
-      )`);
-    } else {
-      conditions.push(
-        Prisma.sql`s.lifecycle_status = ${statusFilter}::"erp"."StudentLifecycleStatus"`
-      );
-    }
+    conditions.push(
+      Prisma.sql`s.lifecycle_status = ${statusFilter}::"erp"."StudentLifecycleStatus"`
+    );
   }
 
   if (churnOnly) {
@@ -2303,32 +2104,17 @@ function buildStudentWhereSql({
   }
 
   if (paymentFilter === "paid") {
-    conditions.push(Prisma.sql`not ${buildStudentOutstandingBalanceSql(today)}`);
+    conditions.push(Prisma.sql`not ${buildStudentOutstandingBalanceSql()}`);
   }
 
   if (paymentFilter === "open") {
-    conditions.push(Prisma.sql`s.lifecycle_status in (
-      'ACTIVE'::"erp"."StudentLifecycleStatus",
-      'DEBT'::"erp"."StudentLifecycleStatus"
-    )`);
-    conditions.push(outstandingBalanceSql);
+    conditions.push(Prisma.sql`s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"`);
+    conditions.push(buildStudentDebtDueSql(today));
   }
 
   if (paymentFilter === "overdue") {
-    conditions.push(Prisma.sql`s.lifecycle_status in (
-      'ACTIVE'::"erp"."StudentLifecycleStatus",
-      'DEBT'::"erp"."StudentLifecycleStatus"
-    )`);
+    conditions.push(Prisma.sql`s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"`);
     conditions.push(buildStudentDebtDueSql(today, true));
-  }
-
-  if (paymentFilter === "planned") {
-    conditions.push(Prisma.sql`s.lifecycle_status in (
-      'ACTIVE'::"erp"."StudentLifecycleStatus",
-      'DEBT'::"erp"."StudentLifecycleStatus"
-    )`);
-    conditions.push(outstandingBalanceSql);
-    conditions.push(Prisma.sql`${buildStudentEffectiveDueDateSql()} > ${today}::date`);
   }
 
   if (paymentFilter === "archive") {
@@ -2436,15 +2222,19 @@ function mapStudentSlot(slot: StudentSlotRecord) {
 }
 
 function toOperationsDistribution(value: unknown) {
-  const rows = asJsonArray<{ name: string; count: unknown }>(value).map((item) => ({
+  const rows = asJsonArray<{ name: string; count: unknown; capacity?: unknown }>(value).map((item) => ({
     name: item.name,
     count: toNumber(item.count),
+    capacity: item.capacity === null || item.capacity === undefined ? null : toNumber(item.capacity),
   }));
   const total = rows.reduce((sum, item) => sum + item.count, 0);
 
   return rows.map((item) => ({
     ...item,
     percentage: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    utilization: item.capacity && item.capacity > 0
+      ? Math.round((item.count / item.capacity) * 100)
+      : null,
   }));
 }
 
@@ -2683,6 +2473,7 @@ export async function getStudentDetailData(studentId: string) {
         s.created_at as "createdAt",
         s.notes,
         s.billing_paused as "billingPaused",
+        s.billing_anchor_date as "billingAnchorDate",
         s.education_level as "educationLevel",
         s.manager_id::text as "managerId",
         s.campaign_id::text as "campaignId",
@@ -2707,6 +2498,7 @@ export async function getStudentDetailData(studentId: string) {
       ps."registeredAt",
       ps.notes,
       ps."billingPaused",
+      ps."billingAnchorDate",
       ps."educationLevel",
       ps."managerId",
       ps."campaignId",
@@ -2764,11 +2556,6 @@ export async function getStudentDetailData(studentId: string) {
       select
         ${buildStudentOutstandingBalanceValueSql({
           studentId: Prisma.sql`ps.id`,
-          billingEligible: Prisma.sql`(
-            ps."lifecycleStatus" in ('ACTIVE', 'DEBT')
-            and ps."billingPaused" = false
-          )`,
-          today,
         })} as balance_due,
         ${buildStudentEffectiveDueDateSql(Prisma.sql`ps.id`)} as next_due_date,
         coalesce((
@@ -2880,14 +2667,9 @@ export async function getStudentDetailData(studentId: string) {
   const nextPaymentAt = student.nextDueDate
     ? new Date(student.nextDueDate as Date)
     : null;
-  const debtDue = isStudentDebtDue({ balance, nextPaymentAt, today });
-  const effectiveLifecycleStatus = resolveStudentLifecycleStatus({
-    lifecycleStatus: student.lifecycleStatus,
-    debtDue,
-  }) as StudentLifecycleStatus;
-  const lifecycleStatus = lifecycleMeta[effectiveLifecycleStatus];
+  const lifecycleStatus = lifecycleMeta[student.lifecycleStatus as StudentLifecycleStatus];
   const paymentStatus = student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
-    ? { label: "Öhdəlik yoxdur", tone: "success" as const }
+    ? { code: "PAID" as const, label: "Öhdəlik yoxdur", tone: "success" as const }
     : resolveStudentPaymentStatus({ balance, nextPaymentAt, today });
   const overdueDays = getOverdueDays(
     nextPaymentAt ?? undefined,
@@ -2901,7 +2683,7 @@ export async function getStudentDetailData(studentId: string) {
         : "";
 
   const canAssignStudentManager = scopeFor(actor.permissions, "student.update") === "ALL";
-  const [options, reminders, managers] = await Promise.all([
+  const [options, reminders, managers, packages] = await Promise.all([
     getStudentCreateOptions(prisma, today),
     getStudentReminderHistory(prisma, actor, studentId),
     prisma.user.findMany({
@@ -2922,6 +2704,22 @@ export async function getStudentDetailData(studentId: string) {
         : { id: student.managerId ?? actor.id },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true },
+    }),
+    prisma.enrollment.findMany({
+      where: {
+        studentId,
+        status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+      },
+      orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        status: true,
+        firstLessonAt: true,
+        monthlyFee: true,
+        lessonsPerMonth: true,
+        program: { select: { name: true } },
+        teacher: { select: { fullName: true } },
+      },
     }),
   ]);
 
@@ -3036,6 +2834,9 @@ export async function getStudentDetailData(studentId: string) {
         firstLessonDate: student.firstLessonAt
           ? formatDateInput(new Date(student.firstLessonAt))
           : "",
+        billingAnchorDate: student.billingAnchorDate
+          ? formatDateInput(new Date(student.billingAnchorDate))
+          : "",
         registeredDate: formatDateInput(new Date(student.registeredAt as Date)),
         registeredAt: formatShortDate(student.registeredAt as Date),
         notes: student.notes ?? "Qeyd yoxdur",
@@ -3048,6 +2849,17 @@ export async function getStudentDetailData(studentId: string) {
         monthlyFeeLabel: student.monthlyFee === null || student.monthlyFee === undefined
           ? "Təyin edilməyib"
           : formatAmount(student.monthlyFee),
+        packages: packages.map((enrollment) => ({
+          id: enrollment.id,
+          program: enrollment.program.name,
+          teacher: enrollment.teacher?.fullName ?? "Müəllim təyin edilməyib",
+          firstLessonDate: enrollment.firstLessonAt
+            ? formatShortDate(enrollment.firstLessonAt)
+            : "Təsdiqlənməyib",
+          monthlyFee: formatAmount(enrollment.monthlyFee),
+          lessonsPerMonth: enrollment.lessonsPerMonth?.toString() ?? "—",
+          status: enrollment.status === EnrollmentStatus.PAUSED ? "Dondurulub" : "Aktiv",
+        })),
         invoices: asJsonArray<StudentInvoiceRecord>(student.invoices).map((invoice) => {
           const status = invoiceStatusMeta[invoice.status];
           return {
@@ -3068,8 +2880,8 @@ export async function getStudentDetailData(studentId: string) {
           paymentMonth: formatMonthInput(payment.paymentMonth),
           nextPaymentDate: payment.scheduleType === "ONE_TIME"
             ? "Tam ödənilib"
-            : payment.nextPaymentAt
-              ? formatShortDate(payment.nextPaymentAt)
+            : student.nextDueDate
+              ? formatShortDate(student.nextDueDate)
               : "—",
           scheduleType: getStudentPaymentScheduleTypeLabel(payment.scheduleType),
           method: getStudentPaymentMethodLabel(payment.method),

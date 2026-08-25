@@ -12,7 +12,6 @@ import {
   Filter,
   Layers3,
   List,
-  Search,
   SlidersHorizontal,
   Sparkles,
   TrendingUp,
@@ -22,13 +21,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/components/ui/cx";
-import { DatePicker } from "@/components/ui/date-picker";
-import { Field, FieldLabel } from "@/components/ui/field";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
 import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
 import { CrmConversionDialog } from "@/modules/crm/crm-conversion-dialog";
@@ -138,15 +130,12 @@ export function CrmPipeline({ data }: { data: CrmData }) {
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams(searchParams.toString());
     const fields = [
-      "q",
       "stage",
       "owner",
       "program",
       "priority",
       "source",
       "followUp",
-      "from",
-      "to",
       "period",
     ];
 
@@ -310,9 +299,6 @@ function CrmFilterPanel({
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onClear: () => void;
 }) {
-  const [dateFrom, setDateFrom] = useState(data.filters.dateFrom);
-  const [dateTo, setDateTo] = useState(data.filters.dateTo);
-
   return (
     <form className="crm-filter-panel crm-enter" onSubmit={onSubmit} aria-label="CRM filtrləri">
       {data.filters.period !== "this_month" ? (
@@ -320,34 +306,6 @@ function CrmFilterPanel({
       ) : null}
 
       <div className="crm-filter-primary">
-        <Field className="crm-search-field">
-          <FieldLabel className="sr-only" htmlFor="crm-search">Müraciət axtar</FieldLabel>
-          <InputGroup>
-            <InputGroupAddon aria-hidden="true"><Search /></InputGroupAddon>
-            <InputGroupInput
-              id="crm-search"
-              name="q"
-              placeholder="Müraciət edən, telefon və ya mənbə..."
-              defaultValue={data.query}
-            />
-          </InputGroup>
-        </Field>
-        <DatePicker
-          name="from"
-          value={dateFrom}
-          onValueChange={setDateFrom}
-          placeholder="Başlanğıc"
-          aria-label="Başlanğıc tarixi"
-          popoverPlacement="floating"
-        />
-        <DatePicker
-          name="to"
-          value={dateTo}
-          onValueChange={setDateTo}
-          placeholder="Son tarix"
-          aria-label="Son tarix"
-          popoverPlacement="floating"
-        />
         <Button className="crm-filter-icon-action is-apply" type="submit" size="icon" disabled={isPending} aria-label="Filtrləri göstər" title="Göstər">
           <Filter />
         </Button>

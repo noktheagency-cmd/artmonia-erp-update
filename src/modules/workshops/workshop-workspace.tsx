@@ -171,23 +171,11 @@ function CompactFilterPanel({ data }: { data: WorkshopData }) {
         method="get"
         action="/workshops"
         className="workshop-filter-form"
-        onSubmit={(event) => {
-          const form = event.currentTarget;
-          const dateRangeInput = form.elements.namedItem("dateRange");
-          const fromInput = form.elements.namedItem("from");
-          const toInput = form.elements.namedItem("to");
-          const hasCustomDates =
-            fromInput instanceof HTMLInputElement && fromInput.value !== "" ||
-            toInput instanceof HTMLInputElement && toInput.value !== "";
-          if (hasCustomDates && dateRangeInput instanceof HTMLInputElement) {
-            dateRangeInput.disabled = true;
-          }
-        }}
       >
         {data.filters.dateRange === "all" ? <input type="hidden" name="dateRange" value="all" /> : null}
+        {data.filters.dateRange !== "all" ? <input type="hidden" name="from" value={data.filters.from} /> : null}
+        {data.filters.dateRange !== "all" ? <input type="hidden" name="to" value={data.filters.to} /> : null}
         <div className="workshop-filter-primary workshop-filter-primary-compact">
-          <FilterDate name="from" label="Başlanğıc tarixi" value={data.filters.dateRange === "all" ? "" : data.filters.from} />
-          <FilterDate name="to" label="Bitiş tarixi" value={data.filters.dateRange === "all" ? "" : data.filters.to} />
           <Link
             href={buildWorkshopUrl(data, { dateRange: "all", from: "", to: "", page: "1" })}
             className={`workshop-all-dates-link${data.filters.dateRange === "all" ? " is-active" : ""}`}
@@ -228,20 +216,6 @@ function FilterSelect({ name, label, value, options }: {
       <select name={name} defaultValue={value}>
         {options.map((option) => <option key={`${name}-${option.value}`} value={option.value}>{option.label}</option>)}
       </select>
-    </label>
-  );
-}
-
-function FilterDate({ name, label, value }: { name: string; label: string; value: string }) {
-  return (
-    <label className="workshop-filter-field">
-      <span>{label}</span>
-      <input
-        key={`${name}-${value}`}
-        type="date"
-        name={name}
-        defaultValue={value}
-      />
     </label>
   );
 }

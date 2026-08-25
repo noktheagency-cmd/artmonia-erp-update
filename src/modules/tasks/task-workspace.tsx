@@ -12,7 +12,6 @@ import {
   ListFilter,
   ListTodo,
   Plus,
-  Search,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -59,11 +58,9 @@ export function TaskWorkspace({
   markNotificationsReadAction: () => unknown | Promise<unknown>;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(data.selectedTask);
   const didMarkNotificationsRead = useRef(false);
-  const normalizedQuery = query.trim().toLocaleLowerCase("az");
   const filteredTasks = useMemo(
     () =>
       data.tasks.filter((task) => {
@@ -71,14 +68,9 @@ export function TaskWorkspace({
           filter === "ACTIVE"
             ? task.status !== "DONE" && task.status !== "CANCELLED"
             : task.status === filter;
-        const matchesQuery =
-          !normalizedQuery ||
-          `${task.title} ${task.description} ${task.ownerName}`
-            .toLocaleLowerCase("az")
-            .includes(normalizedQuery);
-        return matchesFilter && matchesQuery;
+        return matchesFilter;
       }),
-    [data.tasks, filter, normalizedQuery]
+    [data.tasks, filter]
   );
 
   useEffect(() => {
@@ -137,14 +129,6 @@ export function TaskWorkspace({
       </div>
 
       <div className="tasks-toolbar">
-        <label className="tasks-search">
-          <Search size={16} aria-hidden="true" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Task və ya işçi axtar..."
-          />
-        </label>
         <div className="tasks-filter">
           <ListFilter size={15} aria-hidden="true" />
           <FormSelect

@@ -14,6 +14,7 @@ import {
   type Prisma,
 } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
+import { buildTaskWorkspaceWhere } from "@/modules/tasks/task-scope";
 
 type McpActor = {
   id: string;
@@ -146,10 +147,14 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
             where: { eventDate: { gte: now }, status: "SCHEDULED" },
           }),
           prisma.task.count({
-            where: { status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] } },
+            where: {
+              ...buildTaskWorkspaceWhere(),
+              status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+            },
           }),
           prisma.task.count({
             where: {
+              ...buildTaskWorkspaceWhere(),
               status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
               dueAt: { lt: now },
             },
@@ -464,6 +469,7 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
     async ({ status, ownerQuery, overdueOnly, page, limit }) =>
       audited(actor, "erp_tasks_search", async () => {
         const where: Prisma.TaskWhereInput = {
+          ...buildTaskWorkspaceWhere(),
           ...(status ? { status } : {}),
           ...(ownerQuery
             ? {
@@ -992,6 +998,7 @@ export function registerFounderTools(server: McpServer, actor: McpActor) {
           }),
           prisma.task.count({
             where: {
+              ...buildTaskWorkspaceWhere(),
               status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
               dueAt: { lt: now },
             },

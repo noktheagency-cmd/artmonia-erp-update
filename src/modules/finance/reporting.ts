@@ -32,6 +32,10 @@ export function calculateFinanceStatement(input: {
 }) {
   const grossProfit = input.operatingIncome - input.directCost;
   const operatingProfit = grossProfit - input.opex;
+  // There is no tax/interest/non-operating P&L ledger yet. Keep net profit as a
+  // separate semantic metric so those classifications can be added without
+  // changing operating profit or cash-flow formulas.
+  const netProfit = operatingProfit;
   const netCash =
     input.operatingIncome +
     input.financingIn -
@@ -41,7 +45,7 @@ export function calculateFinanceStatement(input: {
     input.financingOut -
     input.legacyLiability;
 
-  return { grossProfit, operatingProfit, netCash };
+  return { grossProfit, operatingProfit, netProfit, netCash };
 }
 
 export function isCashInflow(transactionType: string) {

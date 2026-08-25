@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import type { Route } from "next";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -43,6 +44,10 @@ import {
 } from "@/components/layout/global-search";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
 
+const ErpCalendar = dynamic(() =>
+  import("@/components/layout/erp-calendar").then((module) => module.ErpCalendar),
+);
+
 type ShellUser = {
   id: string;
   fullName: string;
@@ -64,7 +69,7 @@ type NotificationCounts = { all: number; tasks: number };
 
 const primaryNavItems: NavItem[] = [
   { href: "/students", label: "Tələbələr", icon: GraduationCap, requiredPermissions: ["student.read"] },
-  { href: "/crm", label: "Follow-up", icon: UsersRound, requiredPermissions: ["crm.lead.read"] },
+  { href: "/crm", label: "Birbaşa satış", icon: UsersRound, requiredPermissions: ["crm.lead.read"] },
   { href: "/finance", label: "Maliyyə", icon: CreditCard, requiredPermissions: ["billing.invoice.read", "billing.payment.read", "billing.expense.read", "billing.entry.create"] },
   { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness, requiredPermissions: ["hr.employee.read", "teacher.read", "hr.corporate.read", "hr.bonus.read"] },
   { href: "/groups" as Route, label: "Slotlar", icon: CalendarDays, requiredPermissions: ["group.read", "attendance.read"] },
@@ -77,6 +82,7 @@ const secondaryNavItems: NavItem[] = [
   { href: "/marketing" as Route, label: "Marketing", icon: Megaphone, requiredPermissions: ["marketing.read"] },
   { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText, requiredPermissions: ["playbook.read"] },
   { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation, requiredPermissions: ["workshop.read"] },
+  { href: "/crm?followUp=workshop_masterclass&tab=list" as Route, label: "Workshop follow-up", icon: UsersRound, requiredPermissions: ["crm.lead.read", "workshop.read"] },
   { href: "/settings/roles" as Route, label: "Rol və icazələr", icon: Settings2, requiredPermissions: ["auth.role.read"] },
 ];
 
@@ -626,10 +632,13 @@ export function AppShell({
         aria-busy={isNavigating}
       >
 
-        <GlobalSearch
-          navigationItems={searchNavigationItems}
-          onNavigate={markNavigation}
-        />
+        <div className="erp-command-header">
+          <GlobalSearch
+            navigationItems={searchNavigationItems}
+            onNavigate={markNavigation}
+          />
+          <ErpCalendar onNavigate={markNavigation} />
+        </div>
 
         <div
           className="route-content-shell"

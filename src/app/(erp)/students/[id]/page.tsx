@@ -5,6 +5,7 @@ import { getStudentDetailData } from "@/modules/students/queries";
 import {
   recordStudentPaymentAction,
   deleteStudentAction,
+  createStudentEnrollmentAction,
   updateStudentProfileAction,
   updateStudentStatusAction,
 } from "@/modules/students/actions";
@@ -71,6 +72,7 @@ export default async function StudentDetailPage({
           permissions={permissions}
           recordPaymentAction={recordStudentPaymentAction}
           updateStudentProfileAction={updateStudentProfileAction}
+          createStudentEnrollmentAction={createStudentEnrollmentAction}
           updateStudentStatusAction={updateStudentStatusAction}
           deleteStudentAction={deleteStudentAction}
           createStudentReminderAction={createStudentReminderAction}
@@ -110,6 +112,28 @@ export default async function StudentDetailPage({
         disableAction={disableStudentMobileAccountAction}
         enableAction={enableStudentMobileAccountAction}
       />
+
+      <section className="student-detail-section">
+        <div className="student-detail-section-title">
+          <ReceiptText />
+          <span>Tədris paketləri ({student.detail.packages.length})</span>
+        </div>
+        <div className="student-slot-list">
+          {student.detail.packages.map((item) => (
+            <article className="student-slot-item" data-active={item.status === "Aktiv"} key={item.id}>
+              <div>
+                <strong>{item.program}</strong>
+                <span>{item.teacher}</span>
+              </div>
+              <div>
+                <span>{item.monthlyFee} · {item.lessonsPerMonth} dərs</span>
+                <span>{item.status}</span>
+              </div>
+              <small>İlk dərs: {item.firstLessonDate}</small>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="student-reminder-section" aria-labelledby="student-reminder-title">
         <div className="student-reminder-section-head">
@@ -241,6 +265,7 @@ export default async function StudentDetailPage({
             <div className="student-mini-table-head">
               <span>Ay</span>
               <span>Son tarix</span>
+              <span>Məbləğ</span>
               <span>Balans</span>
               <span>Status</span>
             </div>
@@ -250,6 +275,7 @@ export default async function StudentDetailPage({
                   <div className="student-mini-table-row" key={invoice.id}>
                     <span>{invoice.period}</span>
                     <span>{invoice.dueDate}</span>
+                    <span>{invoice.amount}</span>
                     <span>{invoice.balance}</span>
                     <StatusChip tone={invoice.tone}>{invoice.status}</StatusChip>
                   </div>
@@ -274,7 +300,7 @@ export default async function StudentDetailPage({
                   <span>
                     {payment.paidAt} - {payment.scheduleType} - {payment.method} - {payment.createdBy}
                   </span>
-                  <small>Növbəti ödəniş: {payment.nextPaymentDate} · {payment.note}</small>
+                  <small>Cari billing tarixi: {payment.nextPaymentDate} · {payment.note}</small>
                 </div>
               ))
             ) : (

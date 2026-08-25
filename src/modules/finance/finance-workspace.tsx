@@ -8,6 +8,7 @@ import type { Route } from "next";
 import { unwrapActionResult, type ActionResult } from "@/lib/action-result";
 import {
   AlertTriangle,
+  Activity,
   ArrowDownToLine,
   ArrowRight,
   BadgeDollarSign,
@@ -22,9 +23,9 @@ import {
   Pencil,
   Plus,
   ReceiptText,
-  Search,
   ShieldCheck,
   Trash2,
+  TrendingUp,
   Upload,
   UserRound,
   WalletCards,
@@ -279,6 +280,9 @@ export function FinanceWorkspace({
             </div>
           </div>
           <div className="finance-header-actions">
+            <Link href={"/finance/billing-migration" as Route} className="finance-migration-link">
+              Billing migration hesabatı
+            </Link>
             {data.permissions.canExport ? (
               <ExportDialog
                 key={`finance-export-${data.filters.type}`}
@@ -485,13 +489,12 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [draft, setDraft] = useState<FinanceFilterDraft>(() => ({
-    query: data.filters.query,
+    query: "",
     category: data.filters.category,
     from: data.filters.from,
     to: data.filters.to,
     source: data.filters.source,
   }));
-  const presets = useMemo(() => buildPeriodPresets(), []);
 
   function applyFilters(nextDraft: FinanceFilterDraft, mode: "push" | "replace" = "replace") {
     setDraft(nextDraft);
@@ -522,38 +525,6 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
       ) : null}
 
       <div className="finance-filter-row">
-        <label className="table-search finance-search">
-          <Search size={14} />
-          <span className="sr-only">Maliyyə üzrə axtar</span>
-          <input
-            name="q"
-            value={draft.query}
-            onChange={(event) => setDraft((current) => ({ ...current, query: event.target.value }))}
-            placeholder="Axtar: tələbə, qəbz, alacaq, kateqoriya"
-            suppressHydrationWarning
-          />
-        </label>
-
-        <div className="finance-filter-field date">
-          <DatePicker
-            name="from"
-            value={draft.from}
-            onValueChange={(value) => updateDraft({ from: value })}
-            allowClear={false}
-            popoverPlacement="floating"
-          />
-        </div>
-
-        <div className="finance-filter-field date">
-          <DatePicker
-            name="to"
-            value={draft.to}
-            onValueChange={(value) => updateDraft({ to: value })}
-            allowClear={false}
-            popoverPlacement="floating"
-          />
-        </div>
-
         <div className="finance-filter-field">
           <FormSelect
             name="category"
@@ -588,24 +559,8 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
 
       <div className="finance-filter-footer">
         <div className="finance-filter-presets">
-          <div className="finance-preset-pills">
-          {presets.map((preset) => {
-            const isActive = draft.from === preset.from && draft.to === preset.to;
-
-            return (
-              <button
-                type="button"
-                key={preset.id}
-                className={isActive ? "is-active" : undefined}
-                onClick={() => applyFilters({ ...draft, from: preset.from, to: preset.to })}
-              >
-                {preset.label}
-              </button>
-            );
-          })}
-          </div>
           <span className="finance-preset-info-text">
-            Seçilən tarix və kateqoriya bütün cədvəllərə tətbiq olunur
+            Tarix headerdəki ümumi calendar, kateqoriya isə bu panel üzərindən tətbiq olunur
           </span>
         </div>
 
@@ -1307,21 +1262,27 @@ function CategoryDistributionList({ data }: { data: FinanceData }) {
 }
 
 function FinancePrimaryKpis({ data }: { data: FinanceData }) {
-  const [selected, setSelected] = useState<"income" | "expense" | "profit" | "receivables" | "details" | null>(null);
+  const [selected, setSelected] = useState<"income" | "expense" | "operating" | "profit" | "cashflow" | "receivables" | "details" | null>(null);
   const cards = [
     { key: "income" as const, label: "Ümumi gəlir", value: data.summary.income, helper: `Təhsil ${data.summary.studentIncome} · Tədbirlər ${data.summary.eventIncome}`, tone: "success", icon: WalletCards },
     { key: "expense" as const, label: "Ümumi xərc", value: data.summary.expense, helper: `Əsas xərclər ${data.summary.coreExpense} · Tədbirlər ${data.summary.eventExpense}`, tone: "warning", icon: ReceiptText },
-    { key: "profit" as const, label: "Xalis mənfəət", value: data.summary.operatingProfit, helper: "Ümumi gəlir − əsas və əməliyyat xərcləri", tone: "neutral", icon: BarChart3 },
-    { key: "receivables" as const, label: "Alacaqlar ödənişləri", value: data.summary.debt, helper: "Ay sonunadək aktiv/borclu tələbə + workshop və masterclass qalığı", tone: "warning", icon: BadgeDollarSign },
+    { key: "operating" as const, label: "Operating Profit", value: data.summary.operatingProfit, helper: "Gross Profit − OPEX", tone: "neutral", icon: BarChart3 },
+    { key: "profit" as const, label: "Net Profit", value: data.summary.netProfit, helper: "Operating Profit − qeyri-əməliyyat P&L maddələri", tone: "neutral", icon: TrendingUp },
+    { key: "cashflow" as const, label: "Net Cash Flow", value: data.summary.netCash, helper: "Bütün pul girişləri − bütün pul çıxışları", tone: "neutral", icon: Activity },
+    { key: "receivables" as const, label: "Maliyyə sağlamlığı · açıq borc", value: data.receivableSummary.studentOutstanding.amount, helper: `${data.receivableSummary.studentOutstanding.count} tələbə · gələcək ödəniş ayrıca göstərilir`, tone: "warning", icon: BadgeDollarSign },
   ];
   const detailRows = selected === "income"
     ? [["Tələbə ödənişləri", data.summary.studentIncome], ["Workshop / Masterclass", data.summary.eventIncome]]
     : selected === "expense"
       ? [["Direct Cost", data.summary.directCost], ["OPEX", data.summary.opex], ["Tədbir xərcləri", data.summary.eventExpense], ["Əməkhaqqı", data.summary.payroll], ...data.costCenterBreakdown.map((item) => [`Xərc mərkəzi · ${item.label}`, item.amount])]
+      : selected === "operating"
+        ? [["Gross Profit", data.summary.grossProfit], ["OPEX", data.summary.opex], ["Operating Profit", data.summary.operatingProfit]]
       : selected === "profit"
-        ? [["Ümumi gəlir", data.summary.income], ["Ümumi xərc", data.summary.expense], ["Operating Profit", data.summary.operatingProfit], ["Net Cash Flow", data.summary.netCash]]
+        ? [["Operating Profit", data.summary.operatingProfit], ["Net Profit", data.summary.netProfit]]
+      : selected === "cashflow"
+        ? [["Net Profit", data.summary.netProfit], ["CAPEX", data.summary.capex], ["Financing in", data.summary.financingIn], ["Financing out", data.summary.financingOut], ["Net Cash Flow", data.summary.netCash]]
         : selected === "receivables"
-          ? [["Aktiv və borclu tələbələr", data.receivableSummary.studentOutstanding.amount], ["Workshop", data.receivableSummary.workshop.amount], ["Masterclass", data.receivableSummary.masterclass.amount]]
+          ? [["Real açıq tələbə borcu", data.receivableSummary.studentOutstanding.amount], ["Gecikmiş borc", data.receivableSummary.studentOverdue.amount], ["Gələcək ödəniş", data.receivableSummary.studentFuture.amount], ["Workshop", data.receivableSummary.workshop.amount], ["Masterclass", data.receivableSummary.masterclass.amount]]
           : [];
   const selectedCard = cards.find((card) => card.key === selected);
 
@@ -1332,7 +1293,7 @@ function FinancePrimaryKpis({ data }: { data: FinanceData }) {
           const Icon = card.icon;
           return <button type="button" className={`finance-kpi finance-primary-kpi is-${card.tone}`} onClick={() => setSelected(card.key)} key={card.key}><div className="finance-kpi-top"><span className="finance-kpi-label">{card.label}</span><span className="finance-kpi-icon"><Icon size={13} /></span></div><strong>{card.value}</strong><div className="finance-kpi-footer"><small>{card.helper}</small><span>Detala bax <ArrowRight /></span></div></button>;
         })}
-        <button type="button" className="finance-kpi finance-primary-kpi finance-details-kpi" onClick={() => setSelected("details")}><div className="finance-kpi-top"><span className="finance-kpi-label">Ətraflı bax</span><span className="finance-kpi-icon"><Eye size={13} /></span></div><strong>5 KPI</strong><div className="finance-kpi-footer"><small>Revenue-dən Net Cash Flow-a qədər bütün maliyyə kartları</small><span>Kartları aç <ArrowRight /></span></div></button>
+        <button type="button" className="finance-kpi finance-primary-kpi finance-details-kpi" onClick={() => setSelected("details")}><div className="finance-kpi-top"><span className="finance-kpi-label">Ətraflı bax</span><span className="finance-kpi-icon"><Eye size={13} /></span></div><strong>6 KPI</strong><div className="finance-kpi-footer"><small>Gəlirdən xalis pul axınına qədər bütün maliyyə kartları</small><span>Kartları aç <ArrowRight /></span></div></button>
       </div>
       <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent className="finance-dialog finance-kpi-detail-dialog">
@@ -1469,14 +1430,72 @@ function OverviewWorkspace({ data }: { data: FinanceData }) {
       </div>
 
       <div className="finance-stat-grid" aria-label="Maliyyə statistikası">
-        <FinanceStructureChart data={data} />
         <PaymentMethodChart data={data} />
-        <DebtRiskChart data={data} />
       </div>
+
+      <EducationCollectionReconciliation data={data} />
 
       <RecentFinanceActivity data={data} />
     </>
   );
+}
+
+function EducationCollectionReconciliation({ data }: { data: FinanceData }) {
+  const report = data.educationCollectionReconciliation;
+  return (
+    <article className="finance-panel">
+      <div className="finance-panel-head">
+        <div>
+          <span>Vahid ödənilmiş təhsil əməliyyatları mənbəyi</span>
+          <h2>Ümumi ödəniş və köhnə ACTIVE-only fərqi</h2>
+          <small>
+            Ümumi {report.paidEducationTotal} · köhnə ACTIVE-only {report.legacyActiveOnlyTotal} · fərq {report.difference}
+          </small>
+        </div>
+      </div>
+      {report.rows.length > 0 ? (
+        <div className="finance-table-wrap" data-erp-table-scroll="">
+          <table className="finance-table" data-erp-table="">
+            <thead>
+              <tr>
+                <th>Tələbə</th>
+                <th>Məbləğ</th>
+                <th>Ödəniş tarixi</th>
+                <th>Aid olduğu ay</th>
+                <th>Tədris statusu</th>
+                <th>Ödəniş statusu</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.map((row) => (
+                <tr key={row.id}>
+                  <td><strong>{row.studentName}</strong><br /><small>{row.studentCode}</small></td>
+                  <td className="finance-money positive">{row.amount}</td>
+                  <td>{row.paidAt}</td>
+                  <td>{row.paymentMonth}</td>
+                  <td><StatusChip tone="neutral">{getAcademicStatusLabel(row.lifecycleStatus)}</StatusChip></td>
+                  <td><StatusChip tone="success">{row.status}</StatusChip></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="finance-overview-empty">Ümumi və ACTIVE-only məbləğ arasında fərq yoxdur</div>
+      )}
+    </article>
+  );
+}
+
+function getAcademicStatusLabel(value: string) {
+  return {
+    SLOT_WAITING: "Slot gözləyir",
+    ACTIVE: "Aktiv",
+    FROZEN: "Dondurulub",
+    STOPPED: "Dayandırılıb",
+    COMPLETED: "Tamamlayıb",
+    DECLINED: "İmtina edib",
+  }[value] ?? value;
 }
 
 function RecentFinanceActivity({ data }: { data: FinanceData }) {
@@ -2693,59 +2712,6 @@ function buildFinanceFilterPath(
 
   const queryString = params.toString();
   return queryString ? `/finance?${queryString}` : "/finance";
-}
-
-function buildPeriodPresets() {
-  const today = startOfLocalDay(new Date());
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-  const last30Start = addLocalDays(today, -29);
-
-  return [
-    {
-      id: "today",
-      label: "Bu gün",
-      from: toDateInput(today),
-      to: toDateInput(today),
-    },
-    {
-      id: "current-month",
-      label: "Bu ay",
-      from: toDateInput(monthStart),
-      to: toDateInput(today),
-    },
-    {
-      id: "last-30",
-      label: "Son 30 gün",
-      from: toDateInput(last30Start),
-      to: toDateInput(today),
-    },
-    {
-      id: "previous-month",
-      label: "Keçən ay",
-      from: toDateInput(previousMonthStart),
-      to: toDateInput(previousMonthEnd),
-    },
-  ];
-}
-
-function startOfLocalDay(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
-
-function addLocalDays(value: Date, days: number) {
-  const next = new Date(value);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function toDateInput(value: Date) {
-  return [
-    value.getFullYear().toString(),
-    (value.getMonth() + 1).toString().padStart(2, "0"),
-    value.getDate().toString().padStart(2, "0"),
-  ].join("-");
 }
 
 function buildFinanceTabHref(data: FinanceData, tab: FinanceTab) {

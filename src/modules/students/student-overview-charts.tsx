@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CircleDollarSign, Layers3, UsersRound } from "lucide-react";
+import { Layers3, UsersRound, type LucideIcon } from "lucide-react";
 import {
   type ChartConfig,
   ChartContainer,
@@ -24,6 +24,8 @@ type DistributionItem = {
   name: string;
   count: number;
   percentage: number;
+  capacity: number | null;
+  utilization: number | null;
 };
 
 const distributionColors = [
@@ -35,10 +37,6 @@ const distributionColors = [
   "var(--students-chart-cyan)",
 ] as const;
 
-const financeChartConfig = {
-  value: { label: "Tələbə sayı", color: "var(--students-chart-green)" },
-} satisfies ChartConfig;
-
 const programChartConfig = {
   count: { label: "Tələbə sayı", color: "var(--students-chart-blue)" },
 } satisfies ChartConfig;
@@ -48,27 +46,13 @@ const teacherChartConfig = {
 } satisfies ChartConfig;
 
 export function StudentOverviewCharts({
-  collectionRate,
-  debtCount,
-  futureCount,
-  collectedAmount,
-  expectedAmount,
   programs,
   teachers,
 }: {
-  collectionRate: number;
-  debtCount: number;
-  futureCount: number;
-  collectedAmount: string;
-  expectedAmount: string;
   programs: DistributionItem[];
   teachers: DistributionItem[];
 }) {
   const canAnimate = useChartAnimation();
-  const financeData = [
-    { name: "Toplanıb", value: collectionRate, fill: "var(--students-chart-green)" },
-    { name: "Qalıb", value: Math.max(100 - collectionRate, 0), fill: "var(--students-chart-track)" },
-  ];
   const programData = programs.slice(0, 5).map((item, index) => ({
     ...item,
     fill: distributionColors[index % distributionColors.length],
@@ -80,67 +64,6 @@ export function StudentOverviewCharts({
 
   return (
     <section className="students-analytics-grid" aria-label="Tələbə analitikası">
-      <article className="students-analytics-card students-analytics-finance">
-        <AnalyticsHeading
-          icon={CircleDollarSign}
-          title="Maliyyə sağlamlığı"
-          description="Cari ay üzrə toplanan məbləğ və aylıq plan"
-          meta={`${collectionRate}% toplanıb`}
-          tone="green"
-        />
-        <div className="students-finance-content">
-          <div className="students-radial-chart" aria-label={`${collectionRate}% ödəniş toplanıb`}>
-            <ChartContainer config={financeChartConfig} className="students-chart students-finance-chart">
-              <PieChart accessibilityLayer>
-                <ChartTooltip
-                  cursor={false}
-                  content={
-                    <ChartTooltipContent
-                      hideLabel
-                      formatter={(value, _name, item) => (
-                        <div className="students-tooltip-value">
-                          <span>{String(item.payload?.name ?? "Göstərici")}</span>
-                          <strong>{Number(value)}%</strong>
-                        </div>
-                      )}
-                    />
-                  }
-                />
-                <Pie
-                  data={financeData}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={47}
-                  outerRadius={61}
-                  startAngle={90}
-                  endAngle={-270}
-                  paddingAngle={collectionRate > 0 && collectionRate < 100 ? 3 : 0}
-                  cornerRadius={8}
-                  strokeWidth={0}
-                  isAnimationActive={canAnimate}
-                  animationDuration={900}
-                  animationEasing="ease-out"
-                >
-                  {financeData.map((item) => (
-                    <Cell key={item.name} fill={item.fill} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-            <div className="students-radial-center">
-              <strong>{collectionRate}%</strong>
-              <span>toplanıb</span>
-            </div>
-          </div>
-          <div className="students-analytics-list">
-            <AnalyticsRow color="green" label="Bu ay toplanıb" value={collectedAmount} />
-            <AnalyticsRow color="blue" label="Aylıq ödəniş planı" value={expectedAmount} />
-            <AnalyticsRow color="coral" label="Qalıq borc nəzarəti" value={`${debtCount} tələbə`} />
-            <AnalyticsRow color="amber" label="Planlı gələcək ödəniş" value={`${futureCount} tələbə`} />
-          </div>
-        </div>
-      </article>
-
       <article className="students-analytics-card students-analytics-programs">
         <AnalyticsHeading
           icon={Layers3}
@@ -212,7 +135,7 @@ export function StudentOverviewCharts({
         <AnalyticsHeading
           icon={UsersRound}
           title="Müəllim yükü"
-          description="Aktiv tələbələrin müəllimlər üzrə bölgüsü"
+          description="Aktiv tələbə sayı / müəllimin real tutumu"
           meta={`${teachers.length} müəllim`}
           tone="amber"
         />
@@ -264,7 +187,7 @@ export function StudentOverviewCharts({
                 <div className="students-analytics-row" key={item.name}>
                   <span className="students-analytics-dot" style={{ backgroundColor: item.fill }} aria-hidden="true" />
                   <span>{item.name}</span>
-                  <strong>{item.count} ({item.percentage}%)</strong>
+                  <strong>{item.count}/{item.capacity ?? "—"} ({item.utilization ?? 0}% yük)</strong>
                 </div>
               ))}
             </div>
@@ -284,7 +207,7 @@ function AnalyticsHeading({
   meta,
   tone,
 }: {
-  icon: typeof CircleDollarSign;
+  icon: LucideIcon;
   title: string;
   description: string;
   meta: string;
@@ -301,16 +224,6 @@ function AnalyticsHeading({
       </div>
       <span className={`students-analytics-meta is-${tone}`}>{meta}</span>
     </header>
-  );
-}
-
-function AnalyticsRow({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <div className="students-analytics-row">
-      <span className={`students-analytics-dot is-${color}`} aria-hidden="true" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }
 

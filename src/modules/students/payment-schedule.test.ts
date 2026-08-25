@@ -6,40 +6,40 @@ function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-test("anchors the next payment to one month after the slot start month", () => {
+test("Jasmin: first lesson 18 August and payment 22 August gives 18 September", () => {
   assert.equal(
     resolveNextPaymentAt({
-      slotStartedAt: utcDate("2026-07-08"),
-      paymentMonth: utcDate("2026-07-01"),
+      billingAnchorDate: utcDate("2026-08-18"),
+      paymentMonth: utcDate("2026-08-01"),
     })?.toISOString().slice(0, 10),
-    "2026-08-08",
+    "2026-09-18",
   );
 });
 
-test("keeps the slot start day for following billing months", () => {
+test("Fatimə: payment cycle stays on the confirmed first lesson day", () => {
   assert.equal(
-    resolveNextPaymentDateInput({ slotStartedAt: "2026-07-08", paidAt: "2026-08-05" }),
-    "2026-09-08",
+    resolveNextPaymentDateInput({ billingAnchorDate: "2026-07-22", paidAt: "2026-08-25" }),
+    "2026-09-22",
   );
 });
 
-test("never schedules before one month after a later slot start", () => {
+test("slot-added date is not an input to billing", () => {
   assert.equal(
-    resolveNextPaymentDateInput({ slotStartedAt: "08.07.2026", paidAt: "2026-06-05" }),
-    "2026-08-08",
+    resolveNextPaymentDateInput({ billingAnchorDate: "22.07.2026", paidAt: "2026-07-20" }),
+    "2026-08-22",
   );
 });
 
-test("clamps slot start days that do not exist in the target month", () => {
+test("clamps day 31 to the final day of a short month", () => {
   assert.equal(
-    resolveNextPaymentDateInput({ slotStartedAt: "2026-01-31", paidAt: "2026-01-10" }),
+    resolveNextPaymentDateInput({ billingAnchorDate: "2026-01-31", paidAt: "2026-01-10" }),
     "2026-02-28",
   );
 });
 
-test("does not schedule a next payment when the student has no active slot", () => {
+test("does not invent a date without a confirmed first lesson", () => {
   assert.equal(
-    resolveNextPaymentDateInput({ slotStartedAt: null, paidAt: "2026-07-05" }),
+    resolveNextPaymentDateInput({ billingAnchorDate: null, paidAt: "2026-07-05" }),
     "",
   );
 });

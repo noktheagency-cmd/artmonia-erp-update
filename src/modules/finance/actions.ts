@@ -27,11 +27,8 @@ import {
 } from "@/modules/students/payment-schedule-type";
 import {
   clearStudentPaymentSchedules,
-  resolveStudentNextPaymentAt,
 } from "@/modules/students/payment-schedule-service";
 import { ensureMissingStudentMonthlyInvoices } from "@/modules/students/monthly-invoice-service";
-import { isStudentDebtDue } from "@/modules/students/student-debt-status";
-import { getBakuDateInput } from "@/modules/students/student-reminders";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
@@ -449,12 +446,7 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
         amount: input.amount,
         paidAt,
         paymentMonth,
-        nextPaymentAt: input.scheduleType === "ONE_TIME"
-          ? null
-          : await resolveStudentNextPaymentAt(tx, {
-              studentId: existing.studentId,
-              paymentMonth,
-            }),
+        nextPaymentAt: null,
         scheduleType: input.scheduleType,
         method: input.method as PaymentMethod,
         payerName: input.payerName ?? null,
@@ -549,7 +541,6 @@ async function deleteFinancePaymentActionImpl(formData: FormData) {
 
     await reversePaymentAllocations(tx, payment.id);
     await tx.payment.delete({ where: { id: payment.id } });
-    await markStudentDebtIfNeeded(tx, payment.studentId);
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -850,45 +841,7 @@ async function allocateExistingPayment(
     remainingAmount = roundMoney(remainingAmount - amountAllocated);
   }
 
-  await markStudentDebtIfNeeded(tx, input.studentId);
   return allocations;
-}
-
-async function markStudentDebtIfNeeded(tx: Prisma.TransactionClient, studentId: string) {
-  const [openBalance, latestSchedule] = await Promise.all([
-    tx.invoice.findFirst({
-      where: {
-        studentId,
-        status: { not: InvoiceStatus.VOID },
-        balanceDue: { gt: 0 },
-      },
-      select: { id: true },
-    }),
-    tx.payment.findFirst({
-      where: { studentId, nextPaymentAt: { not: null } },
-      orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
-      select: { nextPaymentAt: true },
-    }),
-  ]);
-  const today = new Date(`${getBakuDateInput()}T00:00:00.000Z`);
-
-  if (!isStudentDebtDue({
-    balance: openBalance ? 1 : 0,
-    nextPaymentAt: latestSchedule?.nextPaymentAt,
-    today,
-  })) {
-    return;
-  }
-
-  await tx.student.updateMany({
-    where: {
-      id: studentId,
-      lifecycleStatus: StudentLifecycleStatus.ACTIVE,
-    },
-    data: {
-      lifecycleStatus: StudentLifecycleStatus.DEBT,
-    },
-  });
 }
 
 async function createPaymentAndAllocate(
@@ -996,13 +949,6 @@ async function createPaymentAndAllocate(
     invoices = [...invoices, invoice];
   }
 
-  const nextPaymentAt = input.scheduleType === "ONE_TIME"
-    ? null
-    : await resolveStudentNextPaymentAt(tx, {
-        studentId: student.id,
-        paymentMonth: input.paymentMonth,
-      });
-
   await clearStudentPaymentSchedules(tx, [student.id]);
 
   const payment = await tx.payment.create({
@@ -1011,7 +957,7 @@ async function createPaymentAndAllocate(
       amount: input.amount,
       paidAt: input.paidAt,
       paymentMonth: input.paymentMonth,
-      nextPaymentAt,
+      nextPaymentAt: null,
       scheduleType: input.scheduleType,
       method: input.method as PaymentMethod,
       payerName: input.payerName,
@@ -1071,34 +1017,6 @@ async function createPaymentAndAllocate(
 
     allocations.push({ invoiceId: invoice.id, amount: amountAllocated });
     remainingAmount = roundMoney(remainingAmount - amountAllocated);
-  }
-
-  const stillHasOpenBalance = await tx.invoice.findFirst({
-    where: {
-      studentId: student.id,
-      status: { not: InvoiceStatus.VOID },
-      balanceDue: { gt: 0 },
-    },
-    select: { id: true },
-  });
-
-  if (!stillHasOpenBalance && student.lifecycleStatus === StudentLifecycleStatus.DEBT) {
-    await tx.student.update({
-      where: { id: student.id },
-      data: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
-    });
-
-    await tx.studentStatusHistory.create({
-      data: {
-        studentId: student.id,
-        oldStatus: student.lifecycleStatus,
-        newStatus: StudentLifecycleStatus.ACTIVE,
-        reason: "Alacaq bağlandığı üçün status aktiv edildi",
-        note: input.note,
-        effectiveAt: input.paidAt,
-        changedById: input.actorId,
-      },
-    });
   }
 
   return {

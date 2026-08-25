@@ -33,7 +33,6 @@ import {
 } from "@/modules/students/student-create-rules";
 import {
   clearStudentPaymentSchedules,
-  resolveStudentNextPaymentAt,
   restartStudentPaymentScheduleForActiveSlot,
 } from "@/modules/students/payment-schedule-service";
 import { ensureMissingStudentMonthlyInvoices } from "@/modules/students/monthly-invoice-service";
@@ -80,7 +79,6 @@ const optionalAmount = z.preprocess((value) => {
 const studentLifecycleStatusValues = [
   StudentLifecycleStatus.SLOT_WAITING,
   StudentLifecycleStatus.ACTIVE,
-  StudentLifecycleStatus.DEBT,
   StudentLifecycleStatus.FROZEN,
   StudentLifecycleStatus.STOPPED,
   StudentLifecycleStatus.DECLINED,
@@ -187,6 +185,24 @@ const updateStudentProfileSchema = z.object({
   statusEffectiveDate: optionalText(20),
   statusNote: optionalText(240),
   notes: optionalText(500),
+}).superRefine((value, context) => {
+  if (!isGiftDiscount(value.discountType) && value.monthlyFee <= 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["monthlyFee"],
+      message: "Aylıq məbləğ sıfırdan böyük olmalıdır.",
+    });
+  }
+});
+
+const createStudentEnrollmentSchema = z.object({
+  studentId: z.string().uuid(),
+  programId: requiredUuid("Proqram"),
+  teacherId: optionalUuid("Müəllim"),
+  firstLessonDate: z.string().trim().min(1).max(20),
+  discountType: optionalText(100),
+  monthlyFee: z.preprocess(parseAmountInput, z.number().nonnegative().max(100_000)),
+  lessonsPerMonth: optionalInteger,
 }).superRefine((value, context) => {
   if (!isGiftDiscount(value.discountType) && value.monthlyFee <= 0) {
     context.addIssue({
@@ -332,6 +348,7 @@ async function createStudentActionImpl(formData: FormData) {
         educationLevel: educationLevel?.value ?? null,
         registeredAt,
         billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
+        billingAnchorDate: firstLessonAt,
         notes: input.notes ?? null,
         statusHistory: {
           create: {
@@ -931,6 +948,130 @@ async function updateStudentProfileActionImpl(formData: FormData) {
   invalidateStudentCaches();
 }
 
+async function createStudentEnrollmentActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("student.update");
+  const input = createStudentEnrollmentSchema.parse(Object.fromEntries(formData));
+  const firstLessonAt = parseDateInput(input.firstLessonDate, "İlk dərs tarixi");
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const student = await tx.student.findUnique({
+      where: { id: input.studentId },
+      select: {
+        id: true,
+        code: true,
+        managerId: true,
+        lifecycleStatus: true,
+        billingPaused: true,
+        billingAnchorDate: true,
+      },
+    });
+    if (!student) throw new PublicActionError("Tələbə tapılmadı.");
+    if (
+      scopeFor(actor.permissions, "student.update") !== "ALL"
+      && student.managerId !== actor.id
+    ) {
+      throw new PublicActionError("Bu tələbəyə paket əlavə etmək icazəniz yoxdur.");
+    }
+    if (
+      student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
+      || student.lifecycleStatus === StudentLifecycleStatus.DECLINED
+    ) {
+      throw new PublicActionError("Tamamlanmış və ya imtina etmiş tələbəyə aktiv paket əlavə edilə bilməz.");
+    }
+
+    const [program, teacher, discountType, existingEnrollment] = await Promise.all([
+      tx.program.findUnique({ where: { id: input.programId }, select: { id: true, name: true } }),
+      input.teacherId
+        ? tx.teacher.findUnique({ where: { id: input.teacherId }, select: { id: true } })
+        : Promise.resolve(null),
+      input.discountType
+        ? tx.dropdownCatalogOption.findUnique({
+            where: {
+              catalog_value: {
+                catalog: "STUDENT_DISCOUNT_TYPE",
+                value: input.discountType,
+              },
+            },
+            select: { value: true, isActive: true },
+          })
+        : Promise.resolve(null),
+      tx.enrollment.findFirst({
+        where: {
+          studentId: student.id,
+          programId: input.programId,
+          status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!program) throw new PublicActionError("Proqram tapılmadı.");
+    if (input.teacherId && !teacher) throw new PublicActionError("Müəllim tapılmadı.");
+    if (input.discountType && (!discountType || !discountType.isActive)) {
+      throw new PublicActionError("Güzəşt növü tapılmadı və ya aktiv deyil.");
+    }
+    if (existingEnrollment) {
+      throw new PublicActionError("Bu proqram tələbənin aktiv paketləri arasında artıq mövcuddur.");
+    }
+
+    const monthlyFee = resolveStudentMonthlyFee(discountType?.value, input.monthlyFee);
+    const enrollment = await tx.enrollment.create({
+      data: {
+        studentId: student.id,
+        programId: program.id,
+        teacherId: input.teacherId ?? null,
+        status: student.billingPaused ? EnrollmentStatus.PAUSED : EnrollmentStatus.ACTIVE,
+        startDate: firstLessonAt,
+        firstLessonAt,
+        monthlyFee,
+        discountType: discountType?.value ?? null,
+        lessonsPerMonth: input.lessonsPerMonth ?? null,
+      },
+    });
+
+    if (!student.billingAnchorDate) {
+      await tx.student.update({
+        where: { id: student.id },
+        data: { billingAnchorDate: firstLessonAt },
+      });
+    }
+
+    if (student.lifecycleStatus === StudentLifecycleStatus.ACTIVE && !student.billingPaused) {
+      await ensureMissingStudentMonthlyInvoices(tx, {
+        studentId: student.id,
+        throughDate: startOfToday(),
+      });
+    }
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "student.enrollment.create",
+      entityType: "student",
+      entityId: student.id,
+      after: {
+        enrollmentId: enrollment.id,
+        programId: program.id,
+        programName: program.name,
+        teacherId: input.teacherId ?? null,
+        firstLessonAt: firstLessonAt.toISOString(),
+        billingAnchorDate: (student.billingAnchorDate ?? firstLessonAt).toISOString(),
+        monthlyFee,
+        discountType: discountType?.value ?? null,
+        lessonsPerMonth: input.lessonsPerMonth ?? null,
+      } satisfies Prisma.InputJsonValue,
+      reason: `${student.code} üçün əlavə tədris paketi yaradıldı`,
+    });
+  });
+
+  revalidatePath(`/students/${input.studentId}`);
+  revalidatePath("/students");
+  revalidatePath("/dashboard");
+  revalidatePath("/finance");
+  invalidateStudentCaches();
+  return { redirectTo: `/students/${input.studentId}` };
+}
+
 async function deleteStudentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.delete");
   const input = deleteStudentSchema.parse(Object.fromEntries(formData));
@@ -1241,12 +1382,6 @@ async function createPaymentAndAllocate(
   }
 
   const monthlyFee = toNumber(student.enrollments[0]?.monthlyFee);
-  const nextPaymentAt = input.scheduleType === "ONE_TIME"
-    ? null
-    : await resolveStudentNextPaymentAt(tx, {
-        studentId: student.id,
-        paymentMonth: input.paymentMonth,
-      });
   let invoices = student.invoices;
   const periodMonth = startOfMonth(input.paidAt);
   const openBalance = roundMoney(
@@ -1308,7 +1443,7 @@ async function createPaymentAndAllocate(
       amount: input.amount,
       paidAt: input.paidAt,
       paymentMonth: input.paymentMonth,
-      nextPaymentAt,
+      nextPaymentAt: null,
       scheduleType: input.scheduleType,
       method: input.method as PaymentMethod,
       note: input.note,
@@ -1361,34 +1496,6 @@ async function createPaymentAndAllocate(
 
     allocations.push({ invoiceId: invoice.id, amount: amountAllocated });
     remainingAmount = roundMoney(remainingAmount - amountAllocated);
-  }
-
-  const stillHasOpenBalance = await tx.invoice.findFirst({
-    where: {
-      studentId: student.id,
-      status: { not: InvoiceStatus.VOID },
-      balanceDue: { gt: 0 },
-    },
-    select: { id: true },
-  });
-
-  if (!stillHasOpenBalance && student.lifecycleStatus === StudentLifecycleStatus.DEBT) {
-    await tx.student.update({
-      where: { id: student.id },
-      data: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
-    });
-
-    await tx.studentStatusHistory.create({
-      data: {
-        studentId: student.id,
-        oldStatus: student.lifecycleStatus,
-        newStatus: StudentLifecycleStatus.ACTIVE,
-        reason: "Borc bağlandığı üçün status aktiv edildi",
-        note: input.note,
-        effectiveAt: input.paidAt,
-        changedById: input.actorId,
-      },
-    });
   }
 
   return {
@@ -1534,6 +1641,10 @@ export const updateStudentStatusAction = safeServerAction(
 export const updateStudentProfileAction = safeServerAction(
   updateStudentProfileActionImpl,
   "Tələbə profili yenilənmədi.",
+);
+export const createStudentEnrollmentAction = safeServerAction(
+  createStudentEnrollmentActionImpl,
+  "Tələbəyə paket əlavə edilmədi.",
 );
 export const deleteStudentAction = safeServerAction(
   deleteStudentActionImpl,

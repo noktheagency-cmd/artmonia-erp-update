@@ -5,6 +5,7 @@ import { formatLeadStageLabel } from "@/modules/crm/stage";
 import { getPrisma } from "@/server/db/prisma";
 import type { ErpActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
+import { TASK_WORKSPACE_EXCLUDED_TYPES } from "@/modules/tasks/task-scope";
 
 export const globalSearchKinds = [
   "student",
@@ -297,6 +298,7 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
         from erp.tasks task_row
         left join erp.users task_owner on task_owner.id = task_row.owner_user_id
         where ${taskScopeSql}
+          and task_row.type not in (${Prisma.join([...TASK_WORKSPACE_EXCLUDED_TYPES])})
           and (
             task_row.title ilike ${search.rawPattern}
             or task_row.description ilike ${search.rawPattern}
@@ -452,7 +454,6 @@ function formatDate(value: Date) {
 
 const studentStatusLabels: Record<string, string> = {
   ACTIVE: "Aktiv",
-  DEBT: "Borclu",
   SLOT_WAITING: "Slot gözləyir",
   FROZEN: "Dondurulub",
   STOPPED: "Dayandırılıb",

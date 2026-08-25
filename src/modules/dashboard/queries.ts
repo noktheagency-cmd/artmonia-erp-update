@@ -13,6 +13,7 @@ import {
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { requireErpActor } from "@/server/auth/actor";
 import type { PermissionCode } from "@/server/rbac/permissions";
+import { TASK_WORKSPACE_EXCLUDED_TYPES } from "@/modules/tasks/task-scope";
 
 export type DashboardKpi = {
   label: string;
@@ -125,6 +126,7 @@ type DashboardRawRow = {
   previousPeriodRevenue: unknown;
   previousPeriodExpenses: unknown;
   debtAmount: unknown;
+  debtStudentCount: unknown;
   revenueRows: unknown;
   expenseRows: unknown;
   taskRows: unknown;
@@ -216,19 +218,22 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       coalesce((
         select count(*)::int
         from erp.students s
-        where s.lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+        where s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and s.is_test_data = false
       ), 0) as "activeStudents",
       coalesce((
         select sum(e.monthly_fee)
         from erp.enrollments e
         join erp.students s on s.id = e.student_id
         where e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-          and s.lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          and s.is_test_data = false
       ), 0) as "activeMrr",
       coalesce((
         select count(*)::int
         from erp.students s
         where s.registered_at < ${previousPeriodEndExclusive}
+          and s.is_test_data = false
           and coalesce(
             (
               select h.new_status
@@ -239,13 +244,15 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
               limit 1
             ),
             s.lifecycle_status
-          ) in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "previousActiveStudents",
       coalesce((
         select sum(p.amount)
         from erp.payments p
+        join erp.students s on s.id = p.student_id
         where p.paid_at >= ${periodStart}
           and p.paid_at < ${periodEndExclusive}
+          and s.is_test_data = false
       ), 0) + coalesce((
         select sum(wp.amount)
         from erp.workshop_payments wp
@@ -256,8 +263,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       coalesce((
         select sum(p.amount)
         from erp.payments p
+        join erp.students s on s.id = p.student_id
         where p.paid_at >= ${periodStart}
           and p.paid_at < ${periodEndExclusive}
+          and s.is_test_data = false
       ), 0) as "periodStudentRevenue",
       coalesce((
         select sum(wp.amount)
@@ -295,8 +304,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       coalesce((
         select sum(p.amount)
         from erp.payments p
+        join erp.students s on s.id = p.student_id
         where p.paid_at >= ${previousPeriodStart}
           and p.paid_at < ${previousPeriodEndExclusive}
+          and s.is_test_data = false
       ), 0) + coalesce((
         select sum(wp.amount)
         from erp.workshop_payments wp
@@ -315,9 +326,19 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       coalesce((
         select sum(i.balance_due)
         from erp.invoices i
+        join erp.students s on s.id = i.student_id
         where i.balance_due > 0
           and i.status <> 'VOID'::"erp"."InvoiceStatus"
+          and s.is_test_data = false
       ), 0) as "debtAmount",
+      coalesce((
+        select count(distinct i.student_id)::int
+        from erp.invoices i
+        join erp.students s on s.id = i.student_id
+        where i.balance_due > 0
+          and i.status <> 'VOID'::"erp"."InvoiceStatus"
+          and s.is_test_data = false
+      ), 0) as "debtStudentCount",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -331,8 +352,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           from (
             select date_trunc('month', p.paid_at)::date as payment_month, p.amount
             from erp.payments p
+            join erp.students s on s.id = p.student_id
             where p.paid_at >= ${firstRevenueMonth}
               and p.paid_at < ${nextRevenueMonth}
+              and s.is_test_data = false
             union all
             select date_trunc('month', wp.paid_at)::date as payment_month, wp.amount
             from erp.workshop_payments wp
@@ -373,6 +396,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             'OPEN'::"erp"."TaskStatus",
             'IN_PROGRESS'::"erp"."TaskStatus"
           )
+          and t.type not in (${Prisma.join([...TASK_WORKSPACE_EXCLUDED_TYPES])})
           and (${canViewAllTasks} or t.owner_user_id = ${actor.id}::uuid)
           and (
             t.due_at is null
@@ -442,8 +466,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
                 )::int
               ) as age_days
             from erp.invoices i
+            join erp.students s on s.id = i.student_id
             where i.balance_due > 0
               and i.status <> 'VOID'::"erp"."InvoiceStatus"
+              and s.is_test_data = false
           ) open_invoice
           where open_invoice.age_days >= bucket.min_days
             and (
@@ -471,6 +497,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         ) p
         join erp.students s on s.id = p.student_id
         join erp.contacts c on c.id = s.contact_id
+        where s.is_test_data = false
       ), '[]'::jsonb) as "recentPayments",
       coalesce((
         select jsonb_agg(
@@ -485,7 +512,8 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           join erp.programs pr on pr.id = e.program_id
           join erp.students s on s.id = e.student_id
           where e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-            and s.lifecycle_status in ('ACTIVE'::"erp"."StudentLifecycleStatus", 'DEBT'::"erp"."StudentLifecycleStatus")
+            and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+            and s.is_test_data = false
           group by pr.name
           order by count desc
           limit 4
@@ -514,6 +542,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         from (
           select s2.lifecycle_status as status, count(*)::int as count
           from erp.students s2
+          where s2.is_test_data = false
           group by s2.lifecycle_status
         ) status_counts
       ), '[]'::jsonb) as "studentStatusCounts",
@@ -538,9 +567,6 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             coalesce(sum(p.amount), 0) as revenue
           from erp.leads l
           join erp.users u on u.id = l.manager_id and u.is_active = true
-          join erp.hr_employees he on he.user_id = u.id
-            and he.archived_at is null
-            and he.status in ('ACTIVE'::"erp"."HrEmployeeStatus", 'PROBATION'::"erp"."HrEmployeeStatus")
           left join erp.payments p
             on p.student_id = l.converted_student_id
             and p.paid_at >= ${periodStart}
@@ -654,6 +680,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const previousNetProfit = previousPeriodRevenue - previousPeriodExpenses;
   const netProfitMargin = periodRevenue !== 0 ? (netProfit / periodRevenue) * 100 : 0;
   const totalDebt = toNumber(row?.debtAmount);
+  const debtStudentCount = toNumber(row?.debtStudentCount);
   const payoutPreview = toNumber(row?.payoutPreview);
   const waitingLeads = toNumber(row?.waitingLeads);
   const totalAging = debtByBucket.reduce((sum, bucket) => sum + bucket.value, 0);
@@ -735,7 +762,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         delta: activeStudentsTrend.delta,
         helper: "Əvvəlki dövrə nisbətən",
         trend: activeStudentsTrend.direction,
-        detail: `${formatAmount(activeMrr)} aktiv aylıq abunə dəyəri`,
+        detail: `${formatCount(debtStudentCount)} borclu · ${formatAmount(totalDebt)} açıq borc`,
         tone: "primary",
       },
       {
@@ -848,8 +875,6 @@ function mapLifecycleStatus(status: string): { label: string; tone: "success" | 
       return { label: "Aktiv", tone: "success" };
     case "SLOT_WAITING":
       return { label: "Slot gözləyir", tone: "info" };
-    case "DEBT":
-      return { label: "Borclu", tone: "danger" };
     case "FROZEN":
       return { label: "Dondurulub", tone: "warning" };
     case "STOPPED":

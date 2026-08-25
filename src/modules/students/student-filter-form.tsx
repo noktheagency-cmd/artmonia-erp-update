@@ -1,25 +1,21 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useTransition, type FormEvent } from "react";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Activity, BookOpen, CreditCard, Filter, Search, Users, X } from "lucide-react";
+import { Activity, BookOpen, CreditCard, Filter, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DatePicker } from "@/components/ui/date-picker";
 import { Field, FieldGroup } from "@/components/ui/field";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import type { StudentListData } from "@/modules/students/queries";
 
-type StudentFilterFormProps = Pick<StudentListData, "filterOptions" | "filters" | "query">;
+type StudentFilterFormProps = Pick<StudentListData, "filterOptions" | "filters">;
 
-export function StudentFilterForm({ filterOptions, filters, query }: StudentFilterFormProps) {
+export function StudentFilterForm({ filterOptions, filters }: StudentFilterFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  const [dateFrom, setDateFrom] = useState(filters.dateFrom);
-  const [dateTo, setDateTo] = useState(filters.dateTo);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,15 +24,14 @@ export function StudentFilterForm({ filterOptions, filters, query }: StudentFilt
     const currentTab = searchParams.get("tab");
 
     if (currentTab) params.set("tab", currentTab);
-    appendParam(params, "q", formData.get("q"));
+    appendParam(params, "from", searchParams.get("from"));
+    appendParam(params, "to", searchParams.get("to"));
     const status = cleanValue(formData.get("status"));
     if (status) params.set("status", status);
     const churn = searchParams.get("churn");
     if (churn && !status) params.set("churn", churn);
     appendParam(params, "program", formData.get("program"));
     appendParam(params, "teacher", formData.get("teacher"));
-    appendParam(params, "from", formData.get("from"));
-    appendParam(params, "to", formData.get("to"));
 
     const payment = cleanValue(formData.get("payment"));
     if (payment && payment !== "all") params.set("payment", payment);
@@ -53,14 +48,6 @@ export function StudentFilterForm({ filterOptions, filters, query }: StudentFilt
   return (
     <form className="students-filter-form" onSubmit={handleSubmit} aria-label="Tələbə filtrləri">
       <FieldGroup className="students-filter-primary">
-        <Field className="students-search-field">
-          <InputGroup>
-            <InputGroupAddon aria-hidden="true"><Search /></InputGroupAddon>
-            <InputGroupInput name="q" placeholder="Tələbə, kod və ya telefon..." defaultValue={query} aria-label="Tələbə axtar" />
-          </InputGroup>
-        </Field>
-        <Field className="students-date-field"><DatePicker name="from" value={dateFrom} onValueChange={setDateFrom} placeholder="Başlanğıc" aria-label="Başlanğıc tarixi" /></Field>
-        <Field className="students-date-field"><DatePicker name="to" value={dateTo} onValueChange={setDateTo} placeholder="Son tarix" aria-label="Son tarix" /></Field>
         <Field className="students-filter-select-field"><FormSelect name="status" defaultValue={filters.status} emptyLabel="Status" options={filterOptions.statuses} icon={Activity} /></Field>
         <Field className="students-filter-select-field"><FormSelect name="program" defaultValue={filters.program} emptyLabel="Proqram" options={filterOptions.programs} icon={BookOpen} searchable searchPlaceholder="Proqram axtar..." /></Field>
         <Field className="students-filter-select-field"><FormSelect name="teacher" defaultValue={filters.teacher} emptyLabel="Müəllim" options={filterOptions.teachers} icon={Users} searchable searchPlaceholder="Müəllim axtar..." /></Field>

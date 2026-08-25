@@ -49,7 +49,6 @@ const shiftLabels: Record<PlannerSlot["shift"], string> = {
 const lifecycleLabels: Record<string, string> = {
   SLOT_WAITING: "Slot gözləyir",
   ACTIVE: "Aktiv",
-  DEBT: "Borclu",
   FROZEN: "Dondurulub",
   STOPPED: "Dayandırılıb",
   DECLINED: "İmtina edib",

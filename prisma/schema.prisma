@@ -75,7 +75,6 @@ enum LeadNextActionType {
 enum StudentLifecycleStatus {
   SLOT_WAITING
   ACTIVE
-  DEBT
   FROZEN
   STOPPED
   DECLINED
@@ -432,6 +431,7 @@ model User {
   managedStudents                  Student[]                   @relation("StudentManager")
   leadStageChanges                 LeadStageHistory[]          @relation("LeadStageChanger")
   statusChanges                    StudentStatusHistory[]      @relation("StatusChanger")
+  billingMigrationReviews          StudentBillingMigrationReview[] @relation("BillingMigrationReviewer")
   createdPricingVersions           ProgramPricingVersion[]     @relation("PricingCreator")
   teacherAssignmentChanges         TeacherAssignmentHistory[]  @relation("TeacherAssignmentChanger")
   createdPayments                  Payment[]                   @relation("PaymentCreator")
@@ -1411,6 +1411,8 @@ model Student {
   completedAt            DateTime?              @map("completed_at") @db.Date
   freezeReturnAt         DateTime?              @map("freeze_return_at") @db.Date
   billingPaused          Boolean                @default(false) @map("billing_paused")
+  billingAnchorDate      DateTime?              @map("billing_anchor_date") @db.Date
+  isTestData             Boolean                @default(false) @map("is_test_data")
   notes                  String?
   createdAt              DateTime               @default(now()) @map("created_at")
   updatedAt              DateTime               @updatedAt @map("updated_at")
@@ -1423,6 +1425,8 @@ model Student {
   enrollments          Enrollment[]
   invoices             Invoice[]
   payments             Payment[]
+  billingCycles        StudentBillingCycle[]
+  billingMigrationReview StudentBillingMigrationReview?
   refundAdjustments    RefundAdjustment[]
   lessons              Lesson[]
   workshopParticipants WorkshopParticipant[]
@@ -1523,6 +1527,7 @@ model Enrollment {
   program             Program                     @relation(fields: [programId], references: [id])
   teacher             Teacher?                    @relation(fields: [teacherId], references: [id])
   invoices            Invoice[]
+  billingCycles       StudentBillingCycle[]
   assignmentHistory   TeacherAssignmentHistory[]
   payoutLines         TeacherPayoutLine[]
   lessons             Lesson[]
@@ -1943,6 +1948,7 @@ model Invoice {
   enrollment         Enrollment?         @relation(fields: [enrollmentId], references: [id])
   paymentAllocations PaymentAllocation[]
   refundAdjustments  RefundAdjustment[]
+  billingCycle       StudentBillingCycle?
 
   @@index([studentId, periodMonth])
   @@index([periodMonth, enrollmentId], map: "invoices_period_enrollment_idx")
@@ -1976,12 +1982,64 @@ model Payment {
   allocations       PaymentAllocation[]
   refundAdjustments RefundAdjustment[]
   payoutLines       TeacherPayoutLine[]
+  billingCycles     StudentBillingCycle[]
 
   @@index([studentId, paidAt])
   @@index([paymentMonth])
   @@index([nextPaymentAt])
   @@index([createdById])
   @@map("payments")
+  @@schema("erp")
+}
+
+model StudentBillingCycle {
+  id           String        @id @default(uuid()) @db.Uuid
+  studentId    String        @map("student_id") @db.Uuid
+  enrollmentId String        @map("enrollment_id") @db.Uuid
+  invoiceId    String?       @unique @map("invoice_id") @db.Uuid
+  paymentId    String?       @map("payment_id") @db.Uuid
+  cycleStart   DateTime      @map("cycle_start") @db.Date
+  cycleEnd     DateTime      @map("cycle_end") @db.Date
+  dueDate      DateTime      @map("due_date") @db.Date
+  amount       Decimal       @db.Decimal(12, 2)
+  status       InvoiceStatus @default(OPEN)
+  paidAt       DateTime?     @map("paid_at") @db.Date
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  invoice    Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  payment    Payment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([enrollmentId, cycleStart])
+  @@index([studentId, status, dueDate])
+  @@index([paymentId])
+  @@map("student_billing_cycles")
+  @@schema("erp")
+}
+
+model StudentBillingMigrationReview {
+  id                      String   @id @default(uuid()) @db.Uuid
+  studentId               String   @unique @map("student_id") @db.Uuid
+  oldNextPaymentAt        DateTime? @map("old_next_payment_at") @db.Date
+  billingAnchorDate       DateTime? @map("billing_anchor_date") @db.Date
+  proposedNextPaymentAt   DateTime? @map("proposed_next_payment_at") @db.Date
+  mismatch                Boolean  @default(false)
+  issueReason             String?  @map("issue_reason")
+  reviewStatus            String   @default("PENDING") @map("review_status")
+  reviewedById            String?  @map("reviewed_by_id") @db.Uuid
+  reviewedAt              DateTime? @map("reviewed_at")
+  appliedAt               DateTime? @map("applied_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  student    Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reviewedBy User?   @relation("BillingMigrationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([mismatch, reviewStatus])
+  @@index([reviewedById])
+  @@map("student_billing_migration_reviews")
   @@schema("erp")
 }
 

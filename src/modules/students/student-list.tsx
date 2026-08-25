@@ -98,11 +98,13 @@ export function StudentList({ data }: { data: StudentListData }) {
     if (key === "status" && value) {
       params.delete("churn");
       params.delete("payment");
+      params.delete("from");
+      params.delete("to");
     }
     if (key === "payment" && value) {
       params.delete("status");
       params.delete("churn");
-      if (["open", "overdue", "planned", "archive"].includes(value)) {
+      if (["open", "overdue", "archive"].includes(value)) {
         params.delete("from");
         params.delete("to");
       }
@@ -185,7 +187,6 @@ export function StudentList({ data }: { data: StudentListData }) {
           ].join(":")}
           filterOptions={data.filterOptions}
           filters={data.filters}
-          query={data.query}
         />
       </section>
 
@@ -282,11 +283,6 @@ export function StudentList({ data }: { data: StudentListData }) {
       ) : activeTab === "overview" ? (
         <>
           <StudentOverviewCharts
-            collectionRate={data.operations.collectionRate}
-            debtCount={data.operations.actionableCount}
-            futureCount={data.operations.futureCount}
-            collectedAmount={data.operations.collectedAmount}
-            expectedAmount={data.operations.expectedAmount}
             programs={data.operations.programs}
             teachers={data.operations.teachers}
           />

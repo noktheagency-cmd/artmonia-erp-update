@@ -12,6 +12,7 @@ import {
 } from "@/modules/notifications/notification-rules";
 import { formatBakuDate } from "@/modules/notifications/notification-date";
 import { getPrisma } from "@/server/db/prisma";
+import { buildTaskWorkspaceWhere } from "@/modules/tasks/task-scope";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
 
 type NotificationTransaction = Prisma.TransactionClient;
@@ -66,6 +67,7 @@ export async function generateTaskDeadlineNotifications({
   const soonThreshold = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
   const tasks = await prisma.task.findMany({
     where: {
+      ...buildTaskWorkspaceWhere(),
       ...(recipientUserId ? { ownerUserId: recipientUserId } : { ownerUserId: { not: null } }),
       dueAt: { not: null, lte: soonThreshold },
       status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },

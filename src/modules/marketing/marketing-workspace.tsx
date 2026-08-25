@@ -2,22 +2,18 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { FormEvent, ReactNode } from "react";
-import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   Activity,
   Edit3,
   ExternalLink,
   FileText,
-  Filter,
   Images,
   Megaphone,
   MessageCircle,
   MousePointerClick,
   Plus,
   RefreshCw,
-  RotateCcw,
-  Search,
   Trash2,
   UsersRound,
   WalletCards,
@@ -52,19 +48,17 @@ const statusLabels: Record<string, string> = { DRAFT: "Qaralama", ACTIVE: "Aktiv
 
 export function MarketingWorkspace({ data }: { data: MarketingData }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
   const [syncPending, startSyncTransition] = useTransition();
   const campaigns = useMemo(
     () => data.campaigns.filter((campaign) =>
-      (status === "all" || campaign.status === status)
-      && `${campaign.name} ${campaign.channel}`.toLocaleLowerCase("az").includes(query.toLocaleLowerCase("az")))
+      status === "all" || campaign.status === status)
       .toSorted((left, right) => right.stats.spend - left.stats.spend
         || right.stats.conversations - left.stats.conversations
         || deterministicTextCompare(left.name, right.name)),
-    [data.campaigns, query, status],
+    [data.campaigns, status],
   );
   const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0] ?? null;
   const metaCurrency = campaigns.find((campaign) => campaign.metaCampaignId && campaign.stats.spend > 0)?.stats.currency ?? "AZN";
@@ -120,17 +114,6 @@ export function MarketingWorkspace({ data }: { data: MarketingData }) {
 
     <MarketingViewTabs active="results" />
 
-    <div className="marketing-filterbar">
-      <MarketingDateFilter key={`${data.period.from}:${data.period.to}`} period={data.period} />
-      <div className="marketing-filter-controls">
-        <label className="marketing-search-field">
-          <Search size={15} />
-          <span className="sr-only">Kampaniya axtar</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Kampaniya axtar..." />
-        </label>
-      </div>
-    </div>
-
     <div className="marketing-overview-grid" aria-label="Marketing əsas göstəriciləri">
       <Metric icon={MessageCircle} label="Meta conversation" value={count(totals.conversations)} helper={`${count(totals.impressions)} impression`} tone="violet" />
       <Metric icon={WalletCards} label="Meta xərci" value={money(totals.spend, totals.currency)} helper="Reklam hesabından" tone="blue" />
@@ -178,55 +161,6 @@ export function MarketingWorkspace({ data }: { data: MarketingData }) {
         : <div className="marketing-detail-empty"><Megaphone size={24} /><strong>Kampaniya seçilməyib</strong><span>Nəticələri görmək üçün filtrinizi dəyişin.</span></div>}
     </section>
   </section>;
-}
-
-function MarketingDateFilter({ period }: { period: MarketingData["period"] }) {
-  const router = useRouter();
-  const [from, setFrom] = useState(period.from);
-  const [to, setTo] = useState(period.to);
-  const [pending, startTransition] = useTransition();
-  const isDefault = from === period.defaultFrom && to === period.defaultTo;
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const params = new URLSearchParams({ from, to });
-    startTransition(() => router.push(`/marketing?${params.toString()}` as Route));
-  }
-
-  function reset() {
-    setFrom(period.defaultFrom);
-    setTo(period.defaultTo);
-    startTransition(() => router.push("/marketing" as Route));
-  }
-
-  return <form className="marketing-date-filter" onSubmit={submit} aria-label="Tarix aralığı filtri">
-    <DatePicker
-      name="from"
-      value={from}
-      onValueChange={setFrom}
-      allowClear={false}
-      aria-label="Başlanğıc tarixi"
-      popoverPlacement="floating"
-      compact
-    />
-    <span className="marketing-date-separator" aria-hidden="true">–</span>
-    <DatePicker
-      name="to"
-      value={to}
-      onValueChange={setTo}
-      allowClear={false}
-      aria-label="Son tarix"
-      popoverPlacement="floating"
-      compact
-    />
-    <Button type="submit" variant="outline" className="marketing-date-submit" disabled={pending}>
-      <Filter size={15} />
-      {pending ? "Göstərilir..." : "Göstər"}
-    </Button>
-    <Button type="button" variant="ghost" size="icon" className="marketing-date-reset" onClick={reset} disabled={pending || isDefault} aria-label="Son 8 aya qaytar">
-      <RotateCcw size={15} />
-    </Button>
-  </form>;
 }
 
 function CampaignDetail({ campaign, period, canManage }: { campaign: MarketingCampaignRow; period: MarketingData["period"]; canManage: boolean }) {

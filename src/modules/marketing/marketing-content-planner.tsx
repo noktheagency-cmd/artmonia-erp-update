@@ -62,9 +62,19 @@ const statusMeta = {
   REVISION_REQUIRED: { label: "Düzəliş tələb olunur", short: "Düzəliş", tone: "revision" },
 } as const;
 
-export function MarketingContentPlanner({ data }: { data: MarketingContentData }) {
+export function MarketingContentPlanner({
+  data,
+  initialSelectedId,
+}: {
+  data: MarketingContentData;
+  initialSelectedId?: string;
+}) {
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState(data.items[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(
+    data.items.some((item) => item.id === initialSelectedId)
+      ? initialSelectedId!
+      : data.items[0]?.id ?? "",
+  );
   const [platform, setPlatform] = useState("all");
   const [status, setStatus] = useState("all");
   const [person, setPerson] = useState("all");

@@ -32,8 +32,9 @@ export async function ensureMissingStudentMonthlyInvoices(
         e.id,
         e.student_id,
         e.start_date,
-        coalesce(e.first_lesson_at, e.start_date) as billing_anchor,
-        e.monthly_fee
+        s.billing_anchor_date as billing_anchor,
+        e.monthly_fee,
+        count(*) over (partition by e.student_id) as enrollment_count
       from erp.enrollments e
       join erp.students s on s.id = e.student_id
       where e.student_id = ${input.studentId}::uuid
@@ -41,18 +42,15 @@ export async function ensureMissingStudentMonthlyInvoices(
           'ACTIVE'::"erp"."EnrollmentStatus",
           'PAUSED'::"erp"."EnrollmentStatus"
         )
-        and s.lifecycle_status in (
-          'ACTIVE'::"erp"."StudentLifecycleStatus",
-          'DEBT'::"erp"."StudentLifecycleStatus"
-        )
+        and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
         and s.billing_paused = false
-      order by e.start_date desc, e.created_at desc
-      limit 1
+        and s.is_test_data = false
+        and s.billing_anchor_date is not null
     ), evidence as (
       select
         ce.*,
         greatest(
-          date_trunc('month', ce.start_date)::date,
+          date_trunc('month', ce.billing_anchor)::date,
           least(
             coalesce((
               select min(i.period_month)
@@ -77,13 +75,13 @@ export async function ensureMissingStudentMonthlyInvoices(
       billing_month.period_month as "periodMonth",
       e.billing_anchor as "billingAnchor",
       e.monthly_fee as amount,
-      greatest(e.monthly_fee - coalesce((
+      greatest(e.monthly_fee - case when e.enrollment_count = 1 then coalesce((
         select sum(p.amount)
         from erp.payments p
         where p.student_id = e.student_id
           and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
           and date_trunc('month', p.payment_month) = billing_month.period_month
-      ), 0), 0) as "balanceDue"
+      ), 0) else 0 end, 0) as "balanceDue"
     from evidence e
     join erp.students s on s.id = e.student_id
     cross join lateral generate_series(
@@ -96,15 +94,16 @@ export async function ensureMissingStudentMonthlyInvoices(
       from erp.invoices i
       where i.student_id = e.student_id
         and i.status <> 'VOID'::"erp"."InvoiceStatus"
+        and i.enrollment_id = e.id
         and date_trunc('month', i.period_month) = billing_month.period_month
     )
-      and e.monthly_fee > coalesce((
+      and e.monthly_fee > case when e.enrollment_count = 1 then coalesce((
         select sum(p.amount)
         from erp.payments p
         where p.student_id = e.student_id
           and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
           and date_trunc('month', p.payment_month) = billing_month.period_month
-      ), 0)
+      ), 0) else 0 end
     order by billing_month.period_month asc
   `);
 
@@ -126,7 +125,7 @@ export async function ensureMissingStudentMonthlyInvoices(
         amount,
         balanceDue,
         status: resolveInvoiceStatus({ amount, balanceDue, dueDate, today: input.throughDate }),
-        idempotencyKey: `student-gap-${row.studentCode}-${periodMonth.toISOString().slice(0, 10)}`,
+        idempotencyKey: `student-gap-${row.studentCode}-${row.enrollmentId}-${periodMonth.toISOString().slice(0, 10)}`,
       };
     }),
     skipDuplicates: true,

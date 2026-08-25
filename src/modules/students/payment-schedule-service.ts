@@ -8,23 +8,26 @@ export async function resolveStudentNextPaymentAt(
     paymentMonth: Date;
   },
 ) {
-  const assignment = await tx.studentScheduleAssignment.findFirst({
+  const openCycle = await tx.studentBillingCycle.findFirst({
     where: {
-      validTo: null,
-      enrollment: {
-        studentId: input.studentId,
-        student: { billingPaused: false },
-      },
+      studentId: input.studentId,
+      status: { in: ["DRAFT", "OPEN", "PARTIAL", "OVERDUE"] },
     },
-    orderBy: [{ validFrom: "asc" }, { createdAt: "asc" }],
-    select: {
-      validFrom: true,
-      enrollment: { select: { firstLessonAt: true } },
-    },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    select: { dueDate: true },
   });
 
+  if (openCycle) return openCycle.dueDate;
+
+  const student = await tx.student.findUnique({
+    where: { id: input.studentId },
+    select: { billingAnchorDate: true, billingPaused: true },
+  });
+
+  if (!student || student.billingPaused) return null;
+
   return resolveNextPaymentAt({
-    slotStartedAt: assignment?.enrollment.firstLessonAt ?? assignment?.validFrom ?? null,
+    billingAnchorDate: student.billingAnchorDate,
     paymentMonth: input.paymentMonth,
   });
 }
@@ -52,24 +55,8 @@ export async function startStudentPaymentSchedule(
     slotStartedAt: Date;
   },
 ) {
-  const latestPayment = await tx.payment.findFirst({
-    where: { studentId: input.studentId },
-    orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
-    select: { id: true, paymentMonth: true, scheduleType: true },
-  });
-
+  void input.slotStartedAt;
   await clearStudentPaymentSchedules(tx, [input.studentId]);
-  if (!latestPayment || latestPayment.scheduleType === "ONE_TIME") return;
-
-  await tx.payment.update({
-    where: { id: latestPayment.id },
-    data: {
-      nextPaymentAt: resolveNextPaymentAt({
-        slotStartedAt: input.slotStartedAt,
-        paymentMonth: latestPayment.paymentMonth,
-      }),
-    },
-  });
 }
 
 export async function restartStudentPaymentScheduleForActiveSlot(
@@ -78,25 +65,5 @@ export async function restartStudentPaymentScheduleForActiveSlot(
     studentId: string;
   },
 ) {
-  const activeAssignment = await tx.studentScheduleAssignment.findFirst({
-    where: {
-      validTo: null,
-      enrollment: { studentId: input.studentId },
-    },
-    orderBy: [{ validFrom: "asc" }, { createdAt: "asc" }],
-    select: {
-      validFrom: true,
-      enrollment: { select: { firstLessonAt: true } },
-    },
-  });
-
-  if (!activeAssignment) {
-    await clearStudentPaymentSchedules(tx, [input.studentId]);
-    return;
-  }
-
-  await startStudentPaymentSchedule(tx, {
-    studentId: input.studentId,
-    slotStartedAt: activeAssignment.enrollment.firstLessonAt ?? activeAssignment.validFrom,
-  });
+  await clearStudentPaymentSchedules(tx, [input.studentId]);
 }

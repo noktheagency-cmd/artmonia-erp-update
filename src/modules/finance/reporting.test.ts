@@ -28,6 +28,7 @@ test("profit excludes capex and financing while cash flow includes them", () => 
     {
       grossProfit: 7_500,
       operatingProfit: 4_500,
+      netProfit: 4_500,
       netCash: 7_200,
     },
   );

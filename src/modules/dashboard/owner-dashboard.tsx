@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import type { DashboardData } from "@/modules/dashboard/queries";
 import { DashboardTasksPanel } from "@/modules/dashboard/dashboard-tasks-panel";
-import { DashboardDateFilter } from "@/modules/dashboard/dashboard-date-filter";
 import { DashboardInsights } from "@/modules/dashboard/dashboard-insights";
 import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashboard-visuals";
 import type { TaskData } from "@/modules/tasks/queries";
@@ -53,7 +52,6 @@ export function OwnerDashboard({
         <div>
           <h1 id="owner-dashboard-title">Salam, {firstName(actorName)}</h1>
         </div>
-        <DashboardDateFilter from={data.filters.from} to={data.filters.to} label={data.filters.label} />
       </header>
 
       <div className="owner-dashboard-kpi-grid">

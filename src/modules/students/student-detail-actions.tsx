@@ -8,6 +8,7 @@ import {
   BookOpen,
   Edit,
   GraduationCap,
+  Plus,
   RefreshCcw,
   Trash2,
   UserRound,
@@ -36,7 +37,6 @@ import { StudentReminderDialog } from "@/modules/students/student-reminders-clie
 const studentStatusOptions = [
   { value: "SLOT_WAITING", label: "Slot gözləyir" },
   { value: "ACTIVE", label: "Aktiv" },
-  { value: "DEBT", label: "Borclu" },
   { value: "FROZEN", label: "Dondurulub" },
   { value: "STOPPED", label: "Dayandırılıb" },
   { value: "DECLINED", label: "İmtina edib" },
@@ -61,6 +61,7 @@ interface StudentDetail {
     discountType: string;
     lessonsPerMonth: string;
     firstLessonDate: string;
+    billingAnchorDate: string;
     registeredDate: string;
     notes: string;
     paymentDefaultAmount: string;
@@ -102,6 +103,7 @@ export function StudentDetailActions({
   permissions,
   recordPaymentAction,
   updateStudentProfileAction,
+  createStudentEnrollmentAction,
   updateStudentStatusAction,
   deleteStudentAction,
   createStudentReminderAction,
@@ -111,12 +113,14 @@ export function StudentDetailActions({
   permissions: Permissions;
   recordPaymentAction: (formData: FormData) => unknown | Promise<unknown>;
   updateStudentProfileAction: (formData: FormData) => unknown | Promise<unknown>;
+  createStudentEnrollmentAction: (formData: FormData) => unknown | Promise<unknown>;
   updateStudentStatusAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteStudentAction: (formData: FormData) => unknown | Promise<unknown>;
   createStudentReminderAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
+  const [packageOpen, setPackageOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -165,6 +169,17 @@ export function StudentDetailActions({
     }
   }
 
+  async function addPackage(formData: FormData) {
+    try {
+      unwrapActionResult(await createStudentEnrollmentAction(formData));
+      setPackageOpen(false);
+      notifySuccess("Paket əlavə edildi", "Yeni proqram ayrıca tədris və billing qeydi kimi yaradıldı.");
+      router.refresh();
+    } catch (error) {
+      notifyCaughtError(error, "Paket əlavə edilmədi.");
+    }
+  }
+
   return (
     <div className="student-actions-row">
       <StudentReminderDialog
@@ -174,6 +189,79 @@ export function StudentDetailActions({
         canManage={permissions.canManageReminders}
         action={createStudentReminderAction}
       />
+
+      <Dialog open={packageOpen} onOpenChange={setPackageOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" type="button" disabled={!permissions.canUpdateStudent}>
+            <Plus data-icon="inline-start" />
+            Paket əlavə et
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="student-payment-dialog">
+          <DialogHeader>
+            <DialogTitle>Yeni tədris paketi</DialogTitle>
+            <DialogDescription>
+              Paket ayrıca enrollment və faktura xətti kimi saxlanılır. Tələbənin qorunan billing tarixi dəyişmir.
+            </DialogDescription>
+          </DialogHeader>
+          <form action={addPackage} className="student-payment-form">
+            <input name="studentId" type="hidden" value={student.id} />
+            <label className="form-field">
+              <span>Proqram</span>
+              <FormSelect
+                name="programId"
+                emptyLabel="Proqram seçin"
+                options={editOptions.programs.map((program) => ({ value: program.id, label: program.name }))}
+                searchable
+                required
+              />
+            </label>
+            <div className="field-grid">
+              <label className="form-field">
+                <span>Müəllim</span>
+                <FormSelect
+                  name="teacherId"
+                  emptyLabel="Müəllim seçilməyib"
+                  options={editOptions.teachers.map((teacher) => ({ value: teacher.id, label: teacher.fullName }))}
+                  searchable
+                />
+              </label>
+              <label className="form-field">
+                <span>İlk dərs tarixi</span>
+                <DatePicker
+                  name="firstLessonDate"
+                  defaultValue={student.detail.paymentDefaultDate}
+                  allowClear={false}
+                  required
+                />
+              </label>
+            </div>
+            <div className="field-grid">
+              <label className="form-field">
+                <span>Aylıq məbləğ</span>
+                <Input name="monthlyFee" inputMode="decimal" placeholder="0.00" required />
+              </label>
+              <label className="form-field">
+                <span>Aylıq dərs sayı</span>
+                <Input name="lessonsPerMonth" inputMode="numeric" placeholder="Məsələn: 8" />
+              </label>
+            </div>
+            <label className="form-field">
+              <span>Güzəşt növü</span>
+              <FormSelect
+                name="discountType"
+                emptyLabel="Güzəşt yoxdur"
+                options={editOptions.discountTypes}
+                searchable
+              />
+            </label>
+            <DialogFooter>
+              <DialogClose asChild><Button type="button" variant="ghost">Ləğv et</Button></DialogClose>
+              <Button type="submit"><Plus data-icon="inline-start" />Paketi yarat</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={statusOpen} onOpenChange={setStatusOpen}>
         <DialogTrigger asChild>
@@ -186,7 +274,7 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Status dəyiş</DialogTitle>
             <DialogDescription>
-              Aktiv ediləndə ilk dərs və növbəti ödəniş tarixi seçilən günə bağlanır.
+              Status yalnız tədris vəziyyətini dəyişir; ödəniş vəziyyəti faktura və ödənişlərdən avtomatik hesablanır.
             </DialogDescription>
           </DialogHeader>
 
@@ -512,6 +600,10 @@ export function StudentDetailActions({
                 <label className="form-field">
                   <span>İlk dərs tarixi</span>
                   <DatePicker name="firstLessonDate" defaultValue={student.detail.firstLessonDate} />
+                </label>
+                <label className="form-field">
+                  <span>Billing anchor (qorunan)</span>
+                  <Input value={student.detail.billingAnchorDate || "Təsdiqlənməyib"} readOnly aria-readonly="true" />
                 </label>
               </div>
             </section>

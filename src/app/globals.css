@@ -735,18 +735,29 @@ strong {
   padding-left: 108px;
 }
 
-/* Permission-aware global search */
-.global-search {
+/* Permission-aware global search and ERP calendar */
+.erp-command-header {
   position: sticky;
   top: 16px;
   z-index: 950;
-  width: min(100%, 720px);
+  display: flex;
+  width: min(100%, 820px);
+  align-items: flex-start;
+  gap: 10px;
   margin: 0 auto 22px;
+}
+
+.global-search {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
   transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .global-search.is-open {
-  width: min(100%, 780px);
+  width: 100%;
 }
 
 .global-search-control {
@@ -5114,7 +5125,7 @@ strong {
 .student-mini-table-head,
 .student-mini-table-row {
   display: grid;
-  grid-template-columns: 0.72fr 0.82fr 0.9fr 1fr;
+  grid-template-columns: 0.7fr 0.82fr 0.82fr 0.9fr 1fr;
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -9623,7 +9634,7 @@ strong {
 
   .student-mini-table-head,
   .student-mini-table-row {
-    grid-template-columns: 0.8fr 0.9fr 0.9fr;
+    grid-template-columns: 0.8fr 0.9fr 0.9fr 1fr;
   }
 
   .student-mini-table-head span:nth-child(2),

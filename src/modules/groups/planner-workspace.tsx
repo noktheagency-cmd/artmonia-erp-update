@@ -21,7 +21,6 @@ import {
   Plus,
   QrCode,
   RotateCcw,
-  Search,
   Trash2,
   UserPlus,
   UserRound,
@@ -167,7 +166,6 @@ export function PlannerWorkspace({
   const [selectedSlotId, setSelectedSlotId] = useState(data.selectedSlotId);
   const [teacherFilter, setTeacherFilter] = useState("all");
   const [shiftFilter, setShiftFilter] = useState("all");
-  const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [slotDialogMode, setSlotDialogMode] = useState<"create" | "edit" | null>(null);
   const [assignmentOpen, setAssignmentOpen] = useState(false);
@@ -182,18 +180,14 @@ export function PlannerWorkspace({
   );
 
   const filteredSlots = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("az");
     return data.slots.filter((slot) => {
-      const text = `${slot.teacherName} ${slot.room} ${weekdayMeta[slot.weekday].label} ${shiftMeta[slot.shift].label}`
-        .toLocaleLowerCase("az");
-      return (!needle || text.includes(needle))
-        && (
+      return (
           teacherFilter === "all"
           || (teacherFilter === "unassigned" ? slot.teacherId === null : slot.teacherId === teacherFilter)
         )
         && (shiftFilter === "all" || slot.shift === shiftFilter);
     });
-  }, [data.slots, query, shiftFilter, teacherFilter]);
+  }, [data.slots, shiftFilter, teacherFilter]);
 
   const selectedSlot = filteredSlots.find((slot) => slot.id === selectedSlotId)
     ?? filteredSlots[0]
@@ -286,14 +280,6 @@ export function PlannerWorkspace({
       ) : null}
 
       <div className={styles.filterBand}>
-        <label className={styles.search}>
-          <Search size={16} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Müəllim, otaq, gün və ya növbə axtar..."
-          />
-        </label>
         <FilterSelect
           label="Müəllim"
           value={teacherFilter}
@@ -313,7 +299,6 @@ export function PlannerWorkspace({
           type="button"
           variant="ghost"
           onClick={() => {
-            setQuery("");
             setTeacherFilter("all");
             setShiftFilter("all");
           }}

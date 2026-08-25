@@ -399,8 +399,7 @@ async function ensureTeacherCohort(campaignId: string) {
         student.lifecycle_status
       ) in (
         'SLOT_WAITING'::"erp"."StudentLifecycleStatus",
-        'ACTIVE'::"erp"."StudentLifecycleStatus",
-        'DEBT'::"erp"."StudentLifecycleStatus"
+        'ACTIVE'::"erp"."StudentLifecycleStatus"
       )
     order by student.id, assignment.valid_from desc, assignment.created_at desc
     on conflict (campaign_id, student_id) do nothing

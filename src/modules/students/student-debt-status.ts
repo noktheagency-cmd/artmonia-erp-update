@@ -1,4 +1,5 @@
 export type StudentPaymentStatusTone = "success" | "neutral" | "warning" | "danger";
+export type StudentPaymentStatusCode = "PAID" | "UPCOMING" | "DUE" | "OVERDUE" | "OVERDUE_3_PLUS";
 
 export function isStudentDebtDue({
   balance,
@@ -20,36 +21,25 @@ export function resolveStudentPaymentStatus({
   balance: number;
   nextPaymentAt: Date | null | undefined;
   today: Date;
-}): { label: string; tone: StudentPaymentStatusTone } {
+}): { code: StudentPaymentStatusCode; label: string; tone: StudentPaymentStatusTone } {
   if (balance <= 0) {
-    return { label: "Ödənilib", tone: "success" };
+    return { code: "PAID", label: "Ödənilib", tone: "success" };
   }
 
   if (!nextPaymentAt) {
-    return { label: "Qalıq borc", tone: "warning" };
+    return { code: "DUE", label: "Ödəniş gözləyir", tone: "warning" };
   }
 
   if (nextPaymentAt > today) {
-    return { label: "Planlı ödəniş", tone: "neutral" };
+    return { code: "UPCOMING", label: "Gələcək ödəniş", tone: "neutral" };
   }
 
   if (nextPaymentAt < today) {
-    return { label: "Gecikmiş ödəniş", tone: "danger" };
+    const overdueDays = Math.floor((today.getTime() - nextPaymentAt.getTime()) / 86_400_000);
+    return overdueDays >= 3
+      ? { code: "OVERDUE_3_PLUS", label: "3+ gün gecikib", tone: "danger" }
+      : { code: "OVERDUE", label: "Gecikib", tone: "danger" };
   }
 
-  return { label: "Qalıq borc", tone: "warning" };
-}
-
-export function resolveStudentLifecycleStatus({
-  lifecycleStatus,
-  debtDue,
-}: {
-  lifecycleStatus: string;
-  debtDue: boolean;
-}) {
-  if (lifecycleStatus !== "ACTIVE" && lifecycleStatus !== "DEBT") {
-    return lifecycleStatus;
-  }
-
-  return debtDue ? "DEBT" : "ACTIVE";
+  return { code: "DUE", label: "Ödəniş günü çatıb", tone: "warning" };
 }
