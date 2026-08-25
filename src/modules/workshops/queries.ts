@@ -13,8 +13,10 @@ type StatusTone = "success" | "warning" | "danger" | "neutral" | "info";
 export type WorkshopKind = "WORKSHOP" | "MASTERCLASS";
 export type WorkshopStatus = "DRAFT" | "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 export type ParticipantPaymentState = WorkshopPaymentState;
+export type WorkshopFollowUpStatus = "PENDING" | "CONTACTED" | "NO_ANSWER" | "INTERESTED" | "CONVERTED" | "NOT_INTERESTED";
 
 export type WorkshopFilters = {
+  view?: string;
   q?: string;
   type?: string;
   status?: string;
@@ -29,6 +31,8 @@ export type WorkshopFilters = {
   page?: string;
   pageSize?: string;
   selected?: string;
+  followUpQ?: string;
+  followUpStatus?: string;
 };
 
 export type WorkshopDetailFilters = {
@@ -147,6 +151,27 @@ export type WorkshopExpenseRow = {
   voidReason: string;
 };
 
+export type WorkshopFollowUpRow = {
+  id: string;
+  participantId: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  participantKind: "student" | "guest";
+  status: WorkshopFollowUpStatus;
+  statusLabel: string;
+  statusTone: StatusTone;
+  nextFollowUpAt: string;
+  nextFollowUpAtInput: string;
+  lastContactedAt: string;
+  assignedToId: string;
+  assignedToName: string;
+  note: string;
+};
+
 export type WorkshopData = {
   defaultDate: string;
   permissions: WorkshopPermissions;
@@ -167,6 +192,16 @@ export type WorkshopData = {
   events: WorkshopEventRow[];
   selectedEvent: WorkshopEventRow | null;
   pagination: Pagination;
+  followUps: WorkshopFollowUpRow[];
+  followUpSummary: {
+    total: number;
+    pending: number;
+    due: number;
+    interested: number;
+    converted: number;
+  };
+  followUpAssignees: Array<{ value: string; label: string }>;
+  followUpPagination: Pagination;
 };
 
 export type WorkshopDetailData = {
@@ -200,6 +235,7 @@ type WorkshopPermissions = {
   canManage: boolean;
   canViewFinance: boolean;
   canManageFinance: boolean;
+  canViewFollowUp: boolean;
 };
 
 export type WorkshopStudentOption = {
@@ -222,6 +258,7 @@ type Pagination = {
 };
 
 type NormalizedWorkshopFilters = {
+  view: "events" | "follow-up";
   query: string;
   type: string;
   status: "all" | WorkshopStatus;
@@ -236,6 +273,8 @@ type NormalizedWorkshopFilters = {
   page: number;
   pageSize: number;
   selected: string;
+  followUpQuery: string;
+  followUpStatus: "all" | WorkshopFollowUpStatus;
 };
 
 type EventDbRow = {
@@ -337,6 +376,33 @@ type StudentDbRow = {
   teacher: string | null;
 };
 
+type FollowUpDbRow = {
+  id: string;
+  participantId: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: Date | string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  studentId: string | null;
+  status: WorkshopFollowUpStatus;
+  nextFollowUpAt: Date | string | null;
+  lastContactedAt: Date | string | null;
+  assignedToId: string | null;
+  assignedToName: string | null;
+  note: string | null;
+  totalCount: unknown;
+};
+
+type FollowUpSummaryDbRow = {
+  total: unknown;
+  pending: unknown;
+  due: unknown;
+  interested: unknown;
+  converted: unknown;
+};
+
 const eventAggregateCte = Prisma.sql`
   with participant_totals as (
     select
@@ -410,8 +476,26 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     : Prisma.empty;
   const sortSql = getEventSortSql(filters.sort);
   const offset = (filters.page - 1) * filters.pageSize;
+  const followUpConditions: Prisma.Sql[] = [
+    Prisma.sql`wp.cancelled_at is null`,
+    Prisma.sql`we.status <> 'CANCELLED'::"erp"."WorkshopEventStatus"`,
+  ];
+  if (filters.followUpQuery) {
+    const like = `%${filters.followUpQuery}%`;
+    followUpConditions.push(Prisma.sql`(
+      wp.full_name ilike ${like}
+      or coalesce(wp.phone, '') ilike ${like}
+      or coalesce(wp.email, '') ilike ${like}
+      or we.title ilike ${like}
+    )`);
+  }
+  if (filters.followUpStatus !== "all") {
+    followUpConditions.push(Prisma.sql`coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") = ${filters.followUpStatus}::"erp"."WorkshopFollowUpStatus"`);
+  }
+  const followUpWhereSql = Prisma.sql`where ${Prisma.join(followUpConditions, " and ")}`;
+  const followUpOffset = (filters.page - 1) * filters.pageSize;
 
-  const [rows, summaryRows, optionRows] = await Promise.all([
+  const [rows, summaryRows, optionRows, followUpRows, followUpSummaryRows, followUpAssigneeRows] = await Promise.all([
     prisma.$queryRaw<EventDbRow[]>(Prisma.sql`
       ${eventAggregateCte}
       select
@@ -447,6 +531,65 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
       from erp.workshop_events
       order by "eventType", instructor nulls last, room nulls last
     `),
+    prisma.$queryRaw<FollowUpDbRow[]>(Prisma.sql`
+      select
+        coalesce(wf.id::text, '') as "id",
+        wp.id::text as "participantId",
+        we.id::text as "eventId",
+        we.title as "eventTitle",
+        we.event_date as "eventDate",
+        wp.full_name as "fullName",
+        wp.phone,
+        wp.email,
+        wp.student_id::text as "studentId",
+        coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus")::text as "status",
+        wf.next_follow_up_at as "nextFollowUpAt",
+        wf.last_contacted_at as "lastContactedAt",
+        wf.assigned_to_id::text as "assignedToId",
+        assigned.full_name as "assignedToName",
+        wf.note,
+        count(*) over()::int as "totalCount"
+      from erp.workshop_participants wp
+      join erp.workshop_events we on we.id = wp.event_id
+      left join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      left join erp.users assigned on assigned.id = wf.assigned_to_id
+      ${followUpWhereSql}
+      order by
+        case when coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") in (
+          'PENDING'::"erp"."WorkshopFollowUpStatus",
+          'CONTACTED'::"erp"."WorkshopFollowUpStatus",
+          'NO_ANSWER'::"erp"."WorkshopFollowUpStatus",
+          'INTERESTED'::"erp"."WorkshopFollowUpStatus"
+        ) and wf.next_follow_up_at <= now() then 0 else 1 end,
+        wf.next_follow_up_at asc nulls last,
+        we.event_date desc,
+        wp.assigned_at desc
+      limit ${filters.pageSize} offset ${followUpOffset}
+    `),
+    prisma.$queryRaw<FollowUpSummaryDbRow[]>(Prisma.sql`
+      select
+        count(*)::int as total,
+        count(*) filter (where coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") = 'PENDING'::"erp"."WorkshopFollowUpStatus")::int as pending,
+        count(*) filter (
+          where wf.next_follow_up_at <= now()
+          and coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") not in (
+            'CONVERTED'::"erp"."WorkshopFollowUpStatus",
+            'NOT_INTERESTED'::"erp"."WorkshopFollowUpStatus"
+          )
+        )::int as due,
+        count(*) filter (where wf.status = 'INTERESTED'::"erp"."WorkshopFollowUpStatus")::int as interested,
+        count(*) filter (where wf.status = 'CONVERTED'::"erp"."WorkshopFollowUpStatus")::int as converted
+      from erp.workshop_participants wp
+      join erp.workshop_events we on we.id = wp.event_id
+      left join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      ${followUpWhereSql}
+    `),
+    prisma.$queryRaw<Array<{ value: string; label: string }>>(Prisma.sql`
+      select id::text as value, full_name as label
+      from erp.users
+      where is_active = true
+      order by full_name
+    `),
   ]);
 
   const mapped = rows.map((row) => mapEventRow(row, permissions.canViewFinance));
@@ -465,6 +608,8 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
   const participants = toNumber(summaryRow.participantCount);
   const total = toNumber(rows[0]?.totalCount ?? 0);
   const selectedEvent = mapped.find((event) => event.id === filters.selected) ?? mapped[0] ?? null;
+  const followUpSummaryRow = followUpSummaryRows[0] ?? { total: 0, pending: 0, due: 0, interested: 0, converted: 0 };
+  const followUpTotal = toNumber(followUpRows[0]?.totalCount ?? 0);
   const activeCount = [
     filters.query,
     filters.type !== "all" ? filters.type : "",
@@ -502,6 +647,16 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     events: mapped,
     selectedEvent,
     pagination: makePagination(filters.page, filters.pageSize, total),
+    followUps: followUpRows.map(mapFollowUpRow),
+    followUpSummary: {
+      total: toNumber(followUpSummaryRow.total),
+      pending: toNumber(followUpSummaryRow.pending),
+      due: toNumber(followUpSummaryRow.due),
+      interested: toNumber(followUpSummaryRow.interested),
+      converted: toNumber(followUpSummaryRow.converted),
+    },
+    followUpAssignees: followUpAssigneeRows,
+    followUpPagination: makePagination(filters.page, filters.pageSize, followUpTotal),
   };
 }
 
@@ -850,11 +1005,35 @@ function mapExpenseRow(row: ExpenseDbRow): WorkshopExpenseRow {
   };
 }
 
+function mapFollowUpRow(row: FollowUpDbRow): WorkshopFollowUpRow {
+  return {
+    id: row.id,
+    participantId: row.participantId,
+    eventId: row.eventId,
+    eventTitle: row.eventTitle,
+    eventDate: formatDisplayDate(row.eventDate),
+    fullName: row.fullName,
+    phone: row.phone ?? "—",
+    email: row.email ?? "—",
+    participantKind: row.studentId ? "student" : "guest",
+    status: row.status,
+    statusLabel: followUpStatusLabel(row.status),
+    statusTone: followUpStatusTone(row.status),
+    nextFollowUpAt: row.nextFollowUpAt ? formatDateTime(row.nextFollowUpAt) : "Planlanmayıb",
+    nextFollowUpAtInput: row.nextFollowUpAt ? toDateTimeInput(row.nextFollowUpAt) : "",
+    lastContactedAt: row.lastContactedAt ? formatDateTime(row.lastContactedAt) : "—",
+    assignedToId: row.assignedToId ?? "",
+    assignedToName: row.assignedToName ?? "Təyin edilməyib",
+    note: row.note ?? "",
+  };
+}
+
 function normalizeWorkshopFilters(input: WorkshopFilters): NormalizedWorkshopFilters {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return {
+    view: input.view === "follow-up" ? "follow-up" : "events",
     query: formFilterString(input.q),
     type: normalizeEventTypeFilter(input.type),
     status: ["DRAFT", "SCHEDULED", "ACTIVE", "COMPLETED", "CANCELLED"].includes(input.status ?? "")
@@ -873,6 +1052,9 @@ function normalizeWorkshopFilters(input: WorkshopFilters): NormalizedWorkshopFil
     page: boundedInt(input.page, 1, 10_000, 1),
     pageSize: [10, 25, 50, 100].includes(Number(input.pageSize)) ? Number(input.pageSize) : 25,
     selected: formFilterString(input.selected),
+    followUpQuery: formFilterString(input.followUpQ),
+    followUpStatus: ["PENDING", "CONTACTED", "NO_ANSWER", "INTERESTED", "CONVERTED", "NOT_INTERESTED"].includes(input.followUpStatus ?? "")
+      ? input.followUpStatus as WorkshopFollowUpStatus : "all",
   };
 }
 
@@ -898,7 +1080,30 @@ function getWorkshopPermissions(permissions: ReadonlyMap<string, unknown>): Work
     canManage: permissions.has("workshop.manage"),
     canViewFinance: permissions.has("workshop.finance.read"),
     canManageFinance: permissions.has("workshop.finance.manage"),
+    canViewFollowUp: permissions.has("workshop.read"),
   };
+}
+
+function followUpStatusLabel(status: WorkshopFollowUpStatus) {
+  return ({
+    PENDING: "Gözləyir",
+    CONTACTED: "Əlaqə saxlanılıb",
+    NO_ANSWER: "Cavab yoxdur",
+    INTERESTED: "Maraqlanır",
+    CONVERTED: "Nəticələnib",
+    NOT_INTERESTED: "Maraqlanmır",
+  } as const)[status];
+}
+
+function followUpStatusTone(status: WorkshopFollowUpStatus): StatusTone {
+  return ({
+    PENDING: "warning",
+    CONTACTED: "info",
+    NO_ANSWER: "danger",
+    INTERESTED: "success",
+    CONVERTED: "success",
+    NOT_INTERESTED: "neutral",
+  } as const)[status];
 }
 
 function uniqueOptions(values: Array<string | null>) {
@@ -977,6 +1182,11 @@ function formatDecimalInput(value: unknown) {
 
 function toDateInput(value: Date) {
   return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, "0"), String(value.getDate()).padStart(2, "0")].join("-");
+}
+
+function toDateTimeInput(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  return `${toDateInput(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatDisplayDate(value: Date | string) {

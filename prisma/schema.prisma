@@ -285,6 +285,17 @@ enum WorkshopEventStatus {
   @@schema("erp")
 }
 
+enum WorkshopFollowUpStatus {
+  PENDING
+  CONTACTED
+  NO_ANSWER
+  INTERESTED
+  CONVERTED
+  NOT_INTERESTED
+
+  @@schema("erp")
+}
+
 enum MarketingCampaignStatus {
   DRAFT
   ACTIVE
@@ -427,75 +438,78 @@ model User {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   roles                            UserRole[]
-  managedLeads                     Lead[]                      @relation("LeadManager")
-  managedStudents                  Student[]                   @relation("StudentManager")
-  leadStageChanges                 LeadStageHistory[]          @relation("LeadStageChanger")
-  statusChanges                    StudentStatusHistory[]      @relation("StatusChanger")
+  managedLeads                     Lead[]                          @relation("LeadManager")
+  managedStudents                  Student[]                       @relation("StudentManager")
+  leadStageChanges                 LeadStageHistory[]              @relation("LeadStageChanger")
+  statusChanges                    StudentStatusHistory[]          @relation("StatusChanger")
   billingMigrationReviews          StudentBillingMigrationReview[] @relation("BillingMigrationReviewer")
-  createdPricingVersions           ProgramPricingVersion[]     @relation("PricingCreator")
-  teacherAssignmentChanges         TeacherAssignmentHistory[]  @relation("TeacherAssignmentChanger")
-  createdPayments                  Payment[]                   @relation("PaymentCreator")
-  requestedRefundAdjustments       RefundAdjustment[]          @relation("RefundRequestedBy")
-  financeApprovedAdjustments       RefundAdjustment[]          @relation("RefundFinanceApprovedBy")
-  ownerApprovedAdjustments         RefundAdjustment[]          @relation("RefundOwnerApprovedBy")
-  createdTeacherRules              TeacherContractRule[]       @relation("TeacherRuleCreator")
-  generatedPayouts                 TeacherPayout[]             @relation("PayoutGeneratedBy")
-  approvedPayouts                  TeacherPayout[]             @relation("PayoutApprovedBy")
-  ownedTasks                       Task[]                      @relation("TaskOwner")
-  createdTasks                     Task[]                      @relation("TaskCreator")
-  personalNotifications            PersonalNotification[]      @relation("PersonalNotificationRecipient")
-  ownedTargets                     Target[]                    @relation("TargetOwner")
-  managedTargets                   Target[]                    @relation("TargetManager")
-  auditLogs                        AuditLog[]                  @relation("AuditActor")
-  authSessions                     AuthSessionRecord[]         @relation("AuthSessionUser")
-  revokedAuthSessions              AuthSessionRecord[]         @relation("AuthSessionRevoker")
-  createdStudentMobileAccounts     StudentMobileAccount[]      @relation("StudentMobileAccountCreator")
-  updatedStudentMobileAccounts     StudentMobileAccount[]      @relation("StudentMobileAccountUpdater")
-  exports                          DataExport[]                @relation("ExportRequestedBy")
-  createdFinanceExpenses           FinanceExpense[]            @relation("FinanceExpenseCreator")
-  employeeFinanceExpenses          FinanceExpense[]            @relation("FinanceExpenseEmployee")
-  createdLessons                   Lesson[]                    @relation("LessonCreator")
-  teacherProfile                   Teacher?                    @relation("TeacherUser")
-  createdClassSlots                ClassSlot[]                 @relation("ClassSlotCreator")
-  assignedStudentSchedules         StudentScheduleAssignment[] @relation("StudentScheduleAssigner")
-  createdSlotSessions              SlotSession[]               @relation("SlotSessionCreator")
-  createdAttendanceQrChallenges    AttendanceQrChallenge[]     @relation("AttendanceQrChallengeCreator")
-  markedAttendanceRecords          AttendanceRecord[]          @relation("AttendanceMarker")
-  createdLessonHomeworks           LessonHomework[]            @relation("LessonHomeworkCreator")
-  updatedLessonHomeworks           LessonHomework[]            @relation("LessonHomeworkUpdater")
-  createdAcademyAnnouncements      AcademyAnnouncement[]       @relation("AcademyAnnouncementCreator")
-  updatedAcademyAnnouncements      AcademyAnnouncement[]       @relation("AcademyAnnouncementUpdater")
-  createdWorkshopEvents            WorkshopEvent[]             @relation("WorkshopEventCreator")
-  assignedWorkshopParticipants     WorkshopParticipant[]       @relation("WorkshopParticipantAssigner")
-  cancelledWorkshopParticipants    WorkshopParticipant[]       @relation("WorkshopParticipantCanceller")
-  createdWorkshopPayments          WorkshopPayment[]           @relation("WorkshopPaymentCreator")
-  voidedWorkshopPayments           WorkshopPayment[]           @relation("WorkshopPaymentVoider")
-  voidedFinanceExpenses            FinanceExpense[]            @relation("FinanceExpenseVoider")
-  createdMarketingCampaigns        MarketingCampaign[]         @relation("MarketingCampaignCreator")
+  createdPricingVersions           ProgramPricingVersion[]         @relation("PricingCreator")
+  teacherAssignmentChanges         TeacherAssignmentHistory[]      @relation("TeacherAssignmentChanger")
+  createdPayments                  Payment[]                       @relation("PaymentCreator")
+  requestedRefundAdjustments       RefundAdjustment[]              @relation("RefundRequestedBy")
+  financeApprovedAdjustments       RefundAdjustment[]              @relation("RefundFinanceApprovedBy")
+  ownerApprovedAdjustments         RefundAdjustment[]              @relation("RefundOwnerApprovedBy")
+  createdTeacherRules              TeacherContractRule[]           @relation("TeacherRuleCreator")
+  generatedPayouts                 TeacherPayout[]                 @relation("PayoutGeneratedBy")
+  approvedPayouts                  TeacherPayout[]                 @relation("PayoutApprovedBy")
+  ownedTasks                       Task[]                          @relation("TaskOwner")
+  createdTasks                     Task[]                          @relation("TaskCreator")
+  personalNotifications            PersonalNotification[]          @relation("PersonalNotificationRecipient")
+  ownedTargets                     Target[]                        @relation("TargetOwner")
+  managedTargets                   Target[]                        @relation("TargetManager")
+  auditLogs                        AuditLog[]                      @relation("AuditActor")
+  authSessions                     AuthSessionRecord[]             @relation("AuthSessionUser")
+  revokedAuthSessions              AuthSessionRecord[]             @relation("AuthSessionRevoker")
+  createdStudentMobileAccounts     StudentMobileAccount[]          @relation("StudentMobileAccountCreator")
+  updatedStudentMobileAccounts     StudentMobileAccount[]          @relation("StudentMobileAccountUpdater")
+  exports                          DataExport[]                    @relation("ExportRequestedBy")
+  createdFinanceExpenses           FinanceExpense[]                @relation("FinanceExpenseCreator")
+  employeeFinanceExpenses          FinanceExpense[]                @relation("FinanceExpenseEmployee")
+  createdLessons                   Lesson[]                        @relation("LessonCreator")
+  teacherProfile                   Teacher?                        @relation("TeacherUser")
+  createdClassSlots                ClassSlot[]                     @relation("ClassSlotCreator")
+  assignedStudentSchedules         StudentScheduleAssignment[]     @relation("StudentScheduleAssigner")
+  createdSlotSessions              SlotSession[]                   @relation("SlotSessionCreator")
+  createdAttendanceQrChallenges    AttendanceQrChallenge[]         @relation("AttendanceQrChallengeCreator")
+  markedAttendanceRecords          AttendanceRecord[]              @relation("AttendanceMarker")
+  createdLessonHomeworks           LessonHomework[]                @relation("LessonHomeworkCreator")
+  updatedLessonHomeworks           LessonHomework[]                @relation("LessonHomeworkUpdater")
+  createdAcademyAnnouncements      AcademyAnnouncement[]           @relation("AcademyAnnouncementCreator")
+  updatedAcademyAnnouncements      AcademyAnnouncement[]           @relation("AcademyAnnouncementUpdater")
+  createdWorkshopEvents            WorkshopEvent[]                 @relation("WorkshopEventCreator")
+  assignedWorkshopParticipants     WorkshopParticipant[]           @relation("WorkshopParticipantAssigner")
+  cancelledWorkshopParticipants    WorkshopParticipant[]           @relation("WorkshopParticipantCanceller")
+  assignedWorkshopFollowUps        WorkshopParticipantFollowUp[]   @relation("WorkshopFollowUpAssignee")
+  createdWorkshopFollowUps         WorkshopParticipantFollowUp[]   @relation("WorkshopFollowUpCreator")
+  updatedWorkshopFollowUps         WorkshopParticipantFollowUp[]   @relation("WorkshopFollowUpUpdater")
+  createdWorkshopPayments          WorkshopPayment[]               @relation("WorkshopPaymentCreator")
+  voidedWorkshopPayments           WorkshopPayment[]               @relation("WorkshopPaymentVoider")
+  voidedFinanceExpenses            FinanceExpense[]                @relation("FinanceExpenseVoider")
+  createdMarketingCampaigns        MarketingCampaign[]             @relation("MarketingCampaignCreator")
   createdMarketingReports          MarketingCampaignReport[]
-  responsibleMarketingContent      MarketingContentItem[]      @relation("MarketingContentResponsible")
-  createdMarketingContent          MarketingContentItem[]      @relation("MarketingContentCreator")
-  approvedMarketingContent         MarketingContentItem[]      @relation("MarketingContentApprover")
-  marketingContentActivities       MarketingContentActivity[]  @relation("MarketingContentActivityActor")
-  responsibleMarketingStrategies   MarketingStrategy[]         @relation("MarketingStrategyResponsible")
-  createdMarketingStrategies       MarketingStrategy[]         @relation("MarketingStrategyCreator")
-  createdMarketingStrategyExpenses MarketingStrategyExpense[]  @relation("MarketingStrategyExpenseCreator")
+  responsibleMarketingContent      MarketingContentItem[]          @relation("MarketingContentResponsible")
+  createdMarketingContent          MarketingContentItem[]          @relation("MarketingContentCreator")
+  approvedMarketingContent         MarketingContentItem[]          @relation("MarketingContentApprover")
+  marketingContentActivities       MarketingContentActivity[]      @relation("MarketingContentActivityActor")
+  responsibleMarketingStrategies   MarketingStrategy[]             @relation("MarketingStrategyResponsible")
+  createdMarketingStrategies       MarketingStrategy[]             @relation("MarketingStrategyCreator")
+  createdMarketingStrategyExpenses MarketingStrategyExpense[]      @relation("MarketingStrategyExpenseCreator")
   hrEmployeeProfile                HrEmployee?
-  createdBonusCampaigns            HrBonusCampaign[]           @relation("HrBonusCampaignCreator")
-  bonusProgressAdjustments         HrBonusProgressAdjustment[] @relation("HrBonusAdjustmentCreator")
-  approvedBonusAwards              HrBonusAward[]              @relation("HrBonusAwardApprover")
-  createdHrNotifications           HrStaffNotification[]       @relation("HrNotificationCreator")
-  createdHrEmployeeNotes           HrEmployeeNote[]            @relation("HrEmployeeNoteCreator")
-  updatedHrEmployeeNotes           HrEmployeeNote[]            @relation("HrEmployeeNoteUpdater")
-  uploadedHrEmployeeDocuments      HrEmployeeDocument[]        @relation("HrEmployeeDocumentUploader")
-  createdCorporateCustomers        HrCorporateCustomer[]       @relation("HrCorporateCustomerCreator")
-  archivedHrEmployees              HrEmployee[]                @relation("HrEmployeeArchiver")
-  createdDropdownCatalogOptions    DropdownCatalogOption[]     @relation("DropdownCatalogOptionCreator")
-  updatedAboutProfiles             AboutProfile[]              @relation("AboutProfileUpdater")
-  createdKnowledgeCategories       KnowledgeCategory[]         @relation("KnowledgeCategoryCreator")
-  updatedKnowledgeCategories       KnowledgeCategory[]         @relation("KnowledgeCategoryUpdater")
-  createdKnowledgeArticles         KnowledgeArticle[]          @relation("KnowledgeArticleCreator")
-  updatedKnowledgeArticles         KnowledgeArticle[]          @relation("KnowledgeArticleUpdater")
+  createdBonusCampaigns            HrBonusCampaign[]               @relation("HrBonusCampaignCreator")
+  bonusProgressAdjustments         HrBonusProgressAdjustment[]     @relation("HrBonusAdjustmentCreator")
+  approvedBonusAwards              HrBonusAward[]                  @relation("HrBonusAwardApprover")
+  createdHrNotifications           HrStaffNotification[]           @relation("HrNotificationCreator")
+  createdHrEmployeeNotes           HrEmployeeNote[]                @relation("HrEmployeeNoteCreator")
+  updatedHrEmployeeNotes           HrEmployeeNote[]                @relation("HrEmployeeNoteUpdater")
+  uploadedHrEmployeeDocuments      HrEmployeeDocument[]            @relation("HrEmployeeDocumentUploader")
+  createdCorporateCustomers        HrCorporateCustomer[]           @relation("HrCorporateCustomerCreator")
+  archivedHrEmployees              HrEmployee[]                    @relation("HrEmployeeArchiver")
+  createdDropdownCatalogOptions    DropdownCatalogOption[]         @relation("DropdownCatalogOptionCreator")
+  updatedAboutProfiles             AboutProfile[]                  @relation("AboutProfileUpdater")
+  createdKnowledgeCategories       KnowledgeCategory[]             @relation("KnowledgeCategoryCreator")
+  updatedKnowledgeCategories       KnowledgeCategory[]             @relation("KnowledgeCategoryUpdater")
+  createdKnowledgeArticles         KnowledgeArticle[]              @relation("KnowledgeArticleCreator")
+  updatedKnowledgeArticles         KnowledgeArticle[]              @relation("KnowledgeArticleUpdater")
 
   @@map("users")
   @@schema("erp")
@@ -1417,22 +1431,22 @@ model Student {
   createdAt              DateTime               @default(now()) @map("created_at")
   updatedAt              DateTime               @updatedAt @map("updated_at")
 
-  contact              Contact                   @relation(fields: [contactId], references: [id])
-  manager              User?                     @relation("StudentManager", fields: [managerId], references: [id])
-  campaign             MarketingCampaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  relationships        StudentRelationship[]
-  statusHistory        StudentStatusHistory[]
-  enrollments          Enrollment[]
-  invoices             Invoice[]
-  payments             Payment[]
-  billingCycles        StudentBillingCycle[]
+  contact                Contact                        @relation(fields: [contactId], references: [id])
+  manager                User?                          @relation("StudentManager", fields: [managerId], references: [id])
+  campaign               MarketingCampaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  relationships          StudentRelationship[]
+  statusHistory          StudentStatusHistory[]
+  enrollments            Enrollment[]
+  invoices               Invoice[]
+  payments               Payment[]
+  billingCycles          StudentBillingCycle[]
   billingMigrationReview StudentBillingMigrationReview?
-  refundAdjustments    RefundAdjustment[]
-  lessons              Lesson[]
-  workshopParticipants WorkshopParticipant[]
-  bonusTeacherCohorts  HrBonusTeacherCohort[]
-  mobileCheckIns       MobileAttendanceCheckIn[]
-  mobileAccount        StudentMobileAccount?
+  refundAdjustments      RefundAdjustment[]
+  lessons                Lesson[]
+  workshopParticipants   WorkshopParticipant[]
+  bonusTeacherCohorts    HrBonusTeacherCohort[]
+  mobileCheckIns         MobileAttendanceCheckIn[]
+  mobileAccount          StudentMobileAccount?
 
   @@index([contactId])
   @@index([lifecycleStatus])
@@ -1877,10 +1891,11 @@ model WorkshopParticipant {
   cancelReason   String?       @map("cancel_reason")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  event       WorkshopEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  student     Student?          @relation(fields: [studentId], references: [id])
-  assignedBy  User?             @relation("WorkshopParticipantAssigner", fields: [assignedById], references: [id])
-  cancelledBy User?             @relation("WorkshopParticipantCanceller", fields: [cancelledById], references: [id])
+  event       WorkshopEvent                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student     Student?                     @relation(fields: [studentId], references: [id])
+  assignedBy  User?                        @relation("WorkshopParticipantAssigner", fields: [assignedById], references: [id])
+  cancelledBy User?                        @relation("WorkshopParticipantCanceller", fields: [cancelledById], references: [id])
+  followUp    WorkshopParticipantFollowUp?
   payments    WorkshopPayment[]
 
   @@unique([eventId, studentId])
@@ -1890,6 +1905,30 @@ model WorkshopParticipant {
   @@index([eventId, cancelledAt])
   @@index([cancelledById])
   @@map("workshop_participants")
+  @@schema("erp")
+}
+
+model WorkshopParticipantFollowUp {
+  id              String                 @id @default(uuid()) @db.Uuid
+  participantId   String                 @unique @map("participant_id") @db.Uuid
+  status          WorkshopFollowUpStatus @default(PENDING)
+  nextFollowUpAt  DateTime?              @map("next_follow_up_at")
+  lastContactedAt DateTime?              @map("last_contacted_at")
+  note            String?
+  assignedToId    String?                @map("assigned_to_id") @db.Uuid
+  createdById     String?                @map("created_by_id") @db.Uuid
+  updatedById     String?                @map("updated_by_id") @db.Uuid
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  participant WorkshopParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  assignedTo  User?               @relation("WorkshopFollowUpAssignee", fields: [assignedToId], references: [id])
+  createdBy   User?               @relation("WorkshopFollowUpCreator", fields: [createdById], references: [id])
+  updatedBy   User?               @relation("WorkshopFollowUpUpdater", fields: [updatedById], references: [id])
+
+  @@index([status, nextFollowUpAt])
+  @@index([assignedToId, status])
+  @@map("workshop_participant_follow_ups")
   @@schema("erp")
 }
 
@@ -1944,8 +1983,8 @@ model Invoice {
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  student            Student             @relation(fields: [studentId], references: [id])
-  enrollment         Enrollment?         @relation(fields: [enrollmentId], references: [id])
+  student            Student              @relation(fields: [studentId], references: [id])
+  enrollment         Enrollment?          @relation(fields: [enrollmentId], references: [id])
   paymentAllocations PaymentAllocation[]
   refundAdjustments  RefundAdjustment[]
   billingCycle       StudentBillingCycle?
@@ -1977,8 +2016,8 @@ model Payment {
   createdById      String?             @map("created_by_id") @db.Uuid
   createdAt        DateTime            @default(now()) @map("created_at")
 
-  student           Student             @relation(fields: [studentId], references: [id])
-  createdBy         User?               @relation("PaymentCreator", fields: [createdById], references: [id])
+  student           Student               @relation(fields: [studentId], references: [id])
+  createdBy         User?                 @relation("PaymentCreator", fields: [createdById], references: [id])
   allocations       PaymentAllocation[]
   refundAdjustments RefundAdjustment[]
   payoutLines       TeacherPayoutLine[]
@@ -2020,19 +2059,19 @@ model StudentBillingCycle {
 }
 
 model StudentBillingMigrationReview {
-  id                      String   @id @default(uuid()) @db.Uuid
-  studentId               String   @unique @map("student_id") @db.Uuid
-  oldNextPaymentAt        DateTime? @map("old_next_payment_at") @db.Date
-  billingAnchorDate       DateTime? @map("billing_anchor_date") @db.Date
-  proposedNextPaymentAt   DateTime? @map("proposed_next_payment_at") @db.Date
-  mismatch                Boolean  @default(false)
-  issueReason             String?  @map("issue_reason")
-  reviewStatus            String   @default("PENDING") @map("review_status")
-  reviewedById            String?  @map("reviewed_by_id") @db.Uuid
-  reviewedAt              DateTime? @map("reviewed_at")
-  appliedAt               DateTime? @map("applied_at")
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                    String    @id @default(uuid()) @db.Uuid
+  studentId             String    @unique @map("student_id") @db.Uuid
+  oldNextPaymentAt      DateTime? @map("old_next_payment_at") @db.Date
+  billingAnchorDate     DateTime? @map("billing_anchor_date") @db.Date
+  proposedNextPaymentAt DateTime? @map("proposed_next_payment_at") @db.Date
+  mismatch              Boolean   @default(false)
+  issueReason           String?   @map("issue_reason")
+  reviewStatus          String    @default("PENDING") @map("review_status")
+  reviewedById          String?   @map("reviewed_by_id") @db.Uuid
+  reviewedAt            DateTime? @map("reviewed_at")
+  appliedAt             DateTime? @map("applied_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   student    Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   reviewedBy User?   @relation("BillingMigrationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)

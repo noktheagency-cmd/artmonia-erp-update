@@ -82,7 +82,6 @@ const secondaryNavItems: NavItem[] = [
   { href: "/marketing" as Route, label: "Marketing", icon: Megaphone, requiredPermissions: ["marketing.read"] },
   { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText, requiredPermissions: ["playbook.read"] },
   { href: "/workshops" as Route, label: "Workshop & Masterclass", icon: Presentation, requiredPermissions: ["workshop.read"] },
-  { href: "/crm?followUp=workshop_masterclass&tab=list" as Route, label: "Workshop follow-up", icon: UsersRound, requiredPermissions: ["crm.lead.read", "workshop.read"] },
   { href: "/settings/roles" as Route, label: "Rol və icazələr", icon: Settings2, requiredPermissions: ["auth.role.read"] },
 ];
 

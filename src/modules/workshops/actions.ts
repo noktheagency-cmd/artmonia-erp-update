@@ -11,6 +11,7 @@ import {
   Prisma,
   WorkshopEventStatus,
   WorkshopEventType,
+  WorkshopFollowUpStatus,
 } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
@@ -124,6 +125,24 @@ const updateParticipantSchema = z.object({
   discountAmount: optionalAmount,
   isGift: checkbox.default(false),
   note: optionalText(700),
+});
+
+const workshopFollowUpSchema = z.object({
+  participantId: z.string().uuid(),
+  status: z.enum([
+    WorkshopFollowUpStatus.PENDING,
+    WorkshopFollowUpStatus.CONTACTED,
+    WorkshopFollowUpStatus.NO_ANSWER,
+    WorkshopFollowUpStatus.INTERESTED,
+    WorkshopFollowUpStatus.CONVERTED,
+    WorkshopFollowUpStatus.NOT_INTERESTED,
+  ]),
+  nextFollowUpAt: optionalText(30),
+  assignedToId: z.preprocess(
+    (value) => value === "UNASSIGNED" ? undefined : value,
+    z.string().uuid().optional(),
+  ),
+  note: optionalText(1200),
 });
 
 const paymentSchema = z.object({
@@ -513,6 +532,68 @@ async function cancelWorkshopParticipantActionImpl(formData: FormData) {
       entityId: participant.id,
       before: participantAuditJson(participant),
       reason: input.reason ?? "İştirakçı silindi və ya ləğv edildi",
+    });
+  });
+
+  invalidateWorkshopCaches(eventId);
+  return { ok: true as const };
+}
+
+async function updateWorkshopFollowUpActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("workshop.manage");
+  const input = workshopFollowUpSchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+  let eventId = "";
+
+  await prisma.$transaction(async (tx) => {
+    const participant = await tx.workshopParticipant.findUnique({
+      where: { id: input.participantId },
+      include: { followUp: true },
+    });
+    if (!participant || participant.cancelledAt) throw new Error("Aktiv workshop iştirakçısı tapılmadı");
+    eventId = participant.eventId;
+
+    if (input.assignedToId) {
+      const assignee = await tx.user.findFirst({ where: { id: input.assignedToId, isActive: true }, select: { id: true } });
+      if (!assignee) throw new Error("Seçilmiş məsul əməkdaş aktiv deyil");
+    }
+
+    const nextFollowUpAt = parseOptionalDateTime(input.nextFollowUpAt, "Növbəti follow-up tarixi");
+    const statusChanged = participant.followUp?.status !== input.status;
+    const lastContactedAt = input.status === WorkshopFollowUpStatus.PENDING
+      ? participant.followUp?.lastContactedAt ?? null
+      : statusChanged ? new Date() : participant.followUp?.lastContactedAt ?? new Date();
+
+    const updated = await tx.workshopParticipantFollowUp.upsert({
+      where: { participantId: participant.id },
+      create: {
+        participantId: participant.id,
+        status: input.status,
+        nextFollowUpAt,
+        lastContactedAt,
+        assignedToId: input.assignedToId ?? null,
+        note: input.note ?? null,
+        createdById: actor.id,
+        updatedById: actor.id,
+      },
+      update: {
+        status: input.status,
+        nextFollowUpAt,
+        lastContactedAt,
+        assignedToId: input.assignedToId ?? null,
+        note: input.note ?? null,
+        updatedById: actor.id,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "workshop.follow_up.update",
+      entityType: "workshop_participant_follow_up",
+      entityId: updated.id,
+      before: participant.followUp ? workshopFollowUpAuditJson(participant.followUp) : undefined,
+      after: workshopFollowUpAuditJson(updated),
+      reason: input.note ?? "Workshop follow-up yeniləndi",
     });
   });
 
@@ -975,6 +1056,24 @@ function expenseAuditJson(expense: {
   } satisfies Prisma.InputJsonValue;
 }
 
+function workshopFollowUpAuditJson(followUp: {
+  participantId: string;
+  status: WorkshopFollowUpStatus;
+  nextFollowUpAt: Date | null;
+  lastContactedAt: Date | null;
+  assignedToId: string | null;
+  note: string | null;
+}) {
+  return {
+    participantId: followUp.participantId,
+    status: followUp.status,
+    nextFollowUpAt: followUp.nextFollowUpAt?.toISOString() ?? null,
+    lastContactedAt: followUp.lastContactedAt?.toISOString() ?? null,
+    assignedToId: followUp.assignedToId,
+    note: followUp.note,
+  } satisfies Prisma.InputJsonValue;
+}
+
 async function persistReceiptFile(
   value: FormDataEntryValue | null,
   idempotencyKey?: string,
@@ -1002,6 +1101,13 @@ function parseDateInput(value: string, fieldName: string) {
   const normalized = normalizeDateValue(value);
   const date = normalized ? new Date(`${normalized}T00:00:00.000Z`) : null;
   if (!date || Number.isNaN(date.getTime())) throw new Error(`${fieldName} düzgün deyil`);
+  return date;
+}
+
+function parseOptionalDateTime(value: string | undefined, fieldName: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`${fieldName} düzgün deyil`);
   return date;
 }
 
@@ -1054,6 +1160,10 @@ export const updateWorkshopParticipantAction = safeServerAction(
 export const cancelWorkshopParticipantAction = safeServerAction(
   cancelWorkshopParticipantActionImpl,
   "İştirakçı ləğv edilmədi.",
+);
+export const updateWorkshopFollowUpAction = safeServerAction(
+  updateWorkshopFollowUpActionImpl,
+  "Workshop follow-up yenilənmədi.",
 );
 export const recordWorkshopPaymentAction = safeServerAction(
   recordWorkshopPaymentActionImpl,

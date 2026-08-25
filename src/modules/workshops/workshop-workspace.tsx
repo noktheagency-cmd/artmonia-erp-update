@@ -38,9 +38,10 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
+import { StatusChip } from "@/components/ui/status-chip";
 import type { WorkshopOfferAudience, WorkshopOfferInput, WorkshopOfferResult } from "@/modules/workshops/offer-actions";
 import { WorkshopOfferDialog } from "@/modules/workshops/workshop-offer-dialog";
-import type { WorkshopData, WorkshopEventRow } from "@/modules/workshops/queries";
+import type { WorkshopData, WorkshopEventRow, WorkshopFollowUpRow, WorkshopFollowUpStatus } from "@/modules/workshops/queries";
 
 type WorkshopAction = (formData: FormData) => unknown | Promise<unknown>;
 
@@ -56,15 +57,25 @@ const durationOptions = [90, 120, 180, 240].map((value) => ({
   value: String(value),
   label: `${value} dəq`,
 }));
+const followUpStatusOptions: Array<{ value: WorkshopFollowUpStatus; label: string }> = [
+  { value: "PENDING", label: "Gözləyir" },
+  { value: "CONTACTED", label: "Əlaqə saxlanılıb" },
+  { value: "NO_ANSWER", label: "Cavab yoxdur" },
+  { value: "INTERESTED", label: "Maraqlanır" },
+  { value: "CONVERTED", label: "Nəticələnib" },
+  { value: "NOT_INTERESTED", label: "Maraqlanmır" },
+];
 
 export function WorkshopWorkspace({
   data,
   createWorkshopEventAction,
+  updateWorkshopFollowUpAction,
   loadOfferAudienceAction,
   generateOfferAction,
 }: {
   data: WorkshopData;
   createWorkshopEventAction: WorkshopAction;
+  updateWorkshopFollowUpAction: WorkshopAction;
   loadOfferAudienceAction: () => Promise<ActionResult<WorkshopOfferAudience>>;
   generateOfferAction: (
     input: WorkshopOfferInput,
@@ -93,16 +104,27 @@ export function WorkshopWorkspace({
         </div>
       </header>
 
-      <div className="workshop-kpis" aria-label="Workshop göstəriciləri">
-        {data.kpis.map((kpi, index) => (
-          <Metric key={kpi.label} icon={metricIcons[index] ?? Sparkles} {...kpi} />
-        ))}
-      </div>
+      <nav className="workshop-module-tabs" aria-label="Workshop bölmələri">
+        <Link href="/workshops" className={data.filters.view === "events" ? "is-active" : undefined}>Tədbirlər</Link>
+        {data.permissions.canViewFollowUp ? (
+          <Link href="/workshops?view=follow-up" className={data.filters.view === "follow-up" ? "is-active" : undefined}>Follow-up</Link>
+        ) : null}
+      </nav>
 
-      <CompactFilterPanel data={data} />
+      {data.filters.view === "follow-up" ? (
+        <WorkshopFollowUpSection data={data} action={updateWorkshopFollowUpAction} />
+      ) : (
+        <>
+          <div className="workshop-kpis" aria-label="Workshop göstəriciləri">
+            {data.kpis.map((kpi, index) => (
+              <Metric key={kpi.label} icon={metricIcons[index] ?? Sparkles} {...kpi} />
+            ))}
+          </div>
 
-      <div className="workshop-command-layout">
-        <section className="workshop-event-table-panel">
+          <CompactFilterPanel data={data} />
+
+          <div className="workshop-command-layout">
+            <section className="workshop-event-table-panel">
           <div className="workshop-section-head">
             <div>
               <span>{data.pagination.total} nəticə</span>
@@ -157,10 +179,133 @@ export function WorkshopWorkspace({
             </table>
           </div>
 
-          <Pagination data={data} />
-        </section>
-      </div>
+              <Pagination data={data} />
+            </section>
+          </div>
+        </>
+      )}
     </section>
+  );
+}
+
+function WorkshopFollowUpSection({ data, action }: { data: WorkshopData; action: WorkshopAction }) {
+  const summaryCards = [
+    { label: "Ümumi", value: data.followUpSummary.total, helper: "Aktiv iştirakçı", tone: "info" as const },
+    { label: "Gözləyir", value: data.followUpSummary.pending, helper: "İlk əlaqə gözləyir", tone: "warning" as const },
+    { label: "Vaxtı çatıb", value: data.followUpSummary.due, helper: "Planlanan vaxt keçib", tone: "danger" as const },
+    { label: "Maraqlanır", value: data.followUpSummary.interested, helper: "Aktiv fürsət", tone: "success" as const },
+    { label: "Nəticələnib", value: data.followUpSummary.converted, helper: "Uğurlu nəticə", tone: "success" as const },
+  ];
+
+  return (
+    <div className="workshop-follow-up-workspace">
+      <div className="workshop-kpis workshop-follow-up-kpis" aria-label="Workshop follow-up göstəriciləri">
+        {summaryCards.map((card, index) => (
+          <Metric key={card.label} icon={metricIcons[index] ?? UsersRound} label={card.label} value={String(card.value)} helper={card.helper} tone={card.tone} />
+        ))}
+      </div>
+
+      <section className="workshop-filter-panel">
+        <form method="get" action="/workshops" className="workshop-follow-up-filter">
+          <input type="hidden" name="view" value="follow-up" />
+          <Input name="followUpQ" defaultValue={data.filters.followUpQuery} placeholder="İştirakçı, telefon, e-poçt və ya tədbir axtar" />
+          <select name="followUpStatus" defaultValue={data.filters.followUpStatus} aria-label="Follow-up statusu">
+            <option value="all">Bütün statuslar</option>
+            {followUpStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <Button type="submit">Tətbiq et</Button>
+          <Link href="/workshops?view=follow-up" className="workshop-reset-link">Sıfırla</Link>
+        </form>
+      </section>
+
+      <section className="workshop-event-table-panel">
+        <div className="workshop-section-head">
+          <div><span>{data.followUpPagination.total} nəticə</span><h2>İştirakçı follow-up</h2></div>
+          <span className="workshop-sort-label"><UsersRound />Workshop datası</span>
+        </div>
+        <div className="workshop-table-scroll" data-erp-table-scroll="">
+          <table className="workshop-data-table workshop-follow-up-table" data-erp-table="" data-erp-sticky-first="">
+            <thead>
+              <tr>
+                <th>İştirakçı</th>
+                <th>Tədbir</th>
+                <th>Əlaqə</th>
+                <th>Status</th>
+                <th>Növbəti follow-up</th>
+                <th>Məsul</th>
+                <th>Son əlaqə</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {data.followUps.length > 0 ? data.followUps.map((row) => (
+                <tr key={row.participantId}>
+                  <td><strong>{row.fullName}</strong><small>{row.participantKind === "student" ? "Tələbə" : "Qonaq"}</small></td>
+                  <td><Link href={`/workshops/${row.eventId}?tab=participants` as Route} className="workshop-event-link-inline">{row.eventTitle}</Link><small>{row.eventDate}</small></td>
+                  <td><strong>{row.phone}</strong><small>{row.email}</small></td>
+                  <td><StatusChip tone={row.statusTone}>{row.statusLabel}</StatusChip></td>
+                  <td>{row.nextFollowUpAt}</td>
+                  <td>{row.assignedToName}</td>
+                  <td>{row.lastContactedAt}</td>
+                  <td>{data.permissions.canManage ? <WorkshopFollowUpDialog row={row} assignees={data.followUpAssignees} action={action} /> : null}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={8}><EmptyState title="Follow-up qeydi tapılmadı" description="Filtrləri dəyişin və ya workshop-a iştirakçı əlavə edin." /></td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <FollowUpPagination data={data} />
+      </section>
+    </div>
+  );
+}
+
+function WorkshopFollowUpDialog({ row, assignees, action }: {
+  row: WorkshopFollowUpRow;
+  assignees: Array<{ value: string; label: string }>;
+  action: WorkshopAction;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    startTransition(() => {
+      void Promise.resolve(action(new FormData(form))).then((result) => {
+        unwrapActionResult(result);
+        setOpen(false);
+        router.refresh();
+      }).catch((error) => setNotice(notifyCaughtError(error, "Follow-up yenilənə bilmədi", "Follow-up yenilənmədi")));
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button type="button" variant="outline">Yenilə</Button></DialogTrigger>
+      <DialogContent className="workshop-dialog">
+        <DialogHeader>
+          <DialogTitle>{row.fullName} — Follow-up</DialogTitle>
+          <DialogDescription>{row.eventTitle} iştirakçısının ayrıca workshop follow-up məlumatını yeniləyin.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="workshop-dialog-form">
+          <input type="hidden" name="participantId" value={row.participantId} />
+          <FieldGroup>
+            <div className="workshop-form-grid">
+              <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue={row.status} options={followUpStatusOptions} /></Field>
+              <Field><FieldLabel htmlFor={`follow-up-date-${row.participantId}`}>Növbəti follow-up</FieldLabel><Input id={`follow-up-date-${row.participantId}`} name="nextFollowUpAt" type="datetime-local" defaultValue={row.nextFollowUpAtInput} /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel>Məsul əməkdaş</FieldLabel><FormSelect name="assignedToId" defaultValue={row.assignedToId || "UNASSIGNED"} options={[{ value: "UNASSIGNED", label: "Təyin edilməyib" }, ...assignees]} /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel htmlFor={`follow-up-note-${row.participantId}`}>Qeyd</FieldLabel><textarea id={`follow-up-note-${row.participantId}`} name="note" rows={4} defaultValue={row.note} placeholder="Danışıq nəticəsi və növbəti addım" /></Field>
+            </div>
+          </FieldGroup>
+          {notice ? <p className="workshop-form-error" role="alert">{notice}</p> : null}
+          <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button><Button type="submit" disabled={pending}>{pending ? "Saxlanılır..." : "Saxla"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -285,6 +430,26 @@ function Pagination({ data }: { data: WorkshopData }) {
   );
 }
 
+function FollowUpPagination({ data }: { data: WorkshopData }) {
+  const pagination = data.followUpPagination;
+  if (pagination.totalPages <= 1) return <div className="workshop-pagination"><span>Cəmi {pagination.total} iştirakçı</span></div>;
+  return (
+    <div className="workshop-pagination">
+      <span>Cəmi {pagination.total} iştirakçı</span>
+      <div>
+        {pagination.hasPrevious ? (
+          <Link aria-label="Əvvəlki səhifə" href={buildWorkshopUrl(data, { view: "follow-up", page: String(pagination.page - 1) })}><ArrowLeft /></Link>
+        ) : <span className="is-disabled"><ArrowLeft /></span>}
+        <strong>{pagination.page}</strong>
+        <span>/ {pagination.totalPages}</span>
+        {pagination.hasNext ? (
+          <Link aria-label="Növbəti səhifə" href={buildWorkshopUrl(data, { view: "follow-up", page: String(pagination.page + 1) })}><ArrowRight /></Link>
+        ) : <span className="is-disabled"><ArrowRight /></span>}
+      </div>
+    </div>
+  );
+}
+
 function CreateEventDialog({ defaultDate, eventTypes, action, disabled }: {
   defaultDate: string;
   eventTypes: Array<{ value: string; label: string }>;
@@ -375,6 +540,7 @@ function EmptyState({ title, description }: { title: string; description: string
 function buildWorkshopUrl(data: WorkshopData, overrides: Record<string, string>): Route {
   const params = new URLSearchParams();
   const values: Record<string, string> = {
+    view: data.filters.view,
     q: data.filters.query,
     type: data.filters.type,
     status: data.filters.status,
@@ -389,6 +555,8 @@ function buildWorkshopUrl(data: WorkshopData, overrides: Record<string, string>)
     page: String(data.filters.page),
     pageSize: String(data.filters.pageSize),
     selected: data.filters.selected,
+    followUpQ: data.filters.followUpQuery,
+    followUpStatus: data.filters.followUpStatus,
     ...overrides,
   };
   Object.entries(values).forEach(([key, value]) => {
