@@ -181,9 +181,23 @@ const workshopFollowUpFields = {
 } as const;
 
 const createWorkshopFollowUpSchema = z.object({
-  participantId: z.string().uuid(),
+  sourceType: z.enum(["NEW_CONTACT", "EXISTING_PARTICIPANT"]),
+  participantId: optionalUuid,
+  fullName: optionalText(140),
+  phone: optionalText(40),
+  email: optionalEmail,
   targetEventId: z.string().uuid(),
   ...workshopFollowUpFields,
+}).superRefine((value, context) => {
+  if (value.sourceType === "EXISTING_PARTICIPANT" && !value.participantId) {
+    context.addIssue({ code: "custom", path: ["participantId"], message: "Mövcud iştirakçı seçilməlidir" });
+  }
+  if (value.sourceType === "NEW_CONTACT" && (!value.fullName || value.fullName.length < 2)) {
+    context.addIssue({ code: "custom", path: ["fullName"], message: "Ad və soyad daxil edilməlidir" });
+  }
+  if (value.sourceType === "NEW_CONTACT" && !value.phone && !value.email) {
+    context.addIssue({ code: "custom", path: ["phone"], message: "Telefon və ya e-poçtdan ən azı biri daxil edilməlidir" });
+  }
 });
 
 const updateWorkshopFollowUpSchema = z.object({
@@ -592,30 +606,39 @@ async function createWorkshopFollowUpActionImpl(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     const [participant, targetEvent] = await Promise.all([
-      tx.workshopParticipant.findFirst({
-        where: { id: input.participantId, cancelledAt: null },
-        select: { id: true, eventId: true },
-      }),
+      input.sourceType === "EXISTING_PARTICIPANT" && input.participantId
+        ? tx.workshopParticipant.findFirst({
+          where: { id: input.participantId, cancelledAt: null },
+          select: { id: true, eventId: true, fullName: true, phone: true, email: true },
+        })
+        : Promise.resolve(null),
       tx.workshopEvent.findFirst({
         where: { id: input.targetEventId, status: { not: WorkshopEventStatus.CANCELLED } },
         select: { id: true },
       }),
     ]);
-    if (!participant) throw new PublicActionError("Aktiv workshop iştirakçısı tapılmadı");
+    if (input.sourceType === "EXISTING_PARTICIPANT" && !participant) {
+      throw new PublicActionError("Aktiv workshop iştirakçısı tapılmadı");
+    }
     if (!targetEvent) throw new PublicActionError("Hədəf tədbir tapılmadı və ya ləğv edilib");
     await assertWorkshopFollowUpAssignee(tx, input.assignedToId);
 
-    const existing = await tx.workshopParticipantFollowUp.findUnique({
-      where: { participantId_targetEventId: { participantId: participant.id, targetEventId: targetEvent.id } },
-      select: { id: true },
-    });
-    if (existing) throw new PublicActionError("Bu iştirakçı üçün seçilmiş tədbir üzrə follow-up artıq mövcuddur");
+    if (participant) {
+      const existing = await tx.workshopParticipantFollowUp.findUnique({
+        where: { participantId_targetEventId: { participantId: participant.id, targetEventId: targetEvent.id } },
+        select: { id: true },
+      });
+      if (existing) throw new PublicActionError("Bu iştirakçı üçün seçilmiş tədbir üzrə follow-up artıq mövcuddur");
+    }
 
     const state = resolveWorkshopFollowUpState(input);
     const created = await tx.workshopParticipantFollowUp.create({
       data: {
-        participantId: participant.id,
+        participantId: participant?.id ?? null,
         targetEventId: targetEvent.id,
+        fullName: participant?.fullName ?? input.fullName!,
+        phone: participant?.phone ?? input.phone ?? null,
+        email: participant?.email ?? input.email ?? null,
         ...state,
         assignedToId: input.assignedToId ?? null,
         note: input.note ?? null,
@@ -649,7 +672,7 @@ async function updateWorkshopFollowUpActionImpl(formData: FormData) {
       where: { id: input.followUpId },
       include: { participant: { select: { cancelledAt: true } } },
     });
-    if (!followUp || followUp.participant.cancelledAt) throw new PublicActionError("Aktiv workshop follow-up qeydi tapılmadı");
+    if (!followUp || followUp.participant?.cancelledAt) throw new PublicActionError("Aktiv workshop follow-up qeydi tapılmadı");
     eventId = followUp.targetEventId;
 
     await assertWorkshopFollowUpAssignee(tx, input.assignedToId);
@@ -1209,8 +1232,11 @@ async function createWorkshopFollowUpActivity(
 }
 
 function workshopFollowUpAuditJson(followUp: {
-  participantId: string;
+  participantId: string | null;
   targetEventId: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
   status: WorkshopFollowUpStatus;
   nextAction: WorkshopFollowUpAction;
   outcome: WorkshopFollowUpOutcome;
@@ -1225,6 +1251,9 @@ function workshopFollowUpAuditJson(followUp: {
   return {
     participantId: followUp.participantId,
     targetEventId: followUp.targetEventId,
+    fullName: followUp.fullName,
+    phone: followUp.phone,
+    email: followUp.email,
     status: followUp.status,
     nextAction: followUp.nextAction,
     outcome: followUp.outcome,

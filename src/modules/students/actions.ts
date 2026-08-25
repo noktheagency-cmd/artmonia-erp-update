@@ -347,6 +347,7 @@ async function createStudentActionImpl(formData: FormData) {
         lifecycleStatus: input.lifecycleStatus,
         educationLevel: educationLevel?.value ?? null,
         registeredAt,
+        originalFirstLessonAt: firstLessonAt,
         billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
         billingAnchorDate: firstLessonAt,
         notes: input.notes ?? null,
@@ -570,6 +571,10 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       throw new Error("Tələbə tapılmadı");
     }
 
+    const statusReason = getSharedStatusChangeReason(
+      input.lifecycleStatus,
+      current.lifecycleStatus,
+    );
     const updateData = buildSharedStudentStatusUpdateData(input.lifecycleStatus, effectiveAt);
 
     await tx.student.update({
@@ -582,7 +587,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         studentId: current.id,
         oldStatus: current.lifecycleStatus,
         newStatus: input.lifecycleStatus,
-        reason: getSharedStatusChangeReason(input.lifecycleStatus),
+        reason: statusReason,
         note: input.note ?? null,
         effectiveAt,
         changedById: actor.id,
@@ -590,12 +595,16 @@ async function updateStudentStatusActionImpl(formData: FormData) {
     });
 
     let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
+    let activationResult: Awaited<ReturnType<typeof syncSharedActivationBilling>> | null = null;
 
     if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
-      await syncSharedActivationBilling(tx, {
+      activationResult = await syncSharedActivationBilling(tx, {
         studentId: current.id,
         studentCode: current.code,
         effectiveAt,
+        isReactivation:
+          current.lifecycleStatus === StudentLifecycleStatus.FROZEN
+          || current.lifecycleStatus === StudentLifecycleStatus.STOPPED,
       });
       await restartStudentPaymentScheduleForActiveSlot(tx, {
         studentId: current.id,
@@ -615,14 +624,28 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       before: {
         lifecycleStatus: current.lifecycleStatus,
         billingPaused: current.billingPaused,
+        ...(activationResult
+          ? {
+              currentFirstLessonAt:
+                activationResult.previousFirstLessonAt?.toISOString() ?? null,
+            }
+          : {}),
       },
       after: {
         lifecycleStatus: input.lifecycleStatus,
         billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
         effectiveAt: effectiveAt.toISOString(),
+        ...(activationResult
+          ? {
+              enrollmentId: activationResult.enrollmentId,
+              originalFirstLessonAt: activationResult.originalFirstLessonAt.toISOString(),
+              currentFirstLessonAt: activationResult.currentFirstLessonAt.toISOString(),
+              reactivated: activationResult.reactivated,
+            }
+          : {}),
         ...(completionResult ?? {}),
       },
-      reason: input.note ?? getSharedStatusChangeReason(input.lifecycleStatus),
+      reason: input.note ?? statusReason,
     });
   });
 
@@ -686,6 +709,11 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     if (!current) {
       throw new Error("Tələbə tapılmadı");
     }
+
+    const statusReason = getSharedStatusChangeReason(
+      input.lifecycleStatus,
+      current.lifecycleStatus,
+    );
 
     const canManageAllStudents = scopeFor(actor.permissions, "student.update") === "ALL";
     if (!canManageAllStudents && current.managerId !== actor.id) {
@@ -802,6 +830,10 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         campaignId: input.campaignId ?? null,
         educationLevel: educationLevel?.value ?? null,
         registeredAt,
+        originalFirstLessonAt:
+          current.originalFirstLessonAt
+          ?? currentEnrollment.firstLessonAt
+          ?? firstLessonAt,
         notes: input.notes ?? null,
       },
     });
@@ -841,7 +873,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           studentId: current.id,
           oldStatus: current.lifecycleStatus,
           newStatus: input.lifecycleStatus,
-          reason: getSharedStatusChangeReason(input.lifecycleStatus),
+          reason: statusReason,
           note: input.statusNote ?? null,
           effectiveAt: statusEffectiveAt,
           changedById: actor.id,
@@ -849,12 +881,16 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       });
 
       let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
+      let activationResult: Awaited<ReturnType<typeof syncSharedActivationBilling>> | null = null;
 
       if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
-        await syncSharedActivationBilling(tx, {
+        activationResult = await syncSharedActivationBilling(tx, {
           studentId: current.id,
           studentCode: current.code,
           effectiveAt: statusEffectiveAt,
+          isReactivation:
+            current.lifecycleStatus === StudentLifecycleStatus.FROZEN
+            || current.lifecycleStatus === StudentLifecycleStatus.STOPPED,
         });
         await restartStudentPaymentScheduleForActiveSlot(tx, {
           studentId: current.id,
@@ -874,14 +910,28 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         before: {
           lifecycleStatus: current.lifecycleStatus,
           billingPaused: current.billingPaused,
+          originalFirstLessonAt: (
+            current.originalFirstLessonAt
+            ?? currentEnrollment.firstLessonAt
+            ?? firstLessonAt
+          )?.toISOString() ?? null,
+          currentFirstLessonAt: currentEnrollment.firstLessonAt?.toISOString() ?? null,
         },
         after: {
           lifecycleStatus: input.lifecycleStatus,
           billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
           effectiveAt: statusEffectiveAt.toISOString(),
+          ...(activationResult
+            ? {
+                enrollmentId: activationResult.enrollmentId,
+                originalFirstLessonAt: activationResult.originalFirstLessonAt.toISOString(),
+                currentFirstLessonAt: activationResult.currentFirstLessonAt.toISOString(),
+                reactivated: activationResult.reactivated,
+              }
+            : {}),
           ...(completionResult ?? {}),
         },
-        reason: input.statusNote ?? getSharedStatusChangeReason(input.lifecycleStatus),
+        reason: input.statusNote ?? statusReason,
       });
     }
 
@@ -913,6 +963,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         programId: currentEnrollment.programId,
         teacherId: currentEnrollment.teacherId,
         firstLessonAt: currentEnrollment.firstLessonAt?.toISOString() ?? null,
+        originalFirstLessonAt: current.originalFirstLessonAt?.toISOString() ?? null,
         monthlyFee: toNumber(currentEnrollment.monthlyFee),
         discountType: currentEnrollment.discountType,
         lessonsPerMonth: currentEnrollment.lessonsPerMonth,
@@ -931,6 +982,11 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         programId: input.programId,
         teacherId: input.teacherId ?? null,
         firstLessonAt: firstLessonAt?.toISOString() ?? null,
+        originalFirstLessonAt: (
+          current.originalFirstLessonAt
+          ?? currentEnrollment.firstLessonAt
+          ?? firstLessonAt
+        )?.toISOString() ?? null,
         monthlyFee: effectiveMonthlyFee,
         discountType: discountType?.value ?? null,
         lessonsPerMonth: input.lessonsPerMonth ?? null,
@@ -964,6 +1020,7 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
         lifecycleStatus: true,
         billingPaused: true,
         billingAnchorDate: true,
+        originalFirstLessonAt: true,
       },
     });
     if (!student) throw new PublicActionError("Tələbə tapılmadı.");
@@ -1030,10 +1087,13 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
       },
     });
 
-    if (!student.billingAnchorDate) {
+    if (!student.billingAnchorDate || !student.originalFirstLessonAt) {
       await tx.student.update({
         where: { id: student.id },
-        data: { billingAnchorDate: firstLessonAt },
+        data: {
+          ...(!student.billingAnchorDate ? { billingAnchorDate: firstLessonAt } : {}),
+          ...(!student.originalFirstLessonAt ? { originalFirstLessonAt: firstLessonAt } : {}),
+        },
       });
     }
 
@@ -1055,6 +1115,7 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
         programName: program.name,
         teacherId: input.teacherId ?? null,
         firstLessonAt: firstLessonAt.toISOString(),
+        originalFirstLessonAt: (student.originalFirstLessonAt ?? firstLessonAt).toISOString(),
         billingAnchorDate: (student.billingAnchorDate ?? firstLessonAt).toISOString(),
         monthlyFee,
         discountType: discountType?.value ?? null,

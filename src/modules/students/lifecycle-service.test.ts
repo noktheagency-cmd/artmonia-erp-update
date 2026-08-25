@@ -3,6 +3,7 @@ import test from "node:test";
 import type { Prisma } from "@/generated/prisma/client";
 import {
   closeCompletedStudentBilling,
+  getStatusChangeReason,
   syncActivationBilling,
 } from "./lifecycle-service";
 
@@ -15,11 +16,18 @@ function activationTx(enrollment: {
   firstLessonAt: Date | null;
 }) {
   let enrollmentUpdate: unknown;
+  let studentUpdate: unknown;
   const tx = {
+    student: {
+      updateMany: async (args: unknown) => {
+        studentUpdate = args;
+      },
+    },
     enrollment: {
       findFirst: async () => ({
         id: "enrollment-1",
         monthlyFee: 200,
+        student: { originalFirstLessonAt: enrollment.firstLessonAt },
         ...enrollment,
       }),
       update: async (args: unknown) => {
@@ -38,7 +46,11 @@ function activationTx(enrollment: {
     },
   } as unknown as Prisma.TransactionClient;
 
-  return { tx, getEnrollmentUpdate: () => enrollmentUpdate };
+  return {
+    tx,
+    getEnrollmentUpdate: () => enrollmentUpdate,
+    getStudentUpdate: () => studentUpdate,
+  };
 }
 
 test("activation preserves a manually imported first lesson date", async () => {
@@ -86,6 +98,49 @@ test("activation fills the automatic first lesson date from the active slot", as
       firstLessonAt: slotStartedAt,
     },
   });
+});
+
+test("reactivation keeps the original lesson date and starts a new current period", async () => {
+  const originalFirstLessonAt = utcDate("2026-02-10");
+  const returnAt = utcDate("2026-06-03");
+  const { tx, getEnrollmentUpdate, getStudentUpdate } = activationTx({
+    startDate: originalFirstLessonAt,
+    firstLessonAt: originalFirstLessonAt,
+  });
+
+  const result = await syncActivationBilling(tx, {
+    studentId: "student-1",
+    studentCode: "ART-0001",
+    effectiveAt: returnAt,
+    isReactivation: true,
+  });
+
+  assert.deepEqual(getStudentUpdate(), {
+    where: {
+      id: "student-1",
+      originalFirstLessonAt: null,
+    },
+    data: { originalFirstLessonAt },
+  });
+  assert.deepEqual(getEnrollmentUpdate(), {
+    where: { id: "enrollment-1" },
+    data: {
+      status: "ACTIVE",
+      startDate: returnAt,
+      firstLessonAt: returnAt,
+    },
+  });
+  assert.deepEqual(result, {
+    enrollmentId: "enrollment-1",
+    previousFirstLessonAt: originalFirstLessonAt,
+    currentFirstLessonAt: returnAt,
+    originalFirstLessonAt,
+    reactivated: true,
+  });
+  assert.equal(
+    getStatusChangeReason("ACTIVE", "FROZEN"),
+    "Tələbə yenidən aktiv edildi",
+  );
 });
 
 test("completion closes enrollment and outstanding invoices without deleting history", async () => {

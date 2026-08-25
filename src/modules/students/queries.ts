@@ -803,6 +803,7 @@ type StudentDetailRawRow = StudentListRawRow & {
   discountType: string | null;
   lessonsPerMonth: number | null;
   firstLessonAt: Date | string | null;
+  originalFirstLessonAt: Date | string | null;
   billingAnchorDate: Date | string | null;
   mobileAccountId: string | null;
   mobileLoginEmail: string | null;
@@ -2474,6 +2475,7 @@ export async function getStudentDetailData(studentId: string) {
         s.notes,
         s.billing_paused as "billingPaused",
         s.billing_anchor_date as "billingAnchorDate",
+        s.original_first_lesson_at as "originalFirstLessonAt",
         s.education_level as "educationLevel",
         s.manager_id::text as "managerId",
         s.campaign_id::text as "campaignId",
@@ -2499,6 +2501,7 @@ export async function getStudentDetailData(studentId: string) {
       ps.notes,
       ps."billingPaused",
       ps."billingAnchorDate",
+      ps."originalFirstLessonAt",
       ps."educationLevel",
       ps."managerId",
       ps."campaignId",
@@ -2833,6 +2836,9 @@ export async function getStudentDetailData(studentId: string) {
         lessonsPerMonth: student.lessonsPerMonth?.toString() ?? "",
         firstLessonDate: student.firstLessonAt
           ? formatDateInput(new Date(student.firstLessonAt))
+          : "",
+        overallFirstLessonDate: student.originalFirstLessonAt
+          ? formatDateInput(new Date(student.originalFirstLessonAt))
           : "",
         billingAnchorDate: student.billingAnchorDate
           ? formatDateInput(new Date(student.billingAnchorDate))

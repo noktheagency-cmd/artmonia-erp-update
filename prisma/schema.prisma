@@ -1469,6 +1469,7 @@ model Student {
   stoppedAt              DateTime?              @map("stopped_at") @db.Date
   completedAt            DateTime?              @map("completed_at") @db.Date
   freezeReturnAt         DateTime?              @map("freeze_return_at") @db.Date
+  originalFirstLessonAt  DateTime?              @map("original_first_lesson_at") @db.Date
   billingPaused          Boolean                @default(false) @map("billing_paused")
   billingAnchorDate      DateTime?              @map("billing_anchor_date") @db.Date
   isTestData             Boolean                @default(false) @map("is_test_data")
@@ -1956,8 +1957,11 @@ model WorkshopParticipant {
 
 model WorkshopParticipantFollowUp {
   id              String                   @id @default(uuid()) @db.Uuid
-  participantId   String                   @map("participant_id") @db.Uuid
+  participantId   String?                  @map("participant_id") @db.Uuid
   targetEventId   String                   @map("target_event_id") @db.Uuid
+  fullName        String                   @map("full_name")
+  phone           String?                  @db.VarChar(40)
+  email           String?                  @db.VarChar(180)
   status          WorkshopFollowUpStatus   @default(PENDING)
   nextAction      WorkshopFollowUpAction   @default(CALL) @map("next_action")
   outcome         WorkshopFollowUpOutcome  @default(NONE)
@@ -1973,7 +1977,7 @@ model WorkshopParticipantFollowUp {
   createdAt       DateTime                 @default(now()) @map("created_at")
   updatedAt       DateTime                 @updatedAt @map("updated_at")
 
-  participant WorkshopParticipant        @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  participant WorkshopParticipant?       @relation(fields: [participantId], references: [id], onDelete: Cascade)
   targetEvent WorkshopEvent              @relation("WorkshopFollowUpTargetEvent", fields: [targetEventId], references: [id], onDelete: Cascade)
   assignedTo  User?                      @relation("WorkshopFollowUpAssignee", fields: [assignedToId], references: [id])
   createdBy   User?                      @relation("WorkshopFollowUpCreator", fields: [createdById], references: [id])
@@ -1985,6 +1989,7 @@ model WorkshopParticipantFollowUp {
   @@index([assignedToId, status])
   @@index([targetEventId, status])
   @@index([priority, nextFollowUpAt])
+  @@index([fullName, phone])
   @@map("workshop_participant_follow_ups")
   @@schema("erp")
 }

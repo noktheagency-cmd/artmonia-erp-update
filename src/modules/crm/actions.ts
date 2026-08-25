@@ -102,6 +102,11 @@ const updateLeadSchema = z.object({
 
 const convertLeadSchema = z.object({
   leadId: z.string().uuid(),
+  fullName: z.string().trim().min(2).max(120),
+  phone: z.string().trim().min(7).max(40),
+  source: optionalText(60),
+  educationLevel: optionalText(80),
+  programId: z.string().uuid(),
   returnTo: optionalText(260),
 });
 
@@ -454,6 +459,11 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
   const input = convertLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const today = new Date();
+  const phoneNormalized = normalizePhone(input.phone);
+
+  if (!phoneNormalized) {
+    throw new Error("Telefon düzgün deyil");
+  }
 
   await prisma.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({
@@ -461,6 +471,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       select: {
         id: true,
         stage: true,
+        source: true,
         contactId: true,
         managerId: true,
         programInterestId: true,
@@ -470,6 +481,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         contact: {
           select: {
             fullName: true,
+            phoneDisplay: true,
             students: {
               select: {
                 id: true,
@@ -479,23 +491,25 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
             },
           },
         },
-        programInterest: {
+      },
+    });
+
+    const program = await tx.program.findFirst({
+      where: { id: input.programId, isActive: true },
+      select: {
+        id: true,
+        defaultMonthlyFee: true,
+        defaultLessonsPerMonth: true,
+        pricingVersions: {
+          where: {
+            validFrom: { lte: today },
+            OR: [{ validTo: null }, { validTo: { gte: today } }],
+          },
+          orderBy: { validFrom: "desc" },
+          take: 1,
           select: {
-            id: true,
-            defaultMonthlyFee: true,
-            defaultLessonsPerMonth: true,
-            pricingVersions: {
-              where: {
-                validFrom: { lte: today },
-                OR: [{ validTo: null }, { validTo: { gte: today } }],
-              },
-              orderBy: { validFrom: "desc" },
-              take: 1,
-              select: {
-                monthlyFee: true,
-                lessonsPerMonth: true,
-              },
-            },
+            monthlyFee: true,
+            lessonsPerMonth: true,
           },
         },
       },
@@ -515,16 +529,27 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       throw new Error(`Bu əlaqə artıq ${lead.contact.students[0].code} kodlu tələbəyə bağlıdır`);
     }
 
-    if (!lead.programInterest) {
-      throw new Error("Qeydiyyata almadan əvvəl proqram seçin");
+    if (!program) {
+      throw new Error("Seçilən proqram aktiv deyil və ya tapılmadı");
     }
 
+    const educationLevel = await resolveEducationLevelName(tx, input.educationLevel);
+    await tx.contact.update({
+      where: { id: lead.contactId },
+      data: {
+        fullName: input.fullName,
+        phoneDisplay: input.phone,
+        phoneNormalized,
+        source: input.source ?? lead.source ?? "Manual",
+      },
+    });
+
     const monthlyFee =
-      lead.programInterest.pricingVersions[0]?.monthlyFee ??
-      lead.programInterest.defaultMonthlyFee;
+      program.pricingVersions[0]?.monthlyFee ??
+      program.defaultMonthlyFee;
     const lessonsPerMonth =
-      lead.programInterest.pricingVersions[0]?.lessonsPerMonth ??
-      lead.programInterest.defaultLessonsPerMonth;
+      program.pricingVersions[0]?.lessonsPerMonth ??
+      program.defaultLessonsPerMonth;
     const studentCode = await generateStudentCode(tx);
 
     const student = await tx.student.create({
@@ -534,7 +559,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         managerId: actor.id,
         campaignId: lead.campaignId,
         lifecycleStatus: StudentLifecycleStatus.SLOT_WAITING,
-        educationLevel: lead.educationLevel,
+        educationLevel,
         billingPaused: isBillingPausedStatus(StudentLifecycleStatus.SLOT_WAITING),
         registeredAt: today,
         notes: `CRM müraciətindən tələbəyə çevrildi: ${lead.id}`,
@@ -556,7 +581,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
     const enrollment = await tx.enrollment.create({
       data: {
         studentId: student.id,
-        programId: lead.programInterest.id,
+        programId: program.id,
         status: EnrollmentStatus.ACTIVE,
         startDate: today,
         monthlyFee,
@@ -573,6 +598,9 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       data: {
         stage: LeadStage.REGISTERED,
         convertedStudentId: student.id,
+        source: input.source ?? "Manual",
+        educationLevel,
+        programInterestId: program.id,
       },
       select: {
         id: true,
@@ -601,11 +629,23 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         id: lead.id,
         stage: lead.stage,
         convertedStudentId: lead.convertedStudentId,
+        programInterestId: lead.programInterestId,
+        educationLevel: lead.educationLevel,
+        contact: {
+          fullName: lead.contact.fullName,
+          phoneDisplay: lead.contact.phoneDisplay,
+        },
       },
       after: {
         ...updatedLead,
         studentCode: student.code,
         enrollmentId: enrollment.id,
+        programId: program.id,
+        educationLevel,
+        contact: {
+          fullName: input.fullName,
+          phoneDisplay: input.phone,
+        },
       },
       reason: "CRM çevirmə əməliyyatı",
     });

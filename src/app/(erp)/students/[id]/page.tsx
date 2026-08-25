@@ -365,7 +365,11 @@ export default async function StudentDetailPage({
               <strong>{student.detail.registeredAt}</strong>
             </div>
             <div className="profile-info-item">
-              <span>İlk dərs tarixi</span>
+              <span>Ümumi ilk dərs tarixi</span>
+              <strong>{student.detail.overallFirstLessonDate || "Təyin edilməyib"}</strong>
+            </div>
+            <div className="profile-info-item">
+              <span>Cari dövrün ilk dərs tarixi</span>
               <strong>{student.detail.firstLessonDate || "Təyin edilməyib"}</strong>
             </div>
             <div className="profile-info-item">

@@ -108,6 +108,12 @@ const followUpPriorityOptions: Array<{ value: WorkshopFollowUpPriority; label: s
   { value: "URGENT", label: "Təcili" },
 ];
 
+function followUpContactKindLabel(kind: WorkshopFollowUpRow["participantKind"]) {
+  if (kind === "student") return "Tələbə";
+  if (kind === "guest") return "Qonaq";
+  return "Yeni kontakt";
+}
+
 export function WorkshopWorkspace({
   data,
   createWorkshopEventAction,
@@ -295,7 +301,7 @@ function WorkshopFollowUpSection({ data, createAction, updateAction }: {
             <tbody>
               {data.followUps.length > 0 ? data.followUps.map((row) => (
                 <tr key={row.id}>
-                  <td><strong>{row.fullName}</strong><small>{row.sourceEventTitle} · {row.participantKind === "student" ? "Tələbə" : "Qonaq"}</small></td>
+                  <td><strong>{row.fullName}</strong><small>{row.sourceEventTitle} · {followUpContactKindLabel(row.participantKind)}</small></td>
                   <td><Link href={`/workshops/${row.eventId}?tab=participants` as Route} className="workshop-event-link-inline">{row.eventTitle}</Link><small>{row.eventDate}</small></td>
                   <td><strong>{row.phone}</strong><small>{row.email}</small></td>
                   <td><StatusChip tone={row.statusTone}>{row.statusLabel}</StatusChip><small><StatusChip tone={row.priorityTone}>{row.priorityLabel}</StatusChip></small></td>
@@ -324,6 +330,7 @@ function CreateWorkshopFollowUpDialog({ participants, events, assignees, action 
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [sourceType, setSourceType] = useState<"NEW_CONTACT" | "EXISTING_PARTICIPANT">("NEW_CONTACT");
   const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -345,12 +352,25 @@ function CreateWorkshopFollowUpDialog({ participants, events, assignees, action 
       <DialogContent className="workshop-dialog workshop-follow-up-dialog">
         <DialogHeader>
           <DialogTitle>Yeni workshop follow-up</DialogTitle>
-          <DialogDescription>İştirakçını və təklif ediləcək tədbiri seçin. Tədbirə yeni iştirakçı əlavə ediləndə ilkin follow-up onsuz da avtomatik yaranır.</DialogDescription>
+          <DialogDescription>Yeni kontaktı sıfırdan daxil edin və ya mövcud workshop iştirakçısını seçin.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="workshop-dialog-form">
+          <input type="hidden" name="sourceType" value={sourceType} />
           <FieldGroup>
+            <div className="workshop-follow-up-source-switch" role="group" aria-label="Kontakt mənbəyi">
+              <button type="button" className={sourceType === "NEW_CONTACT" ? "is-active" : undefined} onClick={() => setSourceType("NEW_CONTACT")}>Yeni kontakt</button>
+              <button type="button" className={sourceType === "EXISTING_PARTICIPANT" ? "is-active" : undefined} onClick={() => setSourceType("EXISTING_PARTICIPANT")}>Mövcud iştirakçı</button>
+            </div>
             <div className="workshop-form-grid">
-              <Field className="workshop-field-span-2"><FieldLabel>İştirakçı / mənbə tədbir</FieldLabel><FormSelect name="participantId" defaultValue={participants[0]?.value} options={participants} /></Field>
+              {sourceType === "NEW_CONTACT" ? (
+                <>
+                  <Field className="workshop-field-span-2"><FieldLabel htmlFor="new-follow-up-name">Ad və soyad</FieldLabel><Input id="new-follow-up-name" name="fullName" required placeholder="Məsələn, Aysel Məmmədova" /></Field>
+                  <Field><FieldLabel htmlFor="new-follow-up-phone">Telefon</FieldLabel><Input id="new-follow-up-phone" name="phone" type="tel" placeholder="+994 50 000 00 00" /></Field>
+                  <Field><FieldLabel htmlFor="new-follow-up-email">E-poçt</FieldLabel><Input id="new-follow-up-email" name="email" type="email" placeholder="contact@example.com" /></Field>
+                </>
+              ) : (
+                <Field className="workshop-field-span-2"><FieldLabel>Mövcud iştirakçı / mənbə tədbir</FieldLabel><FormSelect name="participantId" defaultValue={participants[0]?.value} options={participants} /></Field>
+              )}
               <Field className="workshop-field-span-2"><FieldLabel>Hədəf tədbir</FieldLabel><FormSelect name="targetEventId" defaultValue={events[0]?.value} options={events} /></Field>
               <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue="PENDING" options={followUpStatusOptions} /></Field>
               <Field><FieldLabel>Prioritet</FieldLabel><FormSelect name="priority" defaultValue="NORMAL" options={followUpPriorityOptions} /></Field>
@@ -363,7 +383,7 @@ function CreateWorkshopFollowUpDialog({ participants, events, assignees, action 
             </div>
           </FieldGroup>
           {notice ? <p className="workshop-form-error" role="alert">{notice}</p> : null}
-          <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button><Button type="submit" disabled={pending || participants.length === 0 || events.length === 0}>{pending ? "Yaradılır..." : "Follow-up yarat"}</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button><Button type="submit" disabled={pending || events.length === 0 || (sourceType === "EXISTING_PARTICIPANT" && participants.length === 0)}>{pending ? "Yaradılır..." : "Follow-up yarat"}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -398,7 +418,7 @@ function WorkshopFollowUpDialog({ row, assignees, action }: {
       <DialogContent className="workshop-dialog workshop-follow-up-dialog">
         <DialogHeader>
           <DialogTitle>{row.fullName} — Follow-up</DialogTitle>
-          <DialogDescription>{row.sourceEventTitle} iştirakçısını “{row.eventTitle}” tədbiri üçün izləyin.</DialogDescription>
+          <DialogDescription>{row.fullName} kontaktını “{row.eventTitle}” tədbiri üçün izləyin. Mənbə: {row.sourceEventTitle}.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="workshop-dialog-form">
           <input type="hidden" name="followUpId" value={row.id} />

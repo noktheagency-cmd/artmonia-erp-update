@@ -61,6 +61,7 @@ interface StudentDetail {
     discountType: string;
     lessonsPerMonth: string;
     firstLessonDate: string;
+    overallFirstLessonDate: string;
     billingAnchorDate: string;
     registeredDate: string;
     notes: string;
@@ -292,7 +293,7 @@ export function StudentDetailActions({
                 />
               </label>
               <label className="form-field">
-                <span>İlk dərs / status tarixi</span>
+                <span>Aktivləşmə / status tarixi</span>
                 <DatePicker
                   name="firstLessonDate"
                   defaultValue={student.detail.paymentDefaultDate}
@@ -598,7 +599,7 @@ export function StudentDetailActions({
                   />
                 </label>
                 <label className="form-field">
-                  <span>İlk dərs tarixi</span>
+                  <span>Cari paket üzrə ilk dərs</span>
                   <DatePicker name="firstLessonDate" defaultValue={student.detail.firstLessonDate} />
                 </label>
                 <label className="form-field">

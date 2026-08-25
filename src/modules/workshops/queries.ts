@@ -167,7 +167,7 @@ export type WorkshopFollowUpRow = {
   fullName: string;
   phone: string;
   email: string;
-  participantKind: "student" | "guest";
+  participantKind: "student" | "guest" | "lead";
   status: WorkshopFollowUpStatus;
   statusLabel: string;
   statusTone: StatusTone;
@@ -409,7 +409,7 @@ type StudentDbRow = {
 
 type FollowUpDbRow = {
   id: string;
-  participantId: string;
+  participantId: string | null;
   eventId: string;
   eventTitle: string;
   eventDate: Date | string;
@@ -516,16 +516,18 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
   const sortSql = getEventSortSql(filters.sort);
   const offset = (filters.page - 1) * filters.pageSize;
   const followUpConditions: Prisma.Sql[] = [
-    Prisma.sql`wp.cancelled_at is null`,
-    Prisma.sql`we.status <> 'CANCELLED'::"erp"."WorkshopEventStatus"`,
+    Prisma.sql`(
+      wp.id is null
+      or (wp.cancelled_at is null and we.status <> 'CANCELLED'::"erp"."WorkshopEventStatus")
+    )`,
     Prisma.sql`te.status <> 'CANCELLED'::"erp"."WorkshopEventStatus"`,
   ];
   if (filters.followUpQuery) {
     const like = `%${filters.followUpQuery}%`;
     followUpConditions.push(Prisma.sql`(
-      wp.full_name ilike ${like}
-      or coalesce(wp.phone, '') ilike ${like}
-      or coalesce(wp.email, '') ilike ${like}
+      wf.full_name ilike ${like}
+      or coalesce(wf.phone, '') ilike ${like}
+      or coalesce(wf.email, '') ilike ${like}
       or we.title ilike ${like}
       or te.title ilike ${like}
     )`);
@@ -579,12 +581,12 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
         te.id::text as "eventId",
         te.title as "eventTitle",
         te.event_date as "eventDate",
-        we.id::text as "sourceEventId",
-        we.title as "sourceEventTitle",
-        we.event_date as "sourceEventDate",
-        wp.full_name as "fullName",
-        wp.phone,
-        wp.email,
+        coalesce(we.id::text, '') as "sourceEventId",
+        coalesce(we.title, 'Sıfırdan yaradılıb') as "sourceEventTitle",
+        coalesce(we.event_date, wf.created_at::date) as "sourceEventDate",
+        wf.full_name as "fullName",
+        wf.phone,
+        wf.email,
         wp.student_id::text as "studentId",
         wf.status::text as "status",
         wf.next_action::text as "nextAction",
@@ -619,9 +621,9 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
           ) recent
         ), '[]'::jsonb) as activities,
         count(*) over()::int as "totalCount"
-      from erp.workshop_participants wp
-      join erp.workshop_events we on we.id = wp.event_id
-      join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      from erp.workshop_participant_follow_ups wf
+      left join erp.workshop_participants wp on wp.id = wf.participant_id
+      left join erp.workshop_events we on we.id = wp.event_id
       join erp.workshop_events te on te.id = wf.target_event_id
       left join erp.users assigned on assigned.id = wf.assigned_to_id
       ${followUpWhereSql}
@@ -634,7 +636,7 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
         ) and wf.next_follow_up_at <= now() then 0 else 1 end,
         wf.next_follow_up_at asc nulls last,
         te.event_date desc,
-        wp.assigned_at desc
+        wf.created_at desc
       limit ${filters.pageSize} offset ${followUpOffset}
     `),
     prisma.$queryRaw<FollowUpSummaryDbRow[]>(Prisma.sql`
@@ -650,9 +652,9 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
         )::int as due,
         count(*) filter (where wf.status = 'INTERESTED'::"erp"."WorkshopFollowUpStatus")::int as interested,
         count(*) filter (where wf.status = 'CONVERTED'::"erp"."WorkshopFollowUpStatus")::int as converted
-      from erp.workshop_participants wp
-      join erp.workshop_events we on we.id = wp.event_id
-      join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      from erp.workshop_participant_follow_ups wf
+      left join erp.workshop_participants wp on wp.id = wf.participant_id
+      left join erp.workshop_events we on we.id = wp.event_id
       join erp.workshop_events te on te.id = wf.target_event_id
       ${followUpWhereSql}
     `),
@@ -1100,7 +1102,7 @@ function mapFollowUpRow(row: FollowUpDbRow): WorkshopFollowUpRow {
   const activities = Array.isArray(row.activities) ? row.activities : [];
   return {
     id: row.id,
-    participantId: row.participantId,
+    participantId: row.participantId ?? "",
     eventId: row.eventId,
     eventTitle: row.eventTitle,
     eventDate: formatDisplayDate(row.eventDate),
@@ -1110,7 +1112,7 @@ function mapFollowUpRow(row: FollowUpDbRow): WorkshopFollowUpRow {
     fullName: row.fullName,
     phone: row.phone ?? "—",
     email: row.email ?? "—",
-    participantKind: row.studentId ? "student" : "guest",
+    participantKind: row.studentId ? "student" : row.participantId ? "guest" : "lead",
     status: row.status,
     statusLabel: followUpStatusLabel(row.status),
     statusTone: followUpStatusTone(row.status),

@@ -45,8 +45,17 @@ export function buildStudentStatusUpdateData(
   return data;
 }
 
-export function getStatusChangeReason(status: StudentLifecycleStatus) {
+export function getStatusChangeReason(
+  status: StudentLifecycleStatus,
+  previousStatus?: StudentLifecycleStatus,
+) {
   if (status === StudentLifecycleStatus.ACTIVE) {
+    if (
+      previousStatus === StudentLifecycleStatus.FROZEN
+      || previousStatus === StudentLifecycleStatus.STOPPED
+    ) {
+      return "Tələbə yenidən aktiv edildi";
+    }
     return "Tələbə aktiv edildi";
   }
 
@@ -122,6 +131,7 @@ export async function syncActivationBilling(
     studentId: string;
     studentCode: string;
     effectiveAt: Date;
+    isReactivation?: boolean;
   }
 ) {
   const enrollment = await tx.enrollment.findFirst({
@@ -141,6 +151,11 @@ export async function syncActivationBilling(
       startDate: true,
       firstLessonAt: true,
       monthlyFee: true,
+      student: {
+        select: {
+          originalFirstLessonAt: true,
+        },
+      },
     },
   });
 
@@ -148,12 +163,34 @@ export async function syncActivationBilling(
     throw new Error("Aktiv etmək üçün tələbənin enrollment məlumatı tapılmadı");
   }
 
+  const originalFirstLessonAt =
+    enrollment.student.originalFirstLessonAt
+    ?? enrollment.firstLessonAt
+    ?? input.effectiveAt;
+  const currentFirstLessonAt = input.isReactivation
+    ? input.effectiveAt
+    : enrollment.firstLessonAt ?? input.effectiveAt;
+
+  await tx.student.updateMany({
+    where: {
+      id: input.studentId,
+      originalFirstLessonAt: null,
+    },
+    data: {
+      originalFirstLessonAt,
+    },
+  });
+
   await tx.enrollment.update({
     where: { id: enrollment.id },
     data: {
       status: EnrollmentStatus.ACTIVE,
-      startDate: enrollment.firstLessonAt ? enrollment.startDate : input.effectiveAt,
-      firstLessonAt: enrollment.firstLessonAt ?? input.effectiveAt,
+      startDate: input.isReactivation
+        ? input.effectiveAt
+        : enrollment.firstLessonAt
+          ? enrollment.startDate
+          : input.effectiveAt,
+      firstLessonAt: currentFirstLessonAt,
     },
   });
 
@@ -186,7 +223,13 @@ export async function syncActivationBilling(
         }),
       },
     });
-    return;
+    return {
+      enrollmentId: enrollment.id,
+      previousFirstLessonAt: enrollment.firstLessonAt,
+      currentFirstLessonAt,
+      originalFirstLessonAt,
+      reactivated: Boolean(input.isReactivation),
+    };
   }
 
   const amount = toNumber(enrollment.monthlyFee);
@@ -208,6 +251,14 @@ export async function syncActivationBilling(
       idempotencyKey: `student-activation-${input.studentCode}-${startOfMonth(input.effectiveAt).toISOString().slice(0, 10)}`,
     },
   });
+
+  return {
+    enrollmentId: enrollment.id,
+    previousFirstLessonAt: enrollment.firstLessonAt,
+    currentFirstLessonAt,
+    originalFirstLessonAt,
+    reactivated: Boolean(input.isReactivation),
+  };
 }
 
 function resolveInvoiceStatus({

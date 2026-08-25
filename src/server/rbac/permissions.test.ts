@@ -31,6 +31,12 @@ test("Owner can read and manage role permissions by default", () => {
   assert.equal(permissions.has("playbook.guideline.read"), false);
 });
 
+test("Sales representatives can register CRM leads as students by default", () => {
+  const permissions = getPermissionsForRoles([AppRole.SALES]);
+  assert.equal(permissions.get("crm.lead.convert"), "ALL");
+  assert.equal(permissions.get("student.create"), "ALL");
+});
+
 test("Guideline access defaults to Super Admin only", () => {
   const definition = permissionDefinitions.find(({ code }) => code === "playbook.guideline.read");
 

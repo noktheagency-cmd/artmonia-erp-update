@@ -399,6 +399,21 @@ html.dark .crm-conversion-call-rate > div > small { color: #a99578; }
 .crm-delete-dialog.ui-dialog-content { width: min(440px, calc(100vw - 28px)); max-width: 440px; }
 .crm-delete-dialog .ui-dialog-header { padding: 24px 50px 14px 24px; }
 .crm-delete-dialog .ui-dialog-description { max-width: none; }
+.crm-register-dialog.ui-dialog-content { width: min(680px, calc(100vw - 32px)); max-width: 680px; }
+.crm-register-header.ui-dialog-header { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; padding: 20px 64px 16px 22px; background: #fff; border-bottom: 1px solid #e1e7ee; }
+.crm-register-header-icon { display: grid; place-items: center; width: 44px; height: 44px; color: #3158f5; background: #e9eeff; border: 1px solid #d8e0ff; border-radius: 14px; }
+.crm-register-header-icon svg { width: 21px; height: 21px; }
+.crm-register-dialog .crm-dialog-scroll { display: grid; gap: 10px; padding-top: 14px; }
+.crm-register-preview { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 11px; align-items: center; padding: 12px 14px; background: #eef3f8; border: 1px solid #d8e1eb; border-radius: 13px; }
+.crm-register-preview > span { display: grid; place-items: center; width: 42px; height: 42px; color: #3158f5; background: #fff; border: 1px solid #d6deea; border-radius: 12px; font-size: 11px; font-weight: 750; }
+.crm-register-preview div { display: grid; gap: 3px; min-width: 0; }
+.crm-register-preview strong { overflow: hidden; color: #172033; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.crm-register-preview small { overflow: hidden; color: #718096; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.crm-register-preview em { padding: 7px 9px; color: #167a61; background: #dcf5ed; border: 1px solid #b9e7d9; border-radius: 999px; font-size: 8px; font-style: normal; font-weight: 700; }
+.crm-register-note { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; padding: 11px 13px; color: #526176; background: #fff9e8; border: 1px solid #f0dfad; border-radius: 12px; }
+.crm-register-note svg { width: 18px; height: 18px; flex: 0 0 auto; color: #d89319; }
+.crm-register-note p { margin: 0; font-size: 9px; line-height: 1.55; }
+.crm-register-note strong { color: #9b6917; }
 .crm-create-dialog.ui-dialog-content {
   z-index: 1201;
   width: min(880px, calc(100vw - 40px));
@@ -775,6 +790,15 @@ html.dark .crm-conversion-call-rate > div > small { color: #a99578; }
   .crm-detail-dialog .crm-dialog-actions.ui-dialog-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px 14px; }
   .crm-detail-dialog .crm-dialog-actions .ui-button { width: 100%; min-height: 43px; }
   .crm-detail-dialog .crm-detail-delete-trigger { grid-column: 1 / -1; margin-right: 0; }
+  .crm-register-dialog.ui-dialog-content { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); border-radius: 18px; }
+  .crm-register-header.ui-dialog-header { grid-template-columns: 40px minmax(0, 1fr); gap: 10px; padding: 15px 52px 13px 14px; }
+  .crm-register-header-icon { width: 40px; height: 40px; border-radius: 12px; }
+  .crm-register-dialog .crm-dialog-scroll { padding: 10px 14px 2px; }
+  .crm-register-preview { grid-template-columns: 38px minmax(0, 1fr); }
+  .crm-register-preview > span { width: 38px; height: 38px; }
+  .crm-register-preview em { grid-column: 2; justify-self: start; }
+  .crm-register-dialog .crm-dialog-actions.ui-dialog-footer { display: grid; grid-template-columns: 1fr; padding: 10px 14px; }
+  .crm-register-dialog .crm-dialog-actions .ui-button { width: 100%; }
   .crm-skeleton-copy { width: 100%; }
   .crm-skeleton-panel,
   .crm-skeleton-panel.is-wide,
