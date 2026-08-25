@@ -14,6 +14,10 @@ export type WorkshopKind = "WORKSHOP" | "MASTERCLASS";
 export type WorkshopStatus = "DRAFT" | "SCHEDULED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 export type ParticipantPaymentState = WorkshopPaymentState;
 export type WorkshopFollowUpStatus = "PENDING" | "CONTACTED" | "NO_ANSWER" | "INTERESTED" | "CONVERTED" | "NOT_INTERESTED";
+export type WorkshopFollowUpAction = "NONE" | "CALL" | "WHATSAPP" | "SEND_DETAILS" | "SEND_OFFER" | "RESERVE_PLACE" | "WAIT_RESPONSE" | "OTHER";
+export type WorkshopFollowUpOutcome = "NONE" | "POSITIVE_RESPONSE" | "NO_RESPONSE" | "CALLBACK_REQUESTED" | "DECLINED" | "REGISTERED";
+export type WorkshopContactChannel = "NOT_SET" | "PHONE" | "WHATSAPP" | "SMS" | "EMAIL" | "OTHER";
+export type WorkshopFollowUpPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 
 export type WorkshopFilters = {
   view?: string;
@@ -157,6 +161,9 @@ export type WorkshopFollowUpRow = {
   eventId: string;
   eventTitle: string;
   eventDate: string;
+  sourceEventId: string;
+  sourceEventTitle: string;
+  sourceEventDate: string;
   fullName: string;
   phone: string;
   email: string;
@@ -164,12 +171,34 @@ export type WorkshopFollowUpRow = {
   status: WorkshopFollowUpStatus;
   statusLabel: string;
   statusTone: StatusTone;
+  nextAction: WorkshopFollowUpAction;
+  nextActionLabel: string;
+  outcome: WorkshopFollowUpOutcome;
+  outcomeLabel: string;
+  contactChannel: WorkshopContactChannel;
+  contactChannelLabel: string;
+  priority: WorkshopFollowUpPriority;
+  priorityLabel: string;
+  priorityTone: StatusTone;
   nextFollowUpAt: string;
   nextFollowUpAtInput: string;
   lastContactedAt: string;
   assignedToId: string;
   assignedToName: string;
   note: string;
+  activities: Array<{
+    id: string;
+    activityType: string;
+    activityLabel: string;
+    statusLabel: string;
+    nextActionLabel: string;
+    outcomeLabel: string;
+    contactChannelLabel: string;
+    nextFollowUpAt: string;
+    note: string;
+    actorName: string;
+    createdAt: string;
+  }>;
 };
 
 export type WorkshopData = {
@@ -201,6 +230,8 @@ export type WorkshopData = {
     converted: number;
   };
   followUpAssignees: Array<{ value: string; label: string }>;
+  followUpParticipants: Array<{ value: string; label: string }>;
+  followUpEvents: Array<{ value: string; label: string }>;
   followUpPagination: Pagination;
 };
 
@@ -382,16 +413,24 @@ type FollowUpDbRow = {
   eventId: string;
   eventTitle: string;
   eventDate: Date | string;
+  sourceEventId: string;
+  sourceEventTitle: string;
+  sourceEventDate: Date | string;
   fullName: string;
   phone: string | null;
   email: string | null;
   studentId: string | null;
   status: WorkshopFollowUpStatus;
+  nextAction: WorkshopFollowUpAction;
+  outcome: WorkshopFollowUpOutcome;
+  contactChannel: WorkshopContactChannel;
+  priority: WorkshopFollowUpPriority;
   nextFollowUpAt: Date | string | null;
   lastContactedAt: Date | string | null;
   assignedToId: string | null;
   assignedToName: string | null;
   note: string | null;
+  activities: unknown;
   totalCount: unknown;
 };
 
@@ -479,6 +518,7 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
   const followUpConditions: Prisma.Sql[] = [
     Prisma.sql`wp.cancelled_at is null`,
     Prisma.sql`we.status <> 'CANCELLED'::"erp"."WorkshopEventStatus"`,
+    Prisma.sql`te.status <> 'CANCELLED'::"erp"."WorkshopEventStatus"`,
   ];
   if (filters.followUpQuery) {
     const like = `%${filters.followUpQuery}%`;
@@ -487,15 +527,16 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
       or coalesce(wp.phone, '') ilike ${like}
       or coalesce(wp.email, '') ilike ${like}
       or we.title ilike ${like}
+      or te.title ilike ${like}
     )`);
   }
   if (filters.followUpStatus !== "all") {
-    followUpConditions.push(Prisma.sql`coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") = ${filters.followUpStatus}::"erp"."WorkshopFollowUpStatus"`);
+    followUpConditions.push(Prisma.sql`wf.status = ${filters.followUpStatus}::"erp"."WorkshopFollowUpStatus"`);
   }
   const followUpWhereSql = Prisma.sql`where ${Prisma.join(followUpConditions, " and ")}`;
   const followUpOffset = (filters.page - 1) * filters.pageSize;
 
-  const [rows, summaryRows, optionRows, followUpRows, followUpSummaryRows, followUpAssigneeRows] = await Promise.all([
+  const [rows, summaryRows, optionRows, followUpRows, followUpSummaryRows, followUpAssigneeRows, followUpParticipantRows, followUpEventRows] = await Promise.all([
     prisma.$queryRaw<EventDbRow[]>(Prisma.sql`
       ${eventAggregateCte}
       select
@@ -533,46 +574,76 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
     `),
     prisma.$queryRaw<FollowUpDbRow[]>(Prisma.sql`
       select
-        coalesce(wf.id::text, '') as "id",
+        wf.id::text as "id",
         wp.id::text as "participantId",
-        we.id::text as "eventId",
-        we.title as "eventTitle",
-        we.event_date as "eventDate",
+        te.id::text as "eventId",
+        te.title as "eventTitle",
+        te.event_date as "eventDate",
+        we.id::text as "sourceEventId",
+        we.title as "sourceEventTitle",
+        we.event_date as "sourceEventDate",
         wp.full_name as "fullName",
         wp.phone,
         wp.email,
         wp.student_id::text as "studentId",
-        coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus")::text as "status",
+        wf.status::text as "status",
+        wf.next_action::text as "nextAction",
+        wf.outcome::text as "outcome",
+        wf.contact_channel::text as "contactChannel",
+        wf.priority::text as "priority",
         wf.next_follow_up_at as "nextFollowUpAt",
         wf.last_contacted_at as "lastContactedAt",
         wf.assigned_to_id::text as "assignedToId",
         assigned.full_name as "assignedToName",
         wf.note,
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'id', recent.id::text,
+            'activityType', recent.activity_type,
+            'status', recent.status::text,
+            'nextAction', recent.next_action::text,
+            'outcome', recent.outcome::text,
+            'contactChannel', recent.contact_channel::text,
+            'nextFollowUpAt', recent.next_follow_up_at,
+            'note', recent.note,
+            'actorName', recent.actor_name,
+            'createdAt', recent.created_at
+          ) order by recent.created_at desc)
+          from (
+            select a.*, u.full_name as actor_name
+            from erp.workshop_follow_up_activities a
+            left join erp.users u on u.id = a.actor_user_id
+            where a.follow_up_id = wf.id
+            order by a.created_at desc
+            limit 5
+          ) recent
+        ), '[]'::jsonb) as activities,
         count(*) over()::int as "totalCount"
       from erp.workshop_participants wp
       join erp.workshop_events we on we.id = wp.event_id
-      left join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      join erp.workshop_events te on te.id = wf.target_event_id
       left join erp.users assigned on assigned.id = wf.assigned_to_id
       ${followUpWhereSql}
       order by
-        case when coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") in (
+        case when wf.status in (
           'PENDING'::"erp"."WorkshopFollowUpStatus",
           'CONTACTED'::"erp"."WorkshopFollowUpStatus",
           'NO_ANSWER'::"erp"."WorkshopFollowUpStatus",
           'INTERESTED'::"erp"."WorkshopFollowUpStatus"
         ) and wf.next_follow_up_at <= now() then 0 else 1 end,
         wf.next_follow_up_at asc nulls last,
-        we.event_date desc,
+        te.event_date desc,
         wp.assigned_at desc
       limit ${filters.pageSize} offset ${followUpOffset}
     `),
     prisma.$queryRaw<FollowUpSummaryDbRow[]>(Prisma.sql`
       select
         count(*)::int as total,
-        count(*) filter (where coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") = 'PENDING'::"erp"."WorkshopFollowUpStatus")::int as pending,
+        count(*) filter (where wf.status = 'PENDING'::"erp"."WorkshopFollowUpStatus")::int as pending,
         count(*) filter (
           where wf.next_follow_up_at <= now()
-          and coalesce(wf.status, 'PENDING'::"erp"."WorkshopFollowUpStatus") not in (
+          and wf.status not in (
             'CONVERTED'::"erp"."WorkshopFollowUpStatus",
             'NOT_INTERESTED'::"erp"."WorkshopFollowUpStatus"
           )
@@ -581,7 +652,8 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
         count(*) filter (where wf.status = 'CONVERTED'::"erp"."WorkshopFollowUpStatus")::int as converted
       from erp.workshop_participants wp
       join erp.workshop_events we on we.id = wp.event_id
-      left join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      join erp.workshop_participant_follow_ups wf on wf.participant_id = wp.id
+      join erp.workshop_events te on te.id = wf.target_event_id
       ${followUpWhereSql}
     `),
     prisma.$queryRaw<Array<{ value: string; label: string }>>(Prisma.sql`
@@ -589,6 +661,23 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
       from erp.users
       where is_active = true
       order by full_name
+    `),
+    prisma.$queryRaw<Array<{ value: string; label: string }>>(Prisma.sql`
+      select wp.id::text as value,
+        wp.full_name || ' · ' || we.title || coalesce(' · ' || nullif(wp.phone, ''), '') as label
+      from erp.workshop_participants wp
+      join erp.workshop_events we on we.id = wp.event_id
+      where wp.cancelled_at is null and we.status <> 'CANCELLED'::"erp"."WorkshopEventStatus"
+      order by wp.full_name, we.event_date desc
+      limit 1000
+    `),
+    prisma.$queryRaw<Array<{ value: string; label: string }>>(Prisma.sql`
+      select id::text as value,
+        title || ' · ' || to_char(event_date, 'DD.MM.YYYY') as label
+      from erp.workshop_events
+      where status <> 'CANCELLED'::"erp"."WorkshopEventStatus"
+      order by case when event_date >= current_date then 0 else 1 end, event_date asc
+      limit 500
     `),
   ]);
 
@@ -656,6 +745,8 @@ export async function getWorkshopData(input: WorkshopFilters = {}): Promise<Work
       converted: toNumber(followUpSummaryRow.converted),
     },
     followUpAssignees: followUpAssigneeRows,
+    followUpParticipants: followUpParticipantRows,
+    followUpEvents: followUpEventRows,
     followUpPagination: makePagination(filters.page, filters.pageSize, followUpTotal),
   };
 }
@@ -1006,12 +1097,16 @@ function mapExpenseRow(row: ExpenseDbRow): WorkshopExpenseRow {
 }
 
 function mapFollowUpRow(row: FollowUpDbRow): WorkshopFollowUpRow {
+  const activities = Array.isArray(row.activities) ? row.activities : [];
   return {
     id: row.id,
     participantId: row.participantId,
     eventId: row.eventId,
     eventTitle: row.eventTitle,
     eventDate: formatDisplayDate(row.eventDate),
+    sourceEventId: row.sourceEventId,
+    sourceEventTitle: row.sourceEventTitle,
+    sourceEventDate: formatDisplayDate(row.sourceEventDate),
     fullName: row.fullName,
     phone: row.phone ?? "—",
     email: row.email ?? "—",
@@ -1019,12 +1114,42 @@ function mapFollowUpRow(row: FollowUpDbRow): WorkshopFollowUpRow {
     status: row.status,
     statusLabel: followUpStatusLabel(row.status),
     statusTone: followUpStatusTone(row.status),
+    nextAction: row.nextAction,
+    nextActionLabel: followUpActionLabel(row.nextAction),
+    outcome: row.outcome,
+    outcomeLabel: followUpOutcomeLabel(row.outcome),
+    contactChannel: row.contactChannel,
+    contactChannelLabel: contactChannelLabel(row.contactChannel),
+    priority: row.priority,
+    priorityLabel: followUpPriorityLabel(row.priority),
+    priorityTone: followUpPriorityTone(row.priority),
     nextFollowUpAt: row.nextFollowUpAt ? formatDateTime(row.nextFollowUpAt) : "Planlanmayıb",
     nextFollowUpAtInput: row.nextFollowUpAt ? toDateTimeInput(row.nextFollowUpAt) : "",
     lastContactedAt: row.lastContactedAt ? formatDateTime(row.lastContactedAt) : "—",
     assignedToId: row.assignedToId ?? "",
     assignedToName: row.assignedToName ?? "Təyin edilməyib",
     note: row.note ?? "",
+    activities: activities.flatMap((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+      const activity = value as Record<string, unknown>;
+      const status = String(activity.status ?? "PENDING") as WorkshopFollowUpStatus;
+      const nextAction = String(activity.nextAction ?? "NONE") as WorkshopFollowUpAction;
+      const outcome = String(activity.outcome ?? "NONE") as WorkshopFollowUpOutcome;
+      const channel = String(activity.contactChannel ?? "NOT_SET") as WorkshopContactChannel;
+      return [{
+        id: String(activity.id ?? ""),
+        activityType: String(activity.activityType ?? "UPDATED"),
+        activityLabel: followUpActivityLabel(String(activity.activityType ?? "UPDATED")),
+        statusLabel: followUpStatusLabel(status),
+        nextActionLabel: followUpActionLabel(nextAction),
+        outcomeLabel: followUpOutcomeLabel(outcome),
+        contactChannelLabel: contactChannelLabel(channel),
+        nextFollowUpAt: activity.nextFollowUpAt ? formatDateTime(String(activity.nextFollowUpAt)) : "Planlanmayıb",
+        note: String(activity.note ?? ""),
+        actorName: String(activity.actorName ?? "Sistem"),
+        createdAt: activity.createdAt ? formatDateTime(String(activity.createdAt)) : "—",
+      }];
+    }),
   };
 }
 
@@ -1104,6 +1229,58 @@ function followUpStatusTone(status: WorkshopFollowUpStatus): StatusTone {
     CONVERTED: "success",
     NOT_INTERESTED: "neutral",
   } as const)[status];
+}
+
+function followUpActionLabel(action: WorkshopFollowUpAction) {
+  return ({
+    NONE: "Növbəti addım yoxdur",
+    CALL: "Zəng et",
+    WHATSAPP: "WhatsApp yaz",
+    SEND_DETAILS: "Tədbir detallarını göndər",
+    SEND_OFFER: "Təklif göndər",
+    RESERVE_PLACE: "Yer rezerv et",
+    WAIT_RESPONSE: "Geri dönüş gözlə",
+    OTHER: "Digər addım",
+  } as const)[action];
+}
+
+function followUpOutcomeLabel(outcome: WorkshopFollowUpOutcome) {
+  return ({
+    NONE: "Nəticə qeyd edilməyib",
+    POSITIVE_RESPONSE: "Müsbət geri dönüş",
+    NO_RESPONSE: "Geri dönüş olmadı",
+    CALLBACK_REQUESTED: "Sonra əlaqə istədi",
+    DECLINED: "İmtina etdi",
+    REGISTERED: "Tədbirə yazıldı",
+  } as const)[outcome];
+}
+
+function contactChannelLabel(channel: WorkshopContactChannel) {
+  return ({
+    NOT_SET: "Kanal seçilməyib",
+    PHONE: "Telefon",
+    WHATSAPP: "WhatsApp",
+    SMS: "SMS",
+    EMAIL: "E-poçt",
+    OTHER: "Digər",
+  } as const)[channel];
+}
+
+function followUpPriorityLabel(priority: WorkshopFollowUpPriority) {
+  return ({ LOW: "Aşağı", NORMAL: "Normal", HIGH: "Yüksək", URGENT: "Təcili" } as const)[priority];
+}
+
+function followUpPriorityTone(priority: WorkshopFollowUpPriority): StatusTone {
+  return ({ LOW: "neutral", NORMAL: "info", HIGH: "warning", URGENT: "danger" } as const)[priority];
+}
+
+function followUpActivityLabel(activityType: string) {
+  return ({
+    CREATED: "Follow-up yaradıldı",
+    UPDATED: "Məlumat yeniləndi",
+    STATUS_CHANGED: "Status dəyişdirildi",
+    MIGRATED: "Sistemə köçürüldü",
+  } as Record<string, string>)[activityType] ?? "Yeniləmə";
 }
 
 function uniqueOptions(values: Array<string | null>) {

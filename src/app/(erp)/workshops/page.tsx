@@ -1,6 +1,7 @@
 import "@/modules/workshops/workshops.css";
 import {
   createWorkshopEventAction,
+  createWorkshopFollowUpAction,
   updateWorkshopFollowUpAction,
 } from "@/modules/workshops/actions";
 import {
@@ -23,6 +24,7 @@ export default async function WorkshopsPage({
     <WorkshopWorkspace
       data={data}
       createWorkshopEventAction={createWorkshopEventAction}
+      createWorkshopFollowUpAction={createWorkshopFollowUpAction}
       updateWorkshopFollowUpAction={updateWorkshopFollowUpAction}
       loadOfferAudienceAction={getWorkshopOfferAudienceAction}
       generateOfferAction={generateWorkshopOfferAction}

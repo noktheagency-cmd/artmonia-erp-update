@@ -296,6 +296,50 @@ enum WorkshopFollowUpStatus {
   @@schema("erp")
 }
 
+enum WorkshopFollowUpAction {
+  NONE
+  CALL
+  WHATSAPP
+  SEND_DETAILS
+  SEND_OFFER
+  RESERVE_PLACE
+  WAIT_RESPONSE
+  OTHER
+
+  @@schema("erp")
+}
+
+enum WorkshopFollowUpOutcome {
+  NONE
+  POSITIVE_RESPONSE
+  NO_RESPONSE
+  CALLBACK_REQUESTED
+  DECLINED
+  REGISTERED
+
+  @@schema("erp")
+}
+
+enum WorkshopContactChannel {
+  NOT_SET
+  PHONE
+  WHATSAPP
+  SMS
+  EMAIL
+  OTHER
+
+  @@schema("erp")
+}
+
+enum WorkshopFollowUpPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@schema("erp")
+}
+
 enum MarketingCampaignStatus {
   DRAFT
   ACTIVE
@@ -482,6 +526,7 @@ model User {
   assignedWorkshopFollowUps        WorkshopParticipantFollowUp[]   @relation("WorkshopFollowUpAssignee")
   createdWorkshopFollowUps         WorkshopParticipantFollowUp[]   @relation("WorkshopFollowUpCreator")
   updatedWorkshopFollowUps         WorkshopParticipantFollowUp[]   @relation("WorkshopFollowUpUpdater")
+  workshopFollowUpActivities       WorkshopFollowUpActivity[]      @relation("WorkshopFollowUpActivityActor")
   createdWorkshopPayments          WorkshopPayment[]               @relation("WorkshopPaymentCreator")
   voidedWorkshopPayments           WorkshopPayment[]               @relation("WorkshopPaymentVoider")
   voidedFinanceExpenses            FinanceExpense[]                @relation("FinanceExpenseVoider")
@@ -1856,10 +1901,11 @@ model WorkshopEvent {
   createdAt       DateTime            @default(now()) @map("created_at")
   updatedAt       DateTime            @updatedAt @map("updated_at")
 
-  createdBy    User?                 @relation("WorkshopEventCreator", fields: [createdById], references: [id])
-  participants WorkshopParticipant[]
-  payments     WorkshopPayment[]
-  expenses     FinanceExpense[]
+  createdBy       User?                         @relation("WorkshopEventCreator", fields: [createdById], references: [id])
+  participants    WorkshopParticipant[]
+  targetFollowUps WorkshopParticipantFollowUp[] @relation("WorkshopFollowUpTargetEvent")
+  payments        WorkshopPayment[]
+  expenses        FinanceExpense[]
 
   @@index([eventDate, startTime])
   @@index([eventType, status])
@@ -1891,11 +1937,11 @@ model WorkshopParticipant {
   cancelReason   String?       @map("cancel_reason")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  event       WorkshopEvent                @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  student     Student?                     @relation(fields: [studentId], references: [id])
-  assignedBy  User?                        @relation("WorkshopParticipantAssigner", fields: [assignedById], references: [id])
-  cancelledBy User?                        @relation("WorkshopParticipantCanceller", fields: [cancelledById], references: [id])
-  followUp    WorkshopParticipantFollowUp?
+  event       WorkshopEvent                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student     Student?                      @relation(fields: [studentId], references: [id])
+  assignedBy  User?                         @relation("WorkshopParticipantAssigner", fields: [assignedById], references: [id])
+  cancelledBy User?                         @relation("WorkshopParticipantCanceller", fields: [cancelledById], references: [id])
+  followUps   WorkshopParticipantFollowUp[]
   payments    WorkshopPayment[]
 
   @@unique([eventId, studentId])
@@ -1909,26 +1955,58 @@ model WorkshopParticipant {
 }
 
 model WorkshopParticipantFollowUp {
-  id              String                 @id @default(uuid()) @db.Uuid
-  participantId   String                 @unique @map("participant_id") @db.Uuid
-  status          WorkshopFollowUpStatus @default(PENDING)
-  nextFollowUpAt  DateTime?              @map("next_follow_up_at")
-  lastContactedAt DateTime?              @map("last_contacted_at")
+  id              String                   @id @default(uuid()) @db.Uuid
+  participantId   String                   @map("participant_id") @db.Uuid
+  targetEventId   String                   @map("target_event_id") @db.Uuid
+  status          WorkshopFollowUpStatus   @default(PENDING)
+  nextAction      WorkshopFollowUpAction   @default(CALL) @map("next_action")
+  outcome         WorkshopFollowUpOutcome  @default(NONE)
+  contactChannel  WorkshopContactChannel   @default(NOT_SET) @map("contact_channel")
+  priority        WorkshopFollowUpPriority @default(NORMAL)
+  nextFollowUpAt  DateTime?                @map("next_follow_up_at")
+  lastContactedAt DateTime?                @map("last_contacted_at")
+  completedAt     DateTime?                @map("completed_at")
   note            String?
-  assignedToId    String?                @map("assigned_to_id") @db.Uuid
-  createdById     String?                @map("created_by_id") @db.Uuid
-  updatedById     String?                @map("updated_by_id") @db.Uuid
-  createdAt       DateTime               @default(now()) @map("created_at")
-  updatedAt       DateTime               @updatedAt @map("updated_at")
+  assignedToId    String?                  @map("assigned_to_id") @db.Uuid
+  createdById     String?                  @map("created_by_id") @db.Uuid
+  updatedById     String?                  @map("updated_by_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
 
-  participant WorkshopParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  assignedTo  User?               @relation("WorkshopFollowUpAssignee", fields: [assignedToId], references: [id])
-  createdBy   User?               @relation("WorkshopFollowUpCreator", fields: [createdById], references: [id])
-  updatedBy   User?               @relation("WorkshopFollowUpUpdater", fields: [updatedById], references: [id])
+  participant WorkshopParticipant        @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  targetEvent WorkshopEvent              @relation("WorkshopFollowUpTargetEvent", fields: [targetEventId], references: [id], onDelete: Cascade)
+  assignedTo  User?                      @relation("WorkshopFollowUpAssignee", fields: [assignedToId], references: [id])
+  createdBy   User?                      @relation("WorkshopFollowUpCreator", fields: [createdById], references: [id])
+  updatedBy   User?                      @relation("WorkshopFollowUpUpdater", fields: [updatedById], references: [id])
+  activities  WorkshopFollowUpActivity[]
 
+  @@unique([participantId, targetEventId])
   @@index([status, nextFollowUpAt])
   @@index([assignedToId, status])
+  @@index([targetEventId, status])
+  @@index([priority, nextFollowUpAt])
   @@map("workshop_participant_follow_ups")
+  @@schema("erp")
+}
+
+model WorkshopFollowUpActivity {
+  id             String                  @id @default(uuid()) @db.Uuid
+  followUpId     String                  @map("follow_up_id") @db.Uuid
+  activityType   String                  @map("activity_type") @db.VarChar(40)
+  status         WorkshopFollowUpStatus
+  nextAction     WorkshopFollowUpAction  @map("next_action")
+  outcome        WorkshopFollowUpOutcome
+  contactChannel WorkshopContactChannel  @map("contact_channel")
+  nextFollowUpAt DateTime?               @map("next_follow_up_at")
+  note           String?
+  actorUserId    String?                 @map("actor_user_id") @db.Uuid
+  createdAt      DateTime                @default(now()) @map("created_at")
+
+  followUp WorkshopParticipantFollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  actor    User?                       @relation("WorkshopFollowUpActivityActor", fields: [actorUserId], references: [id])
+
+  @@index([followUpId, createdAt(sort: Desc)])
+  @@map("workshop_follow_up_activities")
   @@schema("erp")
 }
 

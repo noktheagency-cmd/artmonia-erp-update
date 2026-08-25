@@ -13,6 +13,7 @@ import {
   CalendarDays,
   CircleCheckBig,
   Info,
+  History,
   MapPin,
   Plus,
   SlidersHorizontal,
@@ -41,7 +42,16 @@ import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { WorkshopOfferAudience, WorkshopOfferInput, WorkshopOfferResult } from "@/modules/workshops/offer-actions";
 import { WorkshopOfferDialog } from "@/modules/workshops/workshop-offer-dialog";
-import type { WorkshopData, WorkshopEventRow, WorkshopFollowUpRow, WorkshopFollowUpStatus } from "@/modules/workshops/queries";
+import type {
+  WorkshopContactChannel,
+  WorkshopData,
+  WorkshopEventRow,
+  WorkshopFollowUpAction,
+  WorkshopFollowUpOutcome,
+  WorkshopFollowUpPriority,
+  WorkshopFollowUpRow,
+  WorkshopFollowUpStatus,
+} from "@/modules/workshops/queries";
 
 type WorkshopAction = (formData: FormData) => unknown | Promise<unknown>;
 
@@ -65,16 +75,50 @@ const followUpStatusOptions: Array<{ value: WorkshopFollowUpStatus; label: strin
   { value: "CONVERTED", label: "Nəticələnib" },
   { value: "NOT_INTERESTED", label: "Maraqlanmır" },
 ];
+const followUpActionOptions: Array<{ value: WorkshopFollowUpAction; label: string }> = [
+  { value: "NONE", label: "Növbəti addım yoxdur" },
+  { value: "CALL", label: "Zəng et" },
+  { value: "WHATSAPP", label: "WhatsApp yaz" },
+  { value: "SEND_DETAILS", label: "Tədbir detallarını göndər" },
+  { value: "SEND_OFFER", label: "Təklif göndər" },
+  { value: "RESERVE_PLACE", label: "Yer rezerv et" },
+  { value: "WAIT_RESPONSE", label: "Geri dönüş gözlə" },
+  { value: "OTHER", label: "Digər addım" },
+];
+const followUpOutcomeOptions: Array<{ value: WorkshopFollowUpOutcome; label: string }> = [
+  { value: "NONE", label: "Nəticə qeyd edilməyib" },
+  { value: "POSITIVE_RESPONSE", label: "Müsbət geri dönüş" },
+  { value: "NO_RESPONSE", label: "Geri dönüş olmadı" },
+  { value: "CALLBACK_REQUESTED", label: "Sonra əlaqə istədi" },
+  { value: "DECLINED", label: "İmtina etdi" },
+  { value: "REGISTERED", label: "Tədbirə yazıldı" },
+];
+const contactChannelOptions: Array<{ value: WorkshopContactChannel; label: string }> = [
+  { value: "NOT_SET", label: "Kanal seçilməyib" },
+  { value: "PHONE", label: "Telefon" },
+  { value: "WHATSAPP", label: "WhatsApp" },
+  { value: "SMS", label: "SMS" },
+  { value: "EMAIL", label: "E-poçt" },
+  { value: "OTHER", label: "Digər" },
+];
+const followUpPriorityOptions: Array<{ value: WorkshopFollowUpPriority; label: string }> = [
+  { value: "LOW", label: "Aşağı" },
+  { value: "NORMAL", label: "Normal" },
+  { value: "HIGH", label: "Yüksək" },
+  { value: "URGENT", label: "Təcili" },
+];
 
 export function WorkshopWorkspace({
   data,
   createWorkshopEventAction,
+  createWorkshopFollowUpAction,
   updateWorkshopFollowUpAction,
   loadOfferAudienceAction,
   generateOfferAction,
 }: {
   data: WorkshopData;
   createWorkshopEventAction: WorkshopAction;
+  createWorkshopFollowUpAction: WorkshopAction;
   updateWorkshopFollowUpAction: WorkshopAction;
   loadOfferAudienceAction: () => Promise<ActionResult<WorkshopOfferAudience>>;
   generateOfferAction: (
@@ -112,7 +156,7 @@ export function WorkshopWorkspace({
       </nav>
 
       {data.filters.view === "follow-up" ? (
-        <WorkshopFollowUpSection data={data} action={updateWorkshopFollowUpAction} />
+        <WorkshopFollowUpSection data={data} createAction={createWorkshopFollowUpAction} updateAction={updateWorkshopFollowUpAction} />
       ) : (
         <>
           <div className="workshop-kpis" aria-label="Workshop göstəriciləri">
@@ -188,7 +232,11 @@ export function WorkshopWorkspace({
   );
 }
 
-function WorkshopFollowUpSection({ data, action }: { data: WorkshopData; action: WorkshopAction }) {
+function WorkshopFollowUpSection({ data, createAction, updateAction }: {
+  data: WorkshopData;
+  createAction: WorkshopAction;
+  updateAction: WorkshopAction;
+}) {
   const summaryCards = [
     { label: "Ümumi", value: data.followUpSummary.total, helper: "Aktiv iştirakçı", tone: "info" as const },
     { label: "Gözləyir", value: data.followUpSummary.pending, helper: "İlk əlaqə gözləyir", tone: "warning" as const },
@@ -221,36 +269,43 @@ function WorkshopFollowUpSection({ data, action }: { data: WorkshopData; action:
       <section className="workshop-event-table-panel">
         <div className="workshop-section-head">
           <div><span>{data.followUpPagination.total} nəticə</span><h2>İştirakçı follow-up</h2></div>
-          <span className="workshop-sort-label"><UsersRound />Workshop datası</span>
+          {data.permissions.canManage ? (
+            <CreateWorkshopFollowUpDialog
+              participants={data.followUpParticipants}
+              events={data.followUpEvents}
+              assignees={data.followUpAssignees}
+              action={createAction}
+            />
+          ) : <span className="workshop-sort-label"><UsersRound />Workshop datası</span>}
         </div>
         <div className="workshop-table-scroll" data-erp-table-scroll="">
           <table className="workshop-data-table workshop-follow-up-table" data-erp-table="" data-erp-sticky-first="">
             <thead>
               <tr>
                 <th>İştirakçı</th>
-                <th>Tədbir</th>
+                <th>Hədəf tədbir</th>
                 <th>Əlaqə</th>
                 <th>Status</th>
-                <th>Növbəti follow-up</th>
+                <th>Nəticə</th>
+                <th>Növbəti addım</th>
                 <th>Məsul</th>
-                <th>Son əlaqə</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {data.followUps.length > 0 ? data.followUps.map((row) => (
-                <tr key={row.participantId}>
-                  <td><strong>{row.fullName}</strong><small>{row.participantKind === "student" ? "Tələbə" : "Qonaq"}</small></td>
+                <tr key={row.id}>
+                  <td><strong>{row.fullName}</strong><small>{row.sourceEventTitle} · {row.participantKind === "student" ? "Tələbə" : "Qonaq"}</small></td>
                   <td><Link href={`/workshops/${row.eventId}?tab=participants` as Route} className="workshop-event-link-inline">{row.eventTitle}</Link><small>{row.eventDate}</small></td>
                   <td><strong>{row.phone}</strong><small>{row.email}</small></td>
-                  <td><StatusChip tone={row.statusTone}>{row.statusLabel}</StatusChip></td>
-                  <td>{row.nextFollowUpAt}</td>
-                  <td>{row.assignedToName}</td>
-                  <td>{row.lastContactedAt}</td>
-                  <td>{data.permissions.canManage ? <WorkshopFollowUpDialog row={row} assignees={data.followUpAssignees} action={action} /> : null}</td>
+                  <td><StatusChip tone={row.statusTone}>{row.statusLabel}</StatusChip><small><StatusChip tone={row.priorityTone}>{row.priorityLabel}</StatusChip></small></td>
+                  <td><strong>{row.outcomeLabel}</strong><small>{row.contactChannelLabel}</small></td>
+                  <td><strong>{row.nextActionLabel}</strong><small>{row.nextFollowUpAt}</small></td>
+                  <td><strong>{row.assignedToName}</strong><small>Son əlaqə: {row.lastContactedAt}</small></td>
+                  <td>{data.permissions.canManage ? <WorkshopFollowUpDialog row={row} assignees={data.followUpAssignees} action={updateAction} /> : null}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={8}><EmptyState title="Follow-up qeydi tapılmadı" description="Filtrləri dəyişin və ya workshop-a iştirakçı əlavə edin." /></td></tr>
+                <tr><td colSpan={8}><EmptyState title="Follow-up qeydi tapılmadı" description="Filtrləri dəyişin və ya tədbirə iştirakçı əlavə edin — follow-up avtomatik yaranacaq." /></td></tr>
               )}
             </tbody>
           </table>
@@ -258,6 +313,60 @@ function WorkshopFollowUpSection({ data, action }: { data: WorkshopData; action:
         <FollowUpPagination data={data} />
       </section>
     </div>
+  );
+}
+
+function CreateWorkshopFollowUpDialog({ participants, events, assignees, action }: {
+  participants: Array<{ value: string; label: string }>;
+  events: Array<{ value: string; label: string }>;
+  assignees: Array<{ value: string; label: string }>;
+  action: WorkshopAction;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    startTransition(() => {
+      void Promise.resolve(action(new FormData(form))).then((result) => {
+        unwrapActionResult(result);
+        setOpen(false);
+        router.refresh();
+      }).catch((error) => setNotice(notifyCaughtError(error, "Follow-up yaradıla bilmədi", "Follow-up yaradılmadı")));
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (value) setNotice(""); }}>
+      <DialogTrigger asChild><Button type="button"><Plus /> Yeni follow-up</Button></DialogTrigger>
+      <DialogContent className="workshop-dialog workshop-follow-up-dialog">
+        <DialogHeader>
+          <DialogTitle>Yeni workshop follow-up</DialogTitle>
+          <DialogDescription>İştirakçını və təklif ediləcək tədbiri seçin. Tədbirə yeni iştirakçı əlavə ediləndə ilkin follow-up onsuz da avtomatik yaranır.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="workshop-dialog-form">
+          <FieldGroup>
+            <div className="workshop-form-grid">
+              <Field className="workshop-field-span-2"><FieldLabel>İştirakçı / mənbə tədbir</FieldLabel><FormSelect name="participantId" defaultValue={participants[0]?.value} options={participants} /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel>Hədəf tədbir</FieldLabel><FormSelect name="targetEventId" defaultValue={events[0]?.value} options={events} /></Field>
+              <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue="PENDING" options={followUpStatusOptions} /></Field>
+              <Field><FieldLabel>Prioritet</FieldLabel><FormSelect name="priority" defaultValue="NORMAL" options={followUpPriorityOptions} /></Field>
+              <Field><FieldLabel>Əlaqə kanalı</FieldLabel><FormSelect name="contactChannel" defaultValue="PHONE" options={contactChannelOptions} /></Field>
+              <Field><FieldLabel>Nəticə</FieldLabel><FormSelect name="outcome" defaultValue="NONE" options={followUpOutcomeOptions} /></Field>
+              <Field><FieldLabel>Növbəti addım</FieldLabel><FormSelect name="nextAction" defaultValue="CALL" options={followUpActionOptions} /></Field>
+              <Field><FieldLabel htmlFor="new-follow-up-date">Növbəti tarix</FieldLabel><Input id="new-follow-up-date" name="nextFollowUpAt" type="datetime-local" /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel>Məsul əməkdaş</FieldLabel><FormSelect name="assignedToId" defaultValue="UNASSIGNED" options={[{ value: "UNASSIGNED", label: "Təyin edilməyib" }, ...assignees]} /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel htmlFor="new-follow-up-note">Qeyd</FieldLabel><textarea id="new-follow-up-note" name="note" rows={3} placeholder="Danışığın məzmunu, etiraz və razılaşdırılmış növbəti addım" /></Field>
+            </div>
+          </FieldGroup>
+          {notice ? <p className="workshop-form-error" role="alert">{notice}</p> : null}
+          <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button><Button type="submit" disabled={pending || participants.length === 0 || events.length === 0}>{pending ? "Yaradılır..." : "Follow-up yarat"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -286,21 +395,39 @@ function WorkshopFollowUpDialog({ row, assignees, action }: {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button type="button" variant="outline">Yenilə</Button></DialogTrigger>
-      <DialogContent className="workshop-dialog">
+      <DialogContent className="workshop-dialog workshop-follow-up-dialog">
         <DialogHeader>
           <DialogTitle>{row.fullName} — Follow-up</DialogTitle>
-          <DialogDescription>{row.eventTitle} iştirakçısının ayrıca workshop follow-up məlumatını yeniləyin.</DialogDescription>
+          <DialogDescription>{row.sourceEventTitle} iştirakçısını “{row.eventTitle}” tədbiri üçün izləyin.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="workshop-dialog-form">
-          <input type="hidden" name="participantId" value={row.participantId} />
+          <input type="hidden" name="followUpId" value={row.id} />
           <FieldGroup>
             <div className="workshop-form-grid">
               <Field><FieldLabel>Status</FieldLabel><FormSelect name="status" defaultValue={row.status} options={followUpStatusOptions} /></Field>
-              <Field><FieldLabel htmlFor={`follow-up-date-${row.participantId}`}>Növbəti follow-up</FieldLabel><Input id={`follow-up-date-${row.participantId}`} name="nextFollowUpAt" type="datetime-local" defaultValue={row.nextFollowUpAtInput} /></Field>
+              <Field><FieldLabel>Prioritet</FieldLabel><FormSelect name="priority" defaultValue={row.priority} options={followUpPriorityOptions} /></Field>
+              <Field><FieldLabel>Əlaqə kanalı</FieldLabel><FormSelect name="contactChannel" defaultValue={row.contactChannel} options={contactChannelOptions} /></Field>
+              <Field><FieldLabel>Nəticə</FieldLabel><FormSelect name="outcome" defaultValue={row.outcome} options={followUpOutcomeOptions} /></Field>
+              <Field><FieldLabel>Növbəti addım</FieldLabel><FormSelect name="nextAction" defaultValue={row.nextAction} options={followUpActionOptions} /></Field>
+              <Field><FieldLabel htmlFor={`follow-up-date-${row.id}`}>Növbəti follow-up</FieldLabel><Input id={`follow-up-date-${row.id}`} name="nextFollowUpAt" type="datetime-local" defaultValue={row.nextFollowUpAtInput} /></Field>
               <Field className="workshop-field-span-2"><FieldLabel>Məsul əməkdaş</FieldLabel><FormSelect name="assignedToId" defaultValue={row.assignedToId || "UNASSIGNED"} options={[{ value: "UNASSIGNED", label: "Təyin edilməyib" }, ...assignees]} /></Field>
-              <Field className="workshop-field-span-2"><FieldLabel htmlFor={`follow-up-note-${row.participantId}`}>Qeyd</FieldLabel><textarea id={`follow-up-note-${row.participantId}`} name="note" rows={4} defaultValue={row.note} placeholder="Danışıq nəticəsi və növbəti addım" /></Field>
+              <Field className="workshop-field-span-2"><FieldLabel htmlFor={`follow-up-note-${row.id}`}>Qeyd</FieldLabel><textarea id={`follow-up-note-${row.id}`} name="note" rows={3} defaultValue={row.note} placeholder="Danışıq nəticəsi və növbəti addım" /></Field>
             </div>
           </FieldGroup>
+          <p className="workshop-follow-up-rule"><Info /> “Nəticələnib”, “Maraqlanmır” və ya “Növbəti addım yoxdur” seçildikdə planlanan tarix avtomatik təmizlənir.</p>
+          {row.activities.length > 0 ? (
+            <section className="workshop-follow-up-history" aria-label="Follow-up tarixçəsi">
+              <h3><History /> Son tarixçə</h3>
+              <div>
+                {row.activities.map((activity) => (
+                  <article key={activity.id}>
+                    <span />
+                    <div><strong>{activity.activityLabel}</strong><small>{activity.createdAt} · {activity.actorName}</small><p>{activity.statusLabel} · {activity.outcomeLabel} · {activity.nextActionLabel}</p>{activity.note ? <em>{activity.note}</em> : null}</div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {notice ? <p className="workshop-form-error" role="alert">{notice}</p> : null}
           <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Ləğv et</Button><Button type="submit" disabled={pending}>{pending ? "Saxlanılır..." : "Saxla"}</Button></DialogFooter>
         </form>

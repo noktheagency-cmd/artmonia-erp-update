@@ -9,8 +9,12 @@ import {
   FinanceTransactionType,
   PaymentMethod,
   Prisma,
+  WorkshopContactChannel,
   WorkshopEventStatus,
   WorkshopEventType,
+  WorkshopFollowUpAction,
+  WorkshopFollowUpOutcome,
+  WorkshopFollowUpPriority,
   WorkshopFollowUpStatus,
 } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
@@ -127,8 +131,7 @@ const updateParticipantSchema = z.object({
   note: optionalText(700),
 });
 
-const workshopFollowUpSchema = z.object({
-  participantId: z.string().uuid(),
+const workshopFollowUpFields = {
   status: z.enum([
     WorkshopFollowUpStatus.PENDING,
     WorkshopFollowUpStatus.CONTACTED,
@@ -137,12 +140,55 @@ const workshopFollowUpSchema = z.object({
     WorkshopFollowUpStatus.CONVERTED,
     WorkshopFollowUpStatus.NOT_INTERESTED,
   ]),
+  nextAction: z.enum([
+    WorkshopFollowUpAction.NONE,
+    WorkshopFollowUpAction.CALL,
+    WorkshopFollowUpAction.WHATSAPP,
+    WorkshopFollowUpAction.SEND_DETAILS,
+    WorkshopFollowUpAction.SEND_OFFER,
+    WorkshopFollowUpAction.RESERVE_PLACE,
+    WorkshopFollowUpAction.WAIT_RESPONSE,
+    WorkshopFollowUpAction.OTHER,
+  ]),
+  outcome: z.enum([
+    WorkshopFollowUpOutcome.NONE,
+    WorkshopFollowUpOutcome.POSITIVE_RESPONSE,
+    WorkshopFollowUpOutcome.NO_RESPONSE,
+    WorkshopFollowUpOutcome.CALLBACK_REQUESTED,
+    WorkshopFollowUpOutcome.DECLINED,
+    WorkshopFollowUpOutcome.REGISTERED,
+  ]),
+  contactChannel: z.enum([
+    WorkshopContactChannel.NOT_SET,
+    WorkshopContactChannel.PHONE,
+    WorkshopContactChannel.WHATSAPP,
+    WorkshopContactChannel.SMS,
+    WorkshopContactChannel.EMAIL,
+    WorkshopContactChannel.OTHER,
+  ]),
+  priority: z.enum([
+    WorkshopFollowUpPriority.LOW,
+    WorkshopFollowUpPriority.NORMAL,
+    WorkshopFollowUpPriority.HIGH,
+    WorkshopFollowUpPriority.URGENT,
+  ]),
   nextFollowUpAt: optionalText(30),
   assignedToId: z.preprocess(
     (value) => value === "UNASSIGNED" ? undefined : value,
     z.string().uuid().optional(),
   ),
   note: optionalText(1200),
+} as const;
+
+const createWorkshopFollowUpSchema = z.object({
+  participantId: z.string().uuid(),
+  targetEventId: z.string().uuid(),
+  ...workshopFollowUpFields,
+});
+
+const updateWorkshopFollowUpSchema = z.object({
+  followUpId: z.string().uuid(),
+  ...workshopFollowUpFields,
 });
 
 const paymentSchema = z.object({
@@ -539,59 +585,99 @@ async function cancelWorkshopParticipantActionImpl(formData: FormData) {
   return { ok: true as const };
 }
 
-async function updateWorkshopFollowUpActionImpl(formData: FormData) {
+async function createWorkshopFollowUpActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
-  const input = workshopFollowUpSchema.parse(Object.fromEntries(formData));
+  const input = createWorkshopFollowUpSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
-  let eventId = "";
 
   await prisma.$transaction(async (tx) => {
-    const participant = await tx.workshopParticipant.findUnique({
-      where: { id: input.participantId },
-      include: { followUp: true },
+    const [participant, targetEvent] = await Promise.all([
+      tx.workshopParticipant.findFirst({
+        where: { id: input.participantId, cancelledAt: null },
+        select: { id: true, eventId: true },
+      }),
+      tx.workshopEvent.findFirst({
+        where: { id: input.targetEventId, status: { not: WorkshopEventStatus.CANCELLED } },
+        select: { id: true },
+      }),
+    ]);
+    if (!participant) throw new PublicActionError("Aktiv workshop iştirakçısı tapılmadı");
+    if (!targetEvent) throw new PublicActionError("Hədəf tədbir tapılmadı və ya ləğv edilib");
+    await assertWorkshopFollowUpAssignee(tx, input.assignedToId);
+
+    const existing = await tx.workshopParticipantFollowUp.findUnique({
+      where: { participantId_targetEventId: { participantId: participant.id, targetEventId: targetEvent.id } },
+      select: { id: true },
     });
-    if (!participant || participant.cancelledAt) throw new Error("Aktiv workshop iştirakçısı tapılmadı");
-    eventId = participant.eventId;
+    if (existing) throw new PublicActionError("Bu iştirakçı üçün seçilmiş tədbir üzrə follow-up artıq mövcuddur");
 
-    if (input.assignedToId) {
-      const assignee = await tx.user.findFirst({ where: { id: input.assignedToId, isActive: true }, select: { id: true } });
-      if (!assignee) throw new Error("Seçilmiş məsul əməkdaş aktiv deyil");
-    }
-
-    const nextFollowUpAt = parseOptionalDateTime(input.nextFollowUpAt, "Növbəti follow-up tarixi");
-    const statusChanged = participant.followUp?.status !== input.status;
-    const lastContactedAt = input.status === WorkshopFollowUpStatus.PENDING
-      ? participant.followUp?.lastContactedAt ?? null
-      : statusChanged ? new Date() : participant.followUp?.lastContactedAt ?? new Date();
-
-    const updated = await tx.workshopParticipantFollowUp.upsert({
-      where: { participantId: participant.id },
-      create: {
+    const state = resolveWorkshopFollowUpState(input);
+    const created = await tx.workshopParticipantFollowUp.create({
+      data: {
         participantId: participant.id,
-        status: input.status,
-        nextFollowUpAt,
-        lastContactedAt,
+        targetEventId: targetEvent.id,
+        ...state,
         assignedToId: input.assignedToId ?? null,
         note: input.note ?? null,
         createdById: actor.id,
         updatedById: actor.id,
       },
-      update: {
-        status: input.status,
-        nextFollowUpAt,
+    });
+    await createWorkshopFollowUpActivity(tx, created, actor.id, "CREATED");
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "workshop.follow_up.create",
+      entityType: "workshop_participant_follow_up",
+      entityId: created.id,
+      after: workshopFollowUpAuditJson(created),
+      reason: input.note ?? "Workshop follow-up yaradıldı",
+    });
+  });
+
+  invalidateWorkshopCaches(input.targetEventId);
+  return { ok: true as const };
+}
+
+async function updateWorkshopFollowUpActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("workshop.manage");
+  const input = updateWorkshopFollowUpSchema.parse(Object.fromEntries(formData));
+  const prisma = getPrisma();
+  let eventId = "";
+
+  await prisma.$transaction(async (tx) => {
+    const followUp = await tx.workshopParticipantFollowUp.findUnique({
+      where: { id: input.followUpId },
+      include: { participant: { select: { cancelledAt: true } } },
+    });
+    if (!followUp || followUp.participant.cancelledAt) throw new PublicActionError("Aktiv workshop follow-up qeydi tapılmadı");
+    eventId = followUp.targetEventId;
+
+    await assertWorkshopFollowUpAssignee(tx, input.assignedToId);
+
+    const state = resolveWorkshopFollowUpState(input);
+    const statusChanged = followUp.status !== state.status;
+    const lastContactedAt = input.status === WorkshopFollowUpStatus.PENDING
+      ? followUp.lastContactedAt
+      : statusChanged || followUp.outcome !== state.outcome ? new Date() : followUp.lastContactedAt ?? new Date();
+
+    const updated = await tx.workshopParticipantFollowUp.update({
+      where: { id: followUp.id },
+      data: {
+        ...state,
         lastContactedAt,
         assignedToId: input.assignedToId ?? null,
         note: input.note ?? null,
         updatedById: actor.id,
       },
     });
+    await createWorkshopFollowUpActivity(tx, updated, actor.id, statusChanged ? "STATUS_CHANGED" : "UPDATED");
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "workshop.follow_up.update",
       entityType: "workshop_participant_follow_up",
       entityId: updated.id,
-      before: participant.followUp ? workshopFollowUpAuditJson(participant.followUp) : undefined,
+      before: workshopFollowUpAuditJson(followUp),
       after: workshopFollowUpAuditJson(updated),
       reason: input.note ?? "Workshop follow-up yeniləndi",
     });
@@ -1056,19 +1142,97 @@ function expenseAuditJson(expense: {
   } satisfies Prisma.InputJsonValue;
 }
 
+function resolveWorkshopFollowUpState(input: {
+  status: WorkshopFollowUpStatus;
+  nextAction: WorkshopFollowUpAction;
+  outcome: WorkshopFollowUpOutcome;
+  contactChannel: WorkshopContactChannel;
+  priority: WorkshopFollowUpPriority;
+  nextFollowUpAt?: string;
+}) {
+  const terminal = input.status === WorkshopFollowUpStatus.CONVERTED
+    || input.status === WorkshopFollowUpStatus.NOT_INTERESTED;
+  const hasNoNextAction = terminal || input.nextAction === WorkshopFollowUpAction.NONE;
+  return {
+    status: input.status,
+    nextAction: terminal ? WorkshopFollowUpAction.NONE : input.nextAction,
+    outcome: input.status === WorkshopFollowUpStatus.CONVERTED
+      ? WorkshopFollowUpOutcome.REGISTERED
+      : input.status === WorkshopFollowUpStatus.NOT_INTERESTED
+        ? WorkshopFollowUpOutcome.DECLINED
+        : input.status === WorkshopFollowUpStatus.NO_ANSWER && input.outcome === WorkshopFollowUpOutcome.NONE
+          ? WorkshopFollowUpOutcome.NO_RESPONSE
+          : input.outcome,
+    contactChannel: input.contactChannel,
+    priority: input.priority,
+    nextFollowUpAt: hasNoNextAction ? null : parseOptionalDateTime(input.nextFollowUpAt, "Növbəti follow-up tarixi"),
+    completedAt: terminal ? new Date() : null,
+  };
+}
+
+async function assertWorkshopFollowUpAssignee(tx: Prisma.TransactionClient, assignedToId?: string) {
+  if (!assignedToId) return;
+  const assignee = await tx.user.findFirst({
+    where: { id: assignedToId, isActive: true },
+    select: { id: true },
+  });
+  if (!assignee) throw new PublicActionError("Seçilmiş məsul əməkdaş aktiv deyil");
+}
+
+async function createWorkshopFollowUpActivity(
+  tx: Prisma.TransactionClient,
+  followUp: {
+    id: string;
+    status: WorkshopFollowUpStatus;
+    nextAction: WorkshopFollowUpAction;
+    outcome: WorkshopFollowUpOutcome;
+    contactChannel: WorkshopContactChannel;
+    nextFollowUpAt: Date | null;
+    note: string | null;
+  },
+  actorUserId: string,
+  activityType: "CREATED" | "UPDATED" | "STATUS_CHANGED",
+) {
+  await tx.workshopFollowUpActivity.create({
+    data: {
+      followUpId: followUp.id,
+      activityType,
+      status: followUp.status,
+      nextAction: followUp.nextAction,
+      outcome: followUp.outcome,
+      contactChannel: followUp.contactChannel,
+      nextFollowUpAt: followUp.nextFollowUpAt,
+      note: followUp.note,
+      actorUserId,
+    },
+  });
+}
+
 function workshopFollowUpAuditJson(followUp: {
   participantId: string;
+  targetEventId: string;
   status: WorkshopFollowUpStatus;
+  nextAction: WorkshopFollowUpAction;
+  outcome: WorkshopFollowUpOutcome;
+  contactChannel: WorkshopContactChannel;
+  priority: WorkshopFollowUpPriority;
   nextFollowUpAt: Date | null;
   lastContactedAt: Date | null;
+  completedAt: Date | null;
   assignedToId: string | null;
   note: string | null;
 }) {
   return {
     participantId: followUp.participantId,
+    targetEventId: followUp.targetEventId,
     status: followUp.status,
+    nextAction: followUp.nextAction,
+    outcome: followUp.outcome,
+    contactChannel: followUp.contactChannel,
+    priority: followUp.priority,
     nextFollowUpAt: followUp.nextFollowUpAt?.toISOString() ?? null,
     lastContactedAt: followUp.lastContactedAt?.toISOString() ?? null,
+    completedAt: followUp.completedAt?.toISOString() ?? null,
     assignedToId: followUp.assignedToId,
     note: followUp.note,
   } satisfies Prisma.InputJsonValue;
@@ -1160,6 +1324,10 @@ export const updateWorkshopParticipantAction = safeServerAction(
 export const cancelWorkshopParticipantAction = safeServerAction(
   cancelWorkshopParticipantActionImpl,
   "İştirakçı ləğv edilmədi.",
+);
+export const createWorkshopFollowUpAction = safeServerAction(
+  createWorkshopFollowUpActionImpl,
+  "Workshop follow-up yaradılmadı.",
 );
 export const updateWorkshopFollowUpAction = safeServerAction(
   updateWorkshopFollowUpActionImpl,
