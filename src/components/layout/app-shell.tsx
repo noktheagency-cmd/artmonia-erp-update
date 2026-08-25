@@ -69,7 +69,7 @@ type NotificationCounts = { all: number; tasks: number };
 
 const primaryNavItems: NavItem[] = [
   { href: "/students", label: "Tələbələr", icon: GraduationCap, requiredPermissions: ["student.read"] },
-  { href: "/crm", label: "Birbaşa satış", icon: UsersRound, requiredPermissions: ["crm.lead.read"] },
+  { href: "/crm", label: "Follow-up", icon: UsersRound, requiredPermissions: ["crm.lead.read"] },
   { href: "/finance", label: "Maliyyə", icon: CreditCard, requiredPermissions: ["billing.invoice.read", "billing.payment.read", "billing.expense.read", "billing.entry.create"] },
   { href: "/hr" as Route, label: "HR", icon: BriefcaseBusiness, requiredPermissions: ["hr.employee.read", "teacher.read", "hr.corporate.read", "hr.bonus.read"] },
   { href: "/groups" as Route, label: "Slotlar", icon: CalendarDays, requiredPermissions: ["group.read", "attendance.read"] },
