@@ -175,7 +175,6 @@ button.students-kpi { cursor: pointer; }
 .students-kpi::after { position: absolute; top: -42px; right: -46px; width: 110px; height: 110px; content: ""; pointer-events: none; background: radial-gradient(circle, color-mix(in srgb, var(--kpi-accent) 15%, transparent), transparent 70%); }
 .students-kpi:hover { border-color: color-mix(in srgb, var(--kpi-accent) 30%, var(--students-line)); box-shadow: 0 16px 34px rgb(39 48 68 / 9%); transform: translateY(-2px); }
 .students-kpi:focus-visible { outline: 3px solid rgb(70 103 232 / 20%); outline-offset: 3px; }
-.students-kpi-clv,
 .students-kpi-mint { --kpi-accent: var(--students-green); }
 .students-kpi-blue { --kpi-accent: var(--students-blue); }
 .students-kpi-coral { --kpi-accent: var(--students-coral); }
@@ -186,11 +185,6 @@ button.students-kpi { cursor: pointer; }
 .students-kpi-icon { display: grid; place-items: center; width: 32px; height: 32px; color: var(--kpi-accent); background: color-mix(in srgb, var(--kpi-accent) 10%, var(--students-surface)); border-radius: 10px; }
 .students-kpi-icon svg { width: 16px; height: 16px; }
 .students-kpi > strong { margin-top: 13px; color: var(--students-ink); font-size: clamp(22px, 2vw, 28px); font-weight: 620; line-height: 1; letter-spacing: -0.035em; }
-.students-kpi-clv > strong[data-insufficient="true"] { max-width: 230px; font-size: 13px; font-weight: 650; line-height: 1.35; letter-spacing: -0.01em; }
-.students-kpi-clv-formula { margin: 7px 0 0; color: var(--students-muted); font-size: 9.5px; font-weight: 600; line-height: 1.25; }
-.students-kpi-clv-formula span { padding: 0 3px; color: var(--students-green); }
-.students-kpi-clv .students-kpi-foot { align-items: flex-start; padding-top: 7px; }
-.students-kpi-clv .students-kpi-foot small { max-width: 116px; text-align: right; white-space: normal; }
 .students-kpi-foot { display: flex; gap: 7px; align-items: flex-end; justify-content: space-between; min-width: 0; margin-top: auto; padding-top: 11px; color: var(--students-muted); font-size: 8.75px; line-height: 1.35; }
 .students-kpi-foot > span { min-width: 0; white-space: normal; }
 .students-kpi-foot small { flex: 0 0 auto; color: var(--students-subtle); font-size: 8.5px; }
@@ -685,7 +679,11 @@ button.students-kpi { cursor: pointer; }
 .program-manager-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
 .program-card { position:relative; display:grid; gap:14px; padding:16px; background:linear-gradient(135deg,#fff,#f4f7ff); border:1px solid #dce5f7; border-radius:15px; }
 .program-card[data-active="false"] { opacity:.65; }.program-card strong,.program-card small { display:block; }.program-card strong { margin-top:8px; color:#252d3d; font-size:14px; }.program-card small { margin-top:5px; color:#687386; font-size:10px; }.program-card > div:first-child > span { color:#4667e8; font-size:9px; font-weight:700; text-transform:uppercase; }
-.program-card-meta { display:flex; justify-content:space-between; align-items:center; color:#687386; font-size:10px; }.program-card-meta b { color:#15935f; font-size:15px; }.program-card-actions { position:absolute; top:10px; right:10px; display:flex; }.program-card-actions form { margin:0; }.program-card-actions .ui-button { width:30px; height:30px; color:#687386; }.program-card-actions form .ui-button { color:#d75368; }.program-dialog { width:min(calc(100vw - 30px),560px); }
+.program-card-meta { display:flex; justify-content:space-between; align-items:center; color:#687386; font-size:10px; }.program-card-meta b { color:#15935f; font-size:15px; }.program-card-actions { position:absolute; top:10px; right:10px; display:flex; }.program-card-actions .ui-button { width:30px; height:30px; color:#687386; }.program-card-actions .ui-button:last-child { color:#d75368; }.program-dialog { width:min(calc(100vw - 30px),560px); }
+.program-delete-form { display:grid; gap:10px; }
+.program-delete-form textarea { width:100%; min-height:108px; padding:12px 14px; color:var(--ink); background:#fbfcff; border:1px solid var(--line); border-radius:14px; outline:none; resize:vertical; }
+.program-delete-form textarea:focus { background:#fff; border-color:rgb(215 83 104 / 62%); box-shadow:0 0 0 4px rgb(215 83 104 / 12%); }
+.program-delete-form > small { color:#7a8495; font-size:10px; line-height:1.45; }
 
 /* Student profile redesign */
 .student-detail-modern-page {

@@ -118,6 +118,7 @@ export type FinanceData = {
     label: string;
     value: number;
     amount: string;
+    count: number;
   }>;
   categories: Array<{
     id: string;
@@ -309,6 +310,7 @@ type ExpenseBreakdownRow = {
 type CostCenterBreakdownRow = {
   label: string;
   value: unknown;
+  count: unknown;
 };
 
 type StudentOptionRow = {
@@ -805,7 +807,8 @@ export async function getFinanceData(
           when fe.cost_center is null then 'Təyin edilməyib'
           else fe.cost_center::text
         end as "label",
-        sum(fe.amount) as "value"
+        sum(fe.amount) as "value",
+        count(*) as "count"
       from erp.finance_expenses fe
       join erp.finance_expense_categories fec on fec.id = fe.category_id
       left join erp.users eu on eu.id = fe.employee_user_id
@@ -1399,6 +1402,7 @@ export async function getFinanceData(
           : getFinanceCostCenterLabel(item.label),
         value,
         amount: formatAmount(value),
+        count: toNumber(item.count),
       };
     }),
     categories: categoryRows.map((category) => ({

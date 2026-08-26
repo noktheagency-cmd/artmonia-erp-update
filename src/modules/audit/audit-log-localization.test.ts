@@ -12,8 +12,10 @@ test("audit əməliyyatları və obyektləri Azərbaycan dilində göstərilir",
   assert.equal(getAuditActionLabel("role.permissions.update"), "Rol icazələri yeniləndi");
   assert.equal(getAuditActionLabel("lead.convert_to_student"), "Müraciət tələbəyə çevrildi");
   assert.equal(getAuditActionLabel("SESSION_REVOKED"), "Sessiya bağlandı");
+  assert.equal(getAuditActionLabel("program.delete"), "Proqram silindi");
   assert.equal(getAuditEntityLabel("auth_session"), "Giriş sessiyası");
   assert.equal(getAuditEntityLabel("marketing_campaign"), "Marketinq kampaniyası");
+  assert.equal(getAuditEntityLabel("program"), "Tədris proqramı");
 });
 
 test("tanınmayan texniki identifikatorlar Azərbaycan dilində ehtiyat mətnə çevrilir", () => {

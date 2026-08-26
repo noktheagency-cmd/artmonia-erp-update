@@ -24,7 +24,6 @@ import {
   GraduationCap,
   List,
   Snowflake,
-  TrendingUp,
   UserRoundCheck,
   X,
 } from "lucide-react";
@@ -191,38 +190,13 @@ export function StudentList({ data }: { data: StudentListData }) {
       </section>
 
       <section className="students-kpi-grid" aria-label="Tələbə statistika kartları">
-        <article className="students-kpi students-kpi-clv students-enter" style={sequenceStyle(0)}>
-          <div className="students-kpi-head">
-            <span>Orta tələbə CLV-si</span>
-            <span className="students-kpi-icon" aria-hidden="true">
-              <TrendingUp />
-            </span>
-          </div>
-          <strong data-insufficient={data.clv.hasEnoughData ? undefined : "true"}>
-            {data.clv.hasEnoughData
-              ? data.clv.averageClv
-              : "Hesablama üçün kifayət qədər məlumat yoxdur"}
-          </strong>
-          {data.clv.hasEnoughData ? (
-            <p className="students-kpi-clv-formula">
-              {data.clv.arpu}/ay <span aria-hidden="true">×</span> {data.clv.averageLifetime} ay
-            </p>
-          ) : null}
-          <div className="students-kpi-foot">
-            <span>{data.clv.studentCount} tələbə · son 12 ay</span>
-            <small>
-              {data.clv.hasEnoughData ? data.clv.comparisonLabel : "minimum 5 tələbə"}
-            </small>
-          </div>
-        </article>
-
         {data.statusSummary.map((item, index) => {
           const Icon = metricIcons[index] ?? UserRoundCheck;
           return (
             <button
               type="button"
               className={`students-kpi students-kpi-${item.tone} students-enter`}
-              style={sequenceStyle(index + 1)}
+              style={sequenceStyle(index)}
               onClick={() => handleQuickFilter(item.filter.key, item.filter.value)}
               key={item.label}
               aria-label={`${item.label} siyahısını aç`}

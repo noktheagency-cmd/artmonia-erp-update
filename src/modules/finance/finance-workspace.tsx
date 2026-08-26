@@ -1438,6 +1438,7 @@ function OverviewWorkspace({ data }: { data: FinanceData }) {
       </div>
 
       <div className="finance-stat-grid" aria-label="Maliyyə statistikası">
+        <CostCenterChart data={data} />
         <PaymentMethodChart data={data} />
       </div>
 
@@ -1638,6 +1639,46 @@ function FinanceStructureChart({ data }: { data: FinanceData }) {
   );
 }
 
+function CostCenterChart({ data }: { data: FinanceData }) {
+  const rows = useMemo(() => {
+    const total = data.costCenterBreakdown.reduce((sum, item) => sum + item.value, 0);
+
+    return data.costCenterBreakdown
+      .filter((item) => item.value > 0)
+      .map((item, index) => ({
+        label: item.label,
+        value: item.value,
+        count: item.count,
+        share: total > 0 ? (item.value / total) * 100 : 0,
+        color: chartPalette[index % chartPalette.length],
+      }))
+      .sort((first, second) => second.value - first.value);
+  }, [data.costCenterBreakdown]);
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const leader = rows[0];
+
+  return (
+    <article className="finance-panel finance-stat-panel">
+      <div className="finance-panel-head">
+        <div>
+          <span>Xərc nəzarəti</span>
+          <h2>Xərc mərkəzləri üzrə bölgü</h2>
+          <small>
+            {leader
+              ? `Ümumi ${formatChartAmount(total)} · ən yüksək ${leader.label} (${leader.share.toFixed(0)}%)`
+              : "Seçilmiş dövr üzrə bölgü"}
+          </small>
+        </div>
+      </div>
+      {rows.length > 0 ? (
+        <HorizontalStatBars rows={rows} />
+      ) : (
+        <div className="finance-overview-empty">Xərc mərkəzi üzrə məlumat yoxdur</div>
+      )}
+    </article>
+  );
+}
+
 function PaymentMethodChart({ data }: { data: FinanceData }) {
   const rows = useMemo(() => {
     const breakdown = new Map<string, { value: number; count: number }>();
@@ -1805,7 +1846,7 @@ function DonutChart({
 function HorizontalStatBars({
   rows,
 }: {
-  rows: Array<{ label: string; value: number; count: number; color: string }>;
+  rows: Array<{ label: string; value: number; count: number; color: string; share?: number }>;
 }) {
   const maxValue = Math.max(...rows.map((row) => row.value), 1);
 
@@ -1818,7 +1859,10 @@ function HorizontalStatBars({
           <div className="finance-method-row" key={row.label}>
             <div className="finance-method-row-head">
               <strong>{row.label}</strong>
-              <span>{formatChartAmount(row.value)}</span>
+              <span>
+                {formatChartAmount(row.value)}
+                {row.share === undefined ? "" : ` · ${row.share.toFixed(0)}%`}
+              </span>
             </div>
             <div className="finance-method-track">
               <span style={{ width: `${width}%`, backgroundColor: row.color }} />
