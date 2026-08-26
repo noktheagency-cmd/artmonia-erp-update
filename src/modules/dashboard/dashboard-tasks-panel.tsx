@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import type { TaskData, TaskRow } from "@/modules/tasks/queries";
 import { TaskDetailsDialog, taskPriorityOptions } from "@/modules/tasks/task-details-dialog";
+import { TaskCompletionDialog } from "@/modules/tasks/task-completion-dialog";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 
@@ -115,24 +116,35 @@ function DashboardDeadlineTask({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [completionOpen, setCompletionOpen] = useState(false);
+  const [completionError, setCompletionError] = useState("");
   const deadline = getDeadlinePresentation(task);
 
   function markDone() {
+    setCompletionError("");
+    setCompletionOpen(true);
+  }
+
+  function confirmDone(completionNote: string) {
     const formData = new FormData();
     formData.set("taskId", task.id);
     formData.set("status", "DONE");
+    formData.set("completionNote", completionNote);
+    setCompletionError("");
     startTransition(async () => {
       try {
         unwrapActionResult(await updateTaskStatusAction(formData));
+        setCompletionOpen(false);
         router.refresh();
       } catch (caught) {
-        notifyCaughtError(caught, "Task tamamlanmadı", "Status yenilənmədi");
+        setCompletionError(notifyCaughtError(caught, "Task tamamlanmadı", "Status yenilənmədi"));
       }
     });
   }
 
   return (
-    <article className={`owner-dashboard-deadline-task is-${deadline.tone}${isPending ? " is-pending" : ""}`}>
+    <>
+      <article className={`owner-dashboard-deadline-task is-${deadline.tone}${isPending ? " is-pending" : ""}`}>
       <button className="owner-dashboard-task-open" type="button" onClick={onOpen} aria-label={`${task.title} taskının detallarını aç`} />
       <span
         className={`owner-dashboard-task-mascot is-${deadline.tone}`}
@@ -159,7 +171,16 @@ function DashboardDeadlineTask({
       >
         <Check size={16} strokeWidth={2.5} />
       </Button>
-    </article>
+      </article>
+      <TaskCompletionDialog
+        taskTitle={task.title}
+        open={completionOpen}
+        pending={isPending}
+        error={completionError}
+        onOpenChange={setCompletionOpen}
+        onConfirm={confirmDone}
+      />
+    </>
   );
 }
 

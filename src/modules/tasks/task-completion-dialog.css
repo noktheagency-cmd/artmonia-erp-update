@@ -1,0 +1,110 @@
+.task-completion-dialog.ui-dialog-content {
+  width: min(calc(100vw - 28px), 510px);
+  padding: 24px;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.task-completion-dialog .ui-dialog-header {
+  position: relative;
+  padding-left: 54px;
+}
+
+.task-completion-dialog-icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  color: #138159;
+  background: #eaf8f0;
+  border: 1px solid #ccebdd;
+  border-radius: 14px;
+  place-items: center;
+}
+
+.task-completion-dialog .ui-dialog-title {
+  color: #253047;
+  font-size: 20px;
+}
+
+.task-completion-dialog .ui-dialog-description {
+  margin-top: 6px;
+  color: #6f7b8e;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.task-completion-dialog form {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.task-completion-note-field {
+  display: grid;
+  gap: 8px;
+}
+
+.task-completion-note-field > span {
+  color: #4f5a6d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.task-completion-note-field > span strong { color: #d64f46; }
+
+.task-completion-note-field textarea {
+  width: 100%;
+  min-height: 126px;
+  padding: 13px 14px;
+  color: #253047;
+  resize: vertical;
+  background: #f8fafc;
+  border: 1px solid #d5dee9;
+  border-radius: 14px;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.task-completion-note-field textarea:focus {
+  border-color: #5a73df;
+  box-shadow: 0 0 0 3px rgb(90 115 223 / 13%);
+}
+
+.task-completion-note-field small {
+  justify-self: end;
+  color: #8b96a8;
+  font-size: 10px;
+}
+
+.task-completion-dialog-error {
+  margin: 0;
+  padding: 10px 12px;
+  color: #b83f38;
+  background: #fff0ee;
+  border-radius: 11px;
+  font-size: 11px;
+}
+
+.task-completion-dialog .ui-dialog-footer {
+  padding-top: 15px;
+  border-top: 1px solid #e2e8f0;
+}
+
+html.dark .task-completion-dialog.ui-dialog-content { background: var(--dm-surface); border-color: var(--dm-line-strong); }
+html.dark .task-completion-dialog .ui-dialog-title, html.dark .task-completion-note-field textarea { color: var(--dm-text); }
+html.dark .task-completion-dialog .ui-dialog-description, html.dark .task-completion-note-field > span, html.dark .task-completion-note-field small { color: var(--dm-muted); }
+html.dark .task-completion-note-field textarea { background: var(--dm-surface-2); border-color: var(--dm-line); }
+html.dark .task-completion-dialog .ui-dialog-footer { border-color: var(--dm-line); }
+
+@media (max-width: 560px) {
+  .task-completion-dialog.ui-dialog-content { padding: 20px; border-radius: 20px; }
+  .task-completion-dialog .ui-dialog-header { padding-left: 0; padding-top: 52px; }
+}

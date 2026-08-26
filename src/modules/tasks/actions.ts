@@ -19,6 +19,7 @@ import {
   assertCanAdministerTasks,
   canAdministerTasks,
 } from "@/modules/tasks/task-permissions";
+import { taskStatusUpdateSchema } from "@/modules/tasks/task-status-update";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -26,11 +27,6 @@ const createTaskSchema = z.object({
   ownerUserId: z.string().uuid(),
   dueDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
   priority: z.nativeEnum(TaskPriority).default(TaskPriority.NORMAL),
-});
-
-const updateStatusSchema = z.object({
-  taskId: z.string().uuid(),
-  status: z.nativeEnum(TaskStatus),
 });
 
 const deleteTaskSchema = z.object({
@@ -110,7 +106,7 @@ async function createTaskActionImpl(formData: FormData) {
 
 async function updateTaskStatusActionImpl(formData: FormData) {
   const actor = await requireMutationActor("task.read");
-  const input = updateStatusSchema.parse(Object.fromEntries(formData));
+  const input = taskStatusUpdateSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const canManageAnyTask = actor.roles.includes(AppRole.SUPER_ADMIN);
 
@@ -136,8 +132,9 @@ async function updateTaskStatusActionImpl(formData: FormData) {
       data: {
         status: input.status,
         completedAt: input.status === TaskStatus.DONE ? new Date() : null,
+        completionNote: input.status === TaskStatus.DONE ? input.completionNote : null,
       },
-      select: { id: true, status: true },
+      select: { id: true, status: true, completionNote: true },
     });
 
     await writeAuditLog(tx, {
@@ -146,8 +143,11 @@ async function updateTaskStatusActionImpl(formData: FormData) {
       entityType: "task",
       entityId: current.id,
       before: { status: current.status },
-      after: { status: updated.status },
-      reason: "Task statusu yeniləndi",
+      after: {
+        status: updated.status,
+        completionNote: updated.completionNote,
+      },
+      reason: updated.status === TaskStatus.DONE ? "Task tamamlandı" : "Task statusu yeniləndi",
     });
   });
 

@@ -15,6 +15,7 @@ export type TaskRow = {
   createdLabel: string;
   updatedLabel: string;
   completedLabel: string;
+  completionNote: string;
   creatorName: string;
   creatorInitials: string;
   ownerUserId: string | null;
@@ -61,6 +62,7 @@ export async function getTaskData(input: { page?: string; pageSize?: string; tas
     createdAt: true,
     updatedAt: true,
     completedAt: true,
+    completionNote: true,
     dueAt: true,
     ownerUser: { select: { fullName: true } },
     createdBy: { select: { fullName: true } },
@@ -106,6 +108,7 @@ export async function getTaskData(input: { page?: string; pageSize?: string; tas
       createdLabel: formatDateTime(task.createdAt),
       updatedLabel: formatDateTime(task.updatedAt),
       completedLabel: task.completedAt ? formatDateTime(task.completedAt) : "",
+      completionNote: task.completionNote ?? "",
       creatorName,
       creatorInitials: initials(creatorName),
       ownerUserId: task.ownerUserId,

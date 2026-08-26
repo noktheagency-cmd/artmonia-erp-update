@@ -1,0 +1,1 @@
+export const TASK_COMPLETION_NOTE_MAX_LENGTH = 1000;

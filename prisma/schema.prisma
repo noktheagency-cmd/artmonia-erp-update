@@ -2406,6 +2406,7 @@ model Task {
   priority       TaskPriority @default(NORMAL)
   dueAt          DateTime?    @map("due_at")
   completedAt    DateTime?    @map("completed_at")
+  completionNote String?      @map("completion_note")
   idempotencyKey String?      @unique @map("idempotency_key")
   createdById    String?      @map("created_by_id") @db.Uuid
   createdAt      DateTime     @default(now()) @map("created_at")

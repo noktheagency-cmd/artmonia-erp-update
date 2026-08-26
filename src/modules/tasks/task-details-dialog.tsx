@@ -23,6 +23,7 @@ import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import type { TaskRow, TaskStatusValue } from "@/modules/tasks/queries";
+import { TaskCompletionDialog } from "@/modules/tasks/task-completion-dialog";
 import "./task-details.css";
 
 type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
@@ -54,6 +55,8 @@ export function TaskDetailsDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [completionError, setCompletionError] = useState("");
+  const [completionOpen, setCompletionOpen] = useState(false);
   const [confirmedStatus, setConfirmedStatus] = useState<TaskStatusValue>(task?.status ?? "OPEN");
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(
     confirmedStatus,
@@ -62,20 +65,31 @@ export function TaskDetailsDialog({
 
   if (!task) return null;
 
-  function updateStatus(status: string) {
+  function updateStatus(status: string, completionNote?: string) {
     if (!task || status === optimisticStatus) return;
+    if (status === "DONE" && !completionNote) {
+      setError("");
+      setCompletionError("");
+      setCompletionOpen(true);
+      return;
+    }
     const formData = new FormData();
     formData.set("taskId", task.id);
     formData.set("status", status);
+    if (completionNote) formData.set("completionNote", completionNote);
     setError("");
+    setCompletionError("");
     startTransition(async () => {
       setOptimisticStatus(status as TaskStatusValue);
       try {
         unwrapActionResult(await updateTaskStatusAction(formData));
         setConfirmedStatus(status as TaskStatusValue);
+        setCompletionOpen(false);
         router.refresh();
       } catch (caught) {
-        setError(notifyCaughtError(caught, "Task statusu yenilənmədi", "Status yenilənmədi"));
+        const message = notifyCaughtError(caught, "Task statusu yenilənmədi", "Status yenilənmədi");
+        if (status === "DONE") setCompletionError(message);
+        else setError(message);
       }
     });
   }
@@ -84,7 +98,8 @@ export function TaskDetailsDialog({
   const priorityLabel = taskPriorityOptions.find((item) => item.value === task.priority)?.label;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="task-detail-dialog">
         <DialogHeader className="task-detail-header">
           <div className="task-detail-badges">
@@ -107,6 +122,13 @@ export function TaskDetailsDialog({
             <h3>Açıqlama</h3>
             <p>{task.description || "Bu task üçün əlavə açıqlama qeyd edilməyib."}</p>
           </section>
+
+          {task.completionNote ? (
+            <section className="task-detail-completion-note">
+              <h3><CheckCircle2 size={15} /> Tamamlanma qeydi</h3>
+              <p>{task.completionNote}</p>
+            </section>
+          ) : null}
 
           <div className="task-detail-people">
             <DetailPerson label="İcraçı" name={task.ownerName} initials={task.ownerInitials} />
@@ -138,7 +160,16 @@ export function TaskDetailsDialog({
           {error ? <p className="task-detail-error" role="alert">{error}</p> : null}
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+      <TaskCompletionDialog
+        taskTitle={task.title}
+        open={completionOpen}
+        pending={isPending}
+        error={completionError}
+        onOpenChange={setCompletionOpen}
+        onConfirm={(completionNote) => updateStatus("DONE", completionNote)}
+      />
+    </>
   );
 }
 

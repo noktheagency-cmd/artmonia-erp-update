@@ -35,6 +35,7 @@ import {
   taskPriorityOptions,
   taskStatusOptions,
 } from "@/modules/tasks/task-details-dialog";
+import { TaskCompletionDialog } from "@/modules/tasks/task-completion-dialog";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import "./tasks.css";
@@ -218,28 +219,41 @@ function TaskListRow({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [completionOpen, setCompletionOpen] = useState(false);
+  const [completionError, setCompletionError] = useState("");
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(
     task.status,
     (_current, next: TaskStatusValue) => next,
   );
 
-  function updateStatus(status: string) {
+  function updateStatus(status: string, completionNote?: string) {
+    if (status === optimisticStatus) return;
+    if (status === "DONE" && !completionNote) {
+      setCompletionError("");
+      setCompletionOpen(true);
+      return;
+    }
     const formData = new FormData();
     formData.set("taskId", task.id);
     formData.set("status", status);
+    if (completionNote) formData.set("completionNote", completionNote);
+    setCompletionError("");
     startTransition(async () => {
       setOptimisticStatus(status as TaskStatusValue);
       try {
         unwrapActionResult(await updateTaskStatusAction(formData));
+        setCompletionOpen(false);
         router.refresh();
       } catch (error) {
-        notifyCaughtError(error, "Task statusu yenilənmədi", "Status yenilənmədi");
+        const message = notifyCaughtError(error, "Task statusu yenilənmədi", "Status yenilənmədi");
+        if (status === "DONE") setCompletionError(message);
       }
     });
   }
 
   return (
-    <article id={`task-${task.id}`} className={cx("task-row", task.isOverdue && "is-overdue", isHighlighted && "is-highlighted", isPending && "is-pending")}>
+    <>
+      <article id={`task-${task.id}`} className={cx("task-row", task.isOverdue && "is-overdue", isHighlighted && "is-highlighted", isPending && "is-pending")}>
       <button className="task-row-open" type="button" onClick={onOpen} aria-label={`${task.title} taskının detallarını aç`} />
       <span className={cx("task-status-mark", `is-${optimisticStatus.toLowerCase()}`)} aria-hidden="true" />
       <div className="task-main">
@@ -266,7 +280,16 @@ function TaskListRow({
         />
         {canDelete ? <DeleteTaskDialog task={task} action={deleteTaskAction} /> : null}
       </div>
-    </article>
+      </article>
+      <TaskCompletionDialog
+        taskTitle={task.title}
+        open={completionOpen}
+        pending={isPending}
+        error={completionError}
+        onOpenChange={setCompletionOpen}
+        onConfirm={(completionNote) => updateStatus("DONE", completionNote)}
+      />
+    </>
   );
 }
 
