@@ -1,4 +1,4 @@
-+create temp table _hecer_august_prepayment_repair on commit drop as
+create temp table _hecer_august_prepayment_repair on commit drop as
 with candidate as (
   select
     s.id as student_id,
@@ -197,4 +197,3 @@ begin
   end if;
 end;
 $$;
-
