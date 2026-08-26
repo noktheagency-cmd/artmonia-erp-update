@@ -506,6 +506,8 @@ model User {
   revokedAuthSessions              AuthSessionRecord[]             @relation("AuthSessionRevoker")
   createdStudentMobileAccounts     StudentMobileAccount[]          @relation("StudentMobileAccountCreator")
   updatedStudentMobileAccounts     StudentMobileAccount[]          @relation("StudentMobileAccountUpdater")
+  createdAttendanceSites           AttendanceSite[]                @relation("AttendanceSiteCreator")
+  updatedAttendanceSites           AttendanceSite[]                @relation("AttendanceSiteUpdater")
   exports                          DataExport[]                    @relation("ExportRequestedBy")
   createdFinanceExpenses           FinanceExpense[]                @relation("FinanceExpenseCreator")
   employeeFinanceExpenses          FinanceExpense[]                @relation("FinanceExpenseEmployee")
@@ -1504,20 +1506,22 @@ model Student {
 }
 
 model StudentMobileAccount {
-  id               String                     @id @default(uuid()) @db.Uuid
-  studentId        String                     @unique @map("student_id") @db.Uuid
-  authUserId       String                     @unique @map("auth_user_id") @db.Uuid
-  loginEmail       String                     @unique @map("login_email")
-  avatarObjectPath String?                    @map("avatar_object_path")
-  status           StudentMobileAccountStatus @default(INVITED)
-  invitedAt        DateTime                   @default(now()) @map("invited_at")
-  lastInviteSentAt DateTime                   @default(now()) @map("last_invite_sent_at")
-  activatedAt      DateTime?                  @map("activated_at")
-  disabledAt       DateTime?                  @map("disabled_at")
-  createdById      String?                    @map("created_by_id") @db.Uuid
-  updatedById      String?                    @map("updated_by_id") @db.Uuid
-  createdAt        DateTime                   @default(now()) @map("created_at")
-  updatedAt        DateTime                   @updatedAt @map("updated_at")
+  id                   String                     @id @default(uuid()) @db.Uuid
+  studentId            String                     @unique @map("student_id") @db.Uuid
+  authUserId           String                     @unique @map("auth_user_id") @db.Uuid
+  loginEmail           String                     @unique @map("login_email")
+  avatarObjectPath     String?                    @map("avatar_object_path")
+  deviceInstallationId String?                    @unique @map("device_installation_id") @db.Uuid
+  deviceBoundAt        DateTime?                  @map("device_bound_at")
+  status               StudentMobileAccountStatus @default(INVITED)
+  invitedAt            DateTime                   @default(now()) @map("invited_at")
+  lastInviteSentAt     DateTime                   @default(now()) @map("last_invite_sent_at")
+  activatedAt          DateTime?                  @map("activated_at")
+  disabledAt           DateTime?                  @map("disabled_at")
+  createdById          String?                    @map("created_by_id") @db.Uuid
+  updatedById          String?                    @map("updated_by_id") @db.Uuid
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
 
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   createdBy User?   @relation("StudentMobileAccountCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1775,6 +1779,29 @@ model AcademyAnnouncement {
   @@schema("erp")
 }
 
+model AttendanceSite {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  token         String   @unique @db.VarChar(64)
+  locationLabel String?  @map("location_label")
+  isActive      Boolean  @default(true) @map("is_active")
+  rotatedAt     DateTime @default(now()) @map("rotated_at")
+  createdById   String?  @map("created_by_id") @db.Uuid
+  updatedById   String?  @map("updated_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  createdBy      User?                     @relation("AttendanceSiteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      User?                     @relation("AttendanceSiteUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  mobileCheckIns MobileAttendanceCheckIn[]
+
+  @@index([isActive])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("attendance_sites")
+  @@schema("erp")
+}
+
 model AttendanceQrChallenge {
   id          String    @id @default(uuid()) @db.Uuid
   sessionId   String    @map("session_id") @db.Uuid
@@ -1813,12 +1840,14 @@ model MobileAttendanceCheckIn {
   enrollmentId       String?   @map("enrollment_id") @db.Uuid
   sessionId          String?   @map("session_id") @db.Uuid
   challengeId        String?   @map("challenge_id") @db.Uuid
+  attendanceSiteId   String?   @map("attendance_site_id") @db.Uuid
   attendanceRecordId String?   @map("attendance_record_id") @db.Uuid
 
   student          Student?               @relation(fields: [studentId], references: [id], onDelete: SetNull)
   enrollment       Enrollment?            @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   session          SlotSession?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   challenge        AttendanceQrChallenge? @relation(fields: [challengeId], references: [id], onDelete: SetNull)
+  attendanceSite   AttendanceSite?        @relation(fields: [attendanceSiteId], references: [id], onDelete: SetNull)
   attendanceRecord AttendanceRecord?      @relation(fields: [attendanceRecordId], references: [id], onDelete: SetNull)
 
   @@index([erpStudentId, receivedAt(sort: Desc)])
@@ -1827,6 +1856,7 @@ model MobileAttendanceCheckIn {
   @@index([studentId])
   @@index([enrollmentId])
   @@index([challengeId])
+  @@index([attendanceSiteId])
   @@index([attendanceRecordId])
   @@map("mobile_attendance_check_ins")
   @@schema("erp")
@@ -2176,9 +2206,9 @@ model PaymentAllocation {
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@unique([paymentId, invoiceId], map: "payment_allocations_payment_invoice_unique")
   @@index([invoiceId])
   @@index([paymentId])
-  @@unique([paymentId, invoiceId], map: "payment_allocations_payment_invoice_unique")
   @@map("payment_allocations")
   @@schema("erp")
 }

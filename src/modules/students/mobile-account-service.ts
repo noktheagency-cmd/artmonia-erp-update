@@ -203,6 +203,36 @@ export async function setStudentMobileAccountDisabled(input: {
   });
 }
 
+export async function resetStudentMobileDevice(input: {
+  studentId: string;
+  actorId: string;
+}) {
+  const prisma = getPrisma();
+  await prisma.$transaction(async (tx) => {
+    const account = await tx.studentMobileAccount.findUnique({
+      where: { studentId: input.studentId },
+      select: { id: true, deviceInstallationId: true, deviceBoundAt: true },
+    });
+    if (!account) throw new PublicActionError("Tələbənin mobil hesabı tapılmadı.", "NOT_FOUND");
+    await tx.studentMobileAccount.update({
+      where: { id: account.id },
+      data: { deviceInstallationId: null, deviceBoundAt: null, updatedById: input.actorId },
+    });
+    await writeAuditLog(tx, {
+      actorUserId: input.actorId,
+      action: "student.mobile_device.reset",
+      entityType: "student",
+      entityId: input.studentId,
+      before: {
+        wasBound: Boolean(account.deviceInstallationId),
+        deviceBoundAt: account.deviceBoundAt?.toISOString() ?? null,
+      },
+      after: { wasBound: false },
+      reason: "Tələbənin mobil cihaz bağlantısı ERP-dən sıfırlandı",
+    });
+  });
+}
+
 export async function resolveStudentMobileIdentity(accessToken: string) {
   const resolution = await resolveStudentMobileIdentityDetailed(accessToken);
   return resolution.ok ? resolution.identity : null;

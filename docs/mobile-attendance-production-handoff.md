@@ -1,7 +1,7 @@
 # Artmonia Mobile ↔ ERP — production handoff
 
-Tarix: 23 avqust 2026
-Status: ERP attendance və mobil tələbə hesabı inteqrasiyası production üçün hazırlanıb.
+Tarix: 26 avqust 2026
+Status: Daimi ümumi QR v2 inteqrasiyası production üçün hazırlanıb.
 
 ## Mobil developer üçün təsdiqlənmiş məlumatlar
 
@@ -20,7 +20,7 @@ API public HTTPS üzərindən əlçatandır. Hazırda əlavə IP allowlist və V
 2. Mobil tətbiq aşağıdakı deep link formatındakı QR-i oxuyur:
 
    ```text
-   artmonia://attendance/check-in?v=1&token=<OPAQUE_BASE64URL_TOKEN>
+   artmonia://attendance/check-in?v=2&token=<PERMANENT_SITE_TOKEN>
    ```
 
 3. Mobil tətbiq istifadəçi JWT-si və QR məlumatını Supabase Edge Function-a göndərir.
@@ -43,6 +43,7 @@ Content-Type: application/json
 {
   "clientEventId": "<UUID>",
   "qrToken": "<QR-dən oxunan token>",
+  "deviceInstallationId": "<APP_INSTALLATION_UUID>",
   "scannedAt": "<ISO 8601 UTC timestamp>"
 }
 ```
@@ -64,16 +65,20 @@ Server tokenini mobil repository-yə, loglara, analytics-ə və client bundle-a 
 ## ERP biznes qaydaları
 
 - QR token ömrü: 60 saniyə.
-- ERP ekranında QR yenilənməsi: 30 saniyə.
+- Ümumi v2 QR daimidir və çap üçün PNG kimi endirilir; yalnız ERP-də rotasiya ediləndə dəyişir.
+- Dinamik v1 QR fallback token ömrü: 60 saniyə və ekran yenilənməsi 30 saniyə.
 - Check-in pəncərəsi: dərsdən 15 dəqiqə əvvəl başlayır, dərs bitdikdən 30 dəqiqə sonra bağlanır.
 - Eyni tələbənin eyni sessiyaya təkrar skanı ikinci davamiyyət yaratmır.
 - ERP tələbənin aktiv enrollment və həmin dərs slotuna assignment vəziyyətini yoxlayır.
+- ERP `sessionId` qəbul etmir; tələbənin server vaxtında açıq olan `scheduled` və ya `rescheduled` dərsini özü seçir.
+- `cancelled` dərs üçün `LESSON_CANCELLED`, açıq dərs olmadıqda `NO_ACTIVE_LESSON` qaytarılır.
 - Uğurlu skan ERP jurnalında `PRESENT` / “Gəldi” yazır.
 - Pəncərə bağlandıqdan sonra qalan tələbələr avtomatik `ABSENT` / “Gəlmədi” qeyd olunur.
 
 ## Mobil giriş qaydası
 
 - ERP-də hər tələbə üçün maksimum bir Supabase Auth hesabı yaradılır.
+- İlk v2 scan zamanı hesab bir `deviceInstallationId` ilə bağlanır; başqa cihaz `DEVICE_MISMATCH` alır.
 - ERP əməkdaşı parol görmür və təyin etmir; tələbə dəvət linkində parolunu özü yaradır.
 - Mobil tətbiq `signInWithPassword({ email, password })` istifadə edir.
 - Mobil hesab deaktiv ediləndə ERP-yə bütün yeni mobil sorğular dərhal bloklanır.

@@ -17,6 +17,7 @@ import {
   enableStudentMobileAccountAction,
   inviteStudentMobileAccountAction,
   resendStudentMobileInviteAction,
+  resetStudentMobileDeviceAction,
 } from "@/modules/students/mobile-account-actions";
 import {
   completeStudentReminderAction,
@@ -111,6 +112,7 @@ export default async function StudentDetailPage({
         resendAction={resendStudentMobileInviteAction}
         disableAction={disableStudentMobileAccountAction}
         enableAction={enableStudentMobileAccountAction}
+        resetDeviceAction={resetStudentMobileDeviceAction}
       />
 
       <section className="student-detail-section">

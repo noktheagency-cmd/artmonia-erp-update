@@ -6,6 +6,7 @@ export const mobileCheckInBodySchema = z.object({
   erpStudentId: z.string().uuid().optional(),
   clientEventId: z.string().uuid(),
   qrToken: z.string().min(16).max(512).regex(/^[A-Za-z0-9_-]+$/),
+  deviceInstallationId: z.string().uuid().optional(),
   scannedAt: z.string().datetime({ offset: true }),
 }).strict();
 
@@ -16,6 +17,10 @@ export const mobileAttendanceErrorCodes = [
   "STUDENT_NOT_FOUND",
   "STUDENT_NOT_ENROLLED",
   "CHECK_IN_WINDOW_CLOSED",
+  "NO_ACTIVE_LESSON",
+  "LESSON_CANCELLED",
+  "DEVICE_REQUIRED",
+  "DEVICE_MISMATCH",
   "RATE_LIMITED",
   "IDEMPOTENCY_CONFLICT",
   "INTERNAL_ERROR",

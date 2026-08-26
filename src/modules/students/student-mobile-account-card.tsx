@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MailCheck, RefreshCcw, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
+import { MailCheck, RefreshCcw, ShieldCheck, ShieldOff, Smartphone, Unplug } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -26,6 +26,7 @@ export function StudentMobileAccountCard({
   resendAction,
   disableAction,
   enableAction,
+  resetDeviceAction,
 }: {
   studentId: string;
   contactEmail: string;
@@ -35,6 +36,7 @@ export function StudentMobileAccountCard({
   resendAction: AccountAction;
   disableAction: AccountAction;
   enableAction: AccountAction;
+  resetDeviceAction: AccountAction;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -92,6 +94,9 @@ export function StudentMobileAccountCard({
           <>
             <Button type="button" variant="outline" disabled={!canManage || pending || account.status === "DISABLED"} onClick={() => run(resendAction, "Yeni link göndərildi", "Tələbə parolunu yeniləyə bilər.")}>
               <RefreshCcw data-icon="inline-start" /> Linki yenilə
+            </Button>
+            <Button type="button" variant="outline" disabled={!canManage || pending} onClick={() => run(resetDeviceAction, "Mobil cihaz sıfırlandı", "Növbəti ümumi QR scan edən cihaz hesaba bağlanacaq.")}>
+              <Unplug data-icon="inline-start" /> Cihazı sıfırla
             </Button>
             {account.status === "DISABLED" ? (
               <Button type="button" disabled={!canManage || pending} onClick={() => run(enableAction, "Mobil hesab aktiv edildi", "Tələbə yenidən daxil ola bilər.")}>

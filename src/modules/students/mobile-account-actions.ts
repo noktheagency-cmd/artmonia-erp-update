@@ -8,6 +8,7 @@ import { getPrisma } from "@/server/db/prisma";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import {
   inviteStudentMobileAccount,
+  resetStudentMobileDevice,
   resendStudentMobileInvite,
   setStudentMobileAccountDisabled,
 } from "@/modules/students/mobile-account-service";
@@ -53,6 +54,12 @@ async function enableActionImpl(formData: FormData) {
   revalidatePath(`/students/${studentId}`);
 }
 
+async function resetDeviceActionImpl(formData: FormData) {
+  const { actor, studentId } = await requireStudentMobileAccountActor(formData);
+  await resetStudentMobileDevice({ studentId, actorId: actor.id });
+  revalidatePath(`/students/${studentId}`);
+}
+
 export const inviteStudentMobileAccountAction = safeServerAction(
   inviteActionImpl,
   "Mobil hesab yaradıla bilmədi.",
@@ -68,4 +75,8 @@ export const disableStudentMobileAccountAction = safeServerAction(
 export const enableStudentMobileAccountAction = safeServerAction(
   enableActionImpl,
   "Mobil hesab aktiv edilə bilmədi.",
+);
+export const resetStudentMobileDeviceAction = safeServerAction(
+  resetDeviceActionImpl,
+  "Mobil cihaz bağlantısı sıfırlana bilmədi.",
 );

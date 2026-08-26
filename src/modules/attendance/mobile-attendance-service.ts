@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { AttendanceCaptureSource, AttendanceMark, EnrollmentStatus, Prisma, SlotSessionStatus } from "@/generated/prisma/client";
 import { attendanceQrTokenFingerprint, hashAttendanceQrToken } from "@/modules/attendance/attendance-qr-service";
+import { processMobileAttendanceSiteCheckIn } from "@/modules/attendance/attendance-site-check-in-service";
 import { attendanceWindowState, buildAttendanceWindow, formatBakuIso } from "@/modules/attendance/attendance-time";
 import type {
   MobileAttendanceErrorCode,
@@ -30,6 +31,14 @@ export async function processMobileAttendanceCheckIn(
   const tokenHash = hashAttendanceQrToken(input.qrToken);
   const tokenFingerprint = attendanceQrTokenFingerprint(input.qrToken);
   const env = getEnv();
+
+  const attendanceSite = await prisma.attendanceSite.findUnique({
+    where: { token: input.qrToken },
+    select: { id: true },
+  });
+  if (attendanceSite) {
+    return processMobileAttendanceSiteCheckIn(input, metadata);
+  }
 
   return prisma.$transaction(async (tx) => {
     const lockKeys = [metadata.idempotencyKey, input.clientEventId].sort();
@@ -299,6 +308,7 @@ function buildMobileCheckInRequestHash(input: MobileCheckInInput) {
     clientEventId: input.clientEventId,
     qrTokenHash: hashAttendanceQrToken(input.qrToken),
     scannedAt: input.scannedAt,
+    deviceInstallationId: input.deviceInstallationId ?? null,
   })).digest("hex");
 }
 

@@ -62,6 +62,7 @@ import {
 import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
 import { SlotDetailDialog } from "@/modules/groups/slot-detail-dialog";
 import { AttendanceQrDialog } from "@/modules/groups/attendance-qr-dialog";
+import { AttendanceSiteQrDialog } from "@/modules/groups/attendance-site-qr-dialog";
 import styles from "./planner.module.css";
 
 type PlannerActions = {
@@ -172,6 +173,7 @@ export function PlannerWorkspace({
   const [assignmentEnrollmentId, setAssignmentEnrollmentId] = useState<string>();
   const [attendanceOpen, setAttendanceOpen] = useState(initialAttendanceOpen);
   const [attendanceQrOpen, setAttendanceQrOpen] = useState(false);
+  const [attendanceSiteQrOpen, setAttendanceSiteQrOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
 
   const teacherSlotStyles = useMemo(
@@ -280,6 +282,11 @@ export function PlannerWorkspace({
       ) : null}
 
       <div className={styles.filterBand}>
+        {data.canManage ? (
+          <Button type="button" onClick={() => setAttendanceSiteQrOpen(true)}>
+            <QrCode data-icon="inline-start" /> Ümumi QR
+          </Button>
+        ) : null}
         <FilterSelect
           label="Müəllim"
           value={teacherFilter}
@@ -394,7 +401,7 @@ export function PlannerWorkspace({
                         disabled={!selectedSlot.teacherId}
                         title={!selectedSlot.teacherId ? "Əvvəlcə slota müəllim təyin edin" : undefined}
                       >
-                        <QrCode data-icon="inline-start" /> QR aç
+                        <QrCode data-icon="inline-start" /> Dinamik QR
                       </Button>
                       <Button
                         type="button"
@@ -549,6 +556,10 @@ export function PlannerWorkspace({
             router.refresh();
           }}
         />
+      ) : null}
+
+      {attendanceSiteQrOpen && data.canManage ? (
+        <AttendanceSiteQrDialog onClose={() => setAttendanceSiteQrOpen(false)} />
       ) : null}
     </section>
   );

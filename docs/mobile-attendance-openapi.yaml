@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Mobile Attendance API
-  version: 1.0.0
+  version: 2.0.0
 servers:
-  - url: https://development.example.com
-    description: Development; replace with the provisioned ERP URL
+  - url: https://erp.artmoniya.com
+    description: Production ERP
 paths:
   /api/mobile/v1/attendance/check-ins:
     post:
       operationId: createMobileAttendanceCheckIn
-      summary: Record attendance from a mobile QR scan
+      summary: Record attendance from a dynamic v1 or permanent site v2 QR scan
+      description: For a v2 site QR, deviceInstallationId is required and ERP resolves the student's current lesson server-side.
       security:
         - serverToken: []
           studentToken: []
@@ -79,6 +80,10 @@ components:
           minLength: 16
           maxLength: 512
           pattern: '^[A-Za-z0-9_-]+$'
+        deviceInstallationId:
+          type: string
+          format: uuid
+          description: Required for permanent v2 site QR. Persist one UUID per physical app installation.
         scannedAt: { type: string, format: date-time }
     Lesson:
       type: object
@@ -100,6 +105,17 @@ components:
           enum: [checked_in, already_checked_in]
         message: { type: string }
         requestId: { type: string, format: uuid }
+        mode:
+          type: string
+          enum: [site_qr]
+          description: Present only for a permanent v2 site QR check-in.
+        site:
+          type: object
+          description: Present only for a permanent v2 site QR check-in.
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            location: { type: [string, 'null'] }
         lesson: { $ref: '#/components/schemas/Lesson' }
         attendance:
           type: object
