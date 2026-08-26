@@ -213,6 +213,7 @@ export type StudentListData = {
       billingPaused: string;
       paymentDefaultAmount: string;
       paymentDefaultDate: string;
+      paymentDefaultMonth: string;
       monthlyFee: string;
       invoices: Array<{
         id: string;
@@ -706,6 +707,9 @@ export async function getStudentListData(
           billingPaused: student.billingPaused ? "Dayandırılıb" : "Aktivdir",
           paymentDefaultAmount: defaultPaymentAmount,
           paymentDefaultDate: formatDateInput(new Date()),
+          paymentDefaultMonth: formatDateInput(
+            student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
+          ).slice(0, 7),
           monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
           invoices: student.invoices.map((invoice) => {
             const status = invoiceStatusMeta[invoice.status];
@@ -2851,6 +2855,9 @@ export async function getStudentDetailData(studentId: string) {
         reminders,
         paymentDefaultAmount: defaultPaymentAmount,
         paymentDefaultDate: formatDateInput(new Date()),
+        paymentDefaultMonth: formatDateInput(
+          student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
+        ).slice(0, 7),
         monthlyFee: formatNonNegativeDecimalInput(student.monthlyFee),
         monthlyFeeLabel: student.monthlyFee === null || student.monthlyFee === undefined
           ? "Təyin edilməyib"

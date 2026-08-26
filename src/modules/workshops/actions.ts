@@ -105,6 +105,7 @@ const updateEventSchema = eventSchema.extend({ eventId: z.string().uuid() });
 
 const participantSchema = z.object({
   eventId: z.string().uuid(),
+  registeredAt: z.string().trim().min(1).max(20),
   studentId: optionalUuid,
   fullName: optionalText(140),
   phone: optionalText(40),
@@ -407,6 +408,7 @@ async function deleteOrCancelWorkshopEventActionImpl(formData: FormData) {
 async function assignWorkshopParticipantActionImpl(formData: FormData) {
   const actor = await requireMutationActor("workshop.manage");
   const input = participantSchema.parse(Object.fromEntries(formData));
+  const registeredAt = parseDateInput(input.registeredAt, "Qeydiyyat tarixi");
   const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
 
@@ -474,6 +476,7 @@ async function assignWorkshopParticipantActionImpl(formData: FormData) {
         isDiscounted: !input.isGift && discountAmount > 0,
         isGift: input.isGift,
         note: input.note ?? null,
+        assignedAt: registeredAt,
         assignedById: actor.id,
       },
     });
@@ -484,7 +487,7 @@ async function assignWorkshopParticipantActionImpl(formData: FormData) {
           eventId: event.id,
           participantId: participant.id,
           amount: advance,
-          paidAt: new Date(),
+          paidAt: registeredAt,
           method: input.paymentMethod as PaymentMethod,
           payerName: input.payerName ?? fullName,
           receiptFileName: receipt?.fileName ?? null,
@@ -1103,6 +1106,7 @@ function participantAuditJson(participant: {
   eventId: string;
   studentId: string | null;
   fullName: string;
+  assignedAt: Date;
   listPrice: Prisma.Decimal;
   amountPaid: Prisma.Decimal;
   discountAmount: Prisma.Decimal;
@@ -1113,6 +1117,7 @@ function participantAuditJson(participant: {
     eventId: participant.eventId,
     studentId: participant.studentId,
     fullName: participant.fullName,
+    assignedAt: participant.assignedAt.toISOString(),
     listPrice: toNumber(participant.listPrice),
     amountPaid: toNumber(participant.amountPaid),
     discountAmount: toNumber(participant.discountAmount),

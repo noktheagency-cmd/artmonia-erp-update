@@ -28,7 +28,11 @@ import {
 import {
   clearStudentPaymentSchedules,
 } from "@/modules/students/payment-schedule-service";
-import { ensureMissingStudentMonthlyInvoices } from "@/modules/students/monthly-invoice-service";
+import {
+  ensureMissingStudentMonthlyInvoices,
+  ensureStudentMonthlyInvoicesForPeriod,
+} from "@/modules/students/monthly-invoice-service";
+import { parseBillingMonthInput } from "@/modules/students/payment-billing-period";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
@@ -203,6 +207,7 @@ const recordFinancePaymentSchema = z.object({
   studentId: z.string().uuid(),
   amount: requiredAmount,
   paidDate: z.string().trim().min(1).max(20),
+  billingMonth: z.string().trim().regex(/^\d{4}-\d{2}$/, "Aid olduğu ay düzgün seçilməyib."),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
   scheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
   payerName: optionalText(120),
@@ -267,10 +272,10 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
   const input = recordFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
-  const paymentMonth = startOfMonth(paidAt);
+  const paymentMonth = parseBillingMonthInput(input.billingMonth, paidAt);
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx) => {
+  const effectivePaymentMonth = await prisma.$transaction(async (tx) => {
     const paymentResult = await createPaymentAndAllocate(tx, {
       studentId: input.studentId,
       amount: input.amount,
@@ -295,9 +300,11 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
       after: toPaymentAuditJson(paymentResult),
       reason: input.note ?? `${paymentResult.studentCode} üçün ödəniş qəbul edildi`,
     });
+
+    return paymentResult.payment.paymentMonth;
   });
 
-  await recalculateTeacherPayoutsForMonth(paymentMonth, actor.id);
+  await recalculateTeacherPayoutsForMonth(effectivePaymentMonth, actor.id);
 
   invalidateFinanceCaches();
   return {
@@ -410,10 +417,10 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
   const input = updateFinancePaymentSchema.parse(Object.fromEntries(formData));
   const receipt = await persistReceiptFile(formData.get("receiptFile"));
   const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
-  const paymentMonth = startOfMonth(paidAt);
+  const requestedPaymentMonth = parseBillingMonthInput(input.billingMonth, paidAt);
   const prisma = getPrisma();
 
-  const previousPaymentMonth = await prisma.$transaction(async (tx) => {
+  const paymentMonths = await prisma.$transaction(async (tx) => {
     const existing = await tx.payment.findUnique({
       where: { id: input.paymentId },
       select: {
@@ -439,6 +446,21 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
 
     await reversePaymentAllocations(tx, existing.id);
     await clearStudentPaymentSchedules(tx, [existing.studentId]);
+
+    const paymentMonth = input.scheduleType === "MONTHLY"
+      ? await ensureStudentMonthlyInvoicesForPeriod(tx, {
+          studentId: existing.studentId,
+          requestedPeriodMonth: requestedPaymentMonth,
+          asOfDate: paidAt,
+        })
+      : requestedPaymentMonth;
+
+    if (input.scheduleType === "ONE_TIME") {
+      await ensureMissingStudentMonthlyInvoices(tx, {
+        studentId: existing.studentId,
+        throughDate: paidAt,
+      });
+    }
 
     const payment = await tx.payment.update({
       where: { id: existing.id },
@@ -471,7 +493,8 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
       paymentId: payment.id,
       studentId: payment.studentId,
       amount: input.amount,
-      paidAt,
+      paymentMonth,
+      scheduleType: input.scheduleType,
     });
 
     await writeAuditLog(tx, {
@@ -501,11 +524,16 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
       } satisfies Prisma.InputJsonValue,
       reason: input.note ?? "Ödəniş düzəliş edildi",
     });
-    return existing.paymentMonth;
+    return {
+      previous: existing.paymentMonth,
+      current: payment.paymentMonth,
+    };
   });
 
-  await recalculateTeacherPayoutsForMonth(previousPaymentMonth, actor.id);
-  if (previousPaymentMonth.getTime() !== paymentMonth.getTime()) await recalculateTeacherPayoutsForMonth(paymentMonth, actor.id);
+  await recalculateTeacherPayoutsForMonth(paymentMonths.previous, actor.id);
+  if (paymentMonths.previous.getTime() !== paymentMonths.current.getTime()) {
+    await recalculateTeacherPayoutsForMonth(paymentMonths.current, actor.id);
+  }
 
   invalidateFinanceCaches();
   return {
@@ -787,7 +815,8 @@ async function allocateExistingPayment(
     paymentId: string;
     studentId: string;
     amount: number;
-    paidAt: Date;
+    paymentMonth: Date;
+    scheduleType: StudentPaymentScheduleType;
   }
 ) {
   const invoices = await tx.invoice.findMany({
@@ -795,6 +824,7 @@ async function allocateExistingPayment(
       studentId: input.studentId,
       status: { not: InvoiceStatus.VOID },
       balanceDue: { gt: 0 },
+      ...(input.scheduleType === "MONTHLY" ? { periodMonth: input.paymentMonth } : {}),
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     select: {
@@ -804,6 +834,26 @@ async function allocateExistingPayment(
       dueDate: true,
     },
   });
+  const openBalance = roundMoney(
+    invoices.reduce((total, invoice) => total + toNumber(invoice.balanceDue), 0),
+  );
+
+  if (input.scheduleType === "MONTHLY" && openBalance <= 0) {
+    throw new PublicActionError(
+      "Seçilmiş ay üzrə açıq faktura yoxdur. Aid olduğu ayı yoxlayın.",
+    );
+  }
+
+  if (input.scheduleType === "MONTHLY" && input.amount > openBalance) {
+    throw new PublicActionError(
+      "Aylıq ödəniş seçilmiş ayın açıq balansından çox ola bilməz. Artıq məbləğ üçün ayrıca gələcək ay seçin.",
+    );
+  }
+
+  if (input.scheduleType === "ONE_TIME" && input.amount < openBalance) {
+    throw new PublicActionError("Birdəfəlik tam ödəniş açıq balansdan az ola bilməz.");
+  }
+
   let remainingAmount = input.amount;
   const allocations: Array<{ invoiceId: string; amount: number }> = [];
 
@@ -813,7 +863,8 @@ async function allocateExistingPayment(
     }
 
     const currentBalance = toNumber(invoice.balanceDue);
-    const amountAllocated = Math.min(currentBalance, remainingAmount);
+    const amountAllocated = roundMoney(Math.min(currentBalance, remainingAmount));
+    if (amountAllocated <= 0) continue;
     const nextBalance = roundMoney(currentBalance - amountAllocated);
 
     await tx.paymentAllocation.create({
@@ -821,7 +872,9 @@ async function allocateExistingPayment(
         paymentId: input.paymentId,
         invoiceId: invoice.id,
         amountAllocated,
-        mode: PaymentAllocationMode.OLDEST_FIRST,
+        mode: input.scheduleType === "MONTHLY"
+          ? PaymentAllocationMode.SELECTED_INVOICE
+          : PaymentAllocationMode.OLDEST_FIRST,
       },
     });
 
@@ -877,10 +930,20 @@ async function createPaymentAndAllocate(
     );
   }
 
-  await ensureMissingStudentMonthlyInvoices(tx, {
-    studentId: input.studentId,
-    throughDate: input.paidAt,
-  });
+  const paymentMonth = input.scheduleType === "MONTHLY"
+    ? await ensureStudentMonthlyInvoicesForPeriod(tx, {
+        studentId: input.studentId,
+        requestedPeriodMonth: input.paymentMonth,
+        asOfDate: input.paidAt,
+      })
+    : input.paymentMonth;
+
+  if (input.scheduleType === "ONE_TIME") {
+    await ensureMissingStudentMonthlyInvoices(tx, {
+      studentId: input.studentId,
+      throughDate: input.paidAt,
+    });
+  }
 
   const student = await tx.student.findUnique({
     where: { id: input.studentId },
@@ -892,6 +955,7 @@ async function createPaymentAndAllocate(
         where: {
           status: { not: InvoiceStatus.VOID },
           balanceDue: { gt: 0 },
+          ...(input.scheduleType === "MONTHLY" ? { periodMonth: paymentMonth } : {}),
         },
         orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
         select: {
@@ -927,6 +991,19 @@ async function createPaymentAndAllocate(
     );
   }
 
+
+  if (input.scheduleType === "MONTHLY" && openBalance <= 0) {
+    throw new PublicActionError(
+      "Seçilmiş ay üzrə açıq faktura yoxdur. Aid olduğu ayı yoxlayın.",
+    );
+  }
+
+  if (input.scheduleType === "MONTHLY" && input.amount > openBalance) {
+    throw new PublicActionError(
+      "Aylıq ödəniş seçilmiş ayın açıq balansından çox ola bilməz. Artıq məbləğ üçün ayrıca gələcək ay seçin.",
+    );
+  }
+
   let invoices = student.invoices;
   if (input.scheduleType === "ONE_TIME" && input.amount > openBalance) {
     const oneTimeAmount = roundMoney(input.amount - openBalance);
@@ -936,7 +1013,7 @@ async function createPaymentAndAllocate(
       create: {
         studentId: student.id,
         enrollmentId: student.enrollments[0]?.id ?? null,
-        periodMonth: input.paymentMonth,
+        periodMonth: paymentMonth,
         issueDate: input.paidAt,
         dueDate: input.paidAt,
         amount: oneTimeAmount,
@@ -956,7 +1033,7 @@ async function createPaymentAndAllocate(
       studentId: student.id,
       amount: input.amount,
       paidAt: input.paidAt,
-      paymentMonth: input.paymentMonth,
+      paymentMonth,
       nextPaymentAt: null,
       scheduleType: input.scheduleType,
       method: input.method as PaymentMethod,
@@ -991,7 +1068,8 @@ async function createPaymentAndAllocate(
     }
 
     const currentBalance = toNumber(invoice.balanceDue);
-    const amountAllocated = Math.min(currentBalance, remainingAmount);
+    const amountAllocated = roundMoney(Math.min(currentBalance, remainingAmount));
+    if (amountAllocated <= 0) continue;
     const nextBalance = roundMoney(currentBalance - amountAllocated);
 
     await tx.paymentAllocation.create({
@@ -999,7 +1077,9 @@ async function createPaymentAndAllocate(
         paymentId: payment.id,
         invoiceId: invoice.id,
         amountAllocated,
-        mode: PaymentAllocationMode.OLDEST_FIRST,
+        mode: input.scheduleType === "MONTHLY"
+          ? PaymentAllocationMode.SELECTED_INVOICE
+          : PaymentAllocationMode.OLDEST_FIRST,
       },
     });
 

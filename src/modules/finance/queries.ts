@@ -142,6 +142,7 @@ export type FinanceData = {
     balance: string;
     defaultAmount: string;
     defaultPaymentDate: string;
+    defaultPaymentMonth: string;
   }>;
   staff: Array<{
     id: string;
@@ -171,6 +172,7 @@ export type FinanceData = {
     dateKey: string;
     paidDateValue: string;
     paymentMonth: string;
+    paymentMonthValue: string;
     scheduleTypeValue: string;
     methodValue: string;
     method: string;
@@ -345,6 +347,7 @@ type PaymentRow = {
   dateKey: string;
   paidDateValue: string;
   paymentMonth: string;
+  paymentMonthValue: string;
   scheduleType: string;
   method: string;
   receiptFileName: string | null;
@@ -962,6 +965,7 @@ export async function getFinanceData(
           when p.schedule_type = 'ONE_TIME'::"erp"."PaymentScheduleType" then 'Birdəfəlik'
           else to_char(p.payment_month, 'MM.YYYY')
         end as "paymentMonth",
+        to_char(p.payment_month, 'YYYY-MM') as "paymentMonthValue",
         p.schedule_type::text as "scheduleType",
         p.method::text as "method",
         p.receipt_file_name as "receiptFileName",
@@ -1424,6 +1428,9 @@ export async function getFinanceData(
         balance: formatAmount(balance),
         defaultAmount: formatDecimalInput(fallbackAmount),
         defaultPaymentDate: formatDateInput(today),
+        defaultPaymentMonth: formatDateInput(
+          student.nextDueDate ? new Date(student.nextDueDate) : today,
+        ).slice(0, 7),
       };
     }),
     staff: staffRows.map((staff) => ({
@@ -1455,6 +1462,7 @@ export async function getFinanceData(
       dateKey: payment.dateKey,
       paidDateValue: payment.paidDateValue,
       paymentMonth: payment.paymentMonth,
+      paymentMonthValue: payment.paymentMonthValue,
       scheduleTypeValue: payment.scheduleType,
       methodValue: payment.method,
       method: getStudentPaymentMethodLabel(payment.method),
@@ -1479,6 +1487,7 @@ export async function getFinanceData(
         dateKey: payment.dateKey,
         paidDateValue: payment.paidDateValue,
         paymentMonth: "Tədbirlər (Workshop / Masterclass)",
+        paymentMonthValue: "",
         scheduleTypeValue: "ONE_TIME",
         methodValue: payment.method,
         method: getStudentPaymentMethodLabel(payment.method),
@@ -1840,7 +1849,8 @@ async function getLimitedFinanceData({
         contact: { select: { fullName: true, phoneDisplay: true } },
         invoices: {
           where: { status: { not: "VOID" }, balanceDue: { gt: 0 } },
-          select: { balanceDue: true },
+          orderBy: [{ dueDate: "asc" }],
+          select: { balanceDue: true, dueDate: true },
         },
         enrollments: {
           orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
@@ -1920,6 +1930,9 @@ async function getLimitedFinanceData({
         balance: balance > 0 ? formatAmount(balance) : "Açıq borc yoxdur",
         defaultAmount: formatDecimalInput(fallbackAmount),
         defaultPaymentDate: formatDateInput(today),
+        defaultPaymentMonth: formatDateInput(
+          student.invoices[0]?.dueDate ?? today,
+        ).slice(0, 7),
       };
     }),
     staff: [],

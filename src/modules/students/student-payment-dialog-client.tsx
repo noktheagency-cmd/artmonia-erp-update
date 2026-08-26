@@ -129,6 +129,7 @@ export function StudentPaymentDialogClient({
                 selectedStudent.id,
                 selectedStudent.detail.paymentDefaultAmount,
                 selectedStudent.detail.paymentDefaultDate,
+                selectedStudent.detail.paymentDefaultMonth,
               ].join(":")}
               student={selectedStudent}
             />
@@ -175,6 +176,7 @@ export function StudentPaymentDialogClient({
 function PaymentScheduleFields({ student }: { student: StudentRow }) {
   const [amount, setAmount] = useState(student.detail.paymentDefaultAmount);
   const [paidDate, setPaidDate] = useState(student.detail.paymentDefaultDate);
+  const [billingMonth, setBillingMonth] = useState(student.detail.paymentDefaultMonth);
 
   return (
     <div className="student-payment-schedule-grid">
@@ -186,6 +188,16 @@ function PaymentScheduleFields({ student }: { student: StudentRow }) {
           placeholder="0.00"
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
+          required
+        />
+      </label>
+      <label className="form-field">
+        <span>Aid olduğu ay</span>
+        <Input
+          name="billingMonth"
+          type="month"
+          value={billingMonth}
+          onChange={(event) => setBillingMonth(event.target.value)}
           required
         />
       </label>

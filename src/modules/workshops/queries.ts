@@ -1045,7 +1045,7 @@ function mapParticipantRow(row: ParticipantDbRow): WorkshopParticipantRow {
     paymentTone: presentation.tone,
     isGift: row.isGift,
     note: row.note ?? "",
-    assignedAt: formatDateTime(row.assignedAt),
+    assignedAt: formatDisplayDate(row.assignedAt),
     cancelledAt: row.cancelledAt ? formatDateTime(row.cancelledAt) : "",
   };
 }

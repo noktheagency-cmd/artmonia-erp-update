@@ -5,6 +5,7 @@ import {
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
 import { toNumber } from "@/modules/shared/format";
+import { billingDateForMonth } from "@/modules/students/payment-billing-period";
 
 export function isBillingPausedStatus(status: StudentLifecycleStatus) {
   switch (status) {
@@ -154,6 +155,7 @@ export async function syncActivationBilling(
       student: {
         select: {
           originalFirstLessonAt: true,
+          billingAnchorDate: true,
         },
       },
     },
@@ -170,16 +172,21 @@ export async function syncActivationBilling(
   const currentFirstLessonAt = input.isReactivation
     ? input.effectiveAt
     : enrollment.firstLessonAt ?? input.effectiveAt;
+  const billingAnchorDate = enrollment.student.billingAnchorDate ?? originalFirstLessonAt;
 
-  await tx.student.updateMany({
-    where: {
-      id: input.studentId,
-      originalFirstLessonAt: null,
-    },
-    data: {
-      originalFirstLessonAt,
-    },
-  });
+  if (!enrollment.student.originalFirstLessonAt) {
+    await tx.student.updateMany({
+      where: { id: input.studentId, originalFirstLessonAt: null },
+      data: { originalFirstLessonAt },
+    });
+  }
+
+  if (!enrollment.student.billingAnchorDate) {
+    await tx.student.updateMany({
+      where: { id: input.studentId, billingAnchorDate: null },
+      data: { billingAnchorDate },
+    });
+  }
 
   await tx.enrollment.update({
     where: { id: enrollment.id },
@@ -194,11 +201,13 @@ export async function syncActivationBilling(
     },
   });
 
+  const periodMonth = startOfMonth(input.effectiveAt);
+  const dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
   const existingInvoice = await tx.invoice.findFirst({
     where: {
       studentId: input.studentId,
       status: { not: InvoiceStatus.VOID },
-      periodMonth: startOfMonth(input.effectiveAt),
+      periodMonth,
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     select: {
@@ -214,12 +223,12 @@ export async function syncActivationBilling(
       where: { id: existingInvoice.id },
       data: {
         enrollmentId: existingInvoice.enrollmentId ?? enrollment.id,
-        periodMonth: startOfMonth(input.effectiveAt),
-        dueDate: input.effectiveAt,
+        periodMonth,
+        dueDate,
         status: resolveInvoiceStatus({
           amount: toNumber(existingInvoice.amount),
           balanceDue: toNumber(existingInvoice.balanceDue),
-          dueDate: input.effectiveAt,
+          dueDate,
         }),
       },
     });
@@ -228,6 +237,7 @@ export async function syncActivationBilling(
       previousFirstLessonAt: enrollment.firstLessonAt,
       currentFirstLessonAt,
       originalFirstLessonAt,
+      billingAnchorDate,
       reactivated: Boolean(input.isReactivation),
     };
   }
@@ -238,17 +248,17 @@ export async function syncActivationBilling(
     data: {
       studentId: input.studentId,
       enrollmentId: enrollment.id,
-      periodMonth: startOfMonth(input.effectiveAt),
-      issueDate: input.effectiveAt,
-      dueDate: input.effectiveAt,
+      periodMonth,
+      issueDate: dueDate,
+      dueDate,
       amount,
       balanceDue: amount,
       status: resolveInvoiceStatus({
         amount,
         balanceDue: amount,
-        dueDate: input.effectiveAt,
+        dueDate,
       }),
-      idempotencyKey: `student-activation-${input.studentCode}-${startOfMonth(input.effectiveAt).toISOString().slice(0, 10)}`,
+      idempotencyKey: `student-activation-${input.studentCode}-${periodMonth.toISOString().slice(0, 10)}`,
     },
   });
 
@@ -257,6 +267,7 @@ export async function syncActivationBilling(
     previousFirstLessonAt: enrollment.firstLessonAt,
     currentFirstLessonAt,
     originalFirstLessonAt,
+    billingAnchorDate,
     reactivated: Boolean(input.isReactivation),
   };
 }

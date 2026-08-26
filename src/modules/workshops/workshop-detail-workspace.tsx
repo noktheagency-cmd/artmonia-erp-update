@@ -396,6 +396,7 @@ function ParticipantDialog({ data, action, autoOpen = false }: { data: WorkshopD
           <Field><FieldLabel htmlFor="participant-name">Ad və soyad</FieldLabel><Input id="participant-name" name="fullName" /></Field>
           <Field><FieldLabel htmlFor="participant-phone">Telefon</FieldLabel><Input id="participant-phone" name="phone" /></Field>
           <Field><FieldLabel htmlFor="participant-email">Email</FieldLabel><Input id="participant-email" name="email" type="email" /></Field>
+          <Field><FieldLabel>Qeydiyyat tarixi</FieldLabel><DatePicker name="registeredAt" defaultValue={data.defaultDate} required allowClear={false} popoverPlacement="floating" /></Field>
           <Field><FieldLabel htmlFor="participant-price">Siyahı qiyməti</FieldLabel><Input id="participant-price" name="listPrice" defaultValue={data.event.entryPriceInput} inputMode="decimal" /></Field>
           <Field><FieldLabel htmlFor="participant-discount">Endirim</FieldLabel><Input id="participant-discount" name="discountAmount" defaultValue="0" inputMode="decimal" /></Field>
           <Field><FieldLabel htmlFor="participant-advance">Avans məbləği</FieldLabel><Input id="participant-advance" name="advanceAmount" defaultValue="0" inputMode="decimal" /></Field>

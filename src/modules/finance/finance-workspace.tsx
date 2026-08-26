@@ -597,6 +597,7 @@ function PaymentDialog({
   const [values, setValues] = useState({
     amount: "",
     paidDate: data.students[0]?.defaultPaymentDate ?? "",
+    billingMonth: data.students[0]?.defaultPaymentMonth ?? "",
     payerName: "",
   });
 
@@ -610,6 +611,7 @@ function PaymentDialog({
         ...current,
         amount: student.defaultAmount,
         paidDate: student.defaultPaymentDate,
+        billingMonth: student.defaultPaymentMonth,
         payerName: student.name,
       }));
     }
@@ -657,7 +659,7 @@ function PaymentDialog({
           <div>
             <DialogTitle>Ödəniş qəbul et</DialogTitle>
             <DialogDescription>
-              Tələbəni seç, qəbzi əlavə et və məbləği açıq fakturalara avtomatik bölüşdür.
+              Tələbəni, əməliyyat tarixini və ödənişin aid olduğu ayı ayrıca qeyd et.
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -758,6 +760,19 @@ function PaymentDialog({
                 <FormSelect name="method" defaultValue="CASH" options={studentPaymentMethodOptions} />
               </label>
             </div>
+            <label className="form-field">
+              <span>Aid olduğu ay</span>
+              <Input
+                name="billingMonth"
+                type="month"
+                value={values.billingMonth}
+                onChange={(event) => setValues((current) => ({
+                  ...current,
+                  billingMonth: event.target.value,
+                }))}
+                required
+              />
+            </label>
             <div className="field-grid">
               <label className="form-field">
                 <span>Ödəyən şəxs</span>
@@ -788,7 +803,7 @@ function PaymentDialog({
             </label>
             <div className="finance-allocation-note">
               <AlertTriangle size={14} aria-hidden="true" />
-              Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmayacaq.
+              Aylıq ödəniş yalnız seçilmiş ayın fakturasına yazılır; əməliyyat tarixi billing ayını dəyişmir.
             </div>
           </section>
 
@@ -1884,7 +1899,7 @@ function PaymentLedger({
               <th>Ödəyən</th>
               <th>Məbləğ</th>
               <th>Tarix</th>
-              <th>Növbəti ödəniş</th>
+              <th>Aid olduğu ay</th>
               <th>Ödəniş üsulu</th>
               <th>Qəbz</th>
               <th>Qeyd</th>
@@ -2058,6 +2073,15 @@ function PaymentCrudActions({
                 />
               </label>
             </div>
+            <label className="form-field">
+              <span>Aid olduğu ay</span>
+              <Input
+                name="billingMonth"
+                type="month"
+                defaultValue={payment.paymentMonthValue}
+                required
+              />
+            </label>
             <div className="field-grid">
               <label className="form-field">
                 <span>Ödəyən şəxs</span>

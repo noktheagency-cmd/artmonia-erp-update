@@ -31,10 +31,24 @@ test("Owner can read and manage role permissions by default", () => {
   assert.equal(permissions.has("playbook.guideline.read"), false);
 });
 
-test("Sales representatives can register CRM leads as students by default", () => {
+test("Sales representatives can register students and accept their payments by default", () => {
   const permissions = getPermissionsForRoles([AppRole.SALES]);
+  const paymentCreateDefinition = permissionDefinitions.find(
+    ({ code }) => code === "billing.payment.create",
+  );
+
   assert.equal(permissions.get("crm.lead.convert"), "ALL");
   assert.equal(permissions.get("student.create"), "ALL");
+  assert.equal(permissions.get("billing.payment.create"), "ALL");
+  assert.equal(permissions.has("billing.payment.read"), false);
+  assert.equal(permissions.has("billing.entry.create"), false);
+  assert.equal(paymentCreateDefinition?.module, "students");
+  assert.equal(
+    paymentCreateDefinition && "dependsOn" in paymentCreateDefinition
+      ? paymentCreateDefinition.dependsOn
+      : null,
+    null,
+  );
 });
 
 test("Guideline access defaults to Super Admin only", () => {

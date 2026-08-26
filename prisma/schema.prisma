@@ -2178,6 +2178,7 @@ model PaymentAllocation {
 
   @@index([invoiceId])
   @@index([paymentId])
+  @@unique([paymentId, invoiceId], map: "payment_allocations_payment_invoice_unique")
   @@map("payment_allocations")
   @@schema("erp")
 }

@@ -1,8 +1,13 @@
 import {
+  EnrollmentStatus,
   InvoiceStatus,
   Prisma,
 } from "@/generated/prisma/client";
 import { toNumber } from "@/modules/shared/format";
+import {
+  billingDateForMonth,
+  resolvePaymentBillingPeriod,
+} from "@/modules/students/payment-billing-period";
 
 type MissingMonthlyInvoiceRow = {
   studentId: string;
@@ -13,6 +18,115 @@ type MissingMonthlyInvoiceRow = {
   amount: unknown;
   balanceDue: unknown;
 };
+
+/**
+ * Ensures only the explicitly selected billing period exists.
+ *
+ * This is intentionally different from the historical gap backfill above:
+ * recording a July payment must never make an August invoice look paid, and it
+ * must not invent every older historical invoice either.
+ */
+export async function ensureStudentMonthlyInvoicesForPeriod(
+  tx: Prisma.TransactionClient,
+  input: {
+    studentId: string;
+    requestedPeriodMonth: Date;
+    asOfDate: Date;
+  },
+) {
+  const student = await tx.student.findUnique({
+    where: { id: input.studentId },
+    select: {
+      code: true,
+      billingAnchorDate: true,
+      enrollments: {
+        where: {
+          status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+        },
+        orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          monthlyFee: true,
+        },
+      },
+    },
+  });
+
+  if (!student) throw new Error("Tələbə tapılmadı");
+  if (!student.billingAnchorDate) {
+    throw new Error("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
+  }
+  if (student.enrollments.length === 0) {
+    throw new Error("Ödəniş üçün aktiv tədris paketi tapılmadı");
+  }
+
+  const periodMonth = resolvePaymentBillingPeriod({
+    requestedMonth: input.requestedPeriodMonth,
+    billingAnchorDate: student.billingAnchorDate,
+  });
+  const dueDate = billingDateForMonth(periodMonth, student.billingAnchorDate);
+
+  for (const enrollment of student.enrollments) {
+    const existing = await tx.invoice.findFirst({
+      where: {
+        studentId: input.studentId,
+        enrollmentId: enrollment.id,
+        periodMonth,
+        status: { not: InvoiceStatus.VOID },
+      },
+      orderBy: [{ createdAt: "asc" }],
+      select: {
+        id: true,
+        amount: true,
+        balanceDue: true,
+        dueDate: true,
+      },
+    });
+
+    if (existing) {
+      const amount = toNumber(existing.amount);
+      const balanceDue = toNumber(existing.balanceDue);
+      const status = resolveInvoiceStatus({
+        amount,
+        balanceDue,
+        dueDate,
+        today: input.asOfDate,
+      });
+
+      if (existing.dueDate.getTime() !== dueDate.getTime()) {
+        await tx.invoice.update({
+          where: { id: existing.id },
+          data: { dueDate, status },
+        });
+      }
+      continue;
+    }
+
+    const amount = toNumber(enrollment.monthlyFee);
+    if (amount <= 0) continue;
+
+    await tx.invoice.create({
+      data: {
+        studentId: input.studentId,
+        enrollmentId: enrollment.id,
+        periodMonth,
+        issueDate: dueDate,
+        dueDate,
+        amount,
+        balanceDue: amount,
+        status: resolveInvoiceStatus({
+          amount,
+          balanceDue: amount,
+          dueDate,
+          today: input.asOfDate,
+        }),
+        idempotencyKey: `student-period-${student.code}-${enrollment.id}-${periodMonth.toISOString().slice(0, 10)}`,
+      },
+    });
+  }
+
+  return periodMonth;
+}
 
 /**
  * Materializes monthly invoice gaps before a payment is allocated.

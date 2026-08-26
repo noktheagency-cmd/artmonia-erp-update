@@ -212,6 +212,16 @@ export function StudentDetailDialogClient({
               </div>
 
               <label className="form-field">
+                <span>Aid olduğu ay</span>
+                <Input
+                  name="billingMonth"
+                  type="month"
+                  defaultValue={student.detail.paymentDefaultMonth}
+                  required
+                />
+              </label>
+
+              <label className="form-field">
                 <span>Qeyd</span>
                 <Input
                   name="note"
@@ -223,7 +233,7 @@ export function StudentDetailDialogClient({
               <p className="payment-policy-note">
                 {paymentClosed
                   ? "Tədris tamamlanıb: maliyyə öhdəliyi bağlıdır və yeni ödəniş tələb olunmur."
-                  : "Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmır."}
+                  : "Ödəniş yalnız seçilmiş ayın fakturasına yazılır. Birdəfəlik seçimdə növbəti aylıq tarix yaradılmır."}
               </p>
 
               <DialogFooter>

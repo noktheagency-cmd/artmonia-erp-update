@@ -67,6 +67,7 @@ interface StudentDetail {
     notes: string;
     paymentDefaultAmount: string;
     paymentDefaultDate: string;
+    paymentDefaultMonth: string;
     monthlyFee: string;
     reminderDefaultDate: string;
   };
@@ -127,6 +128,7 @@ export function StudentDetailActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
+  const [paymentMonth, setPaymentMonth] = useState(student.detail.paymentDefaultMonth);
   const sourceOptions = editOptions.sourceOptions.includes(student.detail.source)
     ? editOptions.sourceOptions
     : [student.detail.source, ...editOptions.sourceOptions].filter(Boolean);
@@ -337,6 +339,7 @@ export function StudentDetailActions({
           if (nextOpen) {
             setPaymentAmount(student.detail.paymentDefaultAmount);
             setPaymentDate(student.detail.paymentDefaultDate);
+            setPaymentMonth(student.detail.paymentDefaultMonth);
           }
         }}
       >
@@ -420,6 +423,17 @@ export function StudentDetailActions({
             </div>
 
             <label className="form-field">
+              <span>Aid olduğu ay</span>
+              <Input
+                name="billingMonth"
+                type="month"
+                value={paymentMonth}
+                onChange={(event) => setPaymentMonth(event.target.value)}
+                required
+              />
+            </label>
+
+            <label className="form-field">
               <span>Qeyd</span>
               <Input
                 name="note"
@@ -429,7 +443,7 @@ export function StudentDetailActions({
             </label>
 
             <p className="payment-policy-note">
-              Birdəfəlik seçimdə növbəti aylıq ödəniş tarixi yaradılmır.
+              Ödəniş yalnız seçilmiş ayın fakturasına yazılır. Birdəfəlik seçimdə növbəti aylıq tarix yaradılmır.
             </p>
 
             <DialogFooter>

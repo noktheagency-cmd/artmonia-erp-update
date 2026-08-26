@@ -14,20 +14,27 @@ function utcDate(value: string) {
 function activationTx(enrollment: {
   startDate: Date;
   firstLessonAt: Date | null;
+  billingAnchorDate?: Date | null;
 }) {
   let enrollmentUpdate: unknown;
-  let studentUpdate: unknown;
+  const studentUpdates: unknown[] = [];
+  let invoiceUpdate: unknown;
   const tx = {
     student: {
       updateMany: async (args: unknown) => {
-        studentUpdate = args;
+        studentUpdates.push(args);
       },
     },
     enrollment: {
       findFirst: async () => ({
         id: "enrollment-1",
         monthlyFee: 200,
-        student: { originalFirstLessonAt: enrollment.firstLessonAt },
+        student: {
+          originalFirstLessonAt: enrollment.firstLessonAt,
+          billingAnchorDate: enrollment.billingAnchorDate === undefined
+            ? enrollment.firstLessonAt
+            : enrollment.billingAnchorDate,
+        },
         ...enrollment,
       }),
       update: async (args: unknown) => {
@@ -41,7 +48,9 @@ function activationTx(enrollment: {
         balanceDue: 0,
         enrollmentId: "enrollment-1",
       }),
-      update: async () => undefined,
+      update: async (args: unknown) => {
+        invoiceUpdate = args;
+      },
       create: async () => undefined,
     },
   } as unknown as Prisma.TransactionClient;
@@ -49,13 +58,14 @@ function activationTx(enrollment: {
   return {
     tx,
     getEnrollmentUpdate: () => enrollmentUpdate,
-    getStudentUpdate: () => studentUpdate,
+    getStudentUpdates: () => studentUpdates,
+    getInvoiceUpdate: () => invoiceUpdate,
   };
 }
 
 test("activation preserves a manually imported first lesson date", async () => {
   const firstLessonAt = utcDate("2024-09-10");
-  const { tx, getEnrollmentUpdate } = activationTx({
+  const { tx, getEnrollmentUpdate, getInvoiceUpdate } = activationTx({
     startDate: firstLessonAt,
     firstLessonAt,
   });
@@ -72,6 +82,15 @@ test("activation preserves a manually imported first lesson date", async () => {
       status: "ACTIVE",
       startDate: firstLessonAt,
       firstLessonAt,
+    },
+  });
+  assert.deepEqual(getInvoiceUpdate(), {
+    where: { id: "invoice-1" },
+    data: {
+      enrollmentId: "enrollment-1",
+      periodMonth: utcDate("2026-08-01"),
+      dueDate: utcDate("2026-08-10"),
+      status: "PAID",
     },
   });
 });
@@ -103,7 +122,7 @@ test("activation fills the automatic first lesson date from the active slot", as
 test("reactivation keeps the original lesson date and starts a new current period", async () => {
   const originalFirstLessonAt = utcDate("2026-02-10");
   const returnAt = utcDate("2026-06-03");
-  const { tx, getEnrollmentUpdate, getStudentUpdate } = activationTx({
+  const { tx, getEnrollmentUpdate, getStudentUpdates } = activationTx({
     startDate: originalFirstLessonAt,
     firstLessonAt: originalFirstLessonAt,
   });
@@ -115,13 +134,7 @@ test("reactivation keeps the original lesson date and starts a new current perio
     isReactivation: true,
   });
 
-  assert.deepEqual(getStudentUpdate(), {
-    where: {
-      id: "student-1",
-      originalFirstLessonAt: null,
-    },
-    data: { originalFirstLessonAt },
-  });
+  assert.deepEqual(getStudentUpdates(), []);
   assert.deepEqual(getEnrollmentUpdate(), {
     where: { id: "enrollment-1" },
     data: {
@@ -135,6 +148,7 @@ test("reactivation keeps the original lesson date and starts a new current perio
     previousFirstLessonAt: originalFirstLessonAt,
     currentFirstLessonAt: returnAt,
     originalFirstLessonAt,
+    billingAnchorDate: originalFirstLessonAt,
     reactivated: true,
   });
   assert.equal(

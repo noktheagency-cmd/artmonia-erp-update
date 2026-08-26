@@ -2106,6 +2106,7 @@
 }
 
 .workshop-dialog .ui-dialog-close {
+  z-index: 3 !important;
   top: 17px !important;
   right: 19px !important;
   width: 38px !important;
