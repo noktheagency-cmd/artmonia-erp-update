@@ -1281,7 +1281,7 @@ function FinancePrimaryKpis({ data }: { data: FinanceData }) {
     { key: "income" as const, label: "Ümumi gəlir", value: data.summary.income, helper: `Təhsil ${data.summary.studentIncome} · Tədbirlər ${data.summary.eventIncome}`, tone: "success", icon: WalletCards },
     { key: "expense" as const, label: "Ümumi xərc", value: data.summary.expense, helper: `Əsas xərclər ${data.summary.coreExpense} · Tədbirlər ${data.summary.eventExpense}`, tone: "warning", icon: ReceiptText },
     { key: "profit" as const, label: "Net Profit", value: data.summary.netProfit, helper: "Operating Profit − qeyri-əməliyyat P&L maddələri", tone: "neutral", icon: TrendingUp },
-    { key: "receivables" as const, label: "Maliyyə sağlamlığı · açıq borc", value: data.receivableSummary.studentOutstanding.amount, helper: `${data.receivableSummary.studentOutstanding.count} tələbə · gələcək ödəniş ayrıca göstərilir`, tone: "warning", icon: BadgeDollarSign },
+    { key: "receivables" as const, label: "Alacaqlar", value: data.receivableSummary.studentOutstanding.amount, helper: `${data.receivableSummary.studentOutstanding.count} tələbə · gələcək ödəniş ayrıca göstərilir`, tone: "warning", icon: BadgeDollarSign },
   ];
   const detailRows = selected === "income"
     ? [["Tələbə ödənişləri", data.summary.studentIncome], ["Workshop / Masterclass", data.summary.eventIncome]]
