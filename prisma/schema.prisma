@@ -375,6 +375,41 @@ enum MarketingContentAction {
   @@schema("erp")
 }
 
+enum InstagramDmDirection {
+  INBOUND
+  OUTBOUND
+
+  @@schema("erp")
+}
+
+enum InstagramDmMessageKind {
+  TEXT
+  MEDIA
+  QUICK_REPLY
+  POSTBACK
+  UNSUPPORTED
+
+  @@schema("erp")
+}
+
+enum InstagramDmProcessingStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+
+  @@schema("erp")
+}
+
+enum InstagramDmAnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@schema("erp")
+}
+
 enum HrEmployeeStatus {
   ACTIVE
   PROBATION
@@ -1232,6 +1267,122 @@ model MarketingAdStat {
   @@unique([adId, recordedOn])
   @@index([recordedOn])
   @@map("marketing_ad_stats")
+  @@schema("erp")
+}
+
+model InstagramDmAccount {
+  id             String   @id @default(uuid()) @db.Uuid
+  metaAccountId  String   @unique @map("meta_account_id")
+  username       String?
+  isActive       Boolean  @default(true) @map("is_active")
+  firstSeenAt    DateTime @default(now()) @map("first_seen_at")
+  lastWebhookAt  DateTime @default(now()) @map("last_webhook_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  participants  InstagramDmParticipant[]
+  conversations InstagramDmConversation[]
+
+  @@index([isActive, lastWebhookAt])
+  @@map("instagram_dm_accounts")
+  @@schema("erp")
+}
+
+model InstagramDmParticipant {
+  id           String   @id @default(uuid()) @db.Uuid
+  accountId    String   @map("account_id") @db.Uuid
+  scopedUserId String   @map("scoped_user_id")
+  username     String?
+  displayName  String?  @map("display_name")
+  firstSeenAt  DateTime @map("first_seen_at")
+  lastSeenAt   DateTime @map("last_seen_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  account       InstagramDmAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  conversations InstagramDmConversation[]
+
+  @@unique([accountId, scopedUserId])
+  @@index([accountId, lastSeenAt])
+  @@map("instagram_dm_participants")
+  @@schema("erp")
+}
+
+model InstagramDmConversation {
+  id                String                    @id @default(uuid()) @db.Uuid
+  accountId         String                    @map("account_id") @db.Uuid
+  participantId     String                    @map("participant_id") @db.Uuid
+  firstMessageAt    DateTime                  @map("first_message_at")
+  lastMessageAt     DateTime                  @map("last_message_at")
+  lastInboundAt     DateTime?                 @map("last_inbound_at")
+  lastOutboundAt    DateTime?                 @map("last_outbound_at")
+  messageCount      Int                       @default(0) @map("message_count")
+  inboundCount      Int                       @default(0) @map("inbound_count")
+  outboundCount     Int                       @default(0) @map("outbound_count")
+  analysisStatus    InstagramDmAnalysisStatus @default(PENDING) @map("analysis_status")
+  analysisDirtyAt   DateTime                  @map("analysis_dirty_at")
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+
+  account     InstagramDmAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  participant InstagramDmParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  messages    InstagramDmMessage[]
+
+  @@unique([accountId, participantId])
+  @@index([accountId, lastMessageAt])
+  @@index([analysisStatus, analysisDirtyAt])
+  @@index([participantId])
+  @@map("instagram_dm_conversations")
+  @@schema("erp")
+}
+
+model InstagramDmWebhookEvent {
+  id           String                      @id @default(uuid()) @db.Uuid
+  payloadHash  String                      @unique @map("payload_hash") @db.VarChar(64)
+  objectType   String                      @map("object_type") @db.VarChar(40)
+  entryCount   Int                         @default(0) @map("entry_count")
+  payload      Json
+  status       InstagramDmProcessingStatus @default(RECEIVED)
+  errorMessage String?                     @map("error_message") @db.VarChar(800)
+  receivedAt   DateTime                    @default(now()) @map("received_at")
+  processedAt  DateTime?                   @map("processed_at")
+
+  messages InstagramDmMessage[]
+
+  @@index([status, receivedAt])
+  @@map("instagram_dm_webhook_events")
+  @@schema("erp")
+}
+
+model InstagramDmMessage {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  conversationId       String                   @map("conversation_id") @db.Uuid
+  webhookEventId       String?                  @map("webhook_event_id") @db.Uuid
+  metaMessageId        String                   @unique @map("meta_message_id")
+  direction            InstagramDmDirection
+  kind                 InstagramDmMessageKind
+  text                 String?                  @db.Text
+  sentAt               DateTime                 @map("sent_at")
+  isEcho               Boolean                  @default(false) @map("is_echo")
+  isSelf               Boolean                  @default(false) @map("is_self")
+  isDeleted            Boolean                  @default(false) @map("is_deleted")
+  isUnsupported        Boolean                  @default(false) @map("is_unsupported")
+  replyToMetaMessageId String?                  @map("reply_to_meta_message_id")
+  quickReplyPayload    String?                  @map("quick_reply_payload")
+  editCount            Int                      @default(0) @map("edit_count")
+  attachments          Json?
+  referral             Json?
+  rawMetadata          Json?                    @map("raw_metadata")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+
+  conversation InstagramDmConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  webhookEvent InstagramDmWebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, sentAt])
+  @@index([direction, sentAt])
+  @@index([webhookEventId])
+  @@map("instagram_dm_messages")
   @@schema("erp")
 }
 

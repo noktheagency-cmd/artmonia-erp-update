@@ -28,6 +28,7 @@ Current stage: technical foundation and implementation blueprint. UI/UX will be 
 - [docs/08-visual-design-system.md](docs/08-visual-design-system.md) - visual system based on the approved reference direction
 - [docs/09-phase-1-foundation.md](docs/09-phase-1-foundation.md) - data/auth/RBAC foundation before CRM
 - [docs/10-supabase-connection.md](docs/10-supabase-connection.md) - Supabase project/env connection details
+- [docs/11-instagram-dm-ingestion.md](docs/11-instagram-dm-ingestion.md) - Instagram DM webhook and history sync setup
 - [database/schema-blueprint.sql](database/schema-blueprint.sql) - initial SQL blueprint for the future Supabase migration
 - [.env.example](.env.example) - environment variable contract
 
