@@ -666,7 +666,12 @@ export async function getStudentListData(
       const lifecycleStatus = lifecycleMeta[student.lifecycleStatus];
       const paymentStatus = student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
         ? { code: "PAID" as const, label: "Öhdəlik yoxdur", tone: "success" as const }
-        : resolveStudentPaymentStatus({ balance, nextPaymentAt, today });
+        : resolveStudentPaymentStatus({
+            balance,
+            nextPaymentAt,
+            today,
+            hasBillingRecord: student.invoices.length > 0,
+          });
       const overdueDays = getOverdueDays(
         nextPaymentAt ?? undefined,
         today
@@ -2677,7 +2682,12 @@ export async function getStudentDetailData(studentId: string) {
   const lifecycleStatus = lifecycleMeta[student.lifecycleStatus as StudentLifecycleStatus];
   const paymentStatus = student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
     ? { code: "PAID" as const, label: "Öhdəlik yoxdur", tone: "success" as const }
-    : resolveStudentPaymentStatus({ balance, nextPaymentAt, today });
+    : resolveStudentPaymentStatus({
+        balance,
+        nextPaymentAt,
+        today,
+        hasBillingRecord: asJsonArray<StudentInvoiceRecord>(student.invoices).length > 0,
+      });
   const overdueDays = getOverdueDays(
     nextPaymentAt ?? undefined,
     today

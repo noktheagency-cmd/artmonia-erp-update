@@ -65,3 +65,27 @@ test("treats an unscheduled outstanding balance as actionable debt", () => {
     { code: "DUE", label: "Ödəniş gözləyir", tone: "warning" },
   );
 });
+
+test("does not label a student as paid before any billing record exists", () => {
+  assert.deepEqual(
+    resolveStudentPaymentStatus({
+      balance: 0,
+      nextPaymentAt: null,
+      today: utcDate("2026-08-26"),
+      hasBillingRecord: false,
+    }),
+    { code: "NOT_BILLED", label: "Ödəniş yaranmayıb", tone: "neutral" },
+  );
+});
+
+test("labels a zero-balance invoiced student as paid", () => {
+  assert.deepEqual(
+    resolveStudentPaymentStatus({
+      balance: 0,
+      nextPaymentAt: null,
+      today: utcDate("2026-08-26"),
+      hasBillingRecord: true,
+    }),
+    { code: "PAID", label: "Ödənilib", tone: "success" },
+  );
+});
