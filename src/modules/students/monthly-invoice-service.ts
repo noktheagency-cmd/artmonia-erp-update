@@ -39,6 +39,7 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
     select: {
       code: true,
       billingAnchorDate: true,
+      originalFirstLessonAt: true,
       enrollments: {
         where: {
           status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
@@ -46,6 +47,7 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
         orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
+          firstLessonAt: true,
           monthlyFee: true,
         },
       },
@@ -53,7 +55,35 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
   });
 
   if (!student) throw new Error("Tələbə tapılmadı");
-  if (!student.billingAnchorDate) {
+  let billingAnchorDate = student.billingAnchorDate;
+
+  if (!billingAnchorDate) {
+    const confirmedFirstLessonAt = student.originalFirstLessonAt
+      ?? student.enrollments.find((enrollment) => enrollment.firstLessonAt)?.firstLessonAt
+      ?? null;
+
+    if (!confirmedFirstLessonAt) {
+      throw new Error("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
+    }
+
+    await tx.student.updateMany({
+      where: { id: input.studentId, billingAnchorDate: null },
+      data: { billingAnchorDate: confirmedFirstLessonAt },
+    });
+
+    await tx.student.updateMany({
+      where: { id: input.studentId, originalFirstLessonAt: null },
+      data: { originalFirstLessonAt: confirmedFirstLessonAt },
+    });
+
+    const anchoredStudent = await tx.student.findUnique({
+      where: { id: input.studentId },
+      select: { billingAnchorDate: true },
+    });
+    billingAnchorDate = anchoredStudent?.billingAnchorDate ?? null;
+  }
+
+  if (!billingAnchorDate) {
     throw new Error("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
   }
   if (student.enrollments.length === 0) {
@@ -62,9 +92,9 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
 
   const periodMonth = resolvePaymentBillingPeriod({
     requestedMonth: input.requestedPeriodMonth,
-    billingAnchorDate: student.billingAnchorDate,
+    billingAnchorDate,
   });
-  const dueDate = billingDateForMonth(periodMonth, student.billingAnchorDate);
+  const dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
 
   for (const enrollment of student.enrollments) {
     const existing = await tx.invoice.findFirst({
