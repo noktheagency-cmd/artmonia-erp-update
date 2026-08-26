@@ -8,7 +8,6 @@ import type { Route } from "next";
 import { unwrapActionResult, type ActionResult } from "@/lib/action-result";
 import {
   AlertTriangle,
-  Activity,
   ArrowDownToLine,
   ArrowRight,
   BadgeDollarSign,
@@ -1277,25 +1276,19 @@ function CategoryDistributionList({ data }: { data: FinanceData }) {
 }
 
 function FinancePrimaryKpis({ data }: { data: FinanceData }) {
-  const [selected, setSelected] = useState<"income" | "expense" | "operating" | "profit" | "cashflow" | "receivables" | "details" | null>(null);
+  const [selected, setSelected] = useState<"income" | "expense" | "profit" | "receivables" | "details" | null>(null);
   const cards = [
     { key: "income" as const, label: "Ümumi gəlir", value: data.summary.income, helper: `Təhsil ${data.summary.studentIncome} · Tədbirlər ${data.summary.eventIncome}`, tone: "success", icon: WalletCards },
     { key: "expense" as const, label: "Ümumi xərc", value: data.summary.expense, helper: `Əsas xərclər ${data.summary.coreExpense} · Tədbirlər ${data.summary.eventExpense}`, tone: "warning", icon: ReceiptText },
-    { key: "operating" as const, label: "Operating Profit", value: data.summary.operatingProfit, helper: "Gross Profit − OPEX", tone: "neutral", icon: BarChart3 },
     { key: "profit" as const, label: "Net Profit", value: data.summary.netProfit, helper: "Operating Profit − qeyri-əməliyyat P&L maddələri", tone: "neutral", icon: TrendingUp },
-    { key: "cashflow" as const, label: "Net Cash Flow", value: data.summary.netCash, helper: "Bütün pul girişləri − bütün pul çıxışları", tone: "neutral", icon: Activity },
     { key: "receivables" as const, label: "Maliyyə sağlamlığı · açıq borc", value: data.receivableSummary.studentOutstanding.amount, helper: `${data.receivableSummary.studentOutstanding.count} tələbə · gələcək ödəniş ayrıca göstərilir`, tone: "warning", icon: BadgeDollarSign },
   ];
   const detailRows = selected === "income"
     ? [["Tələbə ödənişləri", data.summary.studentIncome], ["Workshop / Masterclass", data.summary.eventIncome]]
     : selected === "expense"
       ? [["Direct Cost", data.summary.directCost], ["OPEX", data.summary.opex], ["Tədbir xərcləri", data.summary.eventExpense], ["Əməkhaqqı", data.summary.payroll], ...data.costCenterBreakdown.map((item) => [`Xərc mərkəzi · ${item.label}`, item.amount])]
-      : selected === "operating"
-        ? [["Gross Profit", data.summary.grossProfit], ["OPEX", data.summary.opex], ["Operating Profit", data.summary.operatingProfit]]
       : selected === "profit"
         ? [["Operating Profit", data.summary.operatingProfit], ["Net Profit", data.summary.netProfit]]
-      : selected === "cashflow"
-        ? [["Net Profit", data.summary.netProfit], ["CAPEX", data.summary.capex], ["Financing in", data.summary.financingIn], ["Financing out", data.summary.financingOut], ["Net Cash Flow", data.summary.netCash]]
         : selected === "receivables"
           ? [["Real açıq tələbə borcu", data.receivableSummary.studentOutstanding.amount], ["Gecikmiş borc", data.receivableSummary.studentOverdue.amount], ["Gələcək ödəniş", data.receivableSummary.studentFuture.amount], ["Workshop", data.receivableSummary.workshop.amount], ["Masterclass", data.receivableSummary.masterclass.amount]]
           : [];

@@ -38,6 +38,10 @@ import {
   leadStageOptions,
   leadStageTones,
 } from "@/modules/crm/stage";
+import {
+  crmTeamVisibleHrStatuses,
+  getCrmTeamPerformanceAccess,
+} from "@/modules/crm/team-performance-rules";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { scopeFor, type PermissionScope } from "@/server/rbac/permissions";
 
@@ -491,7 +495,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data-v5"],
+  ["crm-pipeline-data-v6"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -546,6 +550,17 @@ function getCrmRawData(
   const summarySql = Prisma.sql`${scopeSql} AND ${periodSql}`;
   const listWhereSql = buildCrmListWhereSql(input);
   const managerScopeSql = buildManagerScopeSql(input.actor);
+  const teamMemberScopeSql = buildTeamMemberScopeSql(input.actor, input.ownerFilter);
+  const teamSalesWhereSql = buildCrmListWhereSql({
+    ...input,
+    periodRange: null,
+  });
+  const teamConversionPeriodSql = buildLeadConversionPeriodSql(input.periodRange);
+  const teamHrStatusSql = Prisma.join(
+    crmTeamVisibleHrStatuses.map(
+      (status) => Prisma.sql`${status}::"erp"."HrEmployeeStatus"`,
+    ),
+  );
 
   return prisma.$queryRaw<CrmRawRow[]>(Prisma.sql`
     select
@@ -690,23 +705,41 @@ function getCrmRawData(
         from (
           select
             u.full_name as manager_name,
-            count(l.id)::int as total_count,
-            count(*) filter (
-              where l.converted_student_id is not null
-                or l.stage = 'REGISTERED'::"erp"."LeadStage"
-            )::int as sales_count
+            coalesce(team_stats.total_count, 0)::int as total_count,
+            coalesce(team_stats.sales_count, 0)::int as sales_count
           from erp.users u
           left join erp.hr_employees he on he.user_id = u.id
-          left join erp.leads l on l.manager_id = u.id and ${periodSql}
-          where ${managerScopeSql}
+          left join lateral (
+            select
+              count(*) filter (where ${listWhereSql})::int as total_count,
+              count(*) filter (
+                where ${teamSalesWhereSql}
+                  and (
+                    l.converted_student_id is not null
+                    or l.stage = 'REGISTERED'::"erp"."LeadStage"
+                  )
+                  and ${teamConversionPeriodSql}
+              )::int as sales_count
+            from erp.leads l
+            join erp.contacts c on c.id = l.contact_id
+            left join erp.programs p on p.id = l.program_interest_id
+            left join erp.students converted_student on converted_student.id = l.converted_student_id
+            left join lateral (
+              select min(conversion_history.created_at) as registered_at
+              from erp.lead_stage_history conversion_history
+              where conversion_history.lead_id = l.id
+                and conversion_history.new_stage = 'REGISTERED'::"erp"."LeadStage"
+            ) conversion on true
+            where l.manager_id = u.id
+          ) team_stats on true
+          where ${teamMemberScopeSql}
             and (
               he.id is null
               or (
                 he.archived_at is null
-                and he.status in ('ACTIVE'::"erp"."HrEmployeeStatus", 'PROBATION'::"erp"."HrEmployeeStatus")
+                and he.status in (${teamHrStatusSql})
               )
             )
-          group by u.id, u.full_name
           order by sales_count desc, total_count desc, manager_name asc
         ) team
       ), '[]'::jsonb) as "teamPerformance",
@@ -939,6 +972,41 @@ function buildManagerScopeSql(actor: CrmCacheActor) {
   return Prisma.sql`u.id = ${actor.id}::uuid and u.is_active = true`;
 }
 
+function buildTeamMemberScopeSql(actor: CrmCacheActor, ownerFilter: string) {
+  const access = getCrmTeamPerformanceAccess(actor.readScope);
+  const conditions: Prisma.Sql[] = [Prisma.sql`u.is_active = true`];
+
+  if (access === "SALES_TEAM") {
+    conditions.push(Prisma.sql`
+      (
+        exists (
+          select 1
+          from erp.user_roles team_ur
+          join erp.roles team_role on team_role.id = team_ur.role_id
+          where team_ur.user_id = u.id
+            and (
+              team_role.code::text = 'SALES'
+              or team_role.key = 'sales'
+            )
+        )
+        or exists (
+          select 1
+          from erp.leads team_lead
+          where team_lead.manager_id = u.id
+        )
+      )
+    `);
+  } else {
+    conditions.push(Prisma.sql`u.id = ${actor.id}::uuid`);
+  }
+
+  if (ownerFilter) {
+    conditions.push(Prisma.sql`u.id = ${ownerFilter}::uuid`);
+  }
+
+  return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
+}
+
 function buildLeadPeriodSql(periodRange: CrmPeriodRange) {
   const conditions: Prisma.Sql[] = [Prisma.sql`true`];
 
@@ -948,6 +1016,23 @@ function buildLeadPeriodSql(periodRange: CrmPeriodRange) {
 
   if (periodRange?.lt) {
     conditions.push(Prisma.sql`l.created_at < ${periodRange.lt}`);
+  }
+
+  return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
+}
+
+function buildLeadConversionPeriodSql(periodRange: CrmPeriodRange) {
+  const conversionDateSql = Prisma.sql`
+    coalesce(conversion.registered_at, converted_student.registered_at, l.updated_at)
+  `;
+  const conditions: Prisma.Sql[] = [Prisma.sql`true`];
+
+  if (periodRange?.gte) {
+    conditions.push(Prisma.sql`${conversionDateSql} >= ${periodRange.gte}`);
+  }
+
+  if (periodRange?.lt) {
+    conditions.push(Prisma.sql`${conversionDateSql} < ${periodRange.lt}`);
   }
 
   return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
