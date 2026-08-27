@@ -377,7 +377,10 @@ async function linkTeacherAccountActionImpl(formData: FormData) {
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
-    const teacher = await tx.teacher.findUnique({ where: { id: input.teacherId } });
+    const teacher = await tx.teacher.findUnique({
+      where: { id: input.teacherId },
+      include: { hrEmployee: { select: { userId: true } } },
+    });
     if (!teacher) throw new PublicActionError("Müəllim tapılmadı", "NOT_FOUND");
 
     if (input.userId) {
@@ -387,13 +390,34 @@ async function linkTeacherAccountActionImpl(formData: FormData) {
           isActive: true,
           roles: { some: { role: { code: AppRole.TEACHER } } },
         },
+        include: { hrEmployeeProfile: { select: { teacherId: true } } },
       });
       if (!user) throw new PublicActionError("Aktiv TEACHER istifadəçisi tapılmadı", "NOT_FOUND");
+      if (teacher.userId && teacher.userId !== user.id) {
+        throw new PublicActionError("Müəllim profili başqa ERP hesabına bağlıdır", "CONFLICT");
+      }
+      if (teacher.hrEmployee?.userId && teacher.hrEmployee.userId !== user.id) {
+        throw new PublicActionError("Müəllimin HR profili başqa ERP hesabına bağlıdır", "CONFLICT");
+      }
+      if (user.hrEmployeeProfile?.teacherId && user.hrEmployeeProfile.teacherId !== teacher.id) {
+        throw new PublicActionError("ERP hesabının HR profili başqa müəllimə bağlıdır", "CONFLICT");
+      }
       const alreadyLinked = await tx.teacher.findFirst({
         where: { userId: user.id, id: { not: teacher.id } },
         select: { id: true },
       });
       if (alreadyLinked) throw new PublicActionError("Bu ERP hesabı başqa müəllimə bağlıdır", "CONFLICT");
+    } else if (teacher.userId && teacher.hrEmployee?.userId === teacher.userId) {
+      const linkedTeacherRole = await tx.userRole.findFirst({
+        where: { userId: teacher.userId, role: { code: AppRole.TEACHER } },
+        select: { userId: true },
+      });
+      if (linkedTeacherRole) {
+        throw new PublicActionError(
+          "Aktiv müəllim rolunu ayırmaq üçün əvvəlcə hesabın TEACHER rolunu dəyişin",
+          "CONFLICT",
+        );
+      }
     }
 
     await tx.teacher.update({
@@ -413,6 +437,7 @@ async function linkTeacherAccountActionImpl(formData: FormData) {
 
   revalidatePath("/hr");
   revalidatePath("/groups");
+  revalidatePath("/dashboard");
 }
 
 export const createEmployeeAction = safeServerAction(

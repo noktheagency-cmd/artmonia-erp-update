@@ -9,6 +9,10 @@ import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  syncTeacherAccountLink,
+  TeacherAccountLinkError,
+} from "@/modules/audit/teacher-account-link";
 
 const roleIdsSchema = z.preprocess((value) => {
   if (typeof value !== "string") return value;
@@ -66,12 +70,17 @@ async function createAccount(formData: FormData) {
       const effectiveRoles = uniqueRoles([...protectedRoles, ...roles]);
       await tx.userRole.deleteMany({ where: { userId: user.id } });
       await tx.userRole.createMany({ data: effectiveRoles.map((role) => ({ userId: user.id, roleId: role.id })) });
+      const teacherLink = await syncTeacherAccountLinkForAction(tx, {
+        teacherId: employee.teacherId,
+        userId: user.id,
+        hasTeacherRole: effectiveRoles.some((role) => role.code === AppRole.TEACHER),
+      });
       await writeAuditLog(tx, {
         actorUserId: actor.id,
         action: "auth.account.create",
         entityType: "auth_account",
         entityId: employee.id,
-        after: { userId: user.id, employeeId: employee.id, loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name), status: "ACTIVE" },
+        after: { userId: user.id, employeeId: employee.id, loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name), status: "ACTIVE", teacherLink },
         reason: "Əməkdaş üçün ERP giriş hesabı təhlükəsizlik panelindən yaradıldı",
       });
       return user.id;
@@ -113,13 +122,18 @@ async function updateAccount(formData: FormData) {
       await tx.user.update({ where: { id: user.id }, data: { email: input.loginEmail } });
       await tx.userRole.deleteMany({ where: { userId: user.id } });
       await tx.userRole.createMany({ data: effectiveRoles.map((role) => ({ userId: user.id, roleId: role.id })) });
+      const teacherLink = await syncTeacherAccountLinkForAction(tx, {
+        teacherId: employee.teacherId,
+        userId: user.id,
+        hasTeacherRole: effectiveRoles.some((role) => role.code === AppRole.TEACHER),
+      });
       await writeAuditLog(tx, {
         actorUserId: actor.id,
         action: "auth.account.update",
         entityType: "auth_account",
         entityId: employee.id,
         before: { loginEmail: previousEmail, roles: user.roles.map(({ role }) => role.name) },
-        after: { loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name) },
+        after: { loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name), teacherLink },
         reason: "Giriş e-poçtu və hesab rolları təhlükəsizlik panelindən yeniləndi",
       });
     });
@@ -217,6 +231,20 @@ function uniqueRoles<T extends { id: string }>(roles: T[]) {
   return [...new Map(roles.map((role) => [role.id, role])).values()];
 }
 
+async function syncTeacherAccountLinkForAction(
+  db: Parameters<typeof syncTeacherAccountLink>[0],
+  input: Parameters<typeof syncTeacherAccountLink>[1],
+) {
+  try {
+    return await syncTeacherAccountLink(db, input);
+  } catch (error) {
+    if (error instanceof TeacherAccountLinkError) {
+      throw new PublicActionError(error.message, error.code);
+    }
+    throw error;
+  }
+}
+
 async function revokeTargetSessions(userId: string, actorId: string, currentSessionId: string | null, reason: string) {
   const preserve = userId === actorId ? currentSessionId : null;
   const sessions = await getPrisma().$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -240,5 +268,9 @@ async function revokeTargetSessions(userId: string, actorId: string, currentSess
 
 function revalidateSecurity(employeeId: string) {
   revalidatePath("/audit");
+  revalidatePath("/dashboard");
+  revalidatePath("/groups");
+  revalidatePath("/hr");
   revalidatePath(`/hr/${employeeId}`);
+  revalidatePath("/playbook");
 }

@@ -1,4 +1,4 @@
-import { AppRole, EnrollmentStatus } from "@/generated/prisma/client";
+import { EnrollmentStatus } from "@/generated/prisma/client";
 import {
   dateFromInput,
   formatDateAz,
@@ -9,6 +9,8 @@ import {
 import { canEditAttendanceToday, recentScheduledDates } from "@/modules/groups/planner-journal";
 import { formatAmount } from "@/modules/shared/format";
 import { requireErpActor } from "@/server/auth/actor";
+import { scopeFor } from "@/server/rbac/permissions";
+import { buildPlannerSlotScope } from "@/modules/groups/planner-scope";
 import { getPrisma } from "@/server/db/prisma";
 
 export type PlannerMember = {
@@ -131,14 +133,16 @@ export async function getPlannerWorkspaceData(input?: {
   const canManage = actor.permissions.has("group.manage");
   const canManageAttendance = actor.permissions.has("attendance.manage");
   const canReadStudentDetails = actor.permissions.has("student.read");
-  const teacherProfile = actor.roles.includes(AppRole.TEACHER) && !canManage
+  const groupReadScope = scopeFor(actor.permissions, "group.read") ?? "ASSIGNED";
+  const teacherProfile = groupReadScope === "ASSIGNED"
     ? await prisma.teacher.findUnique({ where: { userId: actor.id }, select: { id: true } })
     : null;
   const teacherId = teacherProfile?.id;
+  const slotScope = buildPlannerSlotScope(groupReadScope, teacherId);
 
   const [slots, teachers, enrollments] = await Promise.all([
     prisma.classSlot.findMany({
-      where: { ...(teacherId ? { teacherId } : {}) },
+      where: slotScope,
       take: 250,
       orderBy: [{ validFrom: "asc" }, { startTime: "asc" }, { weekday: "asc" }],
       select: {

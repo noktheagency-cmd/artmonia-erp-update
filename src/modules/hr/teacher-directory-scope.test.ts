@@ -9,7 +9,7 @@ function normalizedSql(ownTeacherId?: string) {
 test("shared teacher directory includes only active HR-linked teachers", () => {
   const sql = normalizedSql();
 
-  assert.match(sql, /he\.id is null or he\.status = 'ACTIVE'/);
+  assert.match(sql, /he\.id is null or \(?he\.status = 'ACTIVE'/);
   assert.doesNotMatch(sql, /he\.status = 'PROBATION'/);
 });
 
