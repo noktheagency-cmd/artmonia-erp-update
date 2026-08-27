@@ -5,6 +5,7 @@ import {
 } from "@/generated/prisma/client";
 import { buildAttendanceWindow } from "@/modules/attendance/attendance-time";
 import { dateFromInput, todayInBaku } from "@/modules/groups/shared";
+import { recalculateTeacherPayoutsForMonthInTransaction } from "@/modules/hr/teacher-payroll";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
 
@@ -83,6 +84,20 @@ export async function finalizeDueAttendanceSessions(now = new Date(), batchSize 
         markedAt: now,
       }));
   });
+  const payoutTargetsByMonth = new Map<string, { period: Date; teacherIds: Set<string> }>();
+  for (const session of dueSessions) {
+    const teacherId = session.slot.teacherId;
+    if (!teacherId) continue;
+    const monthKey = session.sessionDate.toISOString().slice(0, 7);
+    const existingTarget = payoutTargetsByMonth.get(monthKey);
+    if (existingTarget) existingTarget.teacherIds.add(teacherId);
+    else {
+      payoutTargetsByMonth.set(monthKey, {
+        period: session.sessionDate,
+        teacherIds: new Set([teacherId]),
+      });
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
     if (absences.length) {
@@ -107,6 +122,14 @@ export async function finalizeDueAttendanceSessions(now = new Date(), batchSize 
         reason: "Giriş pəncərəsi bağlandığı üçün davamiyyət avtomatik yekunlaşdırıldı",
       })),
     });
+    for (const target of payoutTargetsByMonth.values()) {
+      await recalculateTeacherPayoutsForMonthInTransaction(
+        tx,
+        target.period,
+        null,
+        [...target.teacherIds],
+      );
+    }
   });
 
   return { finalizedSessions: dueSessions.length, createdAbsences: absences.length };

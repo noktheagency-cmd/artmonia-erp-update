@@ -9,6 +9,7 @@ import type {
   MobileAttendanceResult,
   MobileCheckInInput,
 } from "@/modules/attendance/mobile-attendance-contract";
+import { recalculateTeacherPayoutsForMonthInTransaction } from "@/modules/hr/teacher-payroll";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
 
@@ -270,6 +271,14 @@ export async function processMobileAttendanceCheckIn(
         });
 
     const alreadyCheckedIn = existingAttendance?.status === AttendanceMark.PRESENT;
+    if (!alreadyCheckedIn) {
+      await recalculateTeacherPayoutsForMonthInTransaction(
+        tx,
+        session.sessionDate,
+        null,
+        [session.slot.teacherId],
+      );
+    }
     return finish({
       httpStatus: 200,
       body: {

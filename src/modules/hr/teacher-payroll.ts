@@ -49,10 +49,23 @@ export async function getTeacherPayrollPreviews(period = new Date()): Promise<Ma
   return buildPreviews(rules, lines);
 }
 
-export async function recalculateTeacherPayoutsForMonth(period: Date, actorId: string, teacherIds?: string[]) {
-  const prisma = getPrisma();
+export async function recalculateTeacherPayoutsForMonth(
+  period: Date,
+  actorId: string | null,
+  teacherIds?: string[],
+) {
+  await getPrisma().$transaction((tx) => (
+    recalculateTeacherPayoutsForMonthInTransaction(tx, period, actorId, teacherIds)
+  ));
+}
+
+export async function recalculateTeacherPayoutsForMonthInTransaction(
+  tx: Prisma.TransactionClient,
+  period: Date,
+  actorId: string | null,
+  teacherIds?: string[],
+) {
   const periodMonth = monthStart(period);
-  await prisma.$transaction(async (tx) => {
     const rules = await tx.teacherContractRule.findMany({
       where: {
         ...(teacherIds?.length ? { teacherId: { in: teacherIds } } : {}),
@@ -104,7 +117,7 @@ export async function recalculateTeacherPayoutsForMonth(period: Date, actorId: s
       set
         eligible_revenue = changes.eligible_revenue,
         payout_amount = changes.payout_amount,
-        generated_by_id = ${actorId}::uuid,
+        generated_by_id = coalesce(${actorId}::uuid, payout.generated_by_id),
         updated_at = now()
       from (values ${Prisma.join(payoutUpdates)}) as changes(
         teacher_id,
@@ -148,7 +161,6 @@ export async function recalculateTeacherPayoutsForMonth(period: Date, actorId: s
     if (payoutLines.length) {
       await tx.teacherPayoutLine.createMany({ data: payoutLines });
     }
-  });
 }
 
 async function queryPayrollLines(db: Pick<Prisma.TransactionClient, "$queryRaw">, periodMonth: Date, teacherIds?: string[]) {
