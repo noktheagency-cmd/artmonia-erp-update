@@ -61,7 +61,6 @@ import {
 } from "@/modules/groups/planner-assignment";
 import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
 import { SlotDetailDialog } from "@/modules/groups/slot-detail-dialog";
-import { AttendanceQrDialog } from "@/modules/groups/attendance-qr-dialog";
 import { AttendanceSiteQrDialog } from "@/modules/groups/attendance-site-qr-dialog";
 import styles from "./planner.module.css";
 
@@ -172,7 +171,6 @@ export function PlannerWorkspace({
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [assignmentEnrollmentId, setAssignmentEnrollmentId] = useState<string>();
   const [attendanceOpen, setAttendanceOpen] = useState(initialAttendanceOpen);
-  const [attendanceQrOpen, setAttendanceQrOpen] = useState(false);
   const [attendanceSiteQrOpen, setAttendanceSiteQrOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
 
@@ -195,11 +193,9 @@ export function PlannerWorkspace({
     ?? filteredSlots[0]
     ?? data.slots.find((slot) => slot.id === selectedSlotId)
     ?? data.slots[0];
-  const selectedJournalDisabled = Boolean(
-    selectedSlot
-    && selectedSlot.id === data.journal.slotId
-    && data.journal.date > data.today,
-  );
+  const selectedJournalDisabled = !selectedSlot
+    || selectedSlot.id !== data.journal.slotId
+    || !data.journal.canEdit;
   const times = useMemo(() => buildPlannerTimeAxis(filteredSlots), [filteredSlots]);
   const plannedCount = data.slots.reduce((sum, slot) => sum + slot.assignedCount, 0);
   const openSeats = data.slots.reduce(
@@ -247,10 +243,9 @@ export function PlannerWorkspace({
     router.replace(`/groups?slot=${slot.id}` as Route, { scroll: false });
   }
 
-  function openAttendance(slot: PlannerSlot, date?: string) {
+  function openAttendance(slot: PlannerSlot) {
     setDetailsOpen(false);
-    const dateParam = date ? `&date=${date}` : "";
-    router.push(`/groups?slot=${slot.id}${dateParam}&attendance=1` as Route);
+    router.push(`/groups?slot=${slot.id}&attendance=1` as Route);
   }
 
   return (
@@ -394,31 +389,14 @@ export function PlannerWorkspace({
               {data.canManage || data.canManageAttendance ? (
                 <div className={styles.inspectorActions}>
                   {data.canManageAttendance ? (
-                    <>
-                      <Button
-                        type="button"
-                        onClick={() => setAttendanceQrOpen(true)}
-                        disabled={!selectedSlot.teacherId}
-                        title={!selectedSlot.teacherId ? "Əvvəlcə slota müəllim təyin edin" : undefined}
-                      >
-                        <QrCode data-icon="inline-start" /> Dinamik QR
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => openAttendance(selectedSlot)}
-                        disabled={selectedJournalDisabled || !selectedSlot.teacherId}
-                        title={
-                          !selectedSlot.teacherId
-                            ? "Əvvəlcə slota müəllim təyin edin"
-                            : selectedJournalDisabled
-                              ? "Slotun ilk dərs tarixi hələ çatmayıb"
-                              : undefined
-                        }
-                      >
-                        <BookOpenCheck data-icon="inline-start" /> Davamiyyət
-                      </Button>
-                    </>
+                    <Button
+                      type="button"
+                      onClick={() => openAttendance(selectedSlot)}
+                      disabled={selectedJournalDisabled || !selectedSlot.teacherId}
+                      title={data.journal.disabledReason ?? undefined}
+                    >
+                      <BookOpenCheck data-icon="inline-start" /> Bugünkü jurnal
+                    </Button>
                   ) : null}
                   {data.canManage ? (
                     <>
@@ -447,8 +425,8 @@ export function PlannerWorkspace({
           canManage={data.canManage}
           canManageAttendance={data.canManageAttendance}
           canReadStudentDetails={data.canReadStudentDetails}
-          today={data.today}
-          defaultJournalDate={data.journal.date}
+          journalCanEdit={data.journal.canEdit}
+          journalDisabledReason={data.journal.disabledReason}
           onClose={() => closeSlotDetails(selectedSlot)}
           onEditSlot={() => {
             closeSlotDetails(selectedSlot);
@@ -462,7 +440,7 @@ export function PlannerWorkspace({
             closeSlotDetails(selectedSlot);
             openAssignment(enrollmentId);
           }}
-          onOpenJournal={(date) => openAttendance(selectedSlot, date)}
+          onOpenJournal={() => openAttendance(selectedSlot)}
         />
       ) : null}
 
@@ -525,15 +503,10 @@ export function PlannerWorkspace({
           key={`${data.journal.slotId}-${data.journal.date}`}
           slot={selectedSlot}
           journal={data.journal}
-          today={data.today}
-          canManageLesson={data.canManage}
           pending={pending}
           onClose={() => {
             setAttendanceOpen(false);
             router.replace(`/groups?slot=${selectedSlot.id}` as Route);
-          }}
-          onDateChange={(date) => {
-            router.replace(`/groups?slot=${selectedSlot.id}&date=${date}&attendance=1` as Route);
           }}
           onSubmit={(formData) => runAction(
             () => actions.saveAttendance(formData),
@@ -543,18 +516,6 @@ export function PlannerWorkspace({
               router.replace(`/groups?slot=${selectedSlot.id}` as Route);
             },
           )}
-        />
-      ) : null}
-
-      {attendanceQrOpen && selectedSlot && data.canManageAttendance ? (
-        <AttendanceQrDialog
-          key={`${selectedSlot.id}-${data.today}`}
-          slot={selectedSlot}
-          date={data.today}
-          onClose={() => {
-            setAttendanceQrOpen(false);
-            router.refresh();
-          }}
         />
       ) : null}
 
@@ -1157,24 +1118,17 @@ function AssignmentDialog({
 function AttendanceDialog({
   slot,
   journal,
-  today,
-  canManageLesson,
   pending,
   onClose,
-  onDateChange,
   onSubmit,
 }: {
   slot: PlannerSlot;
   journal: PlannerWorkspaceData["journal"];
-  today: string;
-  canManageLesson: boolean;
   pending: boolean;
   onClose: () => void;
-  onDateChange: (date: string) => void;
   onSubmit: (formData: FormData) => void;
 }) {
   const [rows, setRows] = useState<PlannerJournalMember[]>(journal.members);
-  const [sessionStatus, setSessionStatus] = useState(journal.status);
 
   function updateRow(
     enrollmentId: string,
@@ -1204,88 +1158,26 @@ function AttendanceDialog({
   const absentCount = rows.filter((row) => row.attendanceStatus === "absent").length;
   const excusedCount = rows.filter((row) => row.attendanceStatus === "excused").length;
   const unmarkedCount = rows.length - presentCount - absentCount - excusedCount;
-  const isFuture = journal.date > today;
-  const attendanceDisabled = isFuture || sessionStatus === "CANCELLED";
+  const attendanceDisabled = !journal.canEdit;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className={styles.attendanceDialog}>
         <DialogHeader>
-          <DialogTitle>Davamiyyət · {weekdayMeta[slot.weekday].label}</DialogTitle>
+          <DialogTitle>Bugünkü jurnal · {weekdayMeta[slot.weekday].label}</DialogTitle>
           <DialogDescription>
-            {slot.startTime}–{slot.endTime} · {slot.teacherName} · {journal.dateLabel}
+            {journal.dateLabel} · {journal.startTime}–{journal.endTime} · {slot.teacherName}
+            {journal.location ? ` · ${journal.location}` : ""}
           </DialogDescription>
         </DialogHeader>
         <form className={styles.attendanceForm} onSubmit={submit}>
           <input name="slotId" type="hidden" value={slot.id} />
-          <section className={styles.attendanceLessonFields} key={journal.date}>
-            <label>
-              <span>Dərs statusu</span>
-              <select
-                name="sessionStatus"
-                value={sessionStatus}
-                disabled={!canManageLesson}
-                onChange={(event) => {
-                  const next = event.target.value as typeof sessionStatus;
-                  setSessionStatus(next);
-                  if (next === "CANCELLED") markAll(null);
-                }}
-              >
-                <option value="SCHEDULED">Planlaşdırılıb</option>
-                <option value="COMPLETED">Tamamlanıb</option>
-                <option value="CANCELLED">Ləğv edilib</option>
-                <option value="RESCHEDULED">Vaxtı/otağı dəyişib</option>
-              </select>
-              {!canManageLesson ? <input type="hidden" name="sessionStatus" value={sessionStatus} /> : null}
-            </label>
-            <label>
-              <span>Başlama saatı</span>
-              <input name="sessionStartTime" type="time" defaultValue={journal.startTime} disabled={!canManageLesson} required />
-              {!canManageLesson ? <input type="hidden" name="sessionStartTime" value={journal.startTime} /> : null}
-            </label>
-            <label>
-              <span>Bitmə saatı</span>
-              <input name="sessionEndTime" type="time" defaultValue={journal.endTime} disabled={!canManageLesson} required />
-              {!canManageLesson ? <input type="hidden" name="sessionEndTime" value={journal.endTime} /> : null}
-            </label>
-            <label>
-              <span>Otaq / məkan</span>
-              <input name="sessionLocation" defaultValue={journal.location} maxLength={80} disabled={!canManageLesson} placeholder="Məsələn: Studio 2" />
-              {!canManageLesson ? <input type="hidden" name="sessionLocation" value={journal.location} /> : null}
-            </label>
-            <label>
-              <span>Dərsin mövzusu</span>
-              <input name="title" defaultValue={journal.title} maxLength={160} placeholder="Məsələn: Rəng nəzəriyyəsi" />
-            </label>
-            <label>
-              <span>Dərsin məqsədi</span>
-              <textarea name="objective" defaultValue={journal.objective} maxLength={1000} rows={2} placeholder="Bu dərsdə öyrəniləcək mövzu və məqsəd" />
-            </label>
-            <label>
-              <span>Ev tapşırığı</span>
-              <input name="homeworkTitle" defaultValue={journal.homework.title} maxLength={160} placeholder="Tapşırıq başlığı" />
-            </label>
-            <label>
-              <span>Tapşırığın izahı</span>
-              <textarea name="homeworkDescription" defaultValue={journal.homework.description} maxLength={2000} rows={2} placeholder="Tapşırığın detalları" />
-            </label>
-            <label>
-              <span>Son tarix</span>
-              <input name="homeworkDueDate" type="date" defaultValue={journal.homework.dueDate} min={journal.date} />
-            </label>
-          </section>
+          <input name="date" type="hidden" value={journal.date} />
           <div className={styles.attendanceToolbar}>
-            <label>
-              <span>Dərs tarixi</span>
-              <input
-                name="date"
-                type="date"
-                value={journal.date}
-                min={slot.validFrom}
-                onChange={(event) => onDateChange(event.target.value)}
-                required
-              />
-            </label>
+            <div className={styles.attendanceTodayLabel}>
+              <CalendarDays />
+              <span><small>Dərs tarixi</small><strong>{journal.dateLabel}</strong></span>
+            </div>
             <div className={styles.attendanceToolbarRight}>
               <div className={styles.attendanceStats} aria-label="Davamiyyət xülasəsi">
                 <span data-state="present"><b>{presentCount}</b> Gəldi</span>
@@ -1297,10 +1189,14 @@ function AttendanceDialog({
                 <button type="button" disabled={attendanceDisabled} onClick={() => markAll("present")}><Check /> Hamısı gəldi</button>
                 <button type="button" disabled={attendanceDisabled} onClick={() => markAll("absent")}><X /> Hamısı gəlmədi</button>
                 <button type="button" disabled={attendanceDisabled} onClick={() => markAll("excused")}><CircleMinus /> Hamısı üzrlü</button>
-                <button type="button" disabled={isFuture} onClick={() => markAll(null)}><RotateCcw /> Təmizlə</button>
+                <button type="button" disabled={attendanceDisabled} onClick={() => markAll(null)}><RotateCcw /> Təmizlə</button>
               </div>
             </div>
           </div>
+
+          {attendanceDisabled ? (
+            <div className={styles.attendanceLockedNotice}>{journal.disabledReason}</div>
+          ) : null}
 
           <div className={styles.attendanceList}>
             {rows.map((row) => (
@@ -1343,7 +1239,7 @@ function AttendanceDialog({
                   </button>
                   <button
                     type="button"
-                    disabled={isFuture}
+                    disabled={attendanceDisabled}
                     className={styles.clearMark}
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: null })}
                     aria-label={`${row.studentName}: qeydi təmizlə`}
@@ -1354,6 +1250,7 @@ function AttendanceDialog({
                 <input
                   className={styles.attendanceNote}
                   value={row.note}
+                  disabled={attendanceDisabled}
                   onChange={(event) => updateRow(row.enrollmentId, { note: event.target.value })}
                   placeholder="Qeyd (istəyə bağlı)"
                   maxLength={500}
@@ -1369,7 +1266,7 @@ function AttendanceDialog({
           </div>
           <DialogFooter className={styles.attendanceFooter}>
             <Button type="button" variant="outline" onClick={onClose}>Bağla</Button>
-            <Button type="submit" disabled={pending || !rows.length}>
+            <Button type="submit" disabled={pending || !rows.length || attendanceDisabled}>
               {pending ? "Saxlanılır..." : "Davamiyyəti saxla"}
             </Button>
           </DialogFooter>

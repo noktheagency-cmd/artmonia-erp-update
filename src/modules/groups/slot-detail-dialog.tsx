@@ -68,8 +68,8 @@ export function SlotDetailDialog({
   canManage,
   canManageAttendance,
   canReadStudentDetails,
-  today,
-  defaultJournalDate,
+  journalCanEdit,
+  journalDisabledReason,
   onClose,
   onEditSlot,
   onAddStudent,
@@ -81,21 +81,17 @@ export function SlotDetailDialog({
   canManage: boolean;
   canManageAttendance: boolean;
   canReadStudentDetails: boolean;
-  today: string;
-  defaultJournalDate: string;
+  journalCanEdit: boolean;
+  journalDisabledReason: string | null;
   onClose: () => void;
   onEditSlot: () => void;
   onAddStudent: () => void;
   onTransferStudent: (enrollmentId: string) => void;
-  onOpenJournal: (date: string) => void;
+  onOpenJournal: () => void;
 }) {
   const [tab, setTab] = useState<DetailTab>("overview");
-  const journalDisabled = defaultJournalDate > today || !slot.teacherId;
-  const journalDisabledTitle = !slot.teacherId
-    ? "Əvvəlcə slota müəllim təyin edin"
-    : journalDisabled
-      ? "Slot hələ başlamayıb"
-      : undefined;
+  const journalDisabled = !journalCanEdit;
+  const journalDisabledTitle = journalDisabledReason ?? undefined;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -117,11 +113,11 @@ export function SlotDetailDialog({
             {canManageAttendance ? (
               <Button
                 type="button"
-                onClick={() => onOpenJournal(detail.journalHistory[0]?.date ?? defaultJournalDate)}
+                onClick={onOpenJournal}
                 disabled={journalDisabled}
                 title={journalDisabledTitle}
               >
-                <BookOpenCheck data-icon="inline-start" /> Jurnala keç
+                <BookOpenCheck data-icon="inline-start" /> Bugünkü jurnal
               </Button>
             ) : null}
             {canManage ? (
@@ -151,7 +147,6 @@ export function SlotDetailDialog({
               canManage={canManage}
               canManageAttendance={canManageAttendance}
               journalDisabled={journalDisabled}
-              journalDate={detail.journalHistory[0]?.date ?? defaultJournalDate}
               onAddStudent={onAddStudent}
               onOpenJournal={onOpenJournal}
               onShowStudents={() => setTab("students")}
@@ -174,7 +169,6 @@ export function SlotDetailDialog({
               history={detail.journalHistory}
               canManageAttendance={canManageAttendance}
               journalDisabled={journalDisabled}
-              defaultJournalDate={defaultJournalDate}
               onOpenJournal={onOpenJournal}
             />
           ) : null}
@@ -189,7 +183,6 @@ function SlotOverview({
   canManage,
   canManageAttendance,
   journalDisabled,
-  journalDate,
   onAddStudent,
   onOpenJournal,
   onShowStudents,
@@ -199,9 +192,8 @@ function SlotOverview({
   canManage: boolean;
   canManageAttendance: boolean;
   journalDisabled: boolean;
-  journalDate: string;
   onAddStudent: () => void;
-  onOpenJournal: (date: string) => void;
+  onOpenJournal: () => void;
   onShowStudents: () => void;
   onShowJournal: () => void;
 }) {
@@ -246,8 +238,8 @@ function SlotOverview({
             </Button>
           ) : null}
           {canManageAttendance ? (
-            <Button type="button" onClick={() => onOpenJournal(journalDate)} disabled={journalDisabled}>
-              <BookOpenCheck data-icon="inline-start" /> Davamiyyəti aç
+            <Button type="button" onClick={onOpenJournal} disabled={journalDisabled}>
+              <BookOpenCheck data-icon="inline-start" /> Bugünkü jurnalı aç
             </Button>
           ) : null}
         </div>
@@ -432,24 +424,37 @@ function JournalHistory({
   history,
   canManageAttendance,
   journalDisabled,
-  defaultJournalDate,
   onOpenJournal,
 }: {
   history: PlannerWorkspaceData["slotDetail"]["journalHistory"];
   canManageAttendance: boolean;
   journalDisabled: boolean;
-  defaultJournalDate: string;
-  onOpenJournal: (date: string) => void;
+  onOpenJournal: () => void;
 }) {
+  const totals = history.reduce((summary, session) => ({
+    present: summary.present + session.presentCount,
+    absent: summary.absent + session.absentCount,
+    excused: summary.excused + session.excusedCount,
+    unmarked: summary.unmarked + session.unmarkedCount,
+  }), { present: 0, absent: 0, excused: 0, unmarked: 0 });
+
   return (
     <section className={styles.slotJournalSection}>
       <div className={styles.slotSectionToolbar}>
-        <div><h3>Jurnal tarixçəsi</h3><p>Son 12 dərsin davamiyyət qeydləri. Statusa klikləyərək redaktə edə bilərsiniz.</p></div>
+        <div><h3>Jurnal tarixçəsi</h3><p>Son 12 dərs tarix üzrə göstərilir. Əvvəlki günlər yalnız baxış üçündür.</p></div>
         {canManageAttendance ? (
-          <Button type="button" onClick={() => onOpenJournal(history[0]?.date ?? defaultJournalDate)} disabled={journalDisabled}>
-            <BookOpenCheck data-icon="inline-start" /> Jurnalı aç
+          <Button type="button" onClick={onOpenJournal} disabled={journalDisabled}>
+            <BookOpenCheck data-icon="inline-start" /> Bugünkü jurnal
           </Button>
         ) : null}
+      </div>
+
+      <div className={styles.journalOverallSummary} aria-label="Ümumi davamiyyət xülasəsi">
+        <div><small>Dərs tarixi</small><strong>{history.length}</strong></div>
+        <div data-state="present"><small>Ümumi gəldi</small><strong>{totals.present}</strong></div>
+        <div data-state="absent"><small>Ümumi gəlmədi</small><strong>{totals.absent}</strong></div>
+        <div data-state="excused"><small>Ümumi üzrlü</small><strong>{totals.excused}</strong></div>
+        <div><small>Statussuz</small><strong>{totals.unmarked}</strong></div>
       </div>
 
       <div className={styles.slotJournalList}>
@@ -466,9 +471,7 @@ function JournalHistory({
                 {session.excusedCount ? (
                   <span data-state="excused"><CircleMinus /> {session.excusedCount} üzrlü</span>
                 ) : null}
-                {canManageAttendance ? (
-                  <button type="button" onClick={() => onOpenJournal(session.date)}>Redaktə et</button>
-                ) : null}
+                {session.unmarkedCount ? <span>{session.unmarkedCount} statussuz</span> : null}
               </div>
             </header>
             <div className={styles.journalRecords}>
@@ -478,21 +481,10 @@ function JournalHistory({
                   <div key={record.assignmentId}>
                     <Avatar name={record.studentName} compact />
                     <span><strong>{record.studentName}</strong><small>{record.studentCode} · {record.program}</small></span>
-                    {canManageAttendance ? (
-                      <button
-                        type="button"
-                        className={cx(styles.historyStatus, styles[`historyStatus_${status}`])}
-                        onClick={() => onOpenJournal(session.date)}
-                        aria-label={`${record.studentName} üçün davamiyyət statusunu dəyiş`}
-                      >
-                        {status === "present" ? <Check /> : status === "absent" ? <X /> : status === "excused" ? <CircleMinus /> : <Clock3 />}
-                        {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : status === "excused" ? "Üzrlü" : "Qeyd yoxdur"}
-                      </button>
-                    ) : (
-                      <span className={cx(styles.historyStatus, styles[`historyStatus_${status}`])}>
-                        {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : status === "excused" ? "Üzrlü" : "Qeyd yoxdur"}
-                      </span>
-                    )}
+                    <span className={cx(styles.historyStatus, styles[`historyStatus_${status}`])}>
+                      {status === "present" ? <Check /> : status === "absent" ? <X /> : status === "excused" ? <CircleMinus /> : <Clock3 />}
+                      {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : status === "excused" ? "Üzrlü" : "Status yoxdur"}
+                    </span>
                     <small className={styles.historyNote}>{record.note || "Qeyd yoxdur"}</small>
                   </div>
                 );
@@ -504,9 +496,9 @@ function JournalHistory({
           <div className={styles.slotDetailEmpty}>
             <NotebookTabs />
             <strong>Jurnal tarixçəsi hələ yaranmayıb</strong>
-            <p>İlk davamiyyət saxlanıldıqdan sonra dərs tarixçəsi burada avtomatik görünəcək.</p>
+            <p>Slotun ilk dərs tarixi çatdıqdan sonra tarixçəsi burada görünəcək.</p>
             {canManageAttendance && !journalDisabled ? (
-              <Button type="button" onClick={() => onOpenJournal(defaultJournalDate)}>İlk davamiyyəti yaz</Button>
+              <Button type="button" onClick={onOpenJournal}>Bugünkü davamiyyəti yaz</Button>
             ) : null}
           </div>
         ) : null}

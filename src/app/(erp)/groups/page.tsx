@@ -19,14 +19,13 @@ export default async function GroupsPage({
 }: {
   searchParams: Promise<{
     slot?: string;
-    date?: string;
     attendance?: string;
     details?: string;
   }>;
 }) {
   const params = await searchParams;
   const [plannerData, announcementData] = await Promise.all([
-    getPlannerWorkspaceData({ slotId: params.slot, date: params.date }),
+    getPlannerWorkspaceData({ slotId: params.slot }),
     getAcademyAnnouncementsData(),
   ]);
 

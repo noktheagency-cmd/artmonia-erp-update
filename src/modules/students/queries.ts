@@ -20,6 +20,7 @@ import {
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 import { getStudentPaymentScheduleTypeLabel } from "@/modules/students/payment-schedule-type";
+import { calculatePackageLessonUsage } from "@/modules/students/package-lesson-usage";
 import {
   normalizeStudentPage,
   STUDENT_LIST_PAGE_SIZE,
@@ -869,6 +870,15 @@ type StudentSlotRecord = {
   teacherName: string | null;
   validFrom: Date | string;
   validTo: Date | string | null;
+};
+
+type StudentPackageUsageRaw = {
+  enrollmentId: string;
+  totalLessons: number | null;
+  usedLessons: number;
+  periodStart: Date | string;
+  periodEnd: Date | string;
+  periodSource: "BILLING_CYCLE" | "CALENDAR_MONTH";
 };
 
 type StudentReminderRawRow = {
@@ -2700,7 +2710,7 @@ export async function getStudentDetailData(studentId: string) {
         : "";
 
   const canAssignStudentManager = scopeFor(actor.permissions, "student.update") === "ALL";
-  const [options, reminders, managers, packages] = await Promise.all([
+  const [options, reminders, managers, packages, packageUsageRows] = await Promise.all([
     getStudentCreateOptions(prisma, today),
     getStudentReminderHistory(prisma, actor, studentId),
     prisma.user.findMany({
@@ -2738,7 +2748,55 @@ export async function getStudentDetailData(studentId: string) {
         teacher: { select: { fullName: true } },
       },
     }),
+    prisma.$queryRaw<StudentPackageUsageRaw[]>(Prisma.sql`
+      select
+        e.id::text as "enrollmentId",
+        coalesce(e.lessons_per_month, p.default_lessons_per_month)::int as "totalLessons",
+        coalesce(active_cycle.cycle_start, date_trunc('month', ${today}::date)::date) as "periodStart",
+        coalesce(
+          active_cycle.cycle_end,
+          (date_trunc('month', ${today}::date) + interval '1 month - 1 day')::date
+        ) as "periodEnd",
+        case
+          when active_cycle.id is null then 'CALENDAR_MONTH'
+          else 'BILLING_CYCLE'
+        end as "periodSource",
+        (
+          select count(*)::int
+          from erp.attendance_records ar
+          join erp.slot_sessions ss on ss.id = ar.session_id
+          where ar.enrollment_id = e.id
+            and ar.status = 'PRESENT'::"erp"."AttendanceMark"
+            and ss.session_date >= coalesce(
+              active_cycle.cycle_start,
+              date_trunc('month', ${today}::date)::date
+            )
+            and ss.session_date <= coalesce(
+              active_cycle.cycle_end,
+              (date_trunc('month', ${today}::date) + interval '1 month - 1 day')::date
+            )
+        ) as "usedLessons"
+      from erp.enrollments e
+      join erp.programs p on p.id = e.program_id
+      left join lateral (
+        select cycle.id, cycle.cycle_start, cycle.cycle_end
+        from erp.student_billing_cycles cycle
+        where cycle.enrollment_id = e.id
+          and cycle.cycle_start <= ${today}::date
+          and cycle.cycle_end >= ${today}::date
+        order by cycle.cycle_start desc
+        limit 1
+      ) active_cycle on true
+      where e.student_id = ${studentId}::uuid
+        and e.status in (
+          'ACTIVE'::"erp"."EnrollmentStatus",
+          'PAUSED'::"erp"."EnrollmentStatus"
+        )
+    `),
   ]);
+  const packageUsageByEnrollment = new Map(
+    packageUsageRows.map((usage) => [usage.enrollmentId, usage]),
+  );
 
   const programs = options.programs.map((program) => ({
     id: program.id,
@@ -2872,17 +2930,33 @@ export async function getStudentDetailData(studentId: string) {
         monthlyFeeLabel: student.monthlyFee === null || student.monthlyFee === undefined
           ? "Təyin edilməyib"
           : formatAmount(student.monthlyFee),
-        packages: packages.map((enrollment) => ({
-          id: enrollment.id,
-          program: enrollment.program.name,
-          teacher: enrollment.teacher?.fullName ?? "Müəllim təyin edilməyib",
-          firstLessonDate: enrollment.firstLessonAt
-            ? formatShortDate(enrollment.firstLessonAt)
-            : "Təsdiqlənməyib",
-          monthlyFee: formatAmount(enrollment.monthlyFee),
-          lessonsPerMonth: enrollment.lessonsPerMonth?.toString() ?? "—",
-          status: enrollment.status === EnrollmentStatus.PAUSED ? "Dondurulub" : "Aktiv",
-        })),
+        packages: packages.map((enrollment) => {
+          const rawUsage = packageUsageByEnrollment.get(enrollment.id);
+          const usage = calculatePackageLessonUsage(
+            rawUsage?.totalLessons ?? enrollment.lessonsPerMonth ?? null,
+            toNumber(rawUsage?.usedLessons),
+          );
+          return {
+            id: enrollment.id,
+            program: enrollment.program.name,
+            teacher: enrollment.teacher?.fullName ?? "Müəllim təyin edilməyib",
+            firstLessonDate: enrollment.firstLessonAt
+              ? formatShortDate(enrollment.firstLessonAt)
+              : "Təsdiqlənməyib",
+            monthlyFee: formatAmount(enrollment.monthlyFee),
+            lessonsPerMonth: usage.totalLessons?.toString() ?? "—",
+            usedLessons: usage.usedLessons,
+            remainingLessons: usage.remainingLessons,
+            overLimitLessons: usage.overLimitLessons,
+            usagePeriod: rawUsage
+              ? `${formatShortDate(rawUsage.periodStart)}–${formatShortDate(rawUsage.periodEnd)}`
+              : "Cari ay",
+            usagePeriodSource: rawUsage?.periodSource === "BILLING_CYCLE"
+              ? "Paket dövrü"
+              : "Təqvim ayı",
+            status: enrollment.status === EnrollmentStatus.PAUSED ? "Dondurulub" : "Aktiv",
+          };
+        }),
         invoices: asJsonArray<StudentInvoiceRecord>(student.invoices).map((invoice) => {
           const status = invoiceStatusMeta[invoice.status];
           return {

@@ -41,6 +41,52 @@
   color: var(--students-ink);
 }
 
+.student-package-lesson-balance {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px !important;
+}
+
+.student-package-lesson-balance > span {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.student-package-lesson-balance > span[data-state="used"] {
+  border-color: #cfe0f8;
+  background: #f2f7ff;
+}
+
+.student-package-lesson-balance > span[data-state="remaining"] {
+  border-color: #c9e9dc;
+  background: #eff9f5;
+}
+
+.student-package-lesson-balance small {
+  padding: 0;
+  border: 0;
+  color: #778296;
+  font-size: 9px;
+}
+
+.student-package-lesson-balance strong {
+  font-size: 14px;
+}
+
+.student-package-over-limit {
+  padding: 8px 10px;
+  color: #a9433f !important;
+  background: #fff0ef;
+  border: 1px solid #ebc0bd;
+  border-radius: 9px;
+  font-size: 9px !important;
+  font-weight: 700;
+}
+
 .students-command-shell,
 .students-kpi,
 .students-analytics-card,

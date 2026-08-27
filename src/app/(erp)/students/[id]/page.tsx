@@ -131,7 +131,24 @@ export default async function StudentDetailPage({
                 <span>{item.monthlyFee} · {item.lessonsPerMonth} dərs</span>
                 <span>{item.status}</span>
               </div>
-              <small>İlk dərs: {item.firstLessonDate}</small>
+              <div className="student-package-lesson-balance">
+                <span data-state="used">
+                  <small>İstifadə olunub</small>
+                  <strong>{item.usedLessons} dərs</strong>
+                </span>
+                <span data-state="remaining">
+                  <small>Qalan</small>
+                  <strong>{item.remainingLessons === null ? "Limitsiz" : `${item.remainingLessons} dərs`}</strong>
+                </span>
+              </div>
+              {item.overLimitLessons ? (
+                <span className="student-package-over-limit">
+                  Paket limitindən {item.overLimitLessons} dərs artıq istifadə olunub
+                </span>
+              ) : null}
+              <small>
+                {item.usagePeriodSource}: {item.usagePeriod} · İlk dərs: {item.firstLessonDate}
+              </small>
             </article>
           ))}
         </div>

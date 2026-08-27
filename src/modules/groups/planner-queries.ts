@@ -2,12 +2,11 @@ import { AppRole, EnrollmentStatus } from "@/generated/prisma/client";
 import {
   dateFromInput,
   formatDateAz,
-  latestScheduledDate,
   todayInBaku,
   toDateInput,
   type GroupWeekdayCode,
 } from "@/modules/groups/shared";
-import { firstSlotOccurrenceDate } from "@/modules/groups/planner-assignment";
+import { canEditAttendanceToday, recentScheduledDates } from "@/modules/groups/planner-journal";
 import { formatAmount } from "@/modules/shared/format";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -86,7 +85,8 @@ export type PlannerJournalHistoryItem = {
   presentCount: number;
   absentCount: number;
   excusedCount: number;
-  records: Array<PlannerJournalMember & { markedAt: string }>;
+  unmarkedCount: number;
+  records: Array<PlannerJournalMember & { markedAt: string | null }>;
 };
 
 export type PlannerWorkspaceData = {
@@ -108,17 +108,12 @@ export type PlannerWorkspaceData = {
     slotId: string;
     date: string;
     dateLabel: string;
-    title: string;
-    objective: string;
     status: "SCHEDULED" | "COMPLETED" | "CANCELLED" | "RESCHEDULED";
     startTime: string;
     endTime: string;
     location: string;
-    homework: {
-      title: string;
-      description: string;
-      dueDate: string;
-    };
+    canEdit: boolean;
+    disabledReason: string | null;
     members: PlannerJournalMember[];
     presentCount: number;
     absentCount: number;
@@ -129,7 +124,6 @@ export type PlannerWorkspaceData = {
 
 export async function getPlannerWorkspaceData(input?: {
   slotId?: string;
-  date?: string;
 }): Promise<PlannerWorkspaceData> {
   const actor = await requireErpActor("group.read");
   const prisma = getPrisma();
@@ -239,17 +233,26 @@ export async function getPlannerWorkspaceData(input?: {
   }));
   const selectedSlot = plannerSlots.find((slot) => slot.id === input?.slotId) ?? plannerSlots[0];
   const selectedSlotId = selectedSlot?.id ?? "";
-  const firstLessonDate = selectedSlot
-    ? firstSlotOccurrenceDate(selectedSlot.validFrom, selectedSlot)
-    : today;
-  const journalDate = selectedSlot
-    ? firstLessonDate > today
-      ? firstLessonDate
-      : latestScheduledDate([selectedSlot.weekday], input?.date, today)
-    : today;
+  const journalDate = today;
   const journalDateValue = dateFromInput(journalDate);
+  const historyDates = selectedSlot
+    ? recentScheduledDates({
+        weekday: selectedSlot.weekday,
+        validFrom: selectedSlot.validFrom,
+        today,
+        limit: 12,
+      })
+    : [];
+  const historyDateValues = historyDates.map(dateFromInput);
+  const historyStartDate = historyDateValues.at(-1) ?? journalDateValue;
 
-  const [journalAssignments, journalSession, detailedAssignments, historySessions] = selectedSlot
+  const [
+    journalAssignments,
+    journalSession,
+    detailedAssignments,
+    historyAssignments,
+    historySessions,
+  ] = selectedSlot
     ? await Promise.all([
         prisma.studentScheduleAssignment.findMany({
           where: {
@@ -284,15 +287,10 @@ export async function getPlannerWorkspaceData(input?: {
             },
           },
           select: {
-            title: true,
-            objective: true,
             status: true,
             startTime: true,
             endTime: true,
             locationOverride: true,
-            homework: {
-              select: { title: true, description: true, dueAt: true },
-            },
             attendance: {
               select: { enrollmentId: true, status: true, note: true },
             },
@@ -350,12 +348,39 @@ export async function getPlannerWorkspaceData(input?: {
               },
             })
           : Promise.resolve([]),
+        prisma.studentScheduleAssignment.findMany({
+          where: {
+            slotId: selectedSlot.id,
+            validFrom: { lte: journalDateValue },
+            OR: [{ validTo: null }, { validTo: { gte: historyStartDate } }],
+          },
+          take: 250,
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            validFrom: true,
+            validTo: true,
+            enrollment: {
+              select: {
+                id: true,
+                program: { select: { name: true } },
+                student: {
+                  select: {
+                    id: true,
+                    code: true,
+                    contact: { select: { fullName: true } },
+                  },
+                },
+              },
+            },
+          },
+        }),
         prisma.slotSession.findMany({
           where: {
             slotId: selectedSlot.id,
-            sessionDate: { lte: dateFromInput(today) },
+            sessionDate: { in: historyDateValues },
           },
-          take: 12,
+          take: historyDates.length,
           orderBy: { sessionDate: "desc" },
           select: {
             id: true,
@@ -364,30 +389,17 @@ export async function getPlannerWorkspaceData(input?: {
             endTime: true,
             attendance: {
               take: 100,
-              orderBy: { enrollment: { student: { contact: { fullName: "asc" } } } },
               select: {
+                enrollmentId: true,
                 status: true,
                 note: true,
                 markedAt: true,
-                enrollment: {
-                  select: {
-                    id: true,
-                    program: { select: { name: true } },
-                    student: {
-                      select: {
-                        id: true,
-                        code: true,
-                        contact: { select: { fullName: true } },
-                      },
-                    },
-                  },
-                },
               },
             },
           },
         }),
       ])
-    : [[], null, [], []] as const;
+    : [[], null, [], [], []] as const;
 
   const attendanceByEnrollment = new Map(
     journalSession?.attendance.map((item) => [item.enrollmentId, item]) ?? [],
@@ -458,34 +470,63 @@ export async function getPlannerWorkspaceData(input?: {
         relatedContacts: [],
       }));
 
-  const journalHistory: PlannerJournalHistoryItem[] = historySessions.map((session) => {
-    const records = session.attendance.map((record) => ({
-      assignmentId: `${session.id}-${record.enrollment.id}`,
-      enrollmentId: record.enrollment.id,
-      studentId: record.enrollment.student.id,
-      studentCode: record.enrollment.student.code,
-      studentName: record.enrollment.student.contact.fullName,
-      program: record.enrollment.program.name,
-      attendanceStatus: record.status === "PRESENT"
-        ? "present" as const
-        : record.status === "EXCUSED"
-          ? "excused" as const
-          : "absent" as const,
-      note: record.note ?? "",
-      markedAt: record.markedAt.toISOString(),
-    }));
+  const historySessionByDate = new Map(
+    historySessions.map((session) => [toDateInput(session.sessionDate), session]),
+  );
+  const journalHistory: PlannerJournalHistoryItem[] = historyDates.map((date) => {
+    const session = historySessionByDate.get(date);
+    const attendanceByEnrollment = new Map(
+      session?.attendance.map((record) => [record.enrollmentId, record]) ?? [],
+    );
+    const records = historyAssignments
+      .filter((assignment) => (
+        toDateInput(assignment.validFrom) <= date
+        && (!assignment.validTo || toDateInput(assignment.validTo) >= date)
+      ))
+      .map((assignment) => {
+        const attendance = attendanceByEnrollment.get(assignment.enrollment.id);
+        return {
+          assignmentId: `${date}-${assignment.id}`,
+          enrollmentId: assignment.enrollment.id,
+          studentId: assignment.enrollment.student.id,
+          studentCode: assignment.enrollment.student.code,
+          studentName: assignment.enrollment.student.contact.fullName,
+          program: assignment.enrollment.program.name,
+          attendanceStatus: attendance?.status === "PRESENT"
+            ? "present" as const
+            : attendance?.status === "EXCUSED"
+              ? "excused" as const
+              : attendance?.status === "ABSENT"
+                ? "absent" as const
+                : null,
+          note: attendance?.note ?? "",
+          markedAt: attendance?.markedAt.toISOString() ?? null,
+        };
+      })
+      .toSorted((left, right) => left.studentName.localeCompare(right.studentName, "az"));
     return {
-      id: session.id,
-      date: toDateInput(session.sessionDate),
-      dateLabel: formatDateAz(session.sessionDate),
-      startTime: session.startTime,
-      endTime: session.endTime,
+      id: session?.id ?? `${selectedSlotId}-${date}`,
+      date,
+      dateLabel: formatDateAz(date),
+      startTime: session?.startTime ?? selectedSlot?.startTime ?? "",
+      endTime: session?.endTime ?? selectedSlot?.endTime ?? "",
       presentCount: records.filter((record) => record.attendanceStatus === "present").length,
       absentCount: records.filter((record) => record.attendanceStatus === "absent").length,
       excusedCount: records.filter((record) => record.attendanceStatus === "excused").length,
+      unmarkedCount: records.filter((record) => record.attendanceStatus === null).length,
       records,
     };
   });
+  const journalStatus = journalSession?.status ?? "SCHEDULED";
+  const attendanceEditState = selectedSlot
+    ? canEditAttendanceToday({
+        today,
+        weekday: selectedSlot.weekday,
+        validFrom: selectedSlot.validFrom,
+        hasTeacher: Boolean(selectedSlot.teacherId),
+        sessionStatus: journalStatus,
+      })
+    : { canEdit: false, reason: "Slot seçilməyib" };
 
   return {
     actorName: actor.fullName,
@@ -516,21 +557,13 @@ export async function getPlannerWorkspaceData(input?: {
       slotId: selectedSlotId,
       date: journalDate,
       dateLabel: formatDateAz(journalDate),
-      title: journalSession?.title ?? "",
-      objective: journalSession?.objective ?? "",
-      status: journalSession?.status
-        ?? (journalDate < today ? "COMPLETED" : "SCHEDULED"),
+      status: journalStatus,
       startTime: journalSession?.startTime ?? selectedSlot?.startTime ?? "",
       endTime: journalSession?.endTime ?? selectedSlot?.endTime ?? "",
       location: journalSession?.locationOverride
         ?? (selectedSlot?.room === "Otaq seçilməyib" ? "" : selectedSlot?.room ?? ""),
-      homework: {
-        title: journalSession?.homework?.title ?? "",
-        description: journalSession?.homework?.description ?? "",
-        dueDate: journalSession?.homework?.dueAt
-          ? toDateInput(journalSession.homework.dueAt)
-          : "",
-      },
+      canEdit: attendanceEditState.canEdit,
+      disabledReason: attendanceEditState.reason,
       members: journalMembers,
       presentCount: journalMembers.filter((member) => member.attendanceStatus === "present").length,
       absentCount: journalMembers.filter((member) => member.attendanceStatus === "absent").length,
