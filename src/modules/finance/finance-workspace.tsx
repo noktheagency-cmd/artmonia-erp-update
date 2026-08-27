@@ -43,8 +43,18 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { PieLabelRenderProps } from "recharts";
 import { createPortal, useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   ChartContainer,
   ChartTooltip,
@@ -279,9 +289,6 @@ export function FinanceWorkspace({
             </div>
           </div>
           <div className="finance-header-actions">
-            <Link href={"/finance/billing-migration" as Route} className="finance-migration-link">
-              Billing migration hesabatı
-            </Link>
             {data.permissions.canExport ? (
               <ExportDialog
                 key={`finance-export-${data.filters.type}`}
@@ -1442,69 +1449,9 @@ function OverviewWorkspace({ data }: { data: FinanceData }) {
         <PaymentMethodChart data={data} />
       </div>
 
-      <EducationCollectionReconciliation data={data} />
-
       <RecentFinanceActivity data={data} />
     </>
   );
-}
-
-function EducationCollectionReconciliation({ data }: { data: FinanceData }) {
-  const report = data.educationCollectionReconciliation;
-  return (
-    <article className="finance-panel">
-      <div className="finance-panel-head">
-        <div>
-          <span>Vahid ödənilmiş təhsil əməliyyatları mənbəyi</span>
-          <h2>Ümumi ödəniş və köhnə ACTIVE-only fərqi</h2>
-          <small>
-            Ümumi {report.paidEducationTotal} · köhnə ACTIVE-only {report.legacyActiveOnlyTotal} · fərq {report.difference}
-          </small>
-        </div>
-      </div>
-      {report.rows.length > 0 ? (
-        <div className="finance-table-wrap" data-erp-table-scroll="">
-          <table className="finance-table" data-erp-table="">
-            <thead>
-              <tr>
-                <th>Tələbə</th>
-                <th>Məbləğ</th>
-                <th>Ödəniş tarixi</th>
-                <th>Aid olduğu ay</th>
-                <th>Tədris statusu</th>
-                <th>Ödəniş statusu</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.rows.map((row) => (
-                <tr key={row.id}>
-                  <td><strong>{row.studentName}</strong><br /><small>{row.studentCode}</small></td>
-                  <td className="finance-money positive">{row.amount}</td>
-                  <td>{row.paidAt}</td>
-                  <td>{row.paymentMonth}</td>
-                  <td><StatusChip tone="neutral">{getAcademicStatusLabel(row.lifecycleStatus)}</StatusChip></td>
-                  <td><StatusChip tone="success">{row.status}</StatusChip></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="finance-overview-empty">Ümumi və ACTIVE-only məbləğ arasında fərq yoxdur</div>
-      )}
-    </article>
-  );
-}
-
-function getAcademicStatusLabel(value: string) {
-  return {
-    SLOT_WAITING: "Slot gözləyir",
-    ACTIVE: "Aktiv",
-    FROZEN: "Dondurulub",
-    STOPPED: "Dayandırılıb",
-    COMPLETED: "Tamamlayıb",
-    DECLINED: "İmtina edib",
-  }[value] ?? value;
 }
 
 function RecentFinanceActivity({ data }: { data: FinanceData }) {
@@ -1601,6 +1548,9 @@ type ChartSlice = {
 };
 
 const chartPalette = ["#2b58f0", "#20b8a8", "#f59e0b", "#ef476f", "#8b5cf6", "#64748b"];
+const expenseCategoryChartConfig = {
+  value: { label: "Məbləğ" },
+} satisfies ChartConfig;
 
 function FinanceStructureChart({ data }: { data: FinanceData }) {
   const slices = useMemo<ChartSlice[]>(() => {
@@ -1641,21 +1591,32 @@ function FinanceStructureChart({ data }: { data: FinanceData }) {
 
 function CostCenterChart({ data }: { data: FinanceData }) {
   const rows = useMemo(() => {
+    const officialLabels = financeCostCenterOptions.map((option) => option.label);
+    const officialLabelSet = new Set(officialLabels);
+    const breakdownByLabel = new Map(
+      data.costCenterBreakdown.map((item) => [item.label, item]),
+    );
     const total = data.costCenterBreakdown.reduce((sum, item) => sum + item.value, 0);
+    const allCenters = [
+      ...officialLabels.map((label) => breakdownByLabel.get(label) ?? {
+        label,
+        value: 0,
+        amount: formatChartAmount(0),
+        count: 0,
+      }),
+      ...data.costCenterBreakdown.filter((item) => !officialLabelSet.has(item.label)),
+    ].sort((first, second) => second.value - first.value);
 
-    return data.costCenterBreakdown
-      .filter((item) => item.value > 0)
-      .map((item, index) => ({
-        label: item.label,
-        value: item.value,
-        count: item.count,
-        share: total > 0 ? (item.value / total) * 100 : 0,
-        color: chartPalette[index % chartPalette.length],
-      }))
-      .sort((first, second) => second.value - first.value);
+    return allCenters.map((item, index) => ({
+      label: item.label,
+      value: item.value,
+      count: item.count,
+      share: total > 0 ? (item.value / total) * 100 : 0,
+      color: chartPalette[index % chartPalette.length],
+    }));
   }, [data.costCenterBreakdown]);
   const total = rows.reduce((sum, row) => sum + row.value, 0);
-  const leader = rows[0];
+  const leader = rows.find((row) => row.value > 0);
 
   return (
     <article className="finance-panel finance-stat-panel">
@@ -1670,11 +1631,7 @@ function CostCenterChart({ data }: { data: FinanceData }) {
           </small>
         </div>
       </div>
-      {rows.length > 0 ? (
-        <HorizontalStatBars rows={rows} />
-      ) : (
-        <div className="finance-overview-empty">Xərc mərkəzi üzrə məlumat yoxdur</div>
-      )}
+      <HorizontalStatBars rows={rows} />
     </article>
   );
 }
@@ -1853,7 +1810,7 @@ function HorizontalStatBars({
   return (
     <div className="finance-method-bars">
       {rows.map((row) => {
-        const width = Math.max(6, (row.value / maxValue) * 100);
+        const width = row.value > 0 ? Math.max(6, (row.value / maxValue) * 100) : 0;
 
         return (
           <div className="finance-method-row" key={row.label}>
@@ -2404,7 +2361,6 @@ function ExpenseCategoryChart({
   const slices = useMemo<ChartSlice[]>(() => {
     return breakdown
       .filter((slice) => slice.value > 0)
-      .slice(0, 7)
       .map((slice, index) => ({
         label: slice.label,
         value: slice.value,
@@ -2412,22 +2368,107 @@ function ExpenseCategoryChart({
         color: chartPalette[index % chartPalette.length],
       }));
   }, [breakdown]);
+  const total = sumChartValues(slices);
+  const reduceMotion = useReducedMotion();
 
   return (
-    <section className="finance-expense-category-chart" aria-label="Xərclərin kateqoriya diaqramı">
-      <div>
-        <span>Kateqoriya bölgüsü</span>
-        <strong>Aktiv filtr üzrə xərc strukturu</strong>
-      </div>
+    <Card className="finance-expense-category-chart" size="sm" aria-label="Xərclərin kateqoriya diaqramı">
+      <CardHeader className="finance-expense-category-head">
+        <CardTitle>Xərc strukturu</CardTitle>
+        <CardDescription>Aktiv filtr üzrə kateqoriyaların payı</CardDescription>
+        <CardAction><StatusChip tone="danger">Xərclər</StatusChip></CardAction>
+      </CardHeader>
       {slices.length > 0 ? (
-        <ExpenseBreakdownBarChart
-          slices={slices}
-          compact
-        />
+        <>
+          <CardContent className="finance-expense-pie-content">
+            <ChartContainer
+              config={expenseCategoryChartConfig}
+              className="finance-expense-pie-chart"
+              initialDimension={{ width: 320, height: 280 }}
+            >
+              <PieChart accessibilityLayer>
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent hideLabel formatter={(value, _name, item) => (
+                    <div className="finance-tooltip-value">
+                      <span>{String(item.payload?.label ?? "Xərc")}</span>
+                      <strong>{formatChartAmount(Number(value))}</strong>
+                    </div>
+                  )} />}
+                />
+                <Pie
+                  data={slices}
+                  dataKey="value"
+                  nameKey="label"
+                  outerRadius={102}
+                  paddingAngle={2}
+                  stroke="var(--background)"
+                  strokeWidth={3}
+                  labelLine={false}
+                  label={renderExpensePieLabel}
+                  isAnimationActive={!reduceMotion}
+                  animationDuration={850}
+                >
+                  {slices.map((slice) => <Cell key={slice.label} fill={slice.color} />)}
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+            <div className="finance-expense-pie-legend" aria-label="Xərc kateqoriyaları">
+              {slices.map((slice) => {
+                const share = total > 0 ? (slice.value / total) * 100 : 0;
+                return (
+                  <div className="finance-expense-pie-legend-row" key={slice.label}>
+                    <span className="finance-expense-pie-dot" style={{ backgroundColor: slice.color }} />
+                    <div>
+                      <strong title={slice.label}>{slice.label}</strong>
+                      <small>{formatChartAmount(slice.value)} · {slice.helper}</small>
+                    </div>
+                    <b>{share.toFixed(0)}%</b>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+          <CardFooter className="finance-expense-pie-footer">
+            <span>Seçilmiş dövr üzrə ümumi xərc</span>
+            <strong>{formatChartAmount(total)}</strong>
+          </CardFooter>
+        </>
       ) : (
-        <div className="finance-overview-empty">Diaqram üçün xərc məlumatı yoxdur</div>
+        <CardContent><div className="finance-overview-empty">Diaqram üçün xərc məlumatı yoxdur</div></CardContent>
       )}
-    </section>
+    </Card>
+  );
+}
+
+function renderExpensePieLabel({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+}: PieLabelRenderProps) {
+  const share = Number(percent ?? 0);
+  if (share < 0.06) return null;
+
+  const radius = Number(innerRadius) + (Number(outerRadius) - Number(innerRadius)) * 0.62;
+  const radians = (-Number(midAngle) * Math.PI) / 180;
+  const x = Number(cx) + radius * Math.cos(radians);
+  const y = Number(cy) + radius * Math.sin(radians);
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="white"
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={11}
+      fontWeight={750}
+    >
+      {Math.round(share * 100)}%
+    </text>
   );
 }
 
