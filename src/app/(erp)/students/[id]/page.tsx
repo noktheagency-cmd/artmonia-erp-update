@@ -221,6 +221,12 @@ export default async function StudentDetailPage({
             <span>Ödəniş edilmiş aylar</span>
             <strong>{student.clv.paidMonths} ay</strong>
           </div>
+          {student.clv.hasCredit && (
+            <div className="is-credit">
+              <span>Avans / kredit</span>
+              <strong>{student.clv.creditBalance}</strong>
+            </div>
+          )}
           {student.paymentTone !== "success" && (
             <div className="is-debt">
               <span>Qalan borc</span>

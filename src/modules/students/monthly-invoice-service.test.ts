@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Prisma } from "@/generated/prisma/client";
 import { ensureStudentMonthlyInvoicesForPeriod } from "./monthly-invoice-service";
+import { billingDateForMonth } from "./payment-billing-period";
 
 function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -96,5 +97,18 @@ test("prepayment is rejected when no first lesson has been confirmed", async () 
       asOfDate: utcDate("2026-08-25"),
     }),
     /təsdiqlənmiş ilk dərs tarixi yoxdur/,
+  );
+});
+
+test("31-day billing anchors use month end without losing the original anchor", () => {
+  const anchor = utcDate("2026-01-31");
+
+  assert.equal(
+    billingDateForMonth(utcDate("2026-02-01"), anchor).toISOString().slice(0, 10),
+    "2026-02-28",
+  );
+  assert.equal(
+    billingDateForMonth(utcDate("2026-03-01"), anchor).toISOString().slice(0, 10),
+    "2026-03-31",
   );
 });

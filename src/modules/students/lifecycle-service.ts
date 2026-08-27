@@ -201,7 +201,11 @@ export async function syncActivationBilling(
     },
   });
 
-  const periodMonth = startOfMonth(input.effectiveAt);
+  const periodMonth = resolveActivationBillingPeriod({
+    effectiveAt: input.effectiveAt,
+    billingAnchorDate,
+    isReactivation: Boolean(input.isReactivation),
+  });
   const dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
   const existingInvoice = await tx.invoice.findFirst({
     where: {
@@ -290,6 +294,28 @@ function resolveInvoiceStatus({
   }
 
   return balanceDue < amount ? InvoiceStatus.PARTIAL : InvoiceStatus.OPEN;
+}
+
+export function resolveActivationBillingPeriod({
+  effectiveAt,
+  billingAnchorDate,
+  isReactivation,
+}: {
+  effectiveAt: Date;
+  billingAnchorDate: Date;
+  isReactivation: boolean;
+}) {
+  const currentMonth = startOfMonth(effectiveAt);
+  if (!isReactivation) return currentMonth;
+
+  const currentDueDate = billingDateForMonth(currentMonth, billingAnchorDate);
+  if (effectiveAt.getTime() <= currentDueDate.getTime()) return currentMonth;
+
+  return new Date(Date.UTC(
+    currentMonth.getUTCFullYear(),
+    currentMonth.getUTCMonth() + 1,
+    1,
+  ));
 }
 
 function startOfMonth(value: Date) {

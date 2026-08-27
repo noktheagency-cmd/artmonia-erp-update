@@ -206,6 +206,8 @@ export type StudentListData = {
     clv: {
       totalPaid: string;
       paidMonths: number;
+      creditBalance: string;
+      hasCredit: boolean;
     };
     detail: {
       manager: string;
@@ -663,6 +665,7 @@ export async function getStudentListData(
       const totalPaid = toNumber(student.totalPaid);
       const currentMonthPaid = toNumber(student.currentMonthPaid);
       const paidMonths = toNumber(student.paidMonths);
+      const creditBalance = toNumber(student.creditBalance);
       const nextPaymentAt = student.nextDueDate ? new Date(student.nextDueDate) : null;
       const lifecycleStatus = lifecycleMeta[student.lifecycleStatus];
       const paymentStatus = student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
@@ -705,6 +708,8 @@ export async function getStudentListData(
         clv: {
           totalPaid: formatAmount(totalPaid),
           paidMonths,
+          creditBalance: formatAmount(creditBalance),
+          hasCredit: creditBalance > 0,
         },
         detail: {
           manager: student.managerName ?? "Təyin edilməyib",
@@ -779,6 +784,7 @@ type StudentListQueryRow = {
   nextDueDate: Date | string | null;
   totalPaid: unknown;
   paidMonths: unknown;
+  creditBalance: unknown;
   totalCount: number;
   invoices: StudentInvoiceRecord[];
   slots: StudentSlotRecord[];
@@ -1118,6 +1124,7 @@ async function getStudentRows(
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
       clv.paid_months as "paidMonths",
+      clv.credit_balance as "creditBalance",
       inv.invoices,
       ${buildStudentSlotsJsonSql(Prisma.sql`ps.id`)} as slots,
       pay.payments,
@@ -1175,7 +1182,15 @@ async function getStudentRows(
         coalesce(sum(p.amount), 0) as total_paid,
         count(distinct p.payment_month) filter (
           where p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
-        )::int as paid_months
+        )::int as paid_months,
+        coalesce(sum(greatest(
+          p.amount - coalesce((
+            select sum(pa.amount_allocated)
+            from erp.payment_allocations pa
+            where pa.payment_id = p.id
+          ), 0),
+          0
+        )), 0) as credit_balance
       from erp.payments p
       where p.student_id = ps.id
     ) clv on true
@@ -2546,6 +2561,7 @@ export async function getStudentDetailData(studentId: string) {
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
       clv.paid_months as "paidMonths",
+      clv.credit_balance as "creditBalance",
       clv_history.monthly_payments as "monthlyPayments",
       inv.invoices,
       ${buildStudentSlotsJsonSql(Prisma.sql`ps.id`)} as slots,
@@ -2606,7 +2622,15 @@ export async function getStudentDetailData(studentId: string) {
         coalesce(sum(p.amount), 0) as total_paid,
         count(distinct p.payment_month) filter (
           where p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
-        )::int as paid_months
+        )::int as paid_months,
+        coalesce(sum(greatest(
+          p.amount - coalesce((
+            select sum(pa.amount_allocated)
+            from erp.payment_allocations pa
+            where pa.payment_id = p.id
+          ), 0),
+          0
+        )), 0) as credit_balance
       from erp.payments p
       where p.student_id = ps.id
     ) clv on true
@@ -2686,6 +2710,7 @@ export async function getStudentDetailData(studentId: string) {
   const totalPaid = toNumber(student.totalPaid);
   const currentMonthPaid = toNumber(student.currentMonthPaid);
   const paidMonths = toNumber(student.paidMonths);
+  const creditBalance = toNumber(student.creditBalance);
   const nextPaymentAt = student.nextDueDate
     ? new Date(student.nextDueDate as Date)
     : null;
@@ -2879,6 +2904,8 @@ export async function getStudentDetailData(studentId: string) {
       clv: {
         totalPaid: formatAmount(totalPaid),
         paidMonths,
+        creditBalance: formatAmount(creditBalance),
+        hasCredit: creditBalance > 0,
       },
       detail: {
         email: student.contactEmail ?? "",

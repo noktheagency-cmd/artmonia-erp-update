@@ -4950,6 +4950,15 @@ strong {
   color: var(--coral);
 }
 
+.student-clv-summary-grid .is-credit {
+  background: #f2fbf7;
+  border-color: rgba(32, 168, 118, 0.2);
+}
+
+.student-clv-summary-grid .is-credit strong {
+  color: #17865f;
+}
+
 .student-clv-history {
   overflow: hidden;
   border: 1px solid rgba(231, 237, 247, 0.9);

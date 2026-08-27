@@ -159,17 +159,18 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
 }
 
 /**
- * Materializes monthly invoice gaps before a payment is allocated.
+ * Materializes only the billing month that is due as of `throughDate`.
  *
- * Imported historical data may contain a monthly payment without an invoice.
- * Such a month is treated as covered; only its unpaid remainder is invoiced.
+ * Historical gaps are never inferred here: an explicit payment-month selection
+ * is handled by `ensureStudentMonthlyInvoicesForPeriod`, while recurring months
+ * are materialized by the database billing job. This prevents a past frozen
+ * month from being turned into debt merely because a later action is recorded.
  */
 export async function ensureMissingStudentMonthlyInvoices(
   tx: Prisma.TransactionClient,
   input: { studentId: string; throughDate: Date },
 ) {
   const throughMonth = startOfMonth(input.throughDate);
-  const sentinelMonth = addMonths(throughMonth, 1);
   const rows = await tx.$queryRaw<MissingMonthlyInvoiceRow[]>(Prisma.sql`
     with current_enrollment as (
       select
@@ -183,40 +184,18 @@ export async function ensureMissingStudentMonthlyInvoices(
       join erp.students s on s.id = e.student_id
       where e.student_id = ${input.studentId}::uuid
         and e.status in (
-          'ACTIVE'::"erp"."EnrollmentStatus",
-          'PAUSED'::"erp"."EnrollmentStatus"
+          'ACTIVE'::"erp"."EnrollmentStatus"
         )
         and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
         and s.billing_paused = false
         and s.is_test_data = false
         and s.billing_anchor_date is not null
-    ), evidence as (
-      select
-        ce.*,
-        greatest(
-          date_trunc('month', ce.billing_anchor)::date,
-          least(
-            coalesce((
-              select min(i.period_month)
-              from erp.invoices i
-              where i.student_id = ce.student_id
-                and i.status <> 'VOID'::"erp"."InvoiceStatus"
-            ), ${sentinelMonth}::date),
-            coalesce((
-              select min(p.payment_month)
-              from erp.payments p
-              where p.student_id = ce.student_id
-                and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
-            ), ${sentinelMonth}::date)
-          )
-        ) as first_billing_month
-      from current_enrollment ce
     )
     select
       e.student_id::text as "studentId",
       s.code as "studentCode",
       e.id::text as "enrollmentId",
-      billing_month.period_month as "periodMonth",
+      ${throughMonth}::date as "periodMonth",
       e.billing_anchor as "billingAnchor",
       e.monthly_fee as amount,
       greatest(e.monthly_fee - case when e.enrollment_count = 1 then coalesce((
@@ -224,31 +203,32 @@ export async function ensureMissingStudentMonthlyInvoices(
         from erp.payments p
         where p.student_id = e.student_id
           and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
-          and date_trunc('month', p.payment_month) = billing_month.period_month
+          and date_trunc('month', p.payment_month) = ${throughMonth}::date
       ), 0) else 0 end, 0) as "balanceDue"
-    from evidence e
+    from current_enrollment e
     join erp.students s on s.id = e.student_id
-    cross join lateral generate_series(
-      e.first_billing_month,
-      ${throughMonth}::date,
-      interval '1 month'
-    ) as billing_month(period_month)
     where not exists (
       select 1
       from erp.invoices i
       where i.student_id = e.student_id
         and i.status <> 'VOID'::"erp"."InvoiceStatus"
         and i.enrollment_id = e.id
-        and date_trunc('month', i.period_month) = billing_month.period_month
+        and date_trunc('month', i.period_month) = ${throughMonth}::date
     )
+      and erp.billing_date_for_month(e.billing_anchor, ${throughMonth}::date)
+        <= ${input.throughDate}::date
+      and erp.student_is_billable_on_date(
+        e.student_id,
+        erp.billing_date_for_month(e.billing_anchor, ${throughMonth}::date)
+      )
       and e.monthly_fee > case when e.enrollment_count = 1 then coalesce((
         select sum(p.amount)
         from erp.payments p
         where p.student_id = e.student_id
           and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
-          and date_trunc('month', p.payment_month) = billing_month.period_month
+          and date_trunc('month', p.payment_month) = ${throughMonth}::date
       ), 0) else 0 end
-    order by billing_month.period_month asc
+    order by e.id asc
   `);
 
   if (rows.length === 0) return 0;
@@ -300,10 +280,6 @@ function startOfMonth(value: Date) {
 
 function startOfDay(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
-}
-
-function addMonths(value: Date, count: number) {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + count, 1));
 }
 
 function dateInMonth(month: Date, requestedDay: number) {

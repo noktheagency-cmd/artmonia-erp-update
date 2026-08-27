@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import {
   closeCompletedStudentBilling,
   getStatusChangeReason,
+  resolveActivationBillingPeriod,
   syncActivationBilling,
 } from "./lifecycle-service";
 
@@ -210,4 +211,34 @@ test("completion closes enrollment and outstanding invoices without deleting his
     },
   });
   assert.equal(scheduleUpdateCalled, true);
+});
+
+test("reactivation after the anchor day starts from the next billing month", () => {
+  const period = resolveActivationBillingPeriod({
+    effectiveAt: utcDate("2026-08-23"),
+    billingAnchorDate: utcDate("2026-06-02"),
+    isReactivation: true,
+  });
+
+  assert.equal(period.toISOString().slice(0, 10), "2026-09-01");
+});
+
+test("reactivation on the anchor day keeps the current billing month", () => {
+  const period = resolveActivationBillingPeriod({
+    effectiveAt: utcDate("2026-08-23"),
+    billingAnchorDate: utcDate("2025-09-23"),
+    isReactivation: true,
+  });
+
+  assert.equal(period.toISOString().slice(0, 10), "2026-08-01");
+});
+
+test("initial activation always uses the current billing month", () => {
+  const period = resolveActivationBillingPeriod({
+    effectiveAt: utcDate("2026-08-23"),
+    billingAnchorDate: utcDate("2026-06-02"),
+    isReactivation: false,
+  });
+
+  assert.equal(period.toISOString().slice(0, 10), "2026-08-01");
 });
