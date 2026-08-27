@@ -891,7 +891,10 @@
   width: min(900px, calc(100vw - 28px));
   max-width: 900px;
   max-height: min(90dvh, 820px);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .attendanceForm {

@@ -136,6 +136,38 @@ const financeCostCenterOptions = [
   { value: "MANAGEMENT", label: "Rəhbərlik" },
 ];
 
+const azerbaijaniMonthNames = [
+  "Yanvar",
+  "Fevral",
+  "Mart",
+  "Aprel",
+  "May",
+  "İyun",
+  "İyul",
+  "Avqust",
+  "Sentyabr",
+  "Oktyabr",
+  "Noyabr",
+  "Dekabr",
+] as const;
+
+function buildBillingMonthOptions(anchorValue: string) {
+  const matchedYear = /^(\d{4})-\d{2}$/.exec(anchorValue)?.[1];
+  const anchorYear = matchedYear ? Number(matchedYear) : new Date().getUTCFullYear();
+  const options: Array<{ value: string; label: string }> = [];
+
+  for (let year = anchorYear - 5; year <= anchorYear + 5; year += 1) {
+    for (let monthIndex = 0; monthIndex < azerbaijaniMonthNames.length; monthIndex += 1) {
+      options.push({
+        value: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+        label: `${azerbaijaniMonthNames[monthIndex]} ${year}`,
+      });
+    }
+  }
+
+  return options;
+}
+
 function getFinancialClassLabel(value: string) {
   return {
     DIRECT_COST: "Birbaşa xərc",
@@ -606,6 +638,10 @@ function PaymentDialog({
     billingMonth: data.students[0]?.defaultPaymentMonth ?? "",
     payerName: "",
   });
+  const billingMonthOptions = useMemo(
+    () => buildBillingMonthOptions(values.billingMonth || values.paidDate.slice(0, 7)),
+    [values.billingMonth, values.paidDate],
+  );
 
   function handleStudentChange(value: string) {
     const studentId = cleanSelectValue(value);
@@ -768,14 +804,18 @@ function PaymentDialog({
             </div>
             <label className="form-field">
               <span>Aid olduğu ay</span>
-              <Input
+              <FormSelect
                 name="billingMonth"
-                type="month"
                 value={values.billingMonth}
-                onChange={(event) => setValues((current) => ({
+                onValueChange={(value) => setValues((current) => ({
                   ...current,
-                  billingMonth: event.target.value,
+                  billingMonth: value,
                 }))}
+                options={billingMonthOptions}
+                placeholder="Ay seç"
+                searchable
+                searchPlaceholder="Ay və ya il axtar..."
+                aria-label="Ödənişin aid olduğu ay"
                 required
               />
             </label>

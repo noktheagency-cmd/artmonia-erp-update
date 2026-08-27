@@ -47,7 +47,7 @@ export function AccountSecurityPanel({
   const [pending, startTransition] = useTransition();
   const normalized = query.trim().toLocaleLowerCase("az");
   const visible = useMemo(() => accounts.filter((account) => !normalized || `${account.fullName} ${account.loginEmail ?? account.contactEmail ?? ""} ${account.department} ${account.position} ${account.roles.map((role) => role.name).join(" ")}`.toLocaleLowerCase("az").includes(normalized)), [accounts, normalized]);
-  const selected = accounts.find((account) => account.employeeId === selectedEmployeeId) ?? visible[0] ?? accounts[0] ?? null;
+  const selected = visible.find((account) => account.employeeId === selectedEmployeeId) ?? visible[0] ?? null;
 
   function run(action: () => Promise<unknown>, success: string) {
     setFeedback(null);
@@ -62,18 +62,18 @@ export function AccountSecurityPanel({
 
   return (
     <section className={styles.workspace} aria-busy={pending}>
-      {feedback ? <div className={feedback.tone === "success" ? styles.success : styles.error} role="status">{feedback.tone === "success" ? <Check /> : <AlertTriangle />}<span>{feedback.text}</span><button onClick={() => setFeedback(null)} aria-label="Bildirişi bağla">×</button></div> : null}
+      {feedback ? <div className={feedback.tone === "success" ? styles.success : styles.error} role="status">{feedback.tone === "success" ? <Check /> : <AlertTriangle />}<span>{feedback.text}</span><button type="button" onClick={() => setFeedback(null)} aria-label="Bildirişi bağla">×</button></div> : null}
       <div className={styles.securityBanner}><ShieldCheck /><span><strong>Yalnız Super Admin idarəetməsi</strong>Parollar heç vaxt göstərilmir və auditə yazılmır. Bütün hesab dəyişiklikləri izlənilir.</span><small>Yenilənib {formatTime(generatedAt)}</small></div>
       <div className={styles.layout}>
         <div className={styles.listPanel}>
           <header className={styles.listHeader}>
-            <label><Search /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ad, e-poçt, rol və ya departament..." /></label>
+            <label><Search /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ad, e-poçt, rol və ya departament..." aria-label="Hesablarda axtarış" /></label>
             <span>{visible.length} əməkdaş</span>
           </header>
           <div className={styles.tableHead}><span>Əməkdaş</span><span>Login / e-poçt</span><span>Rollar</span><span>Status</span><span>Sessiya</span></div>
           <div className={styles.rows}>
             {visible.map((account) => (
-              <button key={account.employeeId} className={account.employeeId === selected?.employeeId ? styles.activeRow : styles.row} onClick={() => setSelectedEmployeeId(account.employeeId)}>
+              <button type="button" key={account.employeeId} className={account.employeeId === selected?.employeeId ? styles.activeRow : styles.row} onClick={() => { setSelectedEmployeeId(account.employeeId); setFeedback(null); }}>
                 <span className={styles.person}><i>{initials(account.fullName)}</i><span><strong>{account.fullName}</strong><small>{account.position} · {account.department}</small></span></span>
                 <span className={styles.email}>{account.loginEmail ?? "—"}</span>
                 <span className={styles.roles}>{account.roles.slice(0, 2).map((role) => <small key={role.id}>{role.name}</small>)}{account.roles.length > 2 ? <small>+{account.roles.length - 2}</small> : null}</span>
@@ -85,7 +85,7 @@ export function AccountSecurityPanel({
           </div>
         </div>
 
-        <aside className={styles.inspector}>
+        <aside key={selected ? `${selected.employeeId}:${selected.updatedAt}` : "empty"} className={styles.inspector}>
           {selected ? (
             <>
               <header className={styles.identity}>
@@ -142,6 +142,7 @@ type FormProps = { account: SecurityAccountDto; roleOptions: SecurityRoleOptionD
 function CredentialForm({ mode, account, roleOptions, pending, onSubmit }: FormProps & { mode: "create" | "update" }) {
   const available = new Set(roleOptions.map((role) => role.id));
   const teacherRole = roleOptions.find((role) => role.code === "TEACHER");
+  const [loginEmail, setLoginEmail] = useState(account.loginEmail ?? account.contactEmail ?? "");
   const [roleIds, setRoleIds] = useState(() => {
     const assigned = account.roles.map((role) => role.id).filter((id) => available.has(id));
     if (assigned.length || mode === "update") return assigned;
@@ -158,7 +159,7 @@ function CredentialForm({ mode, account, roleOptions, pending, onSubmit }: FormP
   return <form className={styles.actionCard} onSubmit={submit}>
     <header>{mode === "create" ? <UserPlus /> : <Mail />}<span><strong>{mode === "create" ? "ERP hesabı yarat" : "Login məlumatları"}</strong><small>{mode === "create" ? "İlkin giriş və səlahiyyət rollarını təyin edin." : "E-poçtu və təyin edilən rolları yeniləyin."}</small></span></header>
     <input type="hidden" name="employeeId" value={account.employeeId} />
-    <label><span>Login e-poçtu</span><Input name="loginEmail" type="email" defaultValue={account.loginEmail ?? account.contactEmail ?? ""} required autoComplete="off" /></label>
+    <label><span>Login e-poçtu</span><Input name="loginEmail" type="email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required autoComplete="off" /></label>
     <fieldset><legend>Sistem rolları</legend><div className={styles.roleGrid}>{roleOptions.map((role) => <label key={role.id}><input type="checkbox" checked={roleIds.includes(role.id)} onChange={() => setRoleIds((current) => current.includes(role.id) ? current.filter((id) => id !== role.id) : [...current, role.id])} /><span>{role.name}</span></label>)}</div>{account.protectedRole ? <small>Qorunan Super Admin/Admin rolu bu paneldə saxlanılır və dəyişdirilmir.</small> : null}</fieldset>
     {mode === "create" ? <div className={styles.twoColumns}><label><span>İlkin parol</span><Input name="password" type="password" minLength={10} maxLength={72} required autoComplete="new-password" /></label><label><span>Parolu təsdiqlə</span><Input name="confirmation" type="password" minLength={10} maxLength={72} required autoComplete="new-password" /></label></div> : null}
     {error ? <p className={styles.formError}>{error}</p> : null}

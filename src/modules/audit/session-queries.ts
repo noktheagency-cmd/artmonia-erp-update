@@ -2,12 +2,12 @@ import "server-only";
 
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { parseSessionDevice } from "@/modules/audit/session-device";
+import { buildSessionUsers } from "@/modules/audit/session-users";
 import type {
   AuthSessionDto,
   AuditLogDto,
   SessionAuditData,
   SessionDeviceTypeDto,
-  SessionUserDto,
   SecurityAccountDto,
 } from "@/modules/audit/session-types";
 import { requireErpActor } from "@/server/auth/actor";
@@ -179,8 +179,8 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
   const sessions = sessionRows
     .slice(0, 1_000)
     .map((row) => mapSession(row, actor.currentSessionId));
-  const users = buildUsers(sessions);
   const accounts = buildAccounts(accountRows.slice(0, 500), sessions, actor.id);
+  const users = buildSessionUsers(sessions, accounts);
   const recentThreshold = generatedAt.getTime() - 15 * 60_000;
 
   return {
@@ -285,35 +285,6 @@ function mapSession(row: AuthSessionRow, currentSessionId: string | null): AuthS
     expiresAt: row.expiresAt?.toISOString() ?? null,
     isCurrent: row.id === currentSessionId,
   };
-}
-
-function buildUsers(sessions: AuthSessionDto[]): SessionUserDto[] {
-  const byUser = new Map<string, SessionUserDto>();
-  for (const session of sessions) {
-    const current = byUser.get(session.userId);
-    if (current) {
-      current.activeSessionCount += 1;
-      if (!current.lastSeenAt || session.lastSeenAt > current.lastSeenAt) {
-        current.lastSeenAt = session.lastSeenAt;
-      }
-      continue;
-    }
-    byUser.set(session.userId, {
-      id: session.userId,
-      fullName: session.userName,
-      email: session.userEmail,
-      role: session.userRole,
-      department: session.department,
-      position: session.position,
-      activeSessionCount: 1,
-      lastSeenAt: session.lastSeenAt,
-    });
-  }
-  return [...byUser.values()].toSorted(
-    (left, right) =>
-      (right.lastSeenAt ?? "").localeCompare(left.lastSeenAt ?? "") ||
-      left.fullName.localeCompare(right.fullName, "az"),
-  );
 }
 
 function normalizeRoleNames(value: unknown) {

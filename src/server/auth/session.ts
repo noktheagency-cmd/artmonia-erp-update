@@ -58,7 +58,14 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
       u.full_name as "fullName",
       u.email,
       coalesce(u.profile_photo_url, he.profile_photo_url) as "profilePhotoUrl",
-      coalesce(array_agg(r.code::text) filter (where r.code is not null), array[]::text[]) as "roles"
+      coalesce(array_agg(r.code::text) filter (where r.code is not null), array[]::text[]) as "roles",
+      exists (
+        select 1
+        from auth.sessions auth_session
+        where auth_session.id = ${sessionId}::uuid
+          and auth_session.user_id = u.auth_user_id
+          and (auth_session.not_after is null or auth_session.not_after > now())
+      ) as "authSessionExists"
     from erp.users u
     left join erp.hr_employees he on he.user_id = u.id
     left join erp.user_roles ur on ur.user_id = u.id
@@ -69,7 +76,8 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
     limit 1
   `);
 
-  if (!user) {
+  if (!user?.authSessionExists) {
+    await supabase.auth.signOut({ scope: "local" });
     return null;
   }
 
@@ -102,6 +110,7 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
 
 type CurrentErpUserRow = Omit<CurrentErpUser, "permissions" | "roles" | "currentSessionId"> & {
   roles: unknown;
+  authSessionExists: boolean;
 };
 
 function normalizeRoles(value: unknown): AppRole[] {

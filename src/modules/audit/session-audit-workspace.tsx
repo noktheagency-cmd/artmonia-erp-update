@@ -70,14 +70,14 @@ const deviceFilters: Array<{ value: "ALL" | SessionDeviceTypeDto; label: string 
 
 export function SessionAuditWorkspace({ initialData }: { initialData: SessionAuditData }) {
   const router = useRouter();
-  const [sessions, setSessions] = useState(initialData.sessions);
+  const [revokedSessionIds, setRevokedSessionIds] = useState<Set<string>>(() => new Set());
   const [tab, setTab] = useState<"SESSIONS" | "ACCOUNTS" | "ACTIVITY">("SESSIONS");
   const [selectedUserId, setSelectedUserId] = useState(
     initialData.users.some((user) => user.id === initialData.currentUserId)
       ? initialData.currentUserId
       : initialData.users[0]?.id ?? initialData.currentUserId,
   );
-  const [selectedSession, setSelectedSession] = useState<AuthSessionDto | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [revokeIntent, setRevokeIntent] = useState<RevokeIntent | null>(null);
   const [query, setQuery] = useState("");
   const [deviceFilter, setDeviceFilter] = useState<"ALL" | SessionDeviceTypeDto>("ALL");
@@ -85,6 +85,11 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
   const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
   const normalizedQuery = query.trim().toLocaleLowerCase("az");
+  const sessions = useMemo(
+    () => initialData.sessions.filter((session) => !revokedSessionIds.has(session.id)),
+    [initialData.sessions, revokedSessionIds],
+  );
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null;
 
   const users = useMemo(
     () => {
@@ -105,10 +110,10 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
     },
     [initialData.users, sessions],
   );
-  const selectedUser = users.find((user) => user.id === selectedUserId) ?? users[0] ?? null;
   const visibleUsers = users.filter((user) =>
     !normalizedQuery || `${user.fullName} ${user.email} ${user.role}`.toLocaleLowerCase("az").includes(normalizedQuery),
   );
+  const selectedUser = visibleUsers.find((user) => user.id === selectedUserId) ?? visibleUsers[0] ?? null;
   const selectedUserSessions = sessions.filter((session) => session.userId === selectedUser?.id);
   const visibleSessions = selectedUserSessions.filter((session) => {
     if (deviceFilter !== "ALL" && session.deviceType !== deviceFilter) return false;
@@ -147,8 +152,12 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
         return;
       }
 
-      setSessions((current) => current.filter((session) => !result.revokedSessionIds.includes(session.id)));
-      setSelectedSession(null);
+      setRevokedSessionIds((current) => {
+        const next = new Set(current);
+        for (const sessionId of result.revokedSessionIds) next.add(sessionId);
+        return next;
+      });
+      setSelectedSessionId(null);
       setRevokeIntent(null);
       setFeedback({
         tone: "success",
@@ -168,6 +177,10 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
   function resetFilters() {
     setQuery("");
     setDeviceFilter("ALL");
+  }
+
+  function refreshSessions() {
+    startTransition(() => router.refresh());
   }
 
   async function copySessionId() {
@@ -290,9 +303,9 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
 
             <div className={`${styles.sessionLayout} ${!initialData.canViewAll ? styles.personalLayout : ""}`}>
               {initialData.canViewAll ? (
-                <aside className={styles.userRail} aria-label="Aktiv istifadəçilər">
+                <aside className={styles.userRail} aria-label="İstifadəçi hesabları">
                   <div className={styles.userRailHeader}>
-                    <strong>İstifadəçilər</strong>
+                    <strong>Hesablar</strong>
                     <span>{visibleUsers.length}</span>
                   </div>
                   <div className={styles.userList}>
@@ -303,7 +316,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
                         className={user.id === selectedUser?.id ? styles.activeUser : styles.userButton}
                         onClick={() => {
                           setSelectedUserId(user.id);
-                          setSelectedSession(null);
+                          setSelectedSessionId(null);
                           setDeviceFilter("ALL");
                         }}
                       >
@@ -312,7 +325,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
                           <strong>{user.fullName}</strong>
                           <small>{user.position || user.role}</small>
                         </span>
-                        <span className={styles.sessionCount}><i /> {user.activeSessionCount}</span>
+                        <span className={styles.sessionCount}>{user.activeSessionCount > 0 ? <i /> : null} {user.activeSessionCount}</span>
                       </button>
                     ))}
                     {!visibleUsers.length ? <p className={styles.railEmpty}>Axtarışa uyğun istifadəçi yoxdur.</p> : null}
@@ -326,7 +339,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
                     <strong>{selectedUser?.fullName ?? "Mənim sessiyalarım"}</strong>
                     <span>{selectedUserSessions.length} aktiv sessiya</span>
                   </div>
-                  {selectedUser ? <small>{selectedUser.email}</small> : null}
+                  {selectedUser ? <small>{selectedUser.email || "E-poçt qeyd edilməyib"}</small> : null}
                 </header>
 
                 <div className={styles.tableHead} aria-hidden="true">
@@ -338,7 +351,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
                       key={session.id}
                       session={session}
                       referenceTime={initialData.generatedAt}
-                      onSelect={() => setSelectedSession(session)}
+                      onSelect={() => setSelectedSessionId(session.id)}
                       onRevoke={() => setRevokeIntent({ kind: "SESSION", session })}
                     />
                   ))}
@@ -352,7 +365,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
                 </div>
                 <footer className={styles.listFooter}>
                   <span>Cəmi {visibleSessions.length} sessiya</span>
-                  <button type="button" onClick={() => router.refresh()}><RefreshCw /> Yenilə</button>
+                  <button type="button" disabled={isPending} onClick={refreshSessions}><RefreshCw className={isPending ? styles.spin : undefined} /> {isPending ? "Yenilənir..." : "Yenilə"}</button>
                 </footer>
               </div>
             </div>
@@ -368,7 +381,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
         <AuditLogPanel logs={initialData.activity} />
       )}
 
-      <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSession(null)}>
+      <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSessionId(null)}>
         <DialogContent className={styles.sessionDialog}>
           {selectedSession ? (
             <>
