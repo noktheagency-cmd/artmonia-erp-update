@@ -58,7 +58,7 @@ function rangeFromSearch(searchParams: URLSearchParams): CompleteDateRange | nul
 }
 
 function supportsGlobalRange(pathname: string) {
-  return ["/dashboard", "/students", "/crm", "/finance", "/groups", "/workshops", "/marketing"]
+  return ["/dashboard", "/students", "/crm", "/finance", "/hr", "/groups", "/workshops", "/marketing"]
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
