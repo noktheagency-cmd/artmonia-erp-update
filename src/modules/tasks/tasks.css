@@ -76,6 +76,8 @@
 .task-main-title h3 { min-width: 0; }
 .task-main h3 { margin: 0; overflow: hidden; color: #252d3d; font-size: 13px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
 .task-main p { display: -webkit-box; max-width: 620px; margin: 5px 0 0; overflow: hidden; color: #7a8495; font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+.task-main .task-completion-preview { display: flex; align-items: center; gap: 5px; color: #137851; }
+.task-completion-preview svg { flex: 0 0 auto; }
 .task-priority-badge { flex: 0 0 auto; padding: 3px 6px; color: #3457c6; background: #eef2ff; border: 1px solid #d7e0ff; border-radius: 999px; font-size: 8px; font-weight: 850; text-transform: uppercase; }
 .task-priority-badge.is-urgent { color: #b63e37; background: #fff0ee; border-color: #f4c9c5; }
 .task-priority-badge.is-low { color: #64748b; background: #f1f5f9; border-color: #dbe3ed; }

@@ -1,0 +1,143 @@
+.picker {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.picker legend {
+  margin-bottom: 7px;
+  color: #596273;
+  font-size: 10px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border: 1px solid #d7e0ea;
+  border-radius: 13px 13px 0 0;
+}
+
+.toolbar label {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  color: #8792a4;
+}
+
+.toolbar input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: #252d3d;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 12px;
+}
+
+.toolbar > span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: #4667e8;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.options {
+  display: grid;
+  max-height: 168px;
+  padding: 6px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #d7e0ea;
+  border-top: 0;
+  border-radius: 0 0 13px 13px;
+}
+
+.options label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  padding: 7px 9px;
+  cursor: pointer;
+  color: #465164;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.options label:hover,
+.options label.selected {
+  color: #304fc1;
+  background: #eef2ff;
+}
+
+.options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.check {
+  display: grid;
+  flex: 0 0 18px;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.selected .check {
+  background: #4667e8;
+  border-color: #4667e8;
+}
+
+.options p {
+  margin: 0;
+  padding: 18px 10px;
+  color: #8a94a6;
+  text-align: center;
+  font-size: 11px;
+}
+
+.picker > small {
+  display: block;
+  margin-top: 6px;
+  color: #8a94a6;
+  font-size: 9px;
+}
+
+:global(html.dark) .toolbar,
+:global(html.dark) .options {
+  color: var(--dm-text);
+  background: var(--dm-surface-2);
+  border-color: var(--dm-line);
+}
+
+:global(html.dark) .options label {
+  color: var(--dm-text);
+}
+
+:global(html.dark) .options label:hover,
+:global(html.dark) .options label.selected {
+  color: #cbd6ff;
+  background: rgb(70 103 232 / 22%);
+}

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CircleDot,
   Clock3,
+  History,
   ListFilter,
   ListTodo,
   Plus,
@@ -36,14 +37,16 @@ import {
   taskStatusOptions,
 } from "@/modules/tasks/task-details-dialog";
 import { TaskCompletionDialog } from "@/modules/tasks/task-completion-dialog";
+import { TaskAssigneePicker } from "@/modules/tasks/task-assignee-picker";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import "./tasks.css";
 
 type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
-type TaskFilter = "ACTIVE" | TaskStatusValue;
+type TaskFilter = "ACTIVE" | "HISTORY" | Exclude<TaskStatusValue, "DONE">;
 
 const statusOptions = [...taskStatusOptions];
+const activeStatusOptions = taskStatusOptions.filter((option) => option.value !== "DONE");
 
 export function TaskWorkspace({
   data,
@@ -59,19 +62,20 @@ export function TaskWorkspace({
   markNotificationsReadAction: () => unknown | Promise<unknown>;
 }) {
   const router = useRouter();
-  const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
+  const [filter, setFilter] = useState<TaskFilter>(data.initialView === "history" ? "HISTORY" : "ACTIVE");
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(data.selectedTask);
   const didMarkNotificationsRead = useRef(false);
   const filteredTasks = useMemo(
     () =>
-      data.tasks.filter((task) => {
+      (filter === "HISTORY" ? data.historyTasks : data.tasks).filter((task) => {
+        if (filter === "HISTORY") return true;
         const matchesFilter =
           filter === "ACTIVE"
             ? task.status !== "DONE" && task.status !== "CANCELLED"
             : task.status === filter;
         return matchesFilter;
       }),
-    [data.tasks, filter]
+    [data.historyTasks, data.tasks, filter]
   );
 
   useEffect(() => {
@@ -105,6 +109,19 @@ export function TaskWorkspace({
     router.replace(`${window.location.pathname}${search ? `?${search}` : ""}` as Route, { scroll: false });
   }
 
+  function changeFilter(value: string) {
+    const nextFilter = value as TaskFilter;
+    setFilter(nextFilter);
+    const params = new URLSearchParams(window.location.search);
+    if (nextFilter === "HISTORY") params.set("view", "history");
+    else {
+      params.delete("view");
+      params.delete("historyPage");
+    }
+    params.delete("task");
+    routerReplace(params);
+  }
+
   return (
     <section className="page-stack tasks-page">
       <header className="tasks-header">
@@ -135,10 +152,13 @@ export function TaskWorkspace({
           <FormSelect
             name="taskFilter"
             value={filter}
-            onValueChange={(value) => setFilter(value as TaskFilter)}
+            onValueChange={changeFilter}
             options={[
               { value: "ACTIVE", label: "Aktiv tasklar" },
-              ...statusOptions,
+              ...activeStatusOptions,
+              ...(data.permissions.canViewHistory
+                ? [{ value: "HISTORY", label: "Task tarixçəsi" }]
+                : []),
             ]}
             aria-label="Status üzrə filtrlə"
           />
@@ -148,7 +168,7 @@ export function TaskWorkspace({
       <div className="tasks-list-panel">
         <div className="tasks-list-heading">
           <div>
-            <h2>{filter === "ACTIVE" ? "Aktiv tasklar" : statusOptions.find((item) => item.value === filter)?.label}</h2>
+            <h2>{filter === "ACTIVE" ? "Aktiv tasklar" : filter === "HISTORY" ? "Task tarixçəsi" : statusOptions.find((item) => item.value === filter)?.label}</h2>
             <span>{filteredTasks.length} task</span>
           </div>
         </div>
@@ -174,11 +194,21 @@ export function TaskWorkspace({
             <p>Axtarış və ya status filtrini dəyişin.</p>
           </div>
         )}
-        {data.pagination.page > 1 || data.pagination.hasNext ? (
+        {(filter === "HISTORY" ? data.historyPagination.page > 1 || data.historyPagination.hasNext : data.pagination.page > 1 || data.pagination.hasNext) ? (
           <nav className="mt-4 flex items-center justify-end gap-2" aria-label="Task səhifələri">
-            {data.pagination.page > 1 ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page - 1}&pageSize=${data.pagination.pageSize}` as Route}>Əvvəlki</Link> : null}
-            <span>{data.pagination.page} / {Math.max(1, Math.ceil(data.pagination.total / data.pagination.pageSize))}</span>
-            {data.pagination.hasNext ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page + 1}&pageSize=${data.pagination.pageSize}` as Route}>Növbəti</Link> : null}
+            {filter === "HISTORY" ? (
+              <>
+                {data.historyPagination.page > 1 ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?view=history&historyPage=${data.historyPagination.page - 1}&pageSize=${data.historyPagination.pageSize}` as Route}>Əvvəlki</Link> : null}
+                <span>{data.historyPagination.page} / {Math.max(1, Math.ceil(data.historyPagination.total / data.historyPagination.pageSize))}</span>
+                {data.historyPagination.hasNext ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?view=history&historyPage=${data.historyPagination.page + 1}&pageSize=${data.historyPagination.pageSize}` as Route}>Növbəti</Link> : null}
+              </>
+            ) : (
+              <>
+                {data.pagination.page > 1 ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page - 1}&pageSize=${data.pagination.pageSize}` as Route}>Əvvəlki</Link> : null}
+                <span>{data.pagination.page} / {Math.max(1, Math.ceil(data.pagination.total / data.pagination.pageSize))}</span>
+                {data.pagination.hasNext ? <Link className="ui-button ui-button-outline ui-button-sm" href={`/tasks?page=${data.pagination.page + 1}&pageSize=${data.pagination.pageSize}` as Route}>Növbəti</Link> : null}
+              </>
+            )}
           </nav>
         ) : null}
       </div>
@@ -258,7 +288,9 @@ function TaskListRow({
       <span className={cx("task-status-mark", `is-${optimisticStatus.toLowerCase()}`)} aria-hidden="true" />
       <div className="task-main">
         <div className="task-main-title"><h3>{task.title}</h3><span className={cx("task-priority-badge", `is-${task.priority.toLowerCase()}`)}>{taskPriorityOptions.find((item) => item.value === task.priority)?.label}</span></div>
-        {task.description ? <p>{task.description}</p> : null}
+        {task.status === "DONE" && task.completionNote
+          ? <p className="task-completion-preview"><History size={12} /> Tamamlanma qeydi: {task.completionNote}</p>
+          : task.description ? <p>{task.description}</p> : null}
       </div>
       <div className="task-owner">
         <span className="task-avatar">{task.ownerInitials || <UserRound size={15} />}</span>
@@ -385,10 +417,7 @@ function CreateTaskDialog({ employees, action }: { employees: TaskData["employee
             <span>Task adı</span>
             <Input name="title" placeholder="Məsələn: Həftəlik hesabatı hazırla" required maxLength={160} />
           </label>
-          <label>
-            <span>İşçi</span>
-            <FormSelect name="ownerUserId" options={employees} placeholder="İşçi seçin" searchable required />
-          </label>
+          <TaskAssigneePicker employees={employees} />
           <label>
             <span>Deadline</span>
             <DatePicker name="dueDate" required allowClear={false} popoverPlacement="floating" />

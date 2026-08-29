@@ -145,7 +145,7 @@ export function TaskDetailsDialog({
           <section className="task-detail-status-control">
             <div>
               <h3>Statusu yenilə</h3>
-              <p>{task.canUpdateStatus ? "İş axışını buradan sürətlə idarə edin." : "Statusu yalnız taskın icraçısı və super admin dəyişə bilər."}</p>
+              <p>{task.canUpdateStatus ? "İş axışını buradan sürətlə idarə edin." : "Statusu yalnız taskın icraçısı, Super Admin və Operation Head dəyişə bilər."}</p>
             </div>
             <FormSelect
               name={`detail-status-${task.id}`}

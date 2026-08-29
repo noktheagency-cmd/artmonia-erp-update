@@ -1,7 +1,7 @@
-import { AppRole } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import type { ErpActor } from "@/server/auth/actor";
 import { hasPermission } from "@/server/rbac/permissions";
+import { canAdministerTasks } from "@/modules/tasks/task-permissions";
 
 export const calendarEventKinds = ["task", "workshop", "lesson", "content", "invoice"] as const;
 
@@ -40,7 +40,7 @@ export async function getErpCalendarData(
 ): Promise<ErpCalendarResponse> {
   const prisma = getPrisma();
   const { start, end } = monthBounds(month);
-  const canViewAllTasks = actor.roles.includes(AppRole.SUPER_ADMIN);
+  const canViewAllTasks = await canAdministerTasks(actor);
 
   const [tasks, workshops, contentItems, invoices, slots, sessions] = await Promise.all([
     hasPermission(actor.permissions, "task.read")

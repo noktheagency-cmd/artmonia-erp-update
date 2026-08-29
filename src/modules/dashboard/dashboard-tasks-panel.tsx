@@ -25,6 +25,7 @@ import { FormSelect } from "@/components/ui/select";
 import type { TaskData, TaskRow } from "@/modules/tasks/queries";
 import { TaskDetailsDialog, taskPriorityOptions } from "@/modules/tasks/task-details-dialog";
 import { TaskCompletionDialog } from "@/modules/tasks/task-completion-dialog";
+import { TaskAssigneePicker } from "@/modules/tasks/task-assignee-picker";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 
@@ -223,10 +224,7 @@ function CreateDashboardTaskDialog({ employees, action }: { employees: TaskData[
             <span>Task adı</span>
             <Input name="title" placeholder="Məsələn: Həftəlik hesabatı hazırla" required maxLength={160} />
           </label>
-          <label>
-            <span>İşçi</span>
-            <FormSelect name="ownerUserId" options={employees} placeholder="İşçi seçin" searchable required />
-          </label>
+          <TaskAssigneePicker employees={employees} />
           <label>
             <span>Deadline</span>
             <Input name="dueDate" type="date" required />

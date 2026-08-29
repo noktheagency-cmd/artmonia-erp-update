@@ -1,4 +1,4 @@
-import { AppRole, TaskStatus } from "@/generated/prisma/client";
+import { TaskStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor } from "@/server/auth/actor";
 import { canAdministerTasks } from "@/modules/tasks/task-permissions";
@@ -34,24 +34,40 @@ export type TaskPriorityValue = "URGENT" | "NORMAL" | "LOW";
 
 export type TaskData = {
   tasks: TaskRow[];
+  historyTasks: TaskRow[];
   employees: Array<{ value: string; label: string }>;
-  permissions: { canAdminister: boolean };
+  permissions: { canAdminister: boolean; canViewHistory: boolean };
   currentUserId: string;
+  initialView: "active" | "history";
   selectedTaskId: string | null;
   selectedTask: TaskRow | null;
   summary: { open: number; inProgress: number; done: number };
   pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
+  historyPagination: { page: number; pageSize: number; total: number; hasNext: boolean };
 };
 
-export async function getTaskData(input: { page?: string; pageSize?: string; task?: string } = {}): Promise<TaskData> {
+export async function getTaskData(input: {
+  page?: string;
+  pageSize?: string;
+  historyPage?: string;
+  view?: string;
+  task?: string;
+  includeHistory?: boolean;
+} = {}): Promise<TaskData> {
   const actor = await requireErpActor("task.read");
   const prisma = getPrisma();
   const canAdminister = await canAdministerTasks(actor);
-  const canViewAll = actor.roles.includes(AppRole.SUPER_ADMIN);
+  const canViewAll = canAdminister;
+  const canViewHistory = canAdminister;
+  const shouldLoadHistory = canViewHistory && input.includeHistory === true;
   const page = Math.max(1, Number.parseInt(input.page ?? "1", 10) || 1);
   const pageSize = Math.min(50, Math.max(10, Number.parseInt(input.pageSize ?? "25", 10) || 25));
+  const historyPage = Math.max(1, Number.parseInt(input.historyPage ?? "1", 10) || 1);
+  const historyPageSize = pageSize;
   const selectedTaskId = /^[0-9a-f-]{36}$/i.test(input.task ?? "") ? input.task : undefined;
-  const where = buildTaskWorkspaceWhere(canViewAll ? undefined : actor.id);
+  const workspaceWhere = buildTaskWorkspaceWhere(canViewAll ? undefined : actor.id);
+  const activeWhere = { ...workspaceWhere, status: { not: TaskStatus.DONE } } as const;
+  const historyWhere = { ...workspaceWhere, status: TaskStatus.DONE } as const;
   const taskSelect = {
     id: true,
     title: true,
@@ -68,16 +84,16 @@ export async function getTaskData(input: { page?: string; pageSize?: string; tas
     createdBy: { select: { fullName: true } },
   } as const;
 
-  const [tasks, total, statusCounts, employees, selectedTaskRecord] = await Promise.all([
+  const [tasks, total, statusCounts, employees, selectedTaskRecord, historyTasks, historyTotal] = await Promise.all([
     prisma.task.findMany({
-      where,
+      where: activeWhere,
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
       select: taskSelect,
     }),
-    prisma.task.count({ where }),
-    prisma.task.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    prisma.task.count({ where: activeWhere }),
+    prisma.task.groupBy({ by: ["status"], where: workspaceWhere, _count: { _all: true } }),
     canAdminister
       ? prisma.user.findMany({
           where: buildCurrentTaskAssigneeWhere(),
@@ -88,10 +104,24 @@ export async function getTaskData(input: { page?: string; pageSize?: string; tas
       : Promise.resolve([]),
     selectedTaskId
       ? prisma.task.findFirst({
-          where: { id: selectedTaskId, ...where },
+          where: {
+            id: selectedTaskId,
+            ...workspaceWhere,
+            ...(canViewHistory ? {} : { status: { not: TaskStatus.DONE } }),
+          },
           select: taskSelect,
         })
       : Promise.resolve(null),
+    shouldLoadHistory
+      ? prisma.task.findMany({
+          where: historyWhere,
+          orderBy: [{ completedAt: "desc" }, { updatedAt: "desc" }],
+          skip: (historyPage - 1) * historyPageSize,
+          take: historyPageSize,
+          select: taskSelect,
+        })
+      : Promise.resolve([]),
+    shouldLoadHistory ? prisma.task.count({ where: historyWhere }) : Promise.resolve(0),
   ]);
 
   const now = new Date();
@@ -130,9 +160,11 @@ export async function getTaskData(input: { page?: string; pageSize?: string; tas
 
   return {
     tasks: rows,
+    historyTasks: historyTasks.map(toRow),
     employees: employees.map((employee) => ({ value: employee.id, label: employee.fullName })),
-    permissions: { canAdminister },
+    permissions: { canAdminister, canViewHistory },
     currentUserId: actor.id,
+    initialView: input.view === "history" && canViewHistory ? "history" : "active",
     selectedTaskId: selectedTaskId ?? null,
     selectedTask: selectedTaskRecord ? toRow(selectedTaskRecord) : null,
     summary: {
@@ -141,6 +173,12 @@ export async function getTaskData(input: { page?: string; pageSize?: string; tas
       done: statusCounts.find((item) => item.status === TaskStatus.DONE)?._count._all ?? 0,
     },
     pagination: { page, pageSize, total, hasNext: page * pageSize < total },
+    historyPagination: {
+      page: historyPage,
+      pageSize: historyPageSize,
+      total: historyTotal,
+      hasNext: historyPage * historyPageSize < historyTotal,
+    },
   };
 }
 

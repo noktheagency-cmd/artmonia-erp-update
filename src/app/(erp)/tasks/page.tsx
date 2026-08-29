@@ -3,8 +3,16 @@ import { markTaskNotificationsReadAction } from "@/modules/notifications/actions
 import { getTaskData } from "@/modules/tasks/queries";
 import { TaskWorkspace } from "@/modules/tasks/task-workspace";
 
-export default async function TasksPage({ searchParams }: { searchParams: Promise<{ page?: string; pageSize?: string; task?: string }> }) {
-  const data = await getTaskData(await searchParams);
+export default async function TasksPage({ searchParams }: {
+  searchParams: Promise<{
+    page?: string;
+    pageSize?: string;
+    historyPage?: string;
+    view?: string;
+    task?: string;
+  }>;
+}) {
+  const data = await getTaskData({ ...(await searchParams), includeHistory: true });
 
   return (
     <TaskWorkspace

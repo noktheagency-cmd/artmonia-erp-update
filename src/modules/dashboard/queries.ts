@@ -1,4 +1,4 @@
-import { AppRole, Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
 import {
@@ -14,6 +14,7 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { requireErpActor } from "@/server/auth/actor";
 import type { PermissionCode } from "@/server/rbac/permissions";
 import { TASK_WORKSPACE_EXCLUDED_TYPES } from "@/modules/tasks/task-scope";
+import { canAdministerTasks } from "@/modules/tasks/task-permissions";
 
 export type DashboardKpi = {
   label: string;
@@ -210,7 +211,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const selectedMonthStart = startOfMonth(today);
   const firstRevenueMonth = addMonths(selectedMonthStart, -11);
   const nextRevenueMonth = addMonths(selectedMonthStart, 1);
-  const canViewAllTasks = actor.roles.includes(AppRole.SUPER_ADMIN);
+  const canViewAllTasks = await canAdministerTasks(actor);
   
   const fetchDashboardRawData = async () =>
     prisma.$queryRaw<DashboardRawRow[]>(Prisma.sql`
