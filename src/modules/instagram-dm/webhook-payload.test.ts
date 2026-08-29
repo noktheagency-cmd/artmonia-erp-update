@@ -123,3 +123,19 @@ test("başqa Instagram hesabına gələn və Instagram olmayan payload ignore ed
   const pagePayload = parseMetaInstagramWebhook(JSON.stringify({ object: "page", entry: [] }));
   assert.deepEqual(extractInstagramDmMessages(pagePayload), []);
 });
+
+test("sender və recipient olmayan read event-i payload-u pozmadan ignore edilir", () => {
+  const payload = parseMetaInstagramWebhook(JSON.stringify({
+    object: "instagram",
+    entry: [{
+      id: "17841400000000000",
+      time: 1787751020000,
+      messaging: [{
+        timestamp: 1787751020000,
+        read: { mid: "mid.inbound.1" },
+      }],
+    }],
+  }));
+
+  assert.deepEqual(extractInstagramDmMessages(payload), []);
+});

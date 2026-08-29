@@ -36,8 +36,8 @@ const actorSchema = z.object({
 }).passthrough();
 
 const messagingSchema = z.object({
-  sender: actorSchema,
-  recipient: actorSchema,
+  sender: actorSchema.optional(),
+  recipient: actorSchema.optional(),
   timestamp: timestampSchema,
   message: messageSchema.optional(),
   message_edit: messageEditSchema.optional(),
@@ -135,6 +135,8 @@ function parseMessagingEvent(
   accountMetaId: string,
   event: z.infer<typeof messagingSchema>,
 ): ParsedInstagramDmMessage | null {
+  if (!event.sender || !event.recipient) return null;
+
   const direction = resolveDirection(accountMetaId, event);
   const participantScopedId = direction === "OUTBOUND" ? event.recipient.id : event.sender.id;
   const participantUsername = direction === "OUTBOUND"
