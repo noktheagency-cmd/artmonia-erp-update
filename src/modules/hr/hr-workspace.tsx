@@ -40,6 +40,8 @@ import type { TeacherDirectoryData } from "@/modules/hr/teacher-directory-data";
 import type { HrBonusData } from "@/modules/hr/bonus-data";
 import { BonusWorkspace } from "@/modules/hr/bonus-workspace";
 import type { CorporateCustomerData, CorporateCustomerRow } from "@/modules/hr/corporate-customer-data";
+import type { CompanyKpiData } from "@/modules/hr/company-kpi-data";
+import { CompanyKpiWorkspace } from "@/modules/hr/company-kpi-workspace";
 import {
   CorporateCustomerDeleteDialog,
   CorporateCustomerDialog,
@@ -52,7 +54,7 @@ import "./hr.css";
 import "./hr-payroll.css";
 import "./staff.css";
 
-type View = "overview" | "employees" | "archive" | "teachers" | "corporate" | "bonus";
+type View = "overview" | "employees" | "archive" | "teachers" | "corporate" | "bonus" | "company-kpi";
 type Action = (formData: FormData) => Promise<unknown>;
 const statusMeta = {
   ACTIVE: { label: "Aktiv", color: "#22a06b", className: "active" },
@@ -66,12 +68,16 @@ export function HrWorkspace({
   employeeData,
   bonusData,
   corporateData,
+  companyKpiData,
+  initialView,
   actions,
 }: {
   teacherData: TeacherDirectoryData;
   employeeData: HrEmployeeData;
   bonusData: HrBonusData;
   corporateData: CorporateCustomerData;
+  companyKpiData: CompanyKpiData;
+  initialView?: "company-kpi";
   actions: {
     create: Action;
     update: Action;
@@ -89,11 +95,14 @@ export function HrWorkspace({
     createCorporate: Action;
     updateCorporate: Action;
     deleteCorporate: Action;
+    saveCompanyKpi: Action;
   };
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>(() =>
-    employeeData.permissions.canRead
+    initialView === "company-kpi" && companyKpiData.permissions.canRead
+      ? "company-kpi"
+      : employeeData.permissions.canRead
       ? "overview"
       : teacherData.permissions.canReadTeachers
         ? "teachers"
@@ -196,7 +205,7 @@ export function HrWorkspace({
     setStatus("all");
   }
   async function exportRows() {
-    if (view === "bonus" || exporting) return;
+    if (view === "bonus" || view === "company-kpi" || exporting) return;
     setExporting(true);
     setNotice("");
     try {
@@ -226,13 +235,13 @@ export function HrWorkspace({
             </p>
           </div>
           <div className="hr-command-actions">
-            {view !== "bonus" && (view === "corporate" ? corporateData.permissions.canExport : view === "teachers" ? teacherData.permissions.canExport : employeeData.permissions.canExport) ? (
+            {view !== "bonus" && view !== "company-kpi" && (view === "corporate" ? corporateData.permissions.canExport : view === "teachers" ? teacherData.permissions.canExport : employeeData.permissions.canExport) ? (
               <Button variant="outline" disabled={exporting} onClick={() => void exportRows()}>
                 {exporting ? <LoaderCircle className="export-spin" data-icon="inline-start" /> : <Download data-icon="inline-start" />}
                 {exporting ? "Hazırlanır..." : "Excel ixrac et"}
               </Button>
             ) : null}
-            {view !== "bonus" ? <Button
+            {view !== "bonus" && view !== "company-kpi" ? <Button
               variant="outline"
               size="icon"
               aria-label="Məlumatları yenilə"
@@ -244,7 +253,7 @@ export function HrWorkspace({
               <Button onClick={() => setCorporateEditor("new")}>
                 <Plus data-icon="inline-start" /> Şirkət əlavə et
               </Button>
-            ) : view !== "bonus" && view !== "corporate" && view !== "archive" && employeeData.permissions.canManage ? (
+            ) : view !== "bonus" && view !== "company-kpi" && view !== "corporate" && view !== "archive" && employeeData.permissions.canManage ? (
               <Button onClick={() => {
                 setNewStaffType(view === "teachers" ? "TEACHER" : "EMPLOYEE");
                 setEditor("new");
@@ -260,9 +269,10 @@ export function HrWorkspace({
           {employeeData.permissions.canRead ? <TabsTrigger value="archive">Komanda arxivi</TabsTrigger> : null}
           {teacherData.permissions.canReadTeachers ? <TabsTrigger value="teachers">Müəllim göstəriciləri</TabsTrigger> : null}
           {corporateData.permissions.canRead ? <TabsTrigger value="corporate">Korporativ müştərilər</TabsTrigger> : null}
+          {companyKpiData.permissions.canRead ? <TabsTrigger value="company-kpi">Şirkət KPI</TabsTrigger> : null}
           {bonusData.permissions.canManage || bonusData.actorEmployeeId || bonusData.permissions.canSeeAll ? <TabsTrigger value="bonus">Bonus</TabsTrigger> : null}
         </TabsList>
-        {view !== "bonus" && view !== "corporate" ? <div className="hr-filter-band">
+        {view !== "bonus" && view !== "company-kpi" && view !== "corporate" ? <div className="hr-filter-band">
           <label className="hr-search">
             <Search />
             <input
@@ -366,6 +376,13 @@ export function HrWorkspace({
               remove: actions.deleteBonus,
               refresh: actions.refreshBonuses,
             }}
+          />
+        </TabsContent>
+        <TabsContent value="company-kpi">
+          <CompanyKpiWorkspace
+            key={companyKpiData.periodMonth}
+            data={companyKpiData}
+            saveAction={actions.saveCompanyKpi}
           />
         </TabsContent>
       </Tabs>

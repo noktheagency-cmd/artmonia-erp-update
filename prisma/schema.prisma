@@ -536,6 +536,8 @@ model User {
   personalNotifications            PersonalNotification[]          @relation("PersonalNotificationRecipient")
   ownedTargets                     Target[]                        @relation("TargetOwner")
   managedTargets                   Target[]                        @relation("TargetManager")
+  createdCompanyMonthlyTargets     CompanyMonthlyTarget[]         @relation("CompanyMonthlyTargetCreator")
+  updatedCompanyMonthlyTargets     CompanyMonthlyTarget[]         @relation("CompanyMonthlyTargetUpdater")
   auditLogs                        AuditLog[]                      @relation("AuditActor")
   authSessions                     AuthSessionRecord[]             @relation("AuthSessionUser")
   revokedAuthSessions              AuthSessionRecord[]             @relation("AuthSessionRevoker")
@@ -2618,6 +2620,29 @@ model Target {
   @@index([managerId])
   @@index([periodMonth])
   @@map("targets")
+  @@schema("erp")
+}
+
+model CompanyMonthlyTarget {
+  id                   String   @id @default(uuid()) @db.Uuid
+  periodMonth          DateTime @unique @map("period_month") @db.Date
+  activeStudentsTarget Int      @map("active_students_target")
+  newSalesTarget       Int      @map("new_sales_target")
+  churnMaxTarget       Int      @map("churn_max_target")
+  leadTarget           Int      @map("lead_target")
+  conversionTarget     Decimal  @map("conversion_target") @db.Decimal(5, 2)
+  revenueTarget        Decimal  @map("revenue_target") @db.Decimal(14, 2)
+  createdById          String?  @map("created_by_id") @db.Uuid
+  updatedById          String?  @map("updated_by_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  createdBy User? @relation("CompanyMonthlyTargetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("CompanyMonthlyTargetUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("company_monthly_targets")
   @@schema("erp")
 }
 

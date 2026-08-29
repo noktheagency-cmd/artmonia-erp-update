@@ -1,0 +1,190 @@
+.company-kpi-workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.company-kpi-toolbar,
+.company-kpi-target-form,
+.company-kpi-list {
+  background: #fff;
+  border: 1px solid var(--hr-line);
+  border-radius: 14px;
+}
+
+.company-kpi-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+}
+
+.company-kpi-toolbar h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -.02em;
+}
+
+.company-kpi-toolbar p {
+  margin: 3px 0 0;
+  color: var(--hr-muted);
+  font-size: 11px;
+}
+
+.company-kpi-toolbar label,
+.company-kpi-target-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.company-kpi-toolbar label > span,
+.company-kpi-target-form label > span {
+  color: #697386;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.company-kpi-toolbar input {
+  width: 170px;
+}
+
+.company-kpi-target-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(110px, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 14px;
+}
+
+.company-kpi-target-form button {
+  white-space: nowrap;
+}
+
+.company-kpi-list {
+  overflow: hidden;
+}
+
+.company-kpi-row {
+  display: grid;
+  gap: 9px;
+  padding: 15px 18px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.company-kpi-row:last-child {
+  border-bottom: 0;
+}
+
+.company-kpi-row-head,
+.company-kpi-row-head > div,
+.company-kpi-values,
+.company-kpi-row-foot {
+  display: flex;
+  align-items: center;
+}
+
+.company-kpi-row-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.company-kpi-row-head > div:first-child {
+  gap: 9px;
+}
+
+.company-kpi-row-head strong {
+  color: #273044;
+  font-size: 12px;
+}
+
+.company-kpi-status {
+  padding: 3px 7px;
+  color: #737d8f;
+  background: #f2f4f7;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.company-kpi-values {
+  gap: 18px;
+  color: #858e9e;
+  font-size: 10px;
+}
+
+.company-kpi-values b {
+  margin-left: 4px;
+  color: #30394c;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.company-kpi-row [data-slot="progress"] {
+  gap: 0;
+}
+
+.company-kpi-row [data-slot="progress-track"] {
+  height: 8px;
+  background: #edf0f4;
+}
+
+.company-kpi-row [data-slot="progress-indicator"] {
+  background: #9aa3b2;
+}
+
+.company-kpi-row.is-success [data-slot="progress-indicator"] { background: #20a874; }
+.company-kpi-row.is-warning [data-slot="progress-indicator"] { background: #e7a33b; }
+.company-kpi-row.is-danger [data-slot="progress-indicator"] { background: #dc5b63; }
+.company-kpi-row.is-success .company-kpi-status { color: #187d5b; background: #eaf8f2; }
+.company-kpi-row.is-warning .company-kpi-status { color: #9d681a; background: #fff5e7; }
+.company-kpi-row.is-danger .company-kpi-status { color: #a43f49; background: #fff0f1; }
+
+.company-kpi-row-foot {
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  color: #8992a1;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.company-kpi-spinner {
+  animation: company-kpi-spin .8s linear infinite;
+}
+
+html.dark .company-kpi-toolbar,
+html.dark .company-kpi-target-form,
+html.dark .company-kpi-list {
+  background: var(--dm-surface);
+  border-color: var(--dm-line);
+}
+
+html.dark .company-kpi-row { border-color: var(--dm-line); }
+html.dark .company-kpi-row-head strong,
+html.dark .company-kpi-values b { color: var(--dm-text); }
+html.dark .company-kpi-row [data-slot="progress-track"] { background: var(--dm-surface-3); }
+html.dark .company-kpi-status { color: var(--dm-muted); background: var(--dm-surface-3); }
+
+@keyframes company-kpi-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1180px) {
+  .company-kpi-target-form { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
+  .company-kpi-target-form button { min-height: 38px; }
+}
+
+@media (max-width: 700px) {
+  .company-kpi-toolbar,
+  .company-kpi-row-head { align-items: stretch; flex-direction: column; }
+  .company-kpi-toolbar input { width: 100%; }
+  .company-kpi-target-form { grid-template-columns: 1fr 1fr; }
+  .company-kpi-target-form button { grid-column: 1 / -1; }
+  .company-kpi-values { justify-content: space-between; }
+}
+
+@media (max-width: 440px) {
+  .company-kpi-target-form { grid-template-columns: 1fr; }
+  .company-kpi-target-form button { grid-column: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .company-kpi-spinner { animation: none; }
+}
