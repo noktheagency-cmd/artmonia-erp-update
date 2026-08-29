@@ -18,6 +18,7 @@ Set these server-only environment values:
 META_APP_SECRET=
 META_GRAPH_API_VERSION=v25.0
 META_INSTAGRAM_ACCOUNT_ID=
+META_INSTAGRAM_WEBHOOK_ACCOUNT_ID=
 META_INSTAGRAM_ACCESS_TOKEN=
 META_INSTAGRAM_WEBHOOK_VERIFY_TOKEN=
 META_INSTAGRAM_SYNC_CONVERSATION_LIMIT=100
@@ -25,6 +26,11 @@ CRON_SECRET=
 ```
 
 The access token needs the current Instagram messaging permissions for the selected Meta login flow. Never expose these values through `NEXT_PUBLIC_*` variables.
+
+`META_INSTAGRAM_ACCOUNT_ID` is used by the Conversations API. Set
+`META_INSTAGRAM_WEBHOOK_ACCOUNT_ID` to the ID Meta sends in webhook `entry.id`
+when it differs from the account ID returned for the access token. If omitted,
+the webhook falls back to `META_INSTAGRAM_ACCOUNT_ID`.
 
 ## Meta webhook
 

@@ -55,6 +55,7 @@ const envSchema = z.object({
   META_ACCESS_TOKEN: z.string().min(20).optional(),
   META_APP_SECRET: z.string().min(16).optional(),
   META_INSTAGRAM_ACCOUNT_ID: z.string().regex(/^\d+$/).optional(),
+  META_INSTAGRAM_WEBHOOK_ACCOUNT_ID: z.string().regex(/^\d+$/).optional(),
   META_INSTAGRAM_ACCESS_TOKEN: z.string().min(20).optional(),
   META_INSTAGRAM_WEBHOOK_VERIFY_TOKEN: z.string().min(16).optional(),
   META_INSTAGRAM_SYNC_CONVERSATION_LIMIT: z.coerce.number().int().min(1).max(500).default(100),

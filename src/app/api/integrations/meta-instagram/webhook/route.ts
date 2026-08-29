@@ -83,7 +83,8 @@ export async function POST(request: Request) {
     await ingestInstagramDmWebhook({
       payload,
       rawBody,
-      expectedAccountId: env.META_INSTAGRAM_ACCOUNT_ID,
+      expectedAccountId:
+        env.META_INSTAGRAM_WEBHOOK_ACCOUNT_ID ?? env.META_INSTAGRAM_ACCOUNT_ID,
     });
     return new Response("EVENT_RECEIVED", {
       status: 200,
