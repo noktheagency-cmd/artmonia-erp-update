@@ -71,7 +71,10 @@ export async function POST(request: Request) {
           code: error instanceof SyntaxError ? "invalid_json" : "unknown_parse_error",
           path: "",
         }];
-    console.warn("Instagram webhook payload parse failed", { issues });
+    console.warn(`Instagram webhook payload parse failed ${JSON.stringify({
+      issues,
+      shape: summarizeWebhookShape(rawBody),
+    })}`);
     return Response.json({ error: "Webhook payload düzgün deyil." }, { status: 400, headers: noStoreHeaders });
   }
 
@@ -90,4 +93,34 @@ export async function POST(request: Request) {
     console.error("Instagram DM webhook ingestion failed", error);
     return Response.json({ error: "Webhook məlumatı saxlanmadı." }, { status: 500, headers: noStoreHeaders });
   }
+}
+
+function summarizeWebhookShape(rawBody: Uint8Array) {
+  try {
+    const payload = JSON.parse(Buffer.from(rawBody).toString("utf8")) as Record<string, unknown>;
+    const entry = Array.isArray(payload.entry) ? payload.entry[0] : undefined;
+    const entryObject = isRecord(entry) ? entry : undefined;
+    const messaging = Array.isArray(entryObject?.messaging) ? entryObject.messaging[0] : undefined;
+    const event = isRecord(messaging) ? messaging : undefined;
+
+    return {
+      entryKeys: entryObject ? Object.keys(entryObject).sort() : [],
+      eventKeys: event ? Object.keys(event).sort() : [],
+      recipient: valueShape(event?.recipient),
+      sender: valueShape(event?.sender),
+    };
+  } catch {
+    return { invalidJson: true };
+  }
+}
+
+function valueShape(value: unknown) {
+  if (Array.isArray(value)) return { type: "array", keys: [] };
+  if (isRecord(value)) return { type: "object", keys: Object.keys(value).sort() };
+  if (value === null) return { type: "null", keys: [] };
+  return { type: typeof value, keys: [] };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
