@@ -168,7 +168,9 @@ export async function getMobileHome(identity: MobileStudentIdentity) {
     profile: {
       displayName: snapshot.contact.fullName,
       avatarUrl: studentAvatarUrl(snapshot.mobileAccount.avatarObjectPath),
+      programCode: primaryEnrollment.program.code,
       programName: primaryEnrollment.program.name,
+      lessonsPerMonth: effectiveLessonsPerMonth(primaryEnrollment),
     },
     attendance: {
       weeklyPercent: completedAttendanceCount
@@ -387,8 +389,16 @@ async function loadStudentPortalSnapshot(studentId: string) {
         select: {
           id: true,
           status: true,
+          lessonsPerMonth: true,
           updatedAt: true,
-          program: { select: { id: true, code: true, name: true } },
+          program: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              defaultLessonsPerMonth: true,
+            },
+          },
           teacher: { select: { fullName: true } },
           scheduleAssignments: {
             where: {
@@ -447,6 +457,7 @@ function buildProfile(snapshot: Awaited<ReturnType<typeof loadStudentPortalSnaps
       teacherName: enrollment.teacher?.fullName ?? assignment?.slot.teacher?.fullName ?? null,
       studentLevel: snapshot.educationLevel,
       enrollmentStatus: enrollment.status.toLowerCase(),
+      lessonsPerMonth: effectiveLessonsPerMonth(enrollment),
     } : null,
     editableFields: ["phone", "avatarObjectPath"],
     updatedAt: updatedAt.toISOString(),
@@ -457,6 +468,15 @@ function getPrimaryEnrollment(snapshot: Awaited<ReturnType<typeof loadStudentPor
   return snapshot.enrollments.find((enrollment) => enrollment.scheduleAssignments.length > 0)
     ?? snapshot.enrollments[0]
     ?? null;
+}
+
+function effectiveLessonsPerMonth(enrollment: {
+  lessonsPerMonth: number | null;
+  program: { defaultLessonsPerMonth: number | null };
+}) {
+  return enrollment.lessonsPerMonth && enrollment.lessonsPerMonth > 0
+    ? enrollment.lessonsPerMonth
+    : enrollment.program.defaultLessonsPerMonth;
 }
 
 type StudentLessonEntry = Awaited<ReturnType<typeof getStudentLessonEntries>>[number];
@@ -484,7 +504,16 @@ async function getStudentLessonEntries(
       enrollment: {
         select: {
           id: true,
-          program: { select: { code: true, name: true } },
+          program: {
+            select: {
+              code: true,
+              name: true,
+              lessonTopics: {
+                orderBy: { sequence: "asc" },
+                select: { sequence: true, title: true, updatedAt: true },
+              },
+            },
+          },
         },
       },
       slot: {
@@ -554,6 +583,28 @@ async function getStudentLessonEntries(
       },
     },
   });
+  const presentAttendance = await prisma.attendanceRecord.findMany({
+    where: {
+      enrollmentId: { in: enrollmentIds },
+      status: AttendanceMark.PRESENT,
+      session: {
+        sessionDate: { lte: toDate },
+        status: { not: SlotSessionStatus.CANCELLED },
+      },
+    },
+    select: {
+      enrollmentId: true,
+      session: {
+        select: { id: true, sessionDate: true, startTime: true },
+      },
+    },
+  });
+  const presentByEnrollment = new Map<string, typeof presentAttendance>();
+  for (const record of presentAttendance) {
+    const records = presentByEnrollment.get(record.enrollmentId) ?? [];
+    records.push(record);
+    presentByEnrollment.set(record.enrollmentId, records);
+  }
 
   return sessions.flatMap((session) => {
     const assignment = assignments.find((item) => (
@@ -572,6 +623,10 @@ async function getStudentLessonEntries(
     const startsAt = bakuLocalDateTimeToUtc(date, session.startTime);
     const endsAt = bakuLocalDateTimeToUtc(date, session.endTime);
     const lessonStatus = mapLessonStatus(session.status, endsAt, now);
+    const previousPresentCount = (presentByEnrollment.get(assignment.enrollment.id) ?? [])
+      .filter((record) => compareSessionPosition(record.session, session) < 0)
+      .length;
+    const programTopic = assignment.enrollment.program.lessonTopics[previousPresentCount] ?? null;
     const homework = session.homework ? {
       id: session.homework.id,
       title: session.homework.title,
@@ -590,6 +645,10 @@ async function getStudentLessonEntries(
       courseCode: assignment.enrollment.program.code,
       title: session.title ?? assignment.enrollment.program.name,
       objective: session.objective,
+      topic: programTopic ? {
+        number: programTopic.sequence,
+        title: programTopic.title,
+      } : null,
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
       location: session.locationOverride ?? session.slot.room,
@@ -612,6 +671,7 @@ async function getStudentLessonEntries(
         session.updatedAt,
         attendance?.updatedAt,
         session.homework?.updatedAt,
+        programTopic?.updatedAt,
       ]).toISOString(),
     }];
   });
@@ -724,12 +784,24 @@ function summarizeLesson(entry: StudentLessonEntry) {
     id: entry.id,
     courseCode: entry.courseCode,
     title: entry.title,
+    topic: entry.topic,
     startsAt: entry.startsAt,
     endsAt: entry.endsAt,
     location: entry.location,
     teacherName: entry.teacher?.displayName ?? null,
     status: entry.lessonStatus,
   };
+}
+
+function compareSessionPosition(
+  left: { id: string; sessionDate: Date; startTime: string },
+  right: { id: string; sessionDate: Date; startTime: string },
+) {
+  const byDate = left.sessionDate.getTime() - right.sessionDate.getTime();
+  if (byDate !== 0) return byDate;
+  const byTime = left.startTime.localeCompare(right.startTime);
+  if (byTime !== 0) return byTime;
+  return left.id.localeCompare(right.id);
 }
 
 function buildNextAction(entries: StudentLessonEntry[], now: Date) {

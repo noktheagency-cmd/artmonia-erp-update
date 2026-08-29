@@ -18,6 +18,7 @@ const programSchema = z.object({
   monthlyFee: z.preprocess((value) => Number(String(value).replace(",", ".")), z.number().min(0).max(100_000)),
   lessonsPerMonth: z.preprocess(optionalFormString, z.coerce.number().int().positive().max(120).optional()),
   description: optionalText(500),
+  lessonTopics: optionalText(25_000),
 });
 
 const deleteProgramSchema = z.object({
@@ -28,6 +29,12 @@ const deleteProgramSchema = z.object({
 async function saveProgramActionImpl(formData: FormData) {
   await requireMutationActor("settings.manage");
   const input = programSchema.parse(Object.fromEntries(formData));
+  const lessonTopics = z.array(z.string().trim().min(2).max(200)).max(120).parse(
+    (input.lessonTopics ?? "")
+      .split(/\r?\n/)
+      .map((topic) => topic.trim())
+      .filter(Boolean),
+  );
   const prisma = getPrisma();
   const data = {
     name: input.name,
@@ -38,8 +45,22 @@ async function saveProgramActionImpl(formData: FormData) {
     isActive: true,
   };
 
-  if (input.id) await prisma.program.update({ where: { id: input.id }, data });
-  else await prisma.program.create({ data });
+  await prisma.$transaction(async (tx) => {
+    const program = input.id
+      ? await tx.program.update({ where: { id: input.id }, data, select: { id: true } })
+      : await tx.program.create({ data, select: { id: true } });
+
+    await tx.programLessonTopic.deleteMany({ where: { programId: program.id } });
+    if (lessonTopics.length) {
+      await tx.programLessonTopic.createMany({
+        data: lessonTopics.map((title, index) => ({
+          programId: program.id,
+          sequence: index + 1,
+          title,
+        })),
+      });
+    }
+  });
 
   revalidatePath("/students");
 }

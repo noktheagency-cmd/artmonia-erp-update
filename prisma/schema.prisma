@@ -536,8 +536,8 @@ model User {
   personalNotifications            PersonalNotification[]          @relation("PersonalNotificationRecipient")
   ownedTargets                     Target[]                        @relation("TargetOwner")
   managedTargets                   Target[]                        @relation("TargetManager")
-  createdCompanyMonthlyTargets     CompanyMonthlyTarget[]         @relation("CompanyMonthlyTargetCreator")
-  updatedCompanyMonthlyTargets     CompanyMonthlyTarget[]         @relation("CompanyMonthlyTargetUpdater")
+  createdCompanyMonthlyTargets     CompanyMonthlyTarget[]          @relation("CompanyMonthlyTargetCreator")
+  updatedCompanyMonthlyTargets     CompanyMonthlyTarget[]          @relation("CompanyMonthlyTargetUpdater")
   auditLogs                        AuditLog[]                      @relation("AuditActor")
   authSessions                     AuthSessionRecord[]             @relation("AuthSessionUser")
   revokedAuthSessions              AuthSessionRecord[]             @relation("AuthSessionRevoker")
@@ -1273,14 +1273,14 @@ model MarketingAdStat {
 }
 
 model InstagramDmAccount {
-  id             String   @id @default(uuid()) @db.Uuid
-  metaAccountId  String   @unique @map("meta_account_id")
-  username       String?
-  isActive       Boolean  @default(true) @map("is_active")
-  firstSeenAt    DateTime @default(now()) @map("first_seen_at")
-  lastWebhookAt  DateTime @default(now()) @map("last_webhook_at")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  metaAccountId String   @unique @map("meta_account_id")
+  username      String?
+  isActive      Boolean  @default(true) @map("is_active")
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at")
+  lastWebhookAt DateTime @default(now()) @map("last_webhook_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   participants  InstagramDmParticipant[]
   conversations InstagramDmConversation[]
@@ -1311,20 +1311,20 @@ model InstagramDmParticipant {
 }
 
 model InstagramDmConversation {
-  id                String                    @id @default(uuid()) @db.Uuid
-  accountId         String                    @map("account_id") @db.Uuid
-  participantId     String                    @map("participant_id") @db.Uuid
-  firstMessageAt    DateTime                  @map("first_message_at")
-  lastMessageAt     DateTime                  @map("last_message_at")
-  lastInboundAt     DateTime?                 @map("last_inbound_at")
-  lastOutboundAt    DateTime?                 @map("last_outbound_at")
-  messageCount      Int                       @default(0) @map("message_count")
-  inboundCount      Int                       @default(0) @map("inbound_count")
-  outboundCount     Int                       @default(0) @map("outbound_count")
-  analysisStatus    InstagramDmAnalysisStatus @default(PENDING) @map("analysis_status")
-  analysisDirtyAt   DateTime                  @map("analysis_dirty_at")
-  createdAt         DateTime                  @default(now()) @map("created_at")
-  updatedAt         DateTime                  @updatedAt @map("updated_at")
+  id              String                    @id @default(uuid()) @db.Uuid
+  accountId       String                    @map("account_id") @db.Uuid
+  participantId   String                    @map("participant_id") @db.Uuid
+  firstMessageAt  DateTime                  @map("first_message_at")
+  lastMessageAt   DateTime                  @map("last_message_at")
+  lastInboundAt   DateTime?                 @map("last_inbound_at")
+  lastOutboundAt  DateTime?                 @map("last_outbound_at")
+  messageCount    Int                       @default(0) @map("message_count")
+  inboundCount    Int                       @default(0) @map("inbound_count")
+  outboundCount   Int                       @default(0) @map("outbound_count")
+  analysisStatus  InstagramDmAnalysisStatus @default(PENDING) @map("analysis_status")
+  analysisDirtyAt DateTime                  @map("analysis_dirty_at")
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  updatedAt       DateTime                  @updatedAt @map("updated_at")
 
   account     InstagramDmAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
   participant InstagramDmParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -1357,26 +1357,26 @@ model InstagramDmWebhookEvent {
 }
 
 model InstagramDmMessage {
-  id                   String                   @id @default(uuid()) @db.Uuid
-  conversationId       String                   @map("conversation_id") @db.Uuid
-  webhookEventId       String?                  @map("webhook_event_id") @db.Uuid
-  metaMessageId        String                   @unique @map("meta_message_id")
+  id                   String                 @id @default(uuid()) @db.Uuid
+  conversationId       String                 @map("conversation_id") @db.Uuid
+  webhookEventId       String?                @map("webhook_event_id") @db.Uuid
+  metaMessageId        String                 @unique @map("meta_message_id")
   direction            InstagramDmDirection
   kind                 InstagramDmMessageKind
-  text                 String?                  @db.Text
-  sentAt               DateTime                 @map("sent_at")
-  isEcho               Boolean                  @default(false) @map("is_echo")
-  isSelf               Boolean                  @default(false) @map("is_self")
-  isDeleted            Boolean                  @default(false) @map("is_deleted")
-  isUnsupported        Boolean                  @default(false) @map("is_unsupported")
-  replyToMetaMessageId String?                  @map("reply_to_meta_message_id")
-  quickReplyPayload    String?                  @map("quick_reply_payload")
-  editCount            Int                      @default(0) @map("edit_count")
+  text                 String?                @db.Text
+  sentAt               DateTime               @map("sent_at")
+  isEcho               Boolean                @default(false) @map("is_echo")
+  isSelf               Boolean                @default(false) @map("is_self")
+  isDeleted            Boolean                @default(false) @map("is_deleted")
+  isUnsupported        Boolean                @default(false) @map("is_unsupported")
+  replyToMetaMessageId String?                @map("reply_to_meta_message_id")
+  quickReplyPayload    String?                @map("quick_reply_payload")
+  editCount            Int                    @default(0) @map("edit_count")
   attachments          Json?
   referral             Json?
-  rawMetadata          Json?                    @map("raw_metadata")
-  createdAt            DateTime                 @default(now()) @map("created_at")
-  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  rawMetadata          Json?                  @map("raw_metadata")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
 
   conversation InstagramDmConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   webhookEvent InstagramDmWebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
@@ -1557,8 +1557,24 @@ model Program {
   enrollments     Enrollment[]
   targets         Target[]
   announcements   AcademyAnnouncement[]
+  lessonTopics    ProgramLessonTopic[]
 
   @@map("programs")
+  @@schema("erp")
+}
+
+model ProgramLessonTopic {
+  id        String   @id @default(uuid()) @db.Uuid
+  programId String   @map("program_id") @db.Uuid
+  sequence  Int
+  title     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, sequence])
+  @@map("program_lesson_topics")
   @@schema("erp")
 }
 

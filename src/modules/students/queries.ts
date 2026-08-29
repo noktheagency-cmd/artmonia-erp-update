@@ -128,9 +128,11 @@ export type StudentListData = {
     programs: Array<{
       id: string;
       name: string;
+      code: string;
       monthlyFee: string;
       lessonsPerMonth: string;
       description: string;
+      lessonTopics: string[];
       isActive: boolean;
     }>;
     teachers: Array<{ id: string; fullName: string }>;
@@ -566,9 +568,11 @@ export async function getStudentListData(
       programs: programs.map((program) => ({
         id: program.id,
         name: program.name,
+        code: program.code ?? "",
         monthlyFee: formatDecimalInput(program.defaultMonthlyFee),
         lessonsPerMonth: program.defaultLessonsPerMonth?.toString() ?? "",
         description: program.description ?? "",
+        lessonTopics: program.lessonTopics,
         isActive: program.isActive,
       })),
       teachers,
@@ -1273,9 +1277,11 @@ type StudentCreateOptionRows = {
   programs: Array<{
     id: string;
     name: string;
+    code: string | null;
     defaultMonthlyFee: unknown;
     defaultLessonsPerMonth: number | null;
     description: string | null;
+    lessonTopics: string[];
     isActive: boolean;
   }>;
   teachers: Array<{ id: string; fullName: string }>;
@@ -1889,9 +1895,15 @@ async function getStudentCreateOptions(
           jsonb_build_object(
             'id', p.id::text,
             'name', p.name,
+            'code', p.code,
             'defaultMonthlyFee', p.default_monthly_fee,
             'defaultLessonsPerMonth', p.default_lessons_per_month
             ,'description', p.description
+            ,'lessonTopics', coalesce((
+              select jsonb_agg(topic.title order by topic.sequence asc)
+              from erp.program_lesson_topics topic
+              where topic.program_id = p.id
+            ), '[]'::jsonb)
             ,'isActive', p.is_active
           )
           order by p.name asc
@@ -2776,7 +2788,7 @@ export async function getStudentDetailData(studentId: string) {
     prisma.$queryRaw<StudentPackageUsageRaw[]>(Prisma.sql`
       select
         e.id::text as "enrollmentId",
-        coalesce(e.lessons_per_month, p.default_lessons_per_month)::int as "totalLessons",
+        coalesce(nullif(e.lessons_per_month, 0), p.default_lessons_per_month)::int as "totalLessons",
         coalesce(active_cycle.cycle_start, date_trunc('month', ${today}::date)::date) as "periodStart",
         coalesce(
           active_cycle.cycle_end,

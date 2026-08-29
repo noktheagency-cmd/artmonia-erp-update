@@ -172,7 +172,7 @@ async function queryPayrollLines(db: Pick<Prisma.TransactionClient, "$queryRaw">
         i.enrollment_id,
         pa.payment_id,
         sum(pa.amount_allocated) as paid_amount,
-        greatest(coalesce(e.lessons_per_month, p.default_lessons_per_month, 1), 1)::int as planned_lessons
+        greatest(coalesce(nullif(e.lessons_per_month, 0), p.default_lessons_per_month, 1), 1)::int as planned_lessons
       from erp.invoices i
       join erp.enrollments e on e.id = i.enrollment_id
       join erp.programs p on p.id = e.program_id
