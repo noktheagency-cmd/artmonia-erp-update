@@ -5,6 +5,7 @@ import {
   verifyMetaWebhookSignature,
 } from "@/modules/instagram-dm/webhook-payload";
 import { getEnv, requireEnv } from "@/server/env";
+import { ZodError } from "zod";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,7 +61,17 @@ export async function POST(request: Request) {
   let payload;
   try {
     payload = parseMetaInstagramWebhook(rawBody);
-  } catch {
+  } catch (error) {
+    const issues = error instanceof ZodError
+      ? error.issues.map((issue) => ({
+          code: issue.code,
+          path: issue.path.join("."),
+        }))
+      : [{
+          code: error instanceof SyntaxError ? "invalid_json" : "unknown_parse_error",
+          path: "",
+        }];
+    console.warn("Instagram webhook payload parse failed", { issues });
     return Response.json({ error: "Webhook payload düzgün deyil." }, { status: 400, headers: noStoreHeaders });
   }
 
