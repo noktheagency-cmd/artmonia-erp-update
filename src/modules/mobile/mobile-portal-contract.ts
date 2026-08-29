@@ -38,7 +38,17 @@ export const mobileHomeworkCompletionSchema = z.object({
   completed: z.boolean(),
 }).strict();
 
+export const mobileNotificationQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+}).strict();
+
+export const mobileNotificationReadSchema = z.object({
+  read: z.boolean(),
+}).strict();
+
 export type MobileLessonsQuery = z.infer<typeof mobileLessonsQuerySchema>;
 export type MobileLessonFilter = typeof lessonFilterValues[number];
 export type MobileProfilePatch = z.infer<typeof mobileProfilePatchSchema>;
 export type MobileHomeworkCompletion = z.infer<typeof mobileHomeworkCompletionSchema>;
+export type MobileNotificationQuery = z.infer<typeof mobileNotificationQuerySchema>;
+export type MobileNotificationRead = z.infer<typeof mobileNotificationReadSchema>;

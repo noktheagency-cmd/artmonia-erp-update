@@ -1692,14 +1692,31 @@ model StudentMobileAccount {
   createdAt            DateTime                   @default(now()) @map("created_at")
   updatedAt            DateTime                   @updatedAt @map("updated_at")
 
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation("StudentMobileAccountCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy User?   @relation("StudentMobileAccountUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  student           Student                         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdBy         User?                           @relation("StudentMobileAccountCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy         User?                           @relation("StudentMobileAccountUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  notificationReads StudentMobileNotificationRead[]
 
   @@index([status])
   @@index([createdById])
   @@index([updatedById])
   @@map("student_mobile_accounts")
+  @@schema("erp")
+}
+
+model StudentMobileNotificationRead {
+  id              String   @id @default(uuid()) @db.Uuid
+  mobileAccountId String   @map("mobile_account_id") @db.Uuid
+  notificationKey String   @map("notification_key") @db.VarChar(180)
+  readAt          DateTime @default(now()) @map("read_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  mobileAccount StudentMobileAccount @relation(fields: [mobileAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([mobileAccountId, notificationKey])
+  @@index([mobileAccountId, readAt, updatedAt(sort: Desc)])
+  @@map("student_mobile_notification_reads")
   @@schema("erp")
 }
 

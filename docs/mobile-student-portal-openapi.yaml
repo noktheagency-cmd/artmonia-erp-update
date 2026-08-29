@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Mobile Student Portal API
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: https://erp.artmoniya.com
 paths:
@@ -206,6 +206,88 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/package:
+    get:
+      operationId: getMobilePackage
+      summary: Get the student's active package and ERP-calculated lesson balance
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      responses:
+        '200':
+          description: Active package usage
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackageResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/journey:
+    get:
+      operationId: getMobileJourney
+      summary: Get ERP-calculated program journey and gamification
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      responses:
+        '200':
+          description: Journey and gamification summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JourneyResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/notifications:
+    get:
+      operationId: listMobileAcademicNotifications
+      summary: List ERP-owned academic notifications and announcement history
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/RequestId' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Academic notification list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/mobile/v1/me/notifications/{notificationId}/read:
+    patch:
+      operationId: setMobileAcademicNotificationRead
+      summary: Idempotently mark an academic notification read or unread
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/RequestId' }
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: string, minLength: 3, maxLength: 180 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [read]
+              properties:
+                read: { type: boolean }
+      responses:
+        '200':
+          description: Current notification read state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationReadState' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     serverToken:
@@ -236,7 +318,7 @@ components:
         serverTime: { type: string, format: date-time }
     Academy:
       type: object
-      required: [programCode, programName, groupName, studioName, teacherName, studentLevel, enrollmentStatus]
+      required: [programCode, programName, groupName, studioName, teacherName, studentLevel, enrollmentStatus, lessonsPerMonth]
       properties:
         programCode: { type: string }
         programName: { type: string }
@@ -245,6 +327,12 @@ components:
         teacherName: { type: [string, 'null'] }
         studentLevel: { type: [string, 'null'] }
         enrollmentStatus: { type: string, enum: [active] }
+        lessonsPerMonth: { type: [integer, 'null'], minimum: 1 }
+    LessonTopic:
+      type: [object, 'null']
+      properties:
+        number: { type: integer, minimum: 1 }
+        title: { type: string }
     Profile:
       type: object
       required: [displayName, email, phone, avatarUrl, avatarObjectPath, accountStatus, academy, editableFields, updatedAt]
@@ -265,11 +353,12 @@ components:
         updatedAt: { type: string, format: date-time }
     LessonSummary:
       type: object
-      required: [id, courseCode, title, startsAt, endsAt, location, teacherName, status]
+      required: [id, courseCode, title, topic, startsAt, endsAt, location, teacherName, status]
       properties:
         id: { type: string, format: uuid }
         courseCode: { type: string }
         title: { type: string }
+        topic: { $ref: '#/components/schemas/LessonTopic' }
         startsAt: { type: string, format: date-time }
         endsAt: { type: string, format: date-time }
         location: { type: [string, 'null'] }
@@ -281,11 +370,13 @@ components:
       properties:
         profile:
           type: object
-          required: [displayName, avatarUrl, programName]
+          required: [displayName, avatarUrl, programCode, programName, lessonsPerMonth]
           properties:
             displayName: { type: string }
             avatarUrl: { type: [string, 'null'], format: uri }
+            programCode: { type: [string, 'null'] }
             programName: { type: string }
+            lessonsPerMonth: { type: [integer, 'null'], minimum: 1 }
         attendance:
           type: object
           required: [weeklyPercent, attendedCount, absentCount, excusedCount, scheduledCount]
@@ -341,13 +432,14 @@ components:
         updatedAt: { type: string, format: date-time }
     LessonEntry:
       type: object
-      required: [id, date, courseCode, title, objective, startsAt, endsAt, location, teacher, lessonStatus, attendance, teacherNote, homework, updatedAt]
+      required: [id, date, courseCode, title, objective, topic, startsAt, endsAt, location, teacher, lessonStatus, attendance, teacherNote, homework, updatedAt]
       properties:
         id: { type: string, format: uuid }
         date: { type: string, format: date }
         courseCode: { type: string }
         title: { type: string }
         objective: { type: [string, 'null'] }
+        topic: { $ref: '#/components/schemas/LessonTopic' }
         startsAt: { type: string, format: date-time }
         endsAt: { type: string, format: date-time }
         location: { type: [string, 'null'] }
@@ -381,6 +473,194 @@ components:
         pendingCount: { type: integer, minimum: 0 }
         scheduledCount: { type: integer, minimum: 0 }
         serverTime: { type: string, format: date-time }
+    PackageResponse:
+      type: object
+      required: [package, updatedAt]
+      properties:
+        package:
+          type: object
+          required: [id, program, status, startsAt, firstLessonAt, period, billing, lessons]
+          properties:
+            id: { type: string, format: uuid }
+            program:
+              type: object
+              required: [code, name]
+              properties:
+                code: { type: [string, 'null'] }
+                name: { type: string }
+            status: { type: string, enum: [active] }
+            startsAt: { type: string, format: date }
+            firstLessonAt: { type: [string, 'null'], format: date }
+            period:
+              type: object
+              required: [from, to, source]
+              properties:
+                from: { type: string, format: date }
+                to: { type: string, format: date }
+                source: { type: string, enum: [billing_cycle, calendar_month] }
+            billing:
+              type: [object, 'null']
+              properties:
+                status: { type: string, enum: [draft, open, partial, paid, overdue, void] }
+                dueAt: { type: string, format: date }
+                paidAt: { type: [string, 'null'], format: date }
+            lessons:
+              type: object
+              required: [totalLessons, usedLessons, remainingLessons, overLimitLessons]
+              properties:
+                totalLessons: { type: [integer, 'null'], minimum: 0 }
+                usedLessons: { type: integer, minimum: 0 }
+                remainingLessons: { type: [integer, 'null'], minimum: 0 }
+                overLimitLessons: { type: integer, minimum: 0 }
+        updatedAt: { type: string, format: date-time }
+    JourneyTopic:
+      type: object
+      required: [identifier, number, title, status, completedAt]
+      properties:
+        identifier: { type: string, pattern: '^program:[0-9a-f-]{36}:topic:[1-9][0-9]*$' }
+        number: { type: integer, minimum: 1 }
+        title: { type: string }
+        status: { type: string, enum: [completed, current, locked] }
+        completedAt: { type: [string, 'null'], format: date-time }
+    Achievement:
+      type: object
+      required: [id, title, description, iconKey, status, earnedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        iconKey: { type: string }
+        status: { type: string, enum: [earned, locked] }
+        earnedAt: { type: [string, 'null'], format: date-time }
+    Reward:
+      type: object
+      required: [id, title, description, iconKey, requiredXp, remainingXp, status, unlockedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        iconKey: { type: string }
+        requiredXp: { type: integer, minimum: 0 }
+        remainingXp: { type: integer, minimum: 0 }
+        status: { type: string, enum: [unlocked, locked] }
+        unlockedAt: { type: [string, 'null'], format: date-time }
+    JourneyResponse:
+      type: object
+      required: [program, journey, gamification, rules, updatedAt]
+      properties:
+        program:
+          type: object
+          required: [code, name]
+          properties:
+            code: { type: [string, 'null'] }
+            name: { type: string }
+        journey:
+          type: object
+          required: [topics, currentTopic, completedTopicCount, totalTopicCount, progressPercent]
+          properties:
+            topics:
+              type: array
+              items: { $ref: '#/components/schemas/JourneyTopic' }
+            currentTopic:
+              anyOf:
+                - { $ref: '#/components/schemas/JourneyTopic' }
+                - { type: 'null' }
+            completedTopicCount: { type: integer, minimum: 0 }
+            totalTopicCount: { type: integer, minimum: 0 }
+            progressPercent: { type: integer, minimum: 0, maximum: 100 }
+        gamification:
+          type: object
+          required: [xp, level, streak, achievements, rewards, latestAchievement, nextReward]
+          properties:
+            xp:
+              type: object
+              required: [total, earnedThisWeek]
+              properties:
+                total: { type: integer, minimum: 0 }
+                earnedThisWeek: { type: integer, minimum: 0 }
+            level:
+              type: object
+              required: [number, title, currentXp, nextLevelXp, progressPercent]
+              properties:
+                number: { type: integer, minimum: 1 }
+                title: { type: string }
+                currentXp: { type: integer, minimum: 0 }
+                nextLevelXp: { type: integer, minimum: 1 }
+                progressPercent: { type: integer, minimum: 0, maximum: 100 }
+            streak:
+              type: object
+              required: [current, best, unit]
+              properties:
+                current: { type: integer, minimum: 0 }
+                best: { type: integer, minimum: 0 }
+                unit: { type: string, enum: [lesson] }
+            achievements:
+              type: array
+              items: { $ref: '#/components/schemas/Achievement' }
+            rewards:
+              type: array
+              items: { $ref: '#/components/schemas/Reward' }
+            latestAchievement:
+              anyOf:
+                - { $ref: '#/components/schemas/Achievement' }
+                - { type: 'null' }
+            nextReward:
+              anyOf:
+                - { $ref: '#/components/schemas/Reward' }
+                - { type: 'null' }
+        rules:
+          type: object
+          required: [presentXp, homeworkXp, levelStepXp, streakUnit, absentBreaksStreak, excusedBreaksStreak]
+          properties:
+            presentXp: { type: integer, const: 100 }
+            homeworkXp: { type: integer, const: 25 }
+            levelStepXp: { type: integer, const: 500 }
+            streakUnit: { type: string, const: lesson }
+            absentBreaksStreak: { type: boolean, const: true }
+            excusedBreaksStreak: { type: boolean, const: false }
+        updatedAt: { type: string, format: date-time }
+    AcademicNotification:
+      type: object
+      required: [id, type, title, body, readAt, occurredAt, entity, event]
+      properties:
+        id: { type: string, maxLength: 180 }
+        type: { type: string, enum: [announcement, attendance, homework, lesson, package] }
+        title: { type: string }
+        body: { type: string }
+        readAt: { type: [string, 'null'], format: date-time }
+        occurredAt: { type: string, format: date-time }
+        entity:
+          type: [object, 'null']
+          properties:
+            type: { type: string }
+            id: { type: string, format: uuid }
+        event:
+          type: object
+          required: [version, name, metadata]
+          properties:
+            version: { type: integer, const: 1 }
+            name:
+              type: string
+              enum: [announcement.published, attendance.updated, homework.assigned, homework.completed, lesson.cancelled, lesson.rescheduled, package.updated]
+            metadata: { type: object, additionalProperties: true }
+    NotificationList:
+      type: object
+      required: [items, unreadCount, hasMore, nextCursor, serverTime]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AcademicNotification' }
+        unreadCount: { type: integer, minimum: 0 }
+        hasMore: { type: boolean }
+        nextCursor: { type: 'null' }
+        serverTime: { type: string, format: date-time }
+    NotificationReadState:
+      type: object
+      required: [id, readAt, updatedAt]
+      properties:
+        id: { type: string, maxLength: 180 }
+        readAt: { type: [string, 'null'], format: date-time }
+        updatedAt: { type: string, format: date-time }
     Error:
       type: object
       required: [code, message, requestId]
