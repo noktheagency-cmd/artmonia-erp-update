@@ -240,7 +240,7 @@ function resolveDirection(
   accountMetaId: string,
   event: z.infer<typeof messagingSchema>,
 ): "INBOUND" | "OUTBOUND" {
-  if (event.sender.id === accountMetaId || event.message?.is_echo) return "OUTBOUND";
+  if (event.sender?.id === accountMetaId || event.message?.is_echo) return "OUTBOUND";
   return "INBOUND";
 }
 
