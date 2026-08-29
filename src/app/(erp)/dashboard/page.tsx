@@ -7,6 +7,7 @@ import { AppRole } from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { RoleDashboard } from "@/modules/dashboard/role-dashboard";
 import { getRoleDashboardData } from "@/modules/dashboard/role-dashboard-query";
+import { getCompanyKpiData } from "@/modules/hr/company-kpi-data";
 
 export const dynamic = "force-dynamic";
 
@@ -27,15 +28,18 @@ export default async function DashboardPage({
   }
   const showTaskProgress =
     !actor.roles.includes(AppRole.SUPER_ADMIN) && actor.permissions.has("task.read");
-  const [data, taskData] = await Promise.all([
+  const showCompanyKpi = actor.permissions.has("hr.company_kpi.read");
+  const [data, taskData, companyKpiData] = await Promise.all([
     getOwnerDashboardData(filters),
     showTaskProgress ? getTaskData() : Promise.resolve(null),
+    showCompanyKpi ? getCompanyKpiData() : Promise.resolve(null),
   ]);
 
   return (
     <OwnerDashboard
       data={data}
       actorName={actor.fullName}
+      companyKpiData={companyKpiData}
       taskData={taskData}
       createTaskAction={createTaskAction}
       updateTaskStatusAction={updateTaskStatusAction}

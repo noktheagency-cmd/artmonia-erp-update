@@ -18,6 +18,8 @@ import { DashboardTasksPanel } from "@/modules/dashboard/dashboard-tasks-panel";
 import { DashboardInsights } from "@/modules/dashboard/dashboard-insights";
 import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashboard-visuals";
 import type { TaskData } from "@/modules/tasks/queries";
+import type { CompanyKpiData } from "@/modules/hr/company-kpi-data";
+import { CompanyKpiProgressPanel } from "@/modules/dashboard/company-kpi-progress-panel";
 
 type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 
@@ -36,12 +38,14 @@ const kpiPresentation: readonly KpiPresentation[] = [
 export function OwnerDashboard({
   data,
   actorName,
+  companyKpiData,
   taskData,
   createTaskAction,
   updateTaskStatusAction,
 }: {
   data: DashboardData;
   actorName: string;
+  companyKpiData: CompanyKpiData | null;
   taskData: TaskData | null;
   createTaskAction: TaskAction;
   updateTaskStatusAction: TaskAction;
@@ -49,9 +53,12 @@ export function OwnerDashboard({
   return (
     <section className="owner-dashboard" aria-labelledby="owner-dashboard-title">
       <header className="owner-dashboard-header">
-        <div>
+        <div className="owner-dashboard-greeting">
           <h1 id="owner-dashboard-title">Salam, {firstName(actorName)}</h1>
         </div>
+        {companyKpiData?.permissions.canRead ? (
+          <CompanyKpiProgressPanel data={companyKpiData} />
+        ) : null}
       </header>
 
       <div className="owner-dashboard-kpi-grid">
