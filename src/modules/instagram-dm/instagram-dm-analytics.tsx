@@ -23,32 +23,8 @@ import { MarketingViewTabs } from "@/modules/marketing/marketing-view-tabs";
 
 type ConversationFilter = "all" | "answered" | "unanswered";
 
-const countFormatter = new Intl.NumberFormat("az-AZ");
-const timeFormatter = new Intl.DateTimeFormat("az-AZ", {
-  timeZone: "Asia/Baku",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const dateFormatter = new Intl.DateTimeFormat("az-AZ", {
-  timeZone: "Asia/Baku",
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-const fullDateTimeFormatter = new Intl.DateTimeFormat("az-AZ", {
-  timeZone: "Asia/Baku",
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const dateKeyFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Baku",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
+const BAKU_OFFSET_MS = 4 * 60 * 60 * 1000;
+const AZ_MONTHS = ["yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avq", "sen", "okt", "noy", "dek"];
 
 export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData }) {
   const router = useRouter();
@@ -360,7 +336,7 @@ function Fact({
 }
 
 function count(value: number) {
-  return countFormatter.format(value);
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
 function durationLabel(minutes: number | null) {
@@ -378,15 +354,18 @@ function peakHourLabel(hour: number | null) {
 }
 
 function dateKey(value: string) {
-  return dateKeyFormatter.format(new Date(value));
+  const date = bakuDate(value);
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
 function dateLabel(value: string) {
-  return dateFormatter.format(new Date(value));
+  const date = bakuDate(value);
+  return `${pad(date.getUTCDate())} ${AZ_MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 function time(value: string) {
-  return timeFormatter.format(new Date(value));
+  const date = bakuDate(value);
+  return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
 }
 
 function compactDateTime(value: string) {
@@ -394,5 +373,13 @@ function compactDateTime(value: string) {
 }
 
 function fullDateTime(value: string) {
-  return fullDateTimeFormatter.format(new Date(value));
+  return `${dateLabel(value)}, ${time(value)}`;
+}
+
+function bakuDate(value: string) {
+  return new Date(new Date(value).getTime() + BAKU_OFFSET_MS);
+}
+
+function pad(value: number) {
+  return String(value).padStart(2, "0");
 }
