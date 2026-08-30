@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { BarChart3, CalendarDays, Target } from "lucide-react";
+import { BarChart3, CalendarDays, MessagesSquare, Target } from "lucide-react";
 import { cx } from "@/components/ui/cx";
 
 export function MarketingViewTabs({
   active,
   month,
 }: {
-  active: "strategy" | "results" | "content";
+  active: "strategy" | "results" | "content" | "dm";
   month?: string;
 }) {
   const monthSuffix = month ? `&month=${month}` : "";
@@ -23,6 +23,10 @@ export function MarketingViewTabs({
       <Link href={`/marketing?view=content${monthSuffix}`} className={cx(active === "content" && "is-active")}>
         <CalendarDays size={16} />
         Content plan
+      </Link>
+      <Link href="/marketing?view=dm" className={cx(active === "dm" && "is-active")}>
+        <MessagesSquare size={16} />
+        DM intelligence
       </Link>
     </nav>
   );

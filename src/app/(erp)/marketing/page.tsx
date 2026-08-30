@@ -1,3 +1,6 @@
+import "@/modules/instagram-dm/instagram-dm-analytics.css";
+import { InstagramDmAnalytics } from "@/modules/instagram-dm/instagram-dm-analytics";
+import { getInstagramDmAnalyticsData } from "@/modules/instagram-dm/analytics-queries";
 import { MarketingContentPlanner } from "@/modules/marketing/marketing-content-planner";
 import { MarketingStrategyWorkspace } from "@/modules/marketing/marketing-strategy-workspace";
 import { MarketingWorkspace } from "@/modules/marketing/marketing-workspace";
@@ -39,6 +42,10 @@ export default async function MarketingPage({
         })}
       />
     );
+  }
+
+  if (filters.view === "dm") {
+    return <InstagramDmAnalytics data={await getInstagramDmAnalyticsData()} />;
   }
 
   return <MarketingWorkspace data={await getMarketingData({ from: filters.from, to: filters.to })} />;
