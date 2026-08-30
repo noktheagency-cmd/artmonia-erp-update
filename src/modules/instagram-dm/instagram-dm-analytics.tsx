@@ -38,8 +38,8 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
 
     return data.conversations.filter((conversation) => {
       const matchesStatus = filter === "all"
-        || (filter === "answered" && conversation.outboundCount > 0)
-        || (filter === "unanswered" && conversation.outboundCount === 0);
+        || (filter === "answered" && conversation.isAnswered)
+        || (filter === "unanswered" && !conversation.isAnswered);
       const matchesSearch = !normalizedSearch
         || `${conversation.participantLabel} ${conversation.participantHandle} ${conversation.preview}`
           .toLocaleLowerCase("az-AZ")
@@ -223,8 +223,8 @@ function ConversationItem({
         <p>{conversation.preview}</p>
         <span className="instagram-dm-conversation-meta">
           <span><MessageCircle size={12} /> {count(conversation.messageCount)}</span>
-          <span className={conversation.outboundCount > 0 ? "is-answered" : undefined}>
-            {conversation.outboundCount > 0 ? "Cavablanıb" : "Cavabsız"}
+          <span className={conversation.isAnswered ? "is-answered" : undefined}>
+            {conversation.isAnswered ? "Cavablanıb" : "Cavabsız"}
           </span>
         </span>
       </span>
@@ -258,7 +258,7 @@ function ConversationTranscript({ conversation }: { conversation: InstagramDmAna
           <div className="instagram-dm-stream-empty">Bu conversation üçün mesaj yoxdur.</div>
         )}
 
-        {conversation.inboundCount > 0 && conversation.outboundCount === 0 ? (
+        {conversation.inboundCount > 0 && !conversation.isAnswered ? (
           <div className="instagram-dm-no-response">
             <span><Send size={19} /></span>
             <strong>Hələ cavab yoxdur</strong>
@@ -288,7 +288,7 @@ function MessageBubble({ message, showDate }: { message: InstagramDmAnalyticsMes
 }
 
 function ConversationFacts({ conversation }: { conversation: InstagramDmAnalyticsConversation }) {
-  const answered = conversation.outboundCount > 0;
+  const answered = conversation.isAnswered;
   return (
     <aside className="instagram-dm-facts">
       <header>

@@ -21,6 +21,7 @@ export type InstagramDmAnalyticsConversation = {
   messageCount: number;
   inboundCount: number;
   outboundCount: number;
+  isAnswered: boolean;
   preview: string;
   messages: InstagramDmAnalyticsMessage[];
 };
@@ -170,6 +171,10 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
     },
     conversations: conversations.map((conversation) => {
       const latestMessage = conversation.messages.at(-1);
+      const firstInboundAt = conversation.messages.find((message) => message.direction === "INBOUND")?.sentAt;
+      const isAnswered = firstInboundAt
+        ? conversation.messages.some((message) => message.direction === "OUTBOUND" && message.sentAt >= firstInboundAt)
+        : false;
       return {
         id: conversation.id,
         participantLabel: participantLabel(conversation.participant),
@@ -179,6 +184,7 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
         messageCount: conversation.messageCount,
         inboundCount: conversation.inboundCount,
         outboundCount: conversation.outboundCount,
+        isAnswered,
         preview: messagePreview(latestMessage),
         messages: conversation.messages.map((message) => ({
           id: message.id,
