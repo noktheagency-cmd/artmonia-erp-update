@@ -320,7 +320,17 @@ async function loadNotificationCandidates(studentId: string) {
       )
       order by ss.id, ss.updated_at desc
     )
-    select * from (
+    select
+      notifications.id,
+      notifications.type,
+      notifications.title,
+      notifications.body,
+      notifications.occurred_at as "occurredAt",
+      notifications.entity_type as "entityType",
+      notifications.entity_id as "entityId",
+      notifications.event_name as "eventName",
+      notifications.metadata
+    from (
       select
         ('announcement:' || a.id::text || ':' || extract(epoch from a.updated_at)::bigint::text) as id,
         'announcement'::text as type,
@@ -387,7 +397,7 @@ async function loadNotificationCandidates(studentId: string) {
       from active_enrollments ae
       join erp.programs p on p.id = ae.program_id
     ) notifications
-    order by occurred_at desc, id desc
+    order by notifications.occurred_at desc, notifications.id desc
     limit 500
   `);
 }
