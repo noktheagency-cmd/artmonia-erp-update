@@ -36,6 +36,7 @@ import { parseBillingMonthInput } from "@/modules/students/payment-billing-perio
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
+import { shouldVoidObsoleteImportedInvoice } from "./obsolete-import-invoice";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
@@ -497,6 +498,19 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
       scheduleType: input.scheduleType,
     });
 
+    if (
+      existing.scheduleType === "MONTHLY" &&
+      payment.scheduleType === "MONTHLY"
+    ) {
+      await voidObsoleteImportedPaymentInvoices(tx, {
+        actorUserId: actor.id,
+        studentId: payment.studentId,
+        paymentId: payment.id,
+        previousPaymentMonth: existing.paymentMonth,
+        currentPaymentMonth: payment.paymentMonth,
+      });
+    }
+
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "finance.payment.update",
@@ -895,6 +909,119 @@ async function allocateExistingPayment(
   }
 
   return allocations;
+}
+
+async function voidObsoleteImportedPaymentInvoices(
+  tx: Prisma.TransactionClient,
+  input: {
+    actorUserId: string;
+    studentId: string;
+    paymentId: string;
+    previousPaymentMonth: Date;
+    currentPaymentMonth: Date;
+  },
+) {
+  if (
+    input.previousPaymentMonth.getTime() === input.currentPaymentMonth.getTime()
+  ) {
+    return;
+  }
+
+  const student = await tx.student.findUnique({
+    where: { id: input.studentId },
+    select: { code: true, createdAt: true },
+  });
+  if (!student) throw new Error("Tələbə tapılmadı");
+
+  const candidates = await tx.invoice.findMany({
+    where: {
+      studentId: input.studentId,
+      periodMonth: input.previousPaymentMonth,
+      status: { not: InvoiceStatus.VOID },
+      OR: [
+        { idempotencyKey: { startsWith: "student-period-" } },
+        { idempotencyKey: { startsWith: "student-month-" } },
+      ],
+    },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+      periodMonth: true,
+      amount: true,
+      balanceDue: true,
+      status: true,
+      idempotencyKey: true,
+      _count: { select: { paymentAllocations: true } },
+    },
+  });
+
+  const otherMonthlyPaymentCount = await tx.payment.count({
+    where: {
+      studentId: input.studentId,
+      id: { not: input.paymentId },
+      scheduleType: "MONTHLY",
+      paymentMonth: input.previousPaymentMonth,
+    },
+  });
+
+  for (const invoice of candidates) {
+    const amount = toNumber(invoice.amount);
+    const balanceDue = toNumber(invoice.balanceDue);
+    if (
+      !shouldVoidObsoleteImportedInvoice({
+        studentCreatedAt: student.createdAt,
+        previousPaymentMonth: input.previousPaymentMonth,
+        currentPaymentMonth: input.currentPaymentMonth,
+        invoicePeriodMonth: invoice.periodMonth,
+        invoiceIdempotencyKey: invoice.idempotencyKey,
+        invoiceAmount: amount,
+        invoiceBalanceDue: balanceDue,
+        allocationCount: invoice._count.paymentAllocations,
+        otherMonthlyPaymentCount,
+      })
+    ) {
+      continue;
+    }
+
+    const updated = await tx.invoice.updateMany({
+      where: {
+        id: invoice.id,
+        status: { not: InvoiceStatus.VOID },
+        balanceDue: invoice.amount,
+        paymentAllocations: { none: {} },
+      },
+      data: {
+        balanceDue: 0,
+        status: InvoiceStatus.VOID,
+      },
+    });
+    if (updated.count !== 1) continue;
+
+    await writeAuditLog(tx, {
+      actorUserId: input.actorUserId,
+      action: "billing.invoice.void_obsolete_import_period",
+      entityType: "invoice",
+      entityId: invoice.id,
+      before: {
+        studentCode: student.code,
+        periodMonth: invoice.periodMonth.toISOString(),
+        amount,
+        balanceDue,
+        status: invoice.status,
+        idempotencyKey: invoice.idempotencyKey,
+      } satisfies Prisma.InputJsonValue,
+      after: {
+        studentCode: student.code,
+        periodMonth: invoice.periodMonth.toISOString(),
+        amount,
+        balanceDue: 0,
+        status: InvoiceStatus.VOID,
+        correctedPaymentMonth: input.currentPaymentMonth.toISOString(),
+      } satisfies Prisma.InputJsonValue,
+      reason:
+        "İdxal edilmiş ödənişin aid olduğu ay düzəldildiyi üçün əvvəlki tarixi ay üçün yaranmış təyinatsız faktura ləğv edildi.",
+    });
+  }
 }
 
 async function createPaymentAndAllocate(
