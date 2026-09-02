@@ -32,12 +32,14 @@ export type KnowledgeCategory = {
   name: string;
   position: number;
   status: KnowledgeStatus;
+  audienceEmployeeIds: string[];
   articles: KnowledgeArticle[];
 };
 
 export type CompanyKnowledgeData = {
   sectionId: string | null;
   categories: KnowledgeCategory[];
+  employeeOptions: Array<{ id: string; name: string; department: string; position: string }>;
 };
 
 export const emptyKnowledgeDocument: KnowledgeDocument = {

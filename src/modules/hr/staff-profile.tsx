@@ -351,7 +351,7 @@ export function StaffProfile({
                 />
                 <Metric
                   icon={CircleDollarSign}
-                  label="Hesablanan maaş"
+                  label="Cari hesablanan maaş"
                   value={formatMoney(teacher.estimatedSalary)}
                 />
                 <Metric

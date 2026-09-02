@@ -26,6 +26,7 @@ const categorySchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(2).max(120),
   status: statusSchema,
+  employeeIds: z.array(z.string().uuid()).max(300).transform((ids) => [...new Set(ids)]),
 });
 const articleSchema = z.object({
   id: z.string().uuid().optional(),
@@ -42,6 +43,7 @@ const moveSchema = z.object({
 async function createCategoryActionImpl(formData: FormData): Promise<MutationResult> {
   const actor = await requireKnowledgeAdmin();
   const parsed = categorySchema.omit({ id: true }).parse(readCategoryForm(formData));
+  await validateAudienceEmployees(parsed.employeeIds);
   const prisma = getPrisma();
   const section = await requireCompanySection();
   const lastCategory = await prisma.knowledgeCategory.findFirst({
@@ -58,8 +60,11 @@ async function createCategoryActionImpl(formData: FormData): Promise<MutationRes
         position: (lastCategory?.position ?? -1) + 1,
         createdById: actor.id,
         updatedById: actor.id,
+        audiences: parsed.employeeIds.length ? {
+          create: parsed.employeeIds.map((employeeId) => ({ employeeId })),
+        } : undefined,
       },
-      select: { id: true, name: true, status: true, position: true },
+      select: { id: true, name: true, status: true, position: true, audiences: { select: { employeeId: true } } },
     });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -77,12 +82,19 @@ async function createCategoryActionImpl(formData: FormData): Promise<MutationRes
 async function updateCategoryActionImpl(formData: FormData): Promise<MutationResult> {
   const actor = await requireKnowledgeAdmin();
   const parsed = categorySchema.parse(readCategoryForm(formData));
+  await validateAudienceEmployees(parsed.employeeIds);
   const current = await requireCompanyCategory(parsed.id!);
   await getPrisma().$transaction(async (tx) => {
+    await tx.knowledgeCategoryAudience.deleteMany({ where: { categoryId: current.id } });
+    if (parsed.employeeIds.length) {
+      await tx.knowledgeCategoryAudience.createMany({
+        data: parsed.employeeIds.map((employeeId) => ({ categoryId: current.id, employeeId })),
+      });
+    }
     const updated = await tx.knowledgeCategory.update({
       where: { id: current.id },
       data: { name: parsed.name, status: parsed.status, updatedById: actor.id },
-      select: { id: true, name: true, status: true, position: true },
+      select: { id: true, name: true, status: true, position: true, audiences: { select: { employeeId: true } } },
     });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -232,7 +244,12 @@ async function moveArticleActionImpl(articleId: string, direction: "up" | "down"
 }
 
 function readCategoryForm(formData: FormData) {
-  return { id: formData.get("id") || undefined, name: formData.get("name"), status: formData.get("status") };
+  return {
+    id: formData.get("id") || undefined,
+    name: formData.get("name"),
+    status: formData.get("status"),
+    employeeIds: formData.getAll("employeeIds"),
+  };
 }
 
 function readArticleForm(formData: FormData) {
@@ -258,7 +275,7 @@ async function requireCompanySection() {
     where: { key: COMPANY_KNOWLEDGE_KEY },
     select: { id: true },
   });
-  if (!section) throw new PublicActionError("“Biz Kimik” bölməsinin data strukturu tapılmadı.", "CONFIGURATION");
+  if (!section) throw new PublicActionError("“Qaydalar” bölməsinin data strukturu tapılmadı.", "CONFIGURATION");
   return section;
 }
 
@@ -321,6 +338,16 @@ async function persistArticleOrder(ids: string[], actorId: string) {
 async function finishMutation(selection: Omit<MutationResult, "data"> = {}): Promise<MutationResult> {
   revalidatePath("/about");
   return { data: await getCompanyKnowledgeData(true), ...selection };
+}
+
+async function validateAudienceEmployees(employeeIds: string[]) {
+  if (!employeeIds.length) return;
+  const count = await getPrisma().hrEmployee.count({
+    where: { id: { in: employeeIds }, archivedAt: null },
+  });
+  if (count !== employeeIds.length) {
+    throw new PublicActionError("Seçilmiş əməkdaşlardan biri tapılmadı.", "NOT_FOUND");
+  }
 }
 
 export const createKnowledgeCategoryAction = safeServerAction(createCategoryActionImpl, "Kateqoriya yaradılmadı.");

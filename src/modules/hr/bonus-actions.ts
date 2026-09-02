@@ -32,6 +32,7 @@ const stageSchema = z.object({
   bonusPool: z.coerce.number().nonnegative().max(1_000_000).default(0),
   bonusPercent: z.coerce.number().nonnegative().max(100).default(0),
   fixedAmount: z.coerce.number().nonnegative().max(1_000_000).default(0),
+  isIncremental: z.boolean().default(false),
   churnRules: z.array(teacherChurnRuleSchema).max(8).default([]),
 });
 
@@ -43,6 +44,17 @@ const createCampaignSchema = z.object({
   metricKind: z.enum(["DEPARTMENT_COLLECTED_REVENUE", "DEPARTMENT_SALES_COUNT", "TEACHER_RETENTION_RATE", "MANUAL_KPI"]),
   distributionMode: z.enum(["EQUAL", "HR_APPROVAL"]),
   recursMonthly: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  requiredThreshold: z.coerce.number().nonnegative().max(1_000_000).default(0),
+  perUnitBonusPercent: z.coerce.number().nonnegative().max(100).default(0),
+  perUnitBonusAmount: z.coerce.number().nonnegative().max(1_000_000).default(0),
+  participantIds: z.string().default("[]").transform((value, context) => {
+    try {
+      return [...new Set(z.array(z.string().uuid()).max(300).parse(JSON.parse(value)))];
+    } catch {
+      context.addIssue({ code: "custom", message: "Bonus iştirakçıları düzgün seçilməyib" });
+      return z.NEVER;
+    }
+  }),
   stages: z.string().transform((value, context) => {
     try {
       return z.array(stageSchema).parse(JSON.parse(value));
@@ -56,9 +68,20 @@ const createCampaignSchema = z.object({
 async function createBonusCampaignActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.bonus.manage");
   const input = createCampaignSchema.parse(Object.fromEntries(formData));
+  const hasPerUnitRule = input.requiredThreshold > 0
+    && (input.perUnitBonusPercent > 0 || input.perUnitBonusAmount > 0);
+  if (hasPerUnitRule && input.metricKind !== "DEPARTMENT_SALES_COUNT") {
+    throw new PublicActionError("Hər satış üçün bonus qaydası yalnız satış sayı göstəricisinə tətbiq olunur");
+  }
+  if (hasPerUnitRule && !Number.isInteger(input.requiredThreshold)) {
+    throw new PublicActionError("Məcburi satış həddi tam ədəd olmalıdır");
+  }
+  const rawStages = hasPerUnitRule
+    ? [{ threshold: input.requiredThreshold + 1, bonusPool: 0, bonusPercent: 0, fixedAmount: 0, isIncremental: true, churnRules: [] }, ...input.stages]
+    : input.stages;
   let stages: ReturnType<typeof validateBonusStages>;
   try {
-    stages = validateBonusStages(input.stages);
+    stages = validateBonusStages(rawStages);
   } catch (error) {
     throw new PublicActionError(
       error instanceof Error ? error.message : "Bonus etapları düzgün deyil",
@@ -78,27 +101,26 @@ async function createBonusCampaignActionImpl(formData: FormData) {
   }
 
   const prisma = getPrisma();
-  const [overlap, participants] = await Promise.all([
-    prisma.hrBonusCampaign.findFirst({
-      where: {
-        department: input.department,
-        metricKind: input.metricKind as HrBonusMetricKind,
-        status: { in: ["SCHEDULED", "ACTIVE"] },
-        startsAt: { lte: endsAt },
-        endsAt: { gte: startsAt },
-      },
-      select: { name: true },
-    }),
-    prisma.hrEmployee.findMany({
-      where: {
-        department: input.department,
-        status: { in: ["ACTIVE", "PROBATION"] },
-        ...(input.metricKind === "TEACHER_RETENTION_RATE" ? { teacherId: { not: null } } : {}),
-      },
-      select: { id: true, fullName: true, email: true },
-      orderBy: { fullName: "asc" },
-    }),
-  ]);
+  const participants = await prisma.hrEmployee.findMany({
+    where: {
+      department: input.department,
+      status: { in: ["ACTIVE", "PROBATION"] },
+      ...(input.participantIds.length ? { id: { in: input.participantIds } } : {}),
+      ...(input.metricKind === "TEACHER_RETENTION_RATE" ? { teacherId: { not: null } } : {}),
+    },
+    select: { id: true, fullName: true, email: true },
+    orderBy: { fullName: "asc" },
+  });
+  const overlap = participants.length ? await prisma.hrBonusCampaign.findFirst({
+    where: {
+      metricKind: input.metricKind as HrBonusMetricKind,
+      status: { in: ["SCHEDULED", "ACTIVE"] },
+      startsAt: { lte: endsAt },
+      endsAt: { gte: startsAt },
+      participants: { some: { employeeId: { in: participants.map((participant) => participant.id) }, isEligible: true } },
+    },
+    select: { name: true },
+  }) : null;
   if (overlap) throw new PublicActionError(`Bu dövr üçün artıq “${overlap.name}” kampaniyası aktivdir`, "CONFLICT");
   if (participants.length === 0) throw new PublicActionError("Seçilmiş departamentdə uyğun əməkdaş yoxdur", "NOT_FOUND");
 
@@ -116,6 +138,9 @@ async function createBonusCampaignActionImpl(formData: FormData) {
         distributionMode: input.distributionMode as HrBonusDistributionMode,
         recursMonthly: input.recursMonthly,
         recurrenceGroupId: input.recursMonthly ? campaignId : null,
+        requiredThreshold: hasPerUnitRule ? input.requiredThreshold : 0,
+        perUnitBonusPercent: hasPerUnitRule ? input.perUnitBonusPercent : 0,
+        perUnitBonusAmount: hasPerUnitRule ? input.perUnitBonusAmount : 0,
         status: startsAt > now ? "SCHEDULED" : "ACTIVE",
         createdById: actor.id,
         stages: {
@@ -125,6 +150,7 @@ async function createBonusCampaignActionImpl(formData: FormData) {
             bonusPool: stage.bonusPool,
             bonusPercent: stage.bonusPercent,
             fixedAmount: stage.fixedAmount,
+            isIncremental: stage.isIncremental ?? false,
             churnRules: input.metricKind === "TEACHER_RETENTION_RATE" ? {
               create: (stage.churnRules ?? []).map((rule, ruleIndex) => ({
                 sortOrder: ruleIndex,
@@ -156,7 +182,11 @@ async function createBonusCampaignActionImpl(formData: FormData) {
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         recursMonthly: input.recursMonthly,
+        requiredThreshold: hasPerUnitRule ? input.requiredThreshold : 0,
+        perUnitBonusPercent: hasPerUnitRule ? input.perUnitBonusPercent : 0,
+        perUnitBonusAmount: hasPerUnitRule ? input.perUnitBonusAmount : 0,
         stages,
+        participantIds: participants.map((participant) => participant.id),
         participantCount: participants.length,
       } as Prisma.InputJsonValue,
       reason: "Bonus kampaniyası yaradıldı",

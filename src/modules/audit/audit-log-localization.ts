@@ -1,6 +1,6 @@
 const actionLabels: Record<string, string> = {
-  "about_profile.create": "“Biz kimik” məlumatı yaradıldı",
-  "about_profile.update": "“Biz kimik” məlumatı yeniləndi",
+  "about_profile.create": "“Qaydalar” məlumatı yaradıldı",
+  "about_profile.update": "“Qaydalar” məlumatı yeniləndi",
   "attendance.batch.update": "Davamiyyət qeydləri yeniləndi",
   "auth.user.create": "İstifadəçi hesabı yaradıldı",
   "auth.account.create": "ERP giriş hesabı yaradıldı",
@@ -117,7 +117,7 @@ const actionLabels: Record<string, string> = {
 };
 
 const entityLabels: Record<string, string> = {
-  about_profile: "“Biz kimik” məlumatı",
+  about_profile: "“Qaydalar” məlumatı",
   auth_session: "Giriş sessiyası",
   auth_account: "ERP giriş hesabı",
   class_slot: "Dərs vaxtı",

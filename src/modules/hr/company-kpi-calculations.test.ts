@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCompanyKpiMetrics,
+  buildCompanyKpiRollover,
   type CompanyKpiActuals,
   type CompanyKpiPeriod,
   type CompanyKpiTargets,
@@ -73,4 +74,79 @@ test("a zero churn limit is green only while no churn exists", () => {
     .find((metric) => metric.key === "churn");
   assert.equal(green?.status, "success");
   assert.equal(red?.status, "danger");
+});
+
+test("unfinished monthly sales are carried into the next completed plan month", () => {
+  const rollover = buildCompanyKpiRollover([
+    {
+      periodMonth: "2026-09",
+      baseTargets: { ...targets, newSales: 78 },
+      actuals: { ...targets, newSales: 70 },
+      isComplete: true,
+    },
+    {
+      periodMonth: "2026-10",
+      baseTargets: { ...targets, newSales: 80 },
+      actuals: { ...targets, newSales: 0 },
+      isComplete: false,
+    },
+  ]);
+
+  assert.equal(rollover[0]?.carryOut?.newSales, 8);
+  assert.equal(rollover[1]?.carryIn?.newSales, 8);
+  assert.equal(rollover[1]?.effectiveTargets.newSales, 88);
+});
+
+test("over-performance reduces the next target and preserves excess across zero targets", () => {
+  const rollover = buildCompanyKpiRollover([
+    {
+      periodMonth: "2026-09",
+      baseTargets: { ...targets, newSales: 50 },
+      actuals: { ...targets, newSales: 80 },
+      isComplete: true,
+    },
+    {
+      periodMonth: "2026-10",
+      baseTargets: { ...targets, newSales: 10 },
+      actuals: { ...targets, newSales: 0 },
+      isComplete: true,
+    },
+    {
+      periodMonth: "2026-11",
+      baseTargets: { ...targets, newSales: 25 },
+      actuals: { ...targets, newSales: 0 },
+      isComplete: false,
+    },
+  ]);
+
+  assert.equal(rollover[1]?.effectiveTargets.newSales, 0);
+  assert.equal(rollover[1]?.carryOut?.newSales, -20);
+  assert.equal(rollover[2]?.effectiveTargets.newSales, 5);
+});
+
+test("unused churn allowance is not carried forward, but an overrun tightens the next limit", () => {
+  const rollover = buildCompanyKpiRollover([
+    {
+      periodMonth: "2026-09",
+      baseTargets: { ...targets, churn: 10 },
+      actuals: { ...targets, churn: 4 },
+      isComplete: true,
+    },
+    {
+      periodMonth: "2026-10",
+      baseTargets: { ...targets, churn: 10 },
+      actuals: { ...targets, churn: 13 },
+      isComplete: true,
+    },
+    {
+      periodMonth: "2026-11",
+      baseTargets: { ...targets, churn: 10 },
+      actuals: { ...targets, churn: 0 },
+      isComplete: false,
+    },
+  ]);
+
+  assert.equal(rollover[0]?.carryOut?.churn, 0);
+  assert.equal(rollover[1]?.carryOut?.churn, -3);
+  assert.equal(rollover[2]?.effectiveTargets.churn, 7);
 });

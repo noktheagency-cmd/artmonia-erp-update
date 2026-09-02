@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { getBakuDateInput } from "@/modules/students/student-reminders";
 import {
   buildCompanyKpiMetrics,
+  buildCompanyKpiRollover,
   type CompanyKpiActuals,
   type CompanyKpiMetric,
   type CompanyKpiPeriod,
@@ -16,12 +17,33 @@ export type CompanyKpiData = {
   periodMonth: string;
   monthLabel: string;
   targets: CompanyKpiTargets | null;
+  baseTargets: CompanyKpiTargets | null;
+  carryIn: CompanyKpiTargets | null;
   metrics: CompanyKpiMetric[];
   period: CompanyKpiPeriod;
+  plan: CompanyKpiPlanDto | null;
   permissions: {
     canRead: boolean;
     canManage: boolean;
   };
+};
+
+export type CompanyKpiPlanDto = {
+  id: string;
+  name: string;
+  startMonth: string;
+  endMonth: string;
+  durationMonths: 6 | 12;
+  totals: CompanyKpiTargets;
+  months: Array<{
+    periodMonth: string;
+    monthLabel: string;
+    baseTargets: CompanyKpiTargets;
+    effectiveTargets: CompanyKpiTargets;
+    actuals: CompanyKpiTargets;
+    carryIn: CompanyKpiTargets | null;
+    isComplete: boolean;
+  }>;
 };
 
 type ActualRow = {
@@ -33,6 +55,10 @@ type ActualRow = {
   convertedLeads: unknown;
   revenue: unknown;
 };
+
+type CompanyKpiPlanRow = Prisma.CompanyKpiPlanGetPayload<{
+  include: { monthlyTargets: true };
+}>;
 
 export async function getCompanyKpiData(requestedMonth?: string): Promise<CompanyKpiData> {
   const actor = await requireErpActor();
@@ -46,13 +72,6 @@ export async function getCompanyKpiData(requestedMonth?: string): Promise<Compan
 
   const prisma = getPrisma();
   const periodStart = dateFromKey(`${periodMonth}-01`);
-  const periodEnd = addUtcMonths(periodStart, 1);
-  const actualEnd = period.hasStarted
-    ? period.isComplete
-      ? periodEnd
-      : addUtcDays(dateFromKey(todayKey), 1)
-    : periodStart;
-
   const targetPromise = prisma.companyMonthlyTarget.findUnique({
     where: { periodMonth: periodStart },
     select: {
@@ -64,32 +83,87 @@ export async function getCompanyKpiData(requestedMonth?: string): Promise<Compan
       revenueTarget: true,
     },
   });
-  const actualPromise = period.hasStarted
-    ? getActuals(periodStart, actualEnd)
-    : Promise.resolve(emptyActuals());
-  const [targetRow, actuals] = await Promise.all([targetPromise, actualPromise]);
-  const targets = targetRow
-    ? {
-        activeStudents: targetRow.activeStudentsTarget,
-        newSales: targetRow.newSalesTarget,
-        churn: targetRow.churnMaxTarget,
-        leads: targetRow.leadTarget,
-        conversion: Number(targetRow.conversionTarget),
-        revenue: Number(targetRow.revenueTarget),
-      }
-    : null;
+  const planPromise = prisma.companyKpiPlan.findFirst({
+    where: { startMonth: { lte: periodStart }, endMonth: { gte: periodStart } },
+    include: { monthlyTargets: { orderBy: { periodMonth: "asc" } } },
+    orderBy: { startMonth: "desc" },
+  });
+  const actualPromise = getActualsForMonth(periodStart, todayKey);
+  const [targetRow, planRow, requestedActuals] = await Promise.all([
+    targetPromise,
+    planPromise,
+    actualPromise,
+  ]);
+
+  const plan = planRow ? await buildPlanDto(planRow, todayKey) : null;
+  const planMonth = plan?.months.find((month) => month.periodMonth === periodMonth) ?? null;
+  const baseTargets = planMonth?.baseTargets ?? (targetRow ? targetsFromRow(targetRow) : null);
+  const targets = planMonth?.effectiveTargets ?? baseTargets;
+  const actuals = planMonth
+    ? { ...planMonth.actuals, openingActiveStudents: requestedActuals.openingActiveStudents, convertedLeads: requestedActuals.convertedLeads }
+    : requestedActuals;
 
   return {
     periodMonth,
     monthLabel: formatMonthLabel(periodStart),
     targets,
+    baseTargets,
+    carryIn: planMonth?.carryIn ?? null,
     metrics: buildCompanyKpiMetrics(targets, actuals, period),
     period,
+    plan,
     permissions: {
       canRead: true,
       canManage: actor.permissions.has("hr.company_kpi.manage"),
     },
   };
+}
+
+async function buildPlanDto(
+  plan: CompanyKpiPlanRow,
+  todayKey: string,
+): Promise<CompanyKpiPlanDto> {
+  if (!plan) throw new Error("KPI planı tapılmadı");
+  const monthlyRows = plan.monthlyTargets ?? [];
+  const monthInputs = await Promise.all(monthlyRows.map(async (row) => {
+    const monthKey = row.periodMonth.toISOString().slice(0, 7);
+    const period = resolvePeriod(monthKey, todayKey);
+    const actuals = await getActualsForMonth(row.periodMonth, todayKey);
+    return {
+      periodMonth: monthKey,
+      baseTargets: targetsFromRow(row),
+      actuals: targetsFromActuals(actuals),
+      isComplete: period.isComplete,
+    };
+  }));
+  const rollover = buildCompanyKpiRollover(monthInputs);
+
+  return {
+    id: plan.id,
+    name: plan.name,
+    startMonth: plan.startMonth.toISOString().slice(0, 7),
+    endMonth: plan.endMonth.toISOString().slice(0, 7),
+    durationMonths: plan.durationMonths === 12 ? 12 : 6,
+    totals: targetsFromRow(plan),
+    months: rollover.map((month) => ({
+      periodMonth: month.periodMonth,
+      monthLabel: formatMonthLabel(dateFromKey(`${month.periodMonth}-01`)),
+      baseTargets: month.baseTargets,
+      effectiveTargets: month.effectiveTargets,
+      actuals: month.actuals,
+      carryIn: month.carryIn,
+      isComplete: month.isComplete,
+    })),
+  };
+}
+
+async function getActualsForMonth(periodStart: Date, todayKey: string) {
+  const periodMonth = periodStart.toISOString().slice(0, 7);
+  const period = resolvePeriod(periodMonth, todayKey);
+  if (!period.hasStarted) return emptyActuals();
+  const periodEnd = addUtcMonths(periodStart, 1);
+  const actualEnd = period.isComplete ? periodEnd : addUtcDays(dateFromKey(todayKey), 1);
+  return getActuals(periodStart, actualEnd);
 }
 
 async function getActuals(periodStart: Date, actualEnd: Date): Promise<CompanyKpiActuals> {
@@ -234,9 +308,41 @@ function emptyCompanyKpiData(periodMonth: string, period: CompanyKpiPeriod): Com
     periodMonth,
     monthLabel: formatMonthLabel(dateFromKey(`${periodMonth}-01`)),
     targets: null,
+    baseTargets: null,
+    carryIn: null,
     metrics: [],
     period,
+    plan: null,
     permissions: { canRead: false, canManage: false },
+  };
+}
+
+function targetsFromRow(row: {
+  activeStudentsTarget: number;
+  newSalesTarget: number;
+  churnMaxTarget: number;
+  leadTarget: number;
+  conversionTarget: Prisma.Decimal | number;
+  revenueTarget: Prisma.Decimal | number;
+}): CompanyKpiTargets {
+  return {
+    activeStudents: row.activeStudentsTarget,
+    newSales: row.newSalesTarget,
+    churn: row.churnMaxTarget,
+    leads: row.leadTarget,
+    conversion: Number(row.conversionTarget),
+    revenue: Number(row.revenueTarget),
+  };
+}
+
+function targetsFromActuals(actuals: CompanyKpiActuals): CompanyKpiTargets {
+  return {
+    activeStudents: actuals.activeStudents,
+    newSales: actuals.newSales,
+    churn: actuals.churn,
+    leads: actuals.leads,
+    conversion: actuals.conversion,
+    revenue: actuals.revenue,
   };
 }
 

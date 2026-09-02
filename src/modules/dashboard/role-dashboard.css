@@ -53,6 +53,9 @@
 .role-dashboard-kpi-icon svg { width: 16px; }
 .role-dashboard-kpi [data-slot="card-title"] { font-size: 21px; font-weight: 780; letter-spacing: -.04em; }
 .role-dashboard-kpi p { margin: 3px 0 0; overflow: hidden; color: #929aaa; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.role-dashboard-kpi-progress { margin-top: 8px; }
+.role-dashboard-kpi-progress [data-slot="progress-track"] { height: 5px; background: #eef0f5; }
+.role-dashboard-kpi-progress [data-slot="progress-indicator"] { background: var(--role-accent); }
 
 .role-dashboard-grid { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 12px; }
 .role-dashboard-panel { min-width: 0; min-height: 278px; border: 0; background: #fff; box-shadow: 0 8px 25px rgba(33, 43, 67, .05); }

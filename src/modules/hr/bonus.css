@@ -185,6 +185,17 @@
 .hr-bonus-penalty-editor i { color: #9097a6; text-align: center; font-style: normal; }
 .hr-bonus-penalty-editor small { color: #6c7588; font-size: 9px; font-weight: 700; }
 .hr-bonus-penalty-editor > div > button { color: #a35a5a; background: transparent; border: 0; font-size: 18px; }
+.hr-bonus-participant-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; max-height: 180px; overflow: auto; padding: 2px; }
+.hr-bonus-participant-list label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 9px 10px; background: #fafbfc; border: 1px solid #e5e8ee; border-radius: 9px; }
+.hr-bonus-participant-list label:has(input:checked) { background: #f1efff; border-color: #bdb5ff; }
+.hr-bonus-participant-list input { width: 15px; height: 15px; accent-color: var(--bonus-violet); }
+.hr-bonus-participant-list strong,
+.hr-bonus-participant-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr-bonus-participant-list strong { color: var(--bonus-ink); font-size: 10px; }
+.hr-bonus-participant-list small { margin-top: 2px; color: #8a92a1; font-size: 8.5px; }
+.hr-bonus-per-unit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 9px; padding: 10px; background: #f8f7ff; border: 1px solid #dfdbff; border-radius: 10px; }
+.hr-bonus-per-unit-grid label { display: grid; gap: 5px; }
+.hr-bonus-per-unit-grid label > span { color: #655f7a; font-size: 8.5px; font-weight: 750; }
 .hr-bonus-teacher-policy,
 .hr-bonus-method-note { display: grid; gap: 7px; padding: 12px; color: #40536d; background: #f4f8ff; border: 1px solid #dce8fb; border-radius: 12px; }
 .hr-bonus-teacher-policy strong,
@@ -277,6 +288,8 @@
   .hr-bonus-history-actions { grid-column: 1 / -1; justify-content: stretch; }
   .hr-bonus-history-actions .ui-button { flex: 1; }
   .hr-bonus-form-grid { grid-template-columns: 1fr; }
+  .hr-bonus-participant-list,
+  .hr-bonus-per-unit-grid { grid-template-columns: 1fr; }
   .hr-bonus-uniform-percent { align-items: flex-start; flex-direction: column; }
   .hr-bonus-stage-editor.is-reward-rule { overflow-x: auto; }
   .hr-bonus-stage-editor.is-reward-rule > div { min-width: 500px; }

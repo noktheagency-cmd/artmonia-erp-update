@@ -27,6 +27,7 @@ export type HrBonusStageDto = {
   bonusPool: number;
   bonusPercent: number;
   fixedAmount: number;
+  isIncremental: boolean;
   churnRules: Array<{ id: string; churnThreshold: number; deductionAmount: number }>;
   reachedAt: string;
   reachedValue: number;
@@ -43,6 +44,9 @@ export type HrBonusCampaignDto = {
   distributionMode: "EQUAL" | "HR_APPROVAL";
   status: "SCHEDULED" | "ACTIVE" | "ACHIEVED" | "EXPIRED" | "CANCELLED";
   recursMonthly: boolean;
+  requiredThreshold: number;
+  perUnitBonusPercent: number;
+  perUnitBonusAmount: number;
   currentValue: number;
   baseValue: number;
   adjustmentValue: number;
@@ -59,6 +63,7 @@ export type HrBonusData = {
   campaigns: HrBonusCampaignDto[];
   departments: string[];
   teacherDepartments: string[];
+  employees: Array<{ id: string; name: string; department: string; position: string; isTeacher: boolean }>;
   actorDepartment: string;
   actorEmployeeId: string;
   permissions: {
@@ -77,6 +82,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
       campaigns: [],
       departments: [],
       teacherDepartments: [],
+      employees: [],
       actorDepartment: "",
       actorEmployeeId: "",
       permissions: { canManage: false, canApprove: false, canPost: false, canSeeAll: false },
@@ -87,7 +93,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
   const canApprove = actor.permissions.has("hr.bonus.approve");
   const canPost = actor.permissions.has("billing.expense.create");
   const canSeeAll = canManage || scopeFor(actor.permissions, "hr.bonus.read") === "ALL";
-  const [actorEmployee, departmentRows, teacherDepartmentRows] = await Promise.all([
+  const [actorEmployee, departmentRows, teacherDepartmentRows, employeeRows] = await Promise.all([
     prisma.hrEmployee.findUnique({ where: { userId: actor.id }, select: { id: true, department: true, teacherId: true } }),
     canManage
       ? prisma.hrEmployee.findMany({ where: { archivedAt: null, status: { in: ["ACTIVE", "PROBATION"] } }, distinct: ["department"], select: { department: true }, orderBy: { department: "asc" } })
@@ -98,6 +104,13 @@ export async function getHrBonusData(): Promise<HrBonusData> {
           distinct: ["department"],
           select: { department: true },
           orderBy: { department: "asc" },
+        })
+      : Promise.resolve([]),
+    canManage
+      ? prisma.hrEmployee.findMany({
+          where: { archivedAt: null, status: { in: ["ACTIVE", "PROBATION"] } },
+          select: { id: true, fullName: true, department: true, position: true, teacherId: true },
+          orderBy: [{ department: "asc" }, { fullName: "asc" }],
         })
       : Promise.resolve([]),
   ]);
@@ -150,6 +163,9 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         distributionMode: campaign.distributionMode,
         status: campaign.status,
         recursMonthly: campaign.recursMonthly,
+        requiredThreshold: Number(campaign.requiredThreshold),
+        perUnitBonusPercent: Number(campaign.perUnitBonusPercent),
+        perUnitBonusAmount: Number(campaign.perUnitBonusAmount),
         currentValue: value.currentValue,
         baseValue: value.baseValue,
         adjustmentValue: value.adjustmentValue,
@@ -167,6 +183,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
           bonusPool: Number(stage.bonusPool),
           bonusPercent: Number(stage.bonusPercent),
           fixedAmount: Number(stage.fixedAmount),
+          isIncremental: stage.isIncremental,
           churnRules: stage.churnRules.map((rule) => ({
             id: rule.id,
             churnThreshold: rule.churnThreshold,
@@ -202,6 +219,13 @@ export async function getHrBonusData(): Promise<HrBonusData> {
       : actorEmployee?.teacherId
         ? [normalizeDepartment(actorEmployee.department, true)]
         : [],
+    employees: employeeRows.map((employee) => ({
+      id: employee.id,
+      name: employee.fullName,
+      department: normalizeDepartment(employee.department, Boolean(employee.teacherId)),
+      position: employee.position,
+      isTeacher: Boolean(employee.teacherId),
+    })),
     actorDepartment: actorEmployee
       ? normalizeDepartment(actorEmployee.department, Boolean(actorEmployee.teacherId))
       : "",

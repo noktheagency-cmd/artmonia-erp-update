@@ -5,11 +5,62 @@
 
 .company-kpi-toolbar,
 .company-kpi-target-form,
-.company-kpi-list {
+.company-kpi-list,
+.company-kpi-plan,
+.company-kpi-plan-summary {
   background: #fff;
   border: 1px solid var(--hr-line);
   border-radius: 14px;
 }
+
+.company-kpi-plan { display: grid; gap: 14px; padding: 16px; }
+.company-kpi-plan-head,
+.company-kpi-plan-head > div:first-child,
+.company-kpi-plan-meta,
+.company-kpi-plan-footer,
+.company-kpi-plan-summary,
+.company-kpi-compensation { display: flex; align-items: center; }
+.company-kpi-plan-head { justify-content: space-between; gap: 14px; }
+.company-kpi-plan-head > div:first-child { gap: 10px; }
+.company-kpi-plan-head svg,
+.company-kpi-plan-summary > svg { width: 19px; color: #6557d9; }
+.company-kpi-plan-head strong,
+.company-kpi-plan-head small,
+.company-kpi-plan-summary strong,
+.company-kpi-plan-summary span { display: block; }
+.company-kpi-plan-head strong { color: #273044; font-size: 12px; }
+.company-kpi-plan-head small,
+.company-kpi-plan-summary span { margin-top: 2px; color: #8992a1; font-size: 9px; }
+.company-kpi-plan-duration { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: #f2f4f7; border-radius: 9px; }
+.company-kpi-plan-duration button { min-width: 70px; padding: 6px 9px; color: #727c8e; background: transparent; border: 0; border-radius: 7px; font: inherit; font-size: 9px; font-weight: 750; }
+.company-kpi-plan-duration button.is-active { color: #fff; background: #6557d9; box-shadow: 0 4px 12px rgba(101, 87, 217, .22); }
+.company-kpi-plan-meta { display: grid; grid-template-columns: minmax(220px, 1fr) 180px auto; align-items: end; gap: 10px; }
+.company-kpi-plan-meta label,
+.company-kpi-plan-totals label { display: grid; gap: 5px; }
+.company-kpi-plan-meta label > span,
+.company-kpi-plan-totals label > span { color: #697386; font-size: 9px; font-weight: 700; }
+.company-kpi-plan-totals { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 9px; }
+.company-kpi-plan-table-wrap { overflow-x: auto; border: 1px solid #e8ebf0; border-radius: 11px; }
+.company-kpi-plan-table { width: 100%; min-width: 920px; border-collapse: collapse; }
+.company-kpi-plan-table th,
+.company-kpi-plan-table td { padding: 7px; border-right: 1px solid #edf0f4; border-bottom: 1px solid #edf0f4; text-align: left; }
+.company-kpi-plan-table th:last-child,
+.company-kpi-plan-table td:last-child { border-right: 0; }
+.company-kpi-plan-table tbody tr:last-child th,
+.company-kpi-plan-table tbody tr:last-child td { border-bottom: 0; }
+.company-kpi-plan-table thead th { color: #737d8f; background: #f8f9fb; font-size: 8.5px; white-space: nowrap; }
+.company-kpi-plan-table tbody th { min-width: 100px; color: #30394c; font-size: 9px; text-transform: capitalize; white-space: nowrap; }
+.company-kpi-plan-table input { min-width: 86px; height: 31px; font-size: 10px; }
+.company-kpi-plan-table tfoot th,
+.company-kpi-plan-table tfoot td { color: #30394c; background: #fafbfc; border-top: 1px solid #dde2e9; border-bottom: 0; font-size: 9px; font-weight: 750; }
+.company-kpi-plan .is-balanced { color: #18845f; }
+.company-kpi-plan .is-unbalanced { color: #c24550; }
+.company-kpi-plan-footer { justify-content: space-between; gap: 12px; }
+.company-kpi-plan-footer > span { font-size: 9px; }
+.company-kpi-plan-summary { gap: 10px; padding: 14px 16px; }
+.company-kpi-plan-summary strong { color: #273044; font-size: 12px; }
+.company-kpi-compensation { flex-wrap: wrap; gap: 7px 12px; padding: 11px 14px; color: #5146b9; background: #f2f0ff; border: 1px solid #ded9ff; border-radius: 12px; font-size: 9.5px; }
+.company-kpi-compensation strong { font-size: 10px; }
 
 .company-kpi-toolbar {
   display: flex;
@@ -153,10 +204,26 @@
 
 html.dark .company-kpi-toolbar,
 html.dark .company-kpi-target-form,
-html.dark .company-kpi-list {
+html.dark .company-kpi-list,
+html.dark .company-kpi-plan,
+html.dark .company-kpi-plan-summary {
   background: var(--dm-surface);
   border-color: var(--dm-line);
 }
+
+html.dark .company-kpi-plan-head strong,
+html.dark .company-kpi-plan-summary strong,
+html.dark .company-kpi-plan-table tbody th,
+html.dark .company-kpi-plan-table tfoot th,
+html.dark .company-kpi-plan-table tfoot td { color: var(--dm-text); }
+html.dark .company-kpi-plan-duration,
+html.dark .company-kpi-plan-table thead th,
+html.dark .company-kpi-plan-table tfoot th,
+html.dark .company-kpi-plan-table tfoot td { background: var(--dm-surface-3); }
+html.dark .company-kpi-plan-table-wrap,
+html.dark .company-kpi-plan-table th,
+html.dark .company-kpi-plan-table td { border-color: var(--dm-line); }
+html.dark .company-kpi-compensation { color: #c7c0ff; background: rgba(101, 87, 217, .12); border-color: rgba(101, 87, 217, .35); }
 
 html.dark .company-kpi-row { border-color: var(--dm-line); }
 html.dark .company-kpi-row-head strong,
@@ -169,6 +236,7 @@ html.dark .company-kpi-status { color: var(--dm-muted); background: var(--dm-sur
 @media (max-width: 1180px) {
   .company-kpi-target-form { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
   .company-kpi-target-form button { min-height: 38px; }
+  .company-kpi-plan-totals { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
 }
 
 @media (max-width: 700px) {
@@ -178,11 +246,16 @@ html.dark .company-kpi-status { color: var(--dm-muted); background: var(--dm-sur
   .company-kpi-target-form { grid-template-columns: 1fr 1fr; }
   .company-kpi-target-form button { grid-column: 1 / -1; }
   .company-kpi-values { justify-content: space-between; }
+  .company-kpi-plan-head,
+  .company-kpi-plan-footer { align-items: stretch; flex-direction: column; }
+  .company-kpi-plan-meta { grid-template-columns: 1fr; }
+  .company-kpi-plan-totals { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 440px) {
   .company-kpi-target-form { grid-template-columns: 1fr; }
   .company-kpi-target-form button { grid-column: auto; }
+  .company-kpi-plan-totals { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

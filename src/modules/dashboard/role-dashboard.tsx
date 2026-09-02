@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, BookOpen, CheckCircle2, CircleDot, Megaphone, Sparkles, Target, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { DashboardTasksPanel } from "@/modules/dashboard/dashboard-tasks-panel";
 import type { RoleDashboardData } from "@/modules/dashboard/role-dashboard-query";
 import { RolePerformanceChart } from "@/modules/dashboard/role-performance-chart";
@@ -31,7 +32,7 @@ export function RoleDashboard({ data, taskData, createTaskAction, updateTaskStat
       const Icon = kpiIcons[index] ?? Sparkles;
       return <Card className={`role-dashboard-kpi is-${item.tone}`} size="sm" key={item.label}>
         <CardHeader><span className="role-dashboard-kpi-icon"><Icon /></span><CardDescription>{item.label}</CardDescription></CardHeader>
-        <CardContent><CardTitle>{item.value}</CardTitle><p>{item.helper}</p></CardContent>
+        <CardContent><CardTitle>{item.value}</CardTitle><p>{item.helper}</p>{item.progress !== undefined ? <Progress value={item.progress} aria-label={`${item.label}: ${item.progress}%`} className="role-dashboard-kpi-progress" /> : null}</CardContent>
       </Card>;
     })}</div> : null}
 

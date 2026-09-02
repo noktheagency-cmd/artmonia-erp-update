@@ -153,8 +153,8 @@ export function AboutWorkspace({
           <span className="knowledge-header-icon" aria-hidden="true"><BookOpenText size={22} /></span>
           <div>
             <p>Daxili bilik bazası</p>
-            <h1>Biz Kimik</h1>
-            <span>Şirkət haqqında ortaq məlumatları kateqoriyalar üzrə kəşf edin.</span>
+            <h1>Qaydalar</h1>
+            <span>Şirkət qaydalarını və daxili məlumatları kateqoriyalar üzrə kəşf edin.</span>
           </div>
         </div>
         {canEdit ? (
@@ -180,7 +180,7 @@ export function AboutWorkspace({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Kateqoriya, məqalə və ya mətn daxilində axtar…"
-          aria-label="Biz Kimik bölməsində axtar"
+          aria-label="Qaydalar bölməsində axtar"
         />
         {searchQuery ? (
           <button type="button" aria-label="Axtarışı təmizlə" onClick={() => setSearchQuery("")}><X size={16} /></button>
@@ -201,7 +201,7 @@ export function AboutWorkspace({
                 {result.type === "category" ? <FolderOpen size={16} /> : <BookOpenText size={16} />}
                 <span>
                   <strong>{result.label}</strong>
-                  <small>Biz Kimik <ChevronRight size={11} /> {result.category.name}{result.article ? <><ChevronRight size={11} /> {result.article.title}</> : null}</small>
+                  <small>Qaydalar <ChevronRight size={11} /> {result.category.name}{result.article ? <><ChevronRight size={11} /> {result.article.title}</> : null}</small>
                 </span>
               </button>
             )) : (
@@ -221,7 +221,7 @@ export function AboutWorkspace({
 
       {data.categories.length ? (
         <div className="knowledge-layout">
-          <aside className="knowledge-library" aria-label="Biz Kimik kateqoriyaları">
+          <aside className="knowledge-library" aria-label="Qaydalar kateqoriyaları">
             <div className="knowledge-library-heading">
               <span>Kateqoriyalar</span>
               <small>{data.categories.length}</small>
@@ -288,7 +288,7 @@ export function AboutWorkspace({
             {selectedArticle && selectedCategory ? (
               <>
                 <nav className="knowledge-breadcrumb" aria-label="Breadcrumb">
-                  <span>Biz Kimik</span><ChevronRight size={13} />
+                  <span>Qaydalar</span><ChevronRight size={13} />
                   <button type="button" onClick={() => selectCategory(selectedCategory)}>{selectedCategory.name}</button><ChevronRight size={13} />
                   <strong>{selectedArticle.title}</strong>
                 </nav>
@@ -327,6 +327,7 @@ export function AboutWorkspace({
         <KnowledgePortal>
           <CategoryDialogView
             dialog={categoryDialog}
+            employeeOptions={data.employeeOptions}
             isPending={isPending}
             onClose={() => setCategoryDialog(null)}
             onDelete={(category) => setDeleteTarget({ type: "category", id: category.id, name: category.name })}
@@ -374,18 +375,22 @@ function KnowledgePortal({ children }: { children: ReactNode }) {
 
 function CategoryDialogView({
   dialog,
+  employeeOptions,
   isPending,
   onClose,
   onDelete,
   onSubmit,
 }: {
   dialog: CategoryDialog;
+  employeeOptions: CompanyKnowledgeData["employeeOptions"];
   isPending: boolean;
   onClose: () => void;
   onDelete: (category: KnowledgeCategory) => void;
   onSubmit: (formData: FormData) => void;
 }) {
   const category = dialog.mode === "edit" ? dialog.category : null;
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(category?.audienceEmployeeIds ?? []);
+  const isForEveryone = selectedEmployeeIds.length === 0;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -404,6 +409,16 @@ function CategoryDialogView({
           {category ? <input type="hidden" name="id" value={category.id} /> : null}
           <label className="knowledge-field"><span>Kateqoriya adı</span><input name="name" defaultValue={category?.name ?? ""} minLength={2} maxLength={120} required autoFocus /></label>
           <StatusField defaultValue={category?.status ?? "PUBLISHED"} />
+          <fieldset className="knowledge-audience-field">
+            <legend>Kimlər görə bilər?</legend>
+            <label className="knowledge-audience-all"><input type="checkbox" checked={isForEveryone} onChange={() => setSelectedEmployeeIds([])} /><span><strong>Bütün əməkdaşlar</strong><small>Heç kim seçilmədikdə kateqoriya hamıya açıqdır.</small></span></label>
+            <div className="knowledge-audience-list">
+              {employeeOptions.map((employee) => {
+                const checked = selectedEmployeeIds.includes(employee.id);
+                return <label key={employee.id}><input type="checkbox" name="employeeIds" value={employee.id} checked={checked} onChange={() => setSelectedEmployeeIds((current) => checked ? current.filter((id) => id !== employee.id) : [...current, employee.id])} /><UserRound size={14} /><span><strong>{employee.name}</strong><small>{employee.department} · {employee.position}</small></span></label>;
+              })}
+            </div>
+          </fieldset>
           <footer>
             {category ? <button className="knowledge-dialog-delete" type="button" onClick={() => onDelete(category)}><Trash2 size={15} /> Sil</button> : <span />}
             <button type="button" onClick={onClose}>Ləğv et</button>
@@ -494,7 +509,7 @@ function EmptyKnowledgeState({ canEdit, onCreate }: { canEdit: boolean; onCreate
     <section className="knowledge-empty-state">
       <span><FolderOpen size={28} /></span>
       <h2>{canEdit ? "İlk kateqoriyanı yaradın" : "Məzmun hələ yayımlanmayıb"}</h2>
-      <p>{canEdit ? "“Biz Kimik” bilik bazasını kateqoriya və məqalələrlə qurmağa başlayın." : "Yeni şirkət məlumatları yayımlandıqda burada görünəcək."}</p>
+      <p>{canEdit ? "“Qaydalar” bilik bazasını kateqoriya və məqalələrlə qurmağa başlayın." : "Yeni şirkət qaydaları yayımlandıqda burada görünəcək."}</p>
       {canEdit ? <button className="knowledge-button is-primary" type="button" onClick={onCreate}><FolderPlus size={16} /> Kateqoriya yarat</button> : null}
     </section>
   );

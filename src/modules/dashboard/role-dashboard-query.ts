@@ -10,7 +10,7 @@ export type RoleDashboardData = {
   description: string;
   primaryHref: "/crm" | "/groups" | "/marketing";
   primaryLabel: string;
-  kpis: Array<{ label: string; value: string; helper: string; tone: "blue" | "violet" | "green" | "orange" }>;
+  kpis: Array<{ label: string; value: string; helper: string; tone: "blue" | "violet" | "green" | "orange"; progress?: number }>;
   breakdown: Array<{ label: string; value: number; total: number }>;
   recent: Array<{ title: string; meta: string; status: string }>;
 };
@@ -93,12 +93,19 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
 
 async function teacherDashboard(actorId: string, actorName: string): Promise<RoleDashboardData> {
   const prisma = getPrisma();
-  const teacher = await prisma.teacher.findUnique({ where: { userId: actorId }, select: { id: true } });
+  const teacher = await prisma.teacher.findUnique({ where: { userId: actorId }, select: { id: true, capacity: true } });
   if (!teacher) return emptyTeacher(actorName);
   const [assignments, attendance, recentSlots] = await Promise.all([
     prisma.studentScheduleAssignment.findMany({
-      where: { slot: { teacherId: teacher.id }, validTo: null },
-      select: { slotId: true, enrollmentId: true },
+      where: {
+        slot: { teacherId: teacher.id },
+        validTo: null,
+        enrollment: {
+          status: "ACTIVE",
+          student: { lifecycleStatus: "ACTIVE", isTestData: false },
+        },
+      },
+      select: { slotId: true, enrollmentId: true, enrollment: { select: { studentId: true } } },
     }),
     prisma.attendanceRecord.groupBy({ by: ["status"], where: { teacherId: teacher.id }, _count: { _all: true } }),
     prisma.classSlot.findMany({
@@ -115,7 +122,9 @@ async function teacherDashboard(actorId: string, actorName: string): Promise<Rol
     }),
   ]);
   const slotCount = new Set(assignments.map((item) => item.slotId)).size;
-  const studentCount = new Set(assignments.map((item) => item.enrollmentId)).size;
+  const studentCount = new Set(assignments.map((item) => item.enrollment.studentId)).size;
+  const studentLimit = teacher.capacity ?? 0;
+  const studentKpi = studentLimit > 0 ? Math.round((studentCount / studentLimit) * 100) : 0;
   const present = attendance.find((item) => item.status === "PRESENT")?._count._all ?? 0;
   const absent = attendance.find((item) => item.status === "ABSENT")?._count._all ?? 0;
   const total = present + absent;
@@ -123,7 +132,13 @@ async function teacherDashboard(actorId: string, actorName: string): Promise<Rol
     kind: "teacher", actorName, eyebrow: "Müəllim paneli", title: "Slotlarınız bir baxışda", description: "Yalnız sizə bağlı slotlar, tələbələr, davamiyyət və şəxsi tasklar.", primaryHref: "/groups", primaryLabel: "Slotları aç",
     kpis: [
       { label: "Mənim slotlarım", value: String(slotCount), helper: "Həftəlik dərs vaxtları", tone: "violet" },
-      { label: "Aktiv tələbələr", value: String(studentCount), helper: "Slotlarınızdakı unikal tələbələr", tone: "blue" },
+      {
+        label: "Tələbə KPI",
+        value: studentLimit > 0 ? `${studentCount}/${studentLimit}` : String(studentCount),
+        helper: studentLimit > 0 ? `${studentKpi}% doluluq · ${Math.max(studentLimit - studentCount, 0)} yer qalır` : "Tələbə limiti təyin edilməyib",
+        tone: studentKpi >= 100 ? "green" : studentKpi >= 75 ? "blue" : "orange",
+        progress: studentLimit > 0 ? Math.min(studentKpi, 100) : 0,
+      },
       { label: "Davamiyyət", value: total ? `${Math.round(present / total * 100)}%` : "—", helper: `${present} iştirak · ${absent} qaib`, tone: "green" },
       { label: "Jurnal qeydləri", value: String(total), helper: "Qeyd edilmiş dərs iştirakları", tone: "orange" },
     ],

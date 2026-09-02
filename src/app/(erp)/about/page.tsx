@@ -6,7 +6,7 @@ import { isPrivilegedActor, requireErpActor } from "@/server/auth/actor";
 export default async function AboutPage() {
   const actor = await requireErpActor();
   const canEdit = isPrivilegedActor(actor);
-  const data = await getCompanyKnowledgeData(canEdit);
+  const data = await getCompanyKnowledgeData(canEdit, actor.id);
 
   return (
     <AboutWorkspace

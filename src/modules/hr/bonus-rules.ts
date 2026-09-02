@@ -3,6 +3,7 @@ export type BonusStageInput = {
   bonusPool: number;
   bonusPercent: number;
   fixedAmount: number;
+  isIncremental?: boolean;
   churnRules?: TeacherChurnRuleInput[];
 };
 
@@ -32,7 +33,7 @@ export function validateBonusStages(stages: BonusStageInput[]) {
     if (stage.bonusPercent > 100) {
       throw new Error("Bonus faizi 100%-dən böyük ola bilməz");
     }
-    if (stage.bonusPool === 0 && stage.bonusPercent === 0 && stage.fixedAmount === 0) {
+    if (!stage.isIncremental && stage.bonusPool === 0 && stage.bonusPercent === 0 && stage.fixedAmount === 0) {
       throw new Error("Hər etapda faiz, sabit ödəniş və ya bonus fondu olmalıdır");
     }
     if (stage.bonusPool === 0 && (stage.bonusPercent < previousPercent || stage.fixedAmount < previousFixedAmount)) {
@@ -124,6 +125,30 @@ export function calculateTierAward(input: TierAwardInput) {
     fixedAmount,
     amount: money(percentAmount + fixedAmount),
     workloadMultiplier: money(multiplier),
+  };
+}
+
+export type PerUnitAwardInput = {
+  baseAmount: number;
+  metricValue: number;
+  requiredThreshold: number;
+  perUnitBonusPercent: number;
+  perUnitBonusAmount: number;
+};
+
+export function calculatePerUnitAward(input: PerUnitAwardInput) {
+  const unitCount = Math.max(0, Math.floor(input.metricValue - input.requiredThreshold));
+  const totalPercent = Math.max(0, input.perUnitBonusPercent) * unitCount;
+  const baseAmount = money(Math.max(0, input.baseAmount));
+  const percentAmount = money(baseAmount * totalPercent / 100);
+  const fixedAmount = money(Math.max(0, input.perUnitBonusAmount) * unitCount);
+  return {
+    unitCount,
+    totalPercent: money(totalPercent),
+    baseAmount,
+    percentAmount,
+    fixedAmount,
+    amount: money(percentAmount + fixedAmount),
   };
 }
 

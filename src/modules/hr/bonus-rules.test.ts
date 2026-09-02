@@ -4,6 +4,7 @@ import {
   bonusProgress,
   calculateTeacherStudentBonus,
   calculateTierAward,
+  calculatePerUnitAward,
   nextMonthlyBonusPeriod,
   splitBonusPool,
   validateBonusStages,
@@ -36,6 +37,24 @@ test("percentage and fixed tiers pay only the incremental difference", () => {
   assert.deepEqual(first, { baseAmount: 1000, percentAmount: 200, fixedAmount: 0, amount: 200, workloadMultiplier: 1 });
   assert.deepEqual(second, { baseAmount: 1000, percentAmount: 100, fixedAmount: 100, amount: 200, workloadMultiplier: 1 });
   assert.equal(first.amount + second.amount, 400);
+});
+
+test("per-unit commission starts only after the mandatory threshold", () => {
+  assert.deepEqual(calculatePerUnitAward({
+    baseAmount: 1000,
+    metricValue: 20,
+    requiredThreshold: 20,
+    perUnitBonusPercent: 10,
+    perUnitBonusAmount: 0,
+  }), { unitCount: 0, totalPercent: 0, baseAmount: 1000, percentAmount: 0, fixedAmount: 0, amount: 0 });
+
+  assert.deepEqual(calculatePerUnitAward({
+    baseAmount: 1000,
+    metricValue: 23,
+    requiredThreshold: 20,
+    perUnitBonusPercent: 10,
+    perUnitBonusAmount: 5,
+  }), { unitCount: 3, totalPercent: 30, baseAmount: 1000, percentAmount: 300, fixedAmount: 15, amount: 315 });
 });
 
 test("teacher bonus uses student tier base and the highest matching churn deduction", () => {

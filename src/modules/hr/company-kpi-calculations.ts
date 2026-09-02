@@ -18,6 +18,28 @@ export type CompanyKpiTargets = {
   revenue: number;
 };
 
+export const companyKpiKeys: CompanyKpiKey[] = [
+  "activeStudents",
+  "newSales",
+  "churn",
+  "leads",
+  "conversion",
+  "revenue",
+];
+
+export type CompanyKpiRolloverMonth = {
+  periodMonth: string;
+  baseTargets: CompanyKpiTargets;
+  actuals: CompanyKpiTargets;
+  isComplete: boolean;
+};
+
+export type CompanyKpiRolloverResult = CompanyKpiRolloverMonth & {
+  carryIn: CompanyKpiTargets | null;
+  effectiveTargets: CompanyKpiTargets;
+  carryOut: CompanyKpiTargets | null;
+};
+
 export type CompanyKpiActuals = CompanyKpiTargets & {
   openingActiveStudents: number;
   convertedLeads: number;
@@ -103,6 +125,41 @@ export function buildCompanyKpiMetrics(
       hasTarget,
     };
   });
+}
+
+export function buildCompanyKpiRollover(
+  months: CompanyKpiRolloverMonth[],
+): CompanyKpiRolloverResult[] {
+  let carry = zeroTargets();
+  let carryIsKnown = true;
+
+  return months.map((month) => {
+    const carryIn = carryIsKnown ? { ...carry } : null;
+    const rawTargets = carryIsKnown
+      ? mapTargets((key) => month.baseTargets[key] + carry[key])
+      : { ...month.baseTargets };
+    const effectiveTargets = mapTargets((key) => Math.max(0, rawTargets[key]));
+
+    if (!carryIsKnown || !month.isComplete) {
+      carryIsKnown = false;
+      return { ...month, carryIn, effectiveTargets, carryOut: null };
+    }
+
+    carry = mapTargets((key) => rolloverBalanceFor(key, rawTargets[key], month.actuals[key]));
+    return {
+      ...month,
+      carryIn,
+      effectiveTargets,
+      carryOut: { ...carry },
+    };
+  });
+}
+
+function rolloverBalanceFor(key: CompanyKpiKey, target: number, actual: number) {
+  const balance = target - actual;
+  // Churn is a ceiling, not a growth goal: unused allowance must not make the
+  // next month's limit looser. Only an overrun is compensated in later months.
+  return key === "churn" ? Math.min(balance, 0) : balance;
 }
 
 function completionFor(actual: number, target: number, isChurn: boolean) {
@@ -202,4 +259,23 @@ function statusLabelFor(status: CompanyKpiTone) {
 
 function round(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+function zeroTargets(): CompanyKpiTargets {
+  return mapTargets(() => 0);
+}
+
+function mapTargets(getValue: (key: CompanyKpiKey) => number): CompanyKpiTargets {
+  return {
+    activeStudents: moneySafe(getValue("activeStudents")),
+    newSales: moneySafe(getValue("newSales")),
+    churn: moneySafe(getValue("churn")),
+    leads: moneySafe(getValue("leads")),
+    conversion: moneySafe(getValue("conversion")),
+    revenue: moneySafe(getValue("revenue")),
+  };
+}
+
+function moneySafe(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }

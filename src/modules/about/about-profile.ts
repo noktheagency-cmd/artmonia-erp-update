@@ -11,7 +11,7 @@ export type AboutProfileSnapshot = {
 };
 
 export const defaultAboutProfile: AboutProfileSnapshot = {
-  title: "Biz kimik",
+  title: "Qaydalar",
   tagline: "İncəsənəti öyrənmək, yaratmaq və paylaşmaq üçün canlı bir yaradıcılıq mühiti.",
   story:
     "Artmonia fərqli yaş və təcrübə səviyyələrindən olan insanları incəsənət ətrafında birləşdirən yaradıcı təhsil məkanıdır. Burada hər bir iştirakçının öz üslubunu kəşf etməsi, texniki bacarıqlarını inkişaf etdirməsi və ideyalarını inamla ifadə etməsi üçün düşünülmüş öyrənmə təcrübəsi qururuq.",

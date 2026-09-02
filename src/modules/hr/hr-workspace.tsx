@@ -96,6 +96,7 @@ export function HrWorkspace({
     updateCorporate: Action;
     deleteCorporate: Action;
     saveCompanyKpi: Action;
+    saveCompanyKpiPlan: Action;
   };
 }) {
   const router = useRouter();
@@ -383,6 +384,7 @@ export function HrWorkspace({
             key={companyKpiData.periodMonth}
             data={companyKpiData}
             saveAction={actions.saveCompanyKpi}
+            savePlanAction={actions.saveCompanyKpiPlan}
           />
         </TabsContent>
       </Tabs>
@@ -965,7 +967,7 @@ function TeacherTable({
               <th>Davamiyyət</th>
               <th>Ödəniş bazası</th>
               <th>Faiz</th>
-              <th>Hesablanan maaş</th>
+              <th>Cari hesablanan maaş</th>
               {canManage ? <th /> : null}
             </tr>
           </thead>

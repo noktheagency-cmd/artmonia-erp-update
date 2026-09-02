@@ -206,6 +206,19 @@ html.dark .knowledge-portal-theme {
 .knowledge-status-field small { display: block; }
 .knowledge-status-field strong { font-size: 11px; }
 .knowledge-status-field small { margin-top: 3px; color: var(--kb-muted); font-size: 9px; }
+.knowledge-audience-field { display: grid; gap: 9px; min-width: 0; padding: 0; border: 0; }
+.knowledge-audience-field legend { margin-bottom: 1px; color: var(--kb-text); font-size: 11px; font-weight: 730; }
+.knowledge-audience-all,
+.knowledge-audience-list label { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 9px; padding: 9px 10px; background: var(--kb-surface-soft); border: 1px solid var(--kb-border); border-radius: 10px; }
+.knowledge-audience-all { grid-template-columns: auto minmax(0, 1fr); }
+.knowledge-audience-field input { width: 15px; height: 15px; accent-color: var(--kb-accent); }
+.knowledge-audience-field strong,
+.knowledge-audience-field small { display: block; }
+.knowledge-audience-field strong { overflow: hidden; color: var(--kb-text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-audience-field small { margin-top: 2px; overflow: hidden; color: var(--kb-muted); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-audience-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; max-height: 210px; overflow: auto; padding: 2px; }
+.knowledge-audience-list label:has(input:checked) { background: var(--kb-accent-soft); border-color: color-mix(in srgb, var(--kb-accent) 45%, var(--kb-border)); }
+.knowledge-audience-list svg { color: var(--kb-muted); }
 .knowledge-dialog form > footer { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding-top: 3px; }
 .knowledge-dialog form > footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 13px; color: var(--kb-muted); background: var(--kb-surface); border: 1px solid var(--kb-border-strong); border-radius: 9px; font-size: 11px; font-weight: 700; }
 .knowledge-dialog form > footer button.is-primary { color: #fff; background: #146cff; border-color: #146cff; }
@@ -265,6 +278,7 @@ html.dark .knowledge-portal-theme {
   .knowledge-dialog > header p { display: none; }
   .knowledge-dialog form { gap: 17px; padding: 16px 14px 22px; }
   .knowledge-dialog-form-grid { grid-template-columns: 1fr; }
+  .knowledge-audience-list { grid-template-columns: 1fr; }
   .knowledge-editor-shell .knowledge-prose { min-height: 220px; padding: 14px; }
   .knowledge-dialog form > footer { position: sticky; bottom: 0; padding: 10px 0 0; background: var(--kb-surface); }
   .knowledge-dialog form > footer button { padding: 0 10px; }

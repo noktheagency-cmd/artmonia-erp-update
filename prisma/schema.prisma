@@ -538,6 +538,8 @@ model User {
   managedTargets                   Target[]                        @relation("TargetManager")
   createdCompanyMonthlyTargets     CompanyMonthlyTarget[]          @relation("CompanyMonthlyTargetCreator")
   updatedCompanyMonthlyTargets     CompanyMonthlyTarget[]          @relation("CompanyMonthlyTargetUpdater")
+  createdCompanyKpiPlans           CompanyKpiPlan[]                 @relation("CompanyKpiPlanCreator")
+  updatedCompanyKpiPlans           CompanyKpiPlan[]                 @relation("CompanyKpiPlanUpdater")
   auditLogs                        AuditLog[]                      @relation("AuditActor")
   authSessions                     AuthSessionRecord[]             @relation("AuthSessionUser")
   revokedAuthSessions              AuthSessionRecord[]             @relation("AuthSessionRevoker")
@@ -651,12 +653,27 @@ model KnowledgeCategory {
   createdBy User?              @relation("KnowledgeCategoryCreator", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy User?              @relation("KnowledgeCategoryUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   articles  KnowledgeArticle[]
+  audiences KnowledgeCategoryAudience[]
 
   @@unique([sectionId, name])
   @@index([sectionId, status, position])
   @@index([createdById])
   @@index([updatedById])
   @@map("knowledge_categories")
+  @@schema("erp")
+}
+
+model KnowledgeCategoryAudience {
+  categoryId String   @map("category_id") @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  category KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  employee HrEmployee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, employeeId])
+  @@index([employeeId, categoryId])
+  @@map("knowledge_category_audiences")
   @@schema("erp")
 }
 
@@ -718,6 +735,7 @@ model HrEmployee {
   notifications        HrStaffNotification[]
   notes                HrEmployeeNote[]
   documents            HrEmployeeDocument[]
+  knowledgeAudiences   KnowledgeCategoryAudience[]
   archivedBy           User?                 @relation("HrEmployeeArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
 
   @@index([status])
@@ -863,6 +881,9 @@ model HrBonusCampaign {
   status                       HrBonusCampaignStatus   @default(ACTIVE)
   recursMonthly                Boolean                 @default(false) @map("recurs_monthly")
   recurrenceGroupId            String?                 @map("recurrence_group_id") @db.Uuid
+  requiredThreshold            Decimal                 @default(0) @map("required_threshold") @db.Decimal(14, 2)
+  perUnitBonusPercent          Decimal                 @default(0) @map("per_unit_bonus_percent") @db.Decimal(7, 2)
+  perUnitBonusAmount           Decimal                 @default(0) @map("per_unit_bonus_amount") @db.Decimal(12, 2)
   teacherMinCohortSize         Int                     @default(10) @map("teacher_min_cohort_size")
   teacherMinTenureDays         Int                     @default(14) @map("teacher_min_tenure_days")
   teacherReferenceStudentCount Int                     @default(20) @map("teacher_reference_student_count")
@@ -893,6 +914,7 @@ model HrBonusStage {
   bonusPool    Decimal   @default(0) @map("bonus_pool") @db.Decimal(12, 2)
   bonusPercent Decimal   @default(0) @map("bonus_percent") @db.Decimal(5, 2)
   fixedAmount  Decimal   @default(0) @map("fixed_amount") @db.Decimal(12, 2)
+  isIncremental Boolean  @default(false) @map("is_incremental")
   reachedAt    DateTime? @map("reached_at")
   reachedValue Decimal?  @map("reached_value") @db.Decimal(14, 2)
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -2667,15 +2689,46 @@ model CompanyMonthlyTarget {
   revenueTarget        Decimal  @map("revenue_target") @db.Decimal(14, 2)
   createdById          String?  @map("created_by_id") @db.Uuid
   updatedById          String?  @map("updated_by_id") @db.Uuid
+  planId               String?  @map("plan_id") @db.Uuid
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
   createdBy User? @relation("CompanyMonthlyTargetCreator", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy User? @relation("CompanyMonthlyTargetUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  plan      CompanyKpiPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([createdById])
   @@index([updatedById])
+  @@index([planId, periodMonth])
   @@map("company_monthly_targets")
+  @@schema("erp")
+}
+
+model CompanyKpiPlan {
+  id                   String   @id @default(uuid()) @db.Uuid
+  name                 String   @db.VarChar(120)
+  startMonth           DateTime @unique @map("start_month") @db.Date
+  endMonth             DateTime @map("end_month") @db.Date
+  durationMonths       Int      @map("duration_months")
+  activeStudentsTarget Int      @map("active_students_target")
+  newSalesTarget       Int      @map("new_sales_target")
+  churnMaxTarget       Int      @map("churn_max_target")
+  leadTarget           Int      @map("lead_target")
+  conversionTarget     Decimal  @map("conversion_target") @db.Decimal(8, 2)
+  revenueTarget        Decimal  @map("revenue_target") @db.Decimal(16, 2)
+  createdById          String?  @map("created_by_id") @db.Uuid
+  updatedById          String?  @map("updated_by_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  createdBy      User?                  @relation("CompanyKpiPlanCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      User?                  @relation("CompanyKpiPlanUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  monthlyTargets CompanyMonthlyTarget[]
+
+  @@index([startMonth, endMonth])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("company_kpi_plans")
   @@schema("erp")
 }
 

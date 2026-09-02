@@ -18,7 +18,7 @@ import {
   deleteCorporateCustomerAction,
   updateCorporateCustomerAction,
 } from "@/modules/hr/corporate-customer-actions";
-import { saveCompanyKpiTargetsAction } from "@/modules/hr/company-kpi-actions";
+import { saveCompanyKpiPlanAction, saveCompanyKpiTargetsAction } from "@/modules/hr/company-kpi-actions";
 import { getCompanyKpiData } from "@/modules/hr/company-kpi-data";
 import { HrWorkspace } from "@/modules/hr/hr-workspace";
 
@@ -36,5 +36,5 @@ export default async function HrPage({
     getCompanyKpiData(filters.month),
   ]);
 
-  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} corporateData={corporateData} companyKpiData={companyKpiData} initialView={filters.view === "company-kpi" ? "company-kpi" : undefined} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, deleteTeacher: deleteTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, deleteBonus: deleteBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction, createCorporate: createCorporateCustomerAction, updateCorporate: updateCorporateCustomerAction, deleteCorporate: deleteCorporateCustomerAction, saveCompanyKpi: saveCompanyKpiTargetsAction }} />;
+  return <HrWorkspace teacherData={teacherData} employeeData={employeeData} bonusData={bonusData} corporateData={corporateData} companyKpiData={companyKpiData} initialView={filters.view === "company-kpi" ? "company-kpi" : undefined} actions={{ create: createStaffAction, update: updateStaffAction, remove: deleteEmployeeAction, updateTeacherSalary: updateTeacherSalaryRuleAction, updateTeacher: updateTeacherAction, deleteTeacher: deleteTeacherAction, createBonus: createBonusCampaignAction, adjustBonus: addBonusProgressAdjustmentAction, approveBonus: approveBonusStageAwardsAction, postBonus: postBonusStageAwardsAction, cancelBonus: cancelBonusCampaignAction, deleteBonus: deleteBonusCampaignAction, refreshBonuses: refreshBonusCampaignsAction, createCorporate: createCorporateCustomerAction, updateCorporate: updateCorporateCustomerAction, deleteCorporate: deleteCorporateCustomerAction, saveCompanyKpi: saveCompanyKpiTargetsAction, saveCompanyKpiPlan: saveCompanyKpiPlanAction }} />;
 }

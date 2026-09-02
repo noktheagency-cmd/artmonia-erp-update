@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import {
   calculateTeacherStudentBonus,
   calculateTierAward,
+  calculatePerUnitAward,
   nextMonthlyBonusPeriod,
   splitBonusPool,
 } from "@/modules/hr/bonus-rules";
@@ -25,6 +26,11 @@ type TeacherPerformanceRow = {
   cohortCount: number;
   eligibleStudentCount: number;
   churnedStudentCount: number;
+};
+
+type ParticipantMetricRow = {
+  participantId: string;
+  value: number | bigint | Prisma.Decimal;
 };
 
 export type BonusCampaignValueInput = {
@@ -48,16 +54,30 @@ export async function calculateBonusCampaignValues(
           join erp.students student on student.id = payment.student_id
           join erp.hr_employees employee on employee.user_id = student.manager_id
           where employee.department = campaign.department
+            and exists (
+              select 1 from erp.hr_bonus_participants participant
+              where participant.campaign_id = campaign.id
+                and participant.employee_id = employee.id
+                and participant.is_eligible = true
+            )
             and payment.paid_at >= campaign.starts_at
             and payment.paid_at <= campaign.ends_at
+            and student.is_test_data = false
         )
         when 'DEPARTMENT_SALES_COUNT'::"erp"."HrBonusMetricKind" then (
           select count(*)::numeric
           from erp.students student
           join erp.hr_employees employee on employee.user_id = student.manager_id
           where employee.department = campaign.department
+            and exists (
+              select 1 from erp.hr_bonus_participants participant
+              where participant.campaign_id = campaign.id
+                and participant.employee_id = employee.id
+                and participant.is_eligible = true
+            )
             and student.registered_at >= campaign.starts_at
             and student.registered_at <= campaign.ends_at
+            and student.is_test_data = false
         )
         when 'TEACHER_RETENTION_RATE'::"erp"."HrBonusMetricKind" then (
           select coalesce(round(avg(teacher_students.student_count), 2), 0)
@@ -106,8 +126,15 @@ export async function calculateBonusCampaignValue(campaignId: string) {
       join erp.students s on s.id = p.student_id
       join erp.hr_employees he on he.user_id = s.manager_id
       where he.department = ${campaign.department}
+        and exists (
+          select 1 from erp.hr_bonus_participants participant
+          where participant.campaign_id = ${campaign.id}::uuid
+            and participant.employee_id = he.id
+            and participant.is_eligible = true
+        )
         and p.paid_at >= ${campaign.startsAt}
         and p.paid_at <= ${campaign.endsAt}
+        and s.is_test_data = false
     `);
     baseValue = Number(row?.value ?? 0);
   } else if (campaign.metricKind === "DEPARTMENT_SALES_COUNT") {
@@ -116,8 +143,15 @@ export async function calculateBonusCampaignValue(campaignId: string) {
       from erp.students s
       join erp.hr_employees he on he.user_id = s.manager_id
       where he.department = ${campaign.department}
+        and exists (
+          select 1 from erp.hr_bonus_participants participant
+          where participant.campaign_id = ${campaign.id}::uuid
+            and participant.employee_id = he.id
+            and participant.is_eligible = true
+        )
         and s.registered_at >= ${campaign.startsAt}
         and s.registered_at <= ${campaign.endsAt}
+        and s.is_test_data = false
     `);
     baseValue = Number(row?.value ?? 0);
   } else if (campaign.metricKind === "TEACHER_RETENTION_RATE") {
@@ -261,9 +295,24 @@ export async function syncBonusCampaign(campaignId: string, actorUserId?: string
   const payroll = campaign.participants.some((participant) => participant.employee?.teacherId)
     ? await getTeacherPayrollPreviews(campaign.startsAt)
     : new Map();
+  const participantValues = campaign.metricKind === "DEPARTMENT_SALES_COUNT"
+    ? await calculateParticipantSalesValues(campaign.id)
+    : new Map<string, number>();
 
   await prisma.$transaction(async (tx) => {
     for (const [stageIndex, stage] of campaign.stages.entries()) {
+      if (stage.isIncremental) {
+        const reached = await syncIncrementalStage({
+          tx,
+          campaign,
+          stage,
+          participantValues,
+          payroll,
+          actorUserId,
+        });
+        if (reached && stage.id === finalStage?.id) finalReached = true;
+        continue;
+      }
       if (stage.reachedAt || progress.currentValue < Number(stage.threshold)) continue;
 
       const unlocked = await tx.hrBonusStage.updateMany({
@@ -344,6 +393,112 @@ export async function syncBonusCampaign(campaignId: string, actorUserId?: string
   }
 
   return progress;
+}
+
+async function calculateParticipantSalesValues(campaignId: string) {
+  const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
+    select
+      participant.id::text as "participantId",
+      count(student.id)::int as value
+    from erp.hr_bonus_participants participant
+    left join erp.hr_employees employee on employee.id = participant.employee_id
+    left join erp.students student on student.manager_id = employee.user_id
+      and student.registered_at >= (
+        select campaign.starts_at from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
+      )
+      and student.registered_at <= (
+        select campaign.ends_at from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
+      )
+      and student.is_test_data = false
+    where participant.campaign_id = ${campaignId}::uuid
+      and participant.is_eligible = true
+    group by participant.id
+  `);
+  return new Map(rows.map((row) => [row.participantId, Number(row.value)]));
+}
+
+async function syncIncrementalStage(input: {
+  tx: Prisma.TransactionClient;
+  campaign: {
+    id: string;
+    name: string;
+    createdById: string | null;
+    requiredThreshold: Prisma.Decimal;
+    perUnitBonusPercent: Prisma.Decimal;
+    perUnitBonusAmount: Prisma.Decimal;
+    participants: Array<{
+      id: string;
+      employee: { salaryMode: string; salaryAmount: Prisma.Decimal; teacherId: string | null } | null;
+    }>;
+  };
+  stage: { id: string; reachedAt: Date | null };
+  participantValues: Map<string, number>;
+  payroll: Map<string, { payoutAmount: number }>;
+  actorUserId?: string | null;
+}) {
+  const { tx, campaign, stage, participantValues, payroll, actorUserId } = input;
+  let reached = Boolean(stage.reachedAt);
+  let maxMetricValue = 0;
+  let awardCount = 0;
+
+  for (const participant of campaign.participants) {
+    const metricValue = participantValues.get(participant.id) ?? 0;
+    maxMetricValue = Math.max(maxMetricValue, metricValue);
+    const award = calculatePerUnitAward({
+      baseAmount: compensationBase(participant.employee, payroll),
+      metricValue,
+      requiredThreshold: Number(campaign.requiredThreshold),
+      perUnitBonusPercent: Number(campaign.perUnitBonusPercent),
+      perUnitBonusAmount: Number(campaign.perUnitBonusAmount),
+    });
+    if (award.amount <= 0) continue;
+
+    const existing = await tx.hrBonusAward.findUnique({
+      where: { stageId_participantId: { stageId: stage.id, participantId: participant.id } },
+      select: { id: true, status: true },
+    });
+    const data = {
+      amount: award.amount,
+      baseAmount: award.baseAmount,
+      percentAmount: award.percentAmount,
+      fixedAmount: award.fixedAmount,
+      workloadMultiplier: 1,
+      metricValue,
+      calculationNote: `${award.unitCount} əlavə satış × ${Number(campaign.perUnitBonusPercent)}%${Number(campaign.perUnitBonusAmount) > 0 ? ` + ${Number(campaign.perUnitBonusAmount)} ₼` : ""}`,
+    };
+    if (!existing) {
+      await tx.hrBonusAward.create({ data: { stageId: stage.id, participantId: participant.id, ...data } });
+      awardCount += 1;
+    } else if (existing.status === "PENDING_HR") {
+      await tx.hrBonusAward.update({ where: { id: existing.id }, data });
+      awardCount += 1;
+    }
+  }
+
+  if (!reached && awardCount > 0) {
+    const unlocked = await tx.hrBonusStage.updateMany({
+      where: { id: stage.id, reachedAt: null },
+      data: { reachedAt: new Date(), reachedValue: maxMetricValue },
+    });
+    reached = unlocked.count > 0;
+    if (reached) {
+      await writeAuditLog(tx, {
+        actorUserId: actorUserId ?? campaign.createdById,
+        action: "hr.bonus.incremental.unlock",
+        entityType: "hr_bonus_stage",
+        entityId: stage.id,
+        after: {
+          campaignId: campaign.id,
+          requiredThreshold: Number(campaign.requiredThreshold),
+          perUnitBonusPercent: Number(campaign.perUnitBonusPercent),
+          perUnitBonusAmount: Number(campaign.perUnitBonusAmount),
+          participantCount: awardCount,
+        },
+        reason: "Məcburi həddən sonrakı satış bonusu aktivləşdi",
+      });
+    }
+  }
+  return reached;
 }
 
 async function ensureTeacherCohort(campaignId: string) {
@@ -507,6 +662,7 @@ async function ensureNextMonthlyCampaign(campaignId: string) {
         orderBy: { sortOrder: "asc" },
         include: { churnRules: { orderBy: { sortOrder: "asc" } } },
       },
+      participants: { where: { isEligible: true }, select: { employeeId: true } },
     },
   });
   if (!source?.recursMonthly || !source.recurrenceGroupId) return null;
@@ -522,6 +678,9 @@ async function ensureNextMonthlyCampaign(campaignId: string) {
     where: {
       department: source.department,
       status: { in: ["ACTIVE", "PROBATION"] },
+      ...(source.participants.some((participant) => participant.employeeId)
+        ? { id: { in: source.participants.flatMap((participant) => participant.employeeId ? [participant.employeeId] : []) } }
+        : {}),
       ...(source.metricKind === "TEACHER_RETENTION_RATE" ? { teacherId: { not: null } } : {}),
     },
     select: { id: true, fullName: true, email: true },
@@ -542,6 +701,9 @@ async function ensureNextMonthlyCampaign(campaignId: string) {
           status: startsAt > utcDateOnly(new Date()) ? "SCHEDULED" : "ACTIVE",
           recursMonthly: true,
           recurrenceGroupId: source.recurrenceGroupId,
+          requiredThreshold: source.requiredThreshold,
+          perUnitBonusPercent: source.perUnitBonusPercent,
+          perUnitBonusAmount: source.perUnitBonusAmount,
           createdById: source.createdById,
           stages: {
             create: source.stages.map((stage) => ({
@@ -550,6 +712,7 @@ async function ensureNextMonthlyCampaign(campaignId: string) {
               bonusPool: stage.bonusPool,
               bonusPercent: stage.bonusPercent,
               fixedAmount: stage.fixedAmount,
+              isIncremental: stage.isIncremental,
               churnRules: {
                 create: stage.churnRules.map((rule) => ({
                   sortOrder: rule.sortOrder,

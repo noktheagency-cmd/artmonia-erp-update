@@ -77,7 +77,7 @@ const primaryNavItems: NavItem[] = [
 ];
 
 const secondaryNavItems: NavItem[] = [
-  { href: "/about" as Route, label: "Biz Kimik", icon: Building2, requiredPermissions: [] },
+  { href: "/about" as Route, label: "Qaydalar", icon: Building2, requiredPermissions: [] },
   { href: "/audit" as Route, label: "Audit və təhlükəsizlik", icon: ShieldCheck, requiredPermissions: [], requiredRoles: ["SUPER_ADMIN"] },
   { href: "/marketing" as Route, label: "Marketing", icon: Megaphone, requiredPermissions: ["marketing.read"] },
   { href: "/playbook" as Route, label: "Playbook", icon: BookOpenText, requiredPermissions: ["playbook.read"] },
