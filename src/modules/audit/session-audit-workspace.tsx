@@ -68,10 +68,18 @@ const deviceFilters: Array<{ value: "ALL" | SessionDeviceTypeDto; label: string 
   { value: "TABLET", label: "Planşet" },
 ];
 
-export function SessionAuditWorkspace({ initialData }: { initialData: SessionAuditData }) {
+export function SessionAuditWorkspace({
+  initialData,
+  initialTab = "SESSIONS",
+  initialAccountKey = null,
+}: {
+  initialData: SessionAuditData;
+  initialTab?: "SESSIONS" | "ACCOUNTS" | "ACTIVITY";
+  initialAccountKey?: string | null;
+}) {
   const router = useRouter();
   const [revokedSessionIds, setRevokedSessionIds] = useState<Set<string>>(() => new Set());
-  const [tab, setTab] = useState<"SESSIONS" | "ACCOUNTS" | "ACTIVITY">("SESSIONS");
+  const [tab, setTab] = useState<"SESSIONS" | "ACCOUNTS" | "ACTIVITY">(initialTab);
   const [selectedUserId, setSelectedUserId] = useState(
     initialData.users.some((user) => user.id === initialData.currentUserId)
       ? initialData.currentUserId
@@ -376,6 +384,7 @@ export function SessionAuditWorkspace({ initialData }: { initialData: SessionAud
           accounts={initialData.accounts}
           roleOptions={initialData.accountRoleOptions}
           generatedAt={initialData.generatedAt}
+          initialProfileKey={initialAccountKey}
         />
       ) : (
         <AuditLogPanel logs={initialData.activity} />

@@ -582,6 +582,7 @@ model User {
   createdMarketingStrategies       MarketingStrategy[]             @relation("MarketingStrategyCreator")
   createdMarketingStrategyExpenses MarketingStrategyExpense[]      @relation("MarketingStrategyExpenseCreator")
   hrEmployeeProfile                HrEmployee?
+  corporateContactProfile          HrCorporateContact?
   createdBonusCampaigns            HrBonusCampaign[]               @relation("HrBonusCampaignCreator")
   bonusProgressAdjustments         HrBonusProgressAdjustment[]     @relation("HrBonusAdjustmentCreator")
   approvedBonusAwards              HrBonusAward[]                  @relation("HrBonusAwardApprover")
@@ -815,6 +816,7 @@ model HrCorporateCustomer {
 model HrCorporateContact {
   id         String   @id @default(uuid()) @db.Uuid
   customerId String   @map("customer_id") @db.Uuid
+  userId     String?  @unique @map("user_id") @db.Uuid
   fullName   String   @map("full_name")
   position   String?
   phone      String?
@@ -824,6 +826,7 @@ model HrCorporateContact {
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   customer HrCorporateCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([customerId, isPrimary])
   @@index([email])

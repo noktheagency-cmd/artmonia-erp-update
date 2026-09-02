@@ -48,8 +48,15 @@ export type AuditLogDto = {
   createdAt: string;
 };
 
+export type SecurityAccountProfileType = "EMPLOYEE" | "CORPORATE_CONTACT";
+
 export type SecurityAccountDto = {
-  employeeId: string;
+  profileId: string;
+  profileType: SecurityAccountProfileType;
+  employeeId: string | null;
+  corporateContactId: string | null;
+  companyId: string | null;
+  companyName: string | null;
   userId: string | null;
   fullName: string;
   profilePhotoUrl: string | null;

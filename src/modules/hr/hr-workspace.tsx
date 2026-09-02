@@ -43,6 +43,7 @@ import type { CorporateCustomerData, CorporateCustomerRow } from "@/modules/hr/c
 import type { CompanyKpiData } from "@/modules/hr/company-kpi-data";
 import { CompanyKpiWorkspace } from "@/modules/hr/company-kpi-workspace";
 import {
+  CorporateContactAccountsDialog,
   CorporateCustomerDeleteDialog,
   CorporateCustomerDialog,
   CorporateCustomerWorkspace,
@@ -95,6 +96,7 @@ export function HrWorkspace({
     createCorporate: Action;
     updateCorporate: Action;
     deleteCorporate: Action;
+    createCorporateAccount: Action;
     saveCompanyKpi: Action;
     saveCompanyKpiPlan: Action;
   };
@@ -128,6 +130,7 @@ export function HrWorkspace({
   >(null);
   const [corporateEditor, setCorporateEditor] = useState<CorporateCustomerRow | "new" | null>(null);
   const [deletingCorporate, setDeletingCorporate] = useState<CorporateCustomerRow | null>(null);
+  const [corporateAccountCustomer, setCorporateAccountCustomer] = useState<CorporateCustomerRow | null>(null);
   const [notice, setNotice] = useState("");
   const [exporting, setExporting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -193,6 +196,7 @@ export function HrWorkspace({
             setDeletingTeacher(null);
             setCorporateEditor(null);
             setDeletingCorporate(null);
+            setCorporateAccountCustomer(null);
             router.refresh();
           })
           .catch((error) =>
@@ -363,6 +367,7 @@ export function HrWorkspace({
             onCreate={() => setCorporateEditor("new")}
             onEdit={setCorporateEditor}
             onDelete={setDeletingCorporate}
+            onManageAccounts={setCorporateAccountCustomer}
           />
         </TabsContent>
         <TabsContent value="bonus">
@@ -415,6 +420,15 @@ export function HrWorkspace({
             form.set("id", deletingCorporate.id);
             run(() => actions.deleteCorporate(form), "Şirkət silindi.");
           }}
+        />
+      ) : null}
+      {corporateAccountCustomer ? (
+        <CorporateContactAccountsDialog
+          customer={corporateAccountCustomer}
+          roleOptions={corporateData.accountRoleOptions}
+          pending={pending}
+          onClose={() => setCorporateAccountCustomer(null)}
+          onSubmit={(formData) => run(() => actions.createCorporateAccount(formData), "Korporativ əlaqəli şəxs üçün giriş hesabı yaradıldı.")}
         />
       ) : null}
       {editor ? (

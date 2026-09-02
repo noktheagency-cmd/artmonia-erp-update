@@ -81,7 +81,12 @@ function session(overrides: Partial<AuthSessionDto> = {}): AuthSessionDto {
 
 function account(overrides: Partial<SecurityAccountDto> = {}): SecurityAccountDto {
   return {
+    profileId: "employee-default",
+    profileType: "EMPLOYEE",
     employeeId: "employee-default",
+    corporateContactId: null,
+    companyId: null,
+    companyName: null,
     userId: "user-default",
     fullName: "Test əməkdaş",
     profilePhotoUrl: null,

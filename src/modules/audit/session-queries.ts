@@ -39,12 +39,15 @@ type AuthSessionRow = {
 };
 
 type SecurityAccountRow = {
+  profileType: "EMPLOYEE" | "CORPORATE_CONTACT";
   id: string;
   fullName: string;
   email: string | null;
   department: string;
   position: string;
   profilePhotoUrl: string | null;
+  companyId: string | null;
+  companyName: string | null;
   createdAt: Date;
   updatedAt: Date;
   user: null | {
@@ -76,8 +79,8 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
         array_agg(distinct r.name order by r.name) filter (where r.name is not null),
         array[]::text[]
       ) as "roleNames",
-      he.department,
-      he.position,
+      coalesce(he.department, company.name) as department,
+      coalesce(he.position, contact.position, 'Əlaqəli şəxs') as position,
       s.user_agent as "authUserAgent",
       host(s.ip) as "authIpAddress",
       coalesce(s.created_at, now()) as "authStartedAt",
@@ -101,6 +104,8 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     from auth.sessions s
     join erp.users u on u.auth_user_id = s.user_id
     left join erp.hr_employees he on he.user_id = u.id
+    left join erp.hr_corporate_contacts contact on contact.user_id = u.id
+    left join erp.hr_corporate_customers company on company.id = contact.customer_id
     left join erp.user_roles ur on ur.user_id = u.id
     left join erp.roles r on r.id = ur.role_id
     left join erp.auth_session_records sr on sr.id = s.id
@@ -112,6 +117,8 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
       u.id,
       he.department,
       he.position,
+      company.name,
+      contact.position,
       s.user_agent,
       s.ip,
       s.created_at,
@@ -137,7 +144,7 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     orderBy: { createdAt: "desc" },
     include: { actor: { select: { fullName: true, email: true } } },
   });
-  const accountsPromise = getPrisma().hrEmployee.findMany({
+  const employeeAccountsPromise = getPrisma().hrEmployee.findMany({
     select: {
       id: true,
       fullName: true,
@@ -168,10 +175,38 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     orderBy: [{ isSystem: "desc" }, { name: "asc" }],
     take: 100,
   });
-  const [sessionRows, activityLogs, accountRows, accountRoleOptions] = await Promise.all([
+  // The shared adapter pool is capped at five connections. Keep the two profile
+  // directory reads sequential so auth sessions, audit logs and roles can load
+  // in parallel without exhausting the Supabase transaction pooler.
+  const contactAccountsPromise = employeeAccountsPromise.then(() => getPrisma().hrCorporateContact.findMany({
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      position: true,
+      createdAt: true,
+      updatedAt: true,
+      customer: { select: { id: true, name: true } },
+      user: {
+        select: {
+          id: true,
+          email: true,
+          authUserId: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          roles: { select: { role: { select: { id: true, name: true, code: true } } } },
+        },
+      },
+    },
+    orderBy: [{ customer: { name: "asc" } }, { fullName: "asc" }],
+    take: 501,
+  }));
+  const [sessionRows, activityLogs, employeeAccountRows, contactAccountRows, accountRoleOptions] = await Promise.all([
     sessionsPromise,
     activityPromise,
-    accountsPromise,
+    employeeAccountsPromise,
+    contactAccountsPromise,
     roleOptionsPromise,
   ]);
   const generatedAt = new Date();
@@ -179,6 +214,28 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
   const sessions = sessionRows
     .slice(0, 1_000)
     .map((row) => mapSession(row, actor.currentSessionId));
+  const accountRows: SecurityAccountRow[] = [
+    ...employeeAccountRows.map((employee) => ({
+      ...employee,
+      profileType: "EMPLOYEE" as const,
+      companyId: null,
+      companyName: null,
+    })),
+    ...contactAccountRows.map((contact) => ({
+      id: contact.id,
+      profileType: "CORPORATE_CONTACT" as const,
+      fullName: contact.fullName,
+      email: contact.email,
+      department: contact.customer.name,
+      position: contact.position ?? "Əlaqəli şəxs",
+      profilePhotoUrl: null,
+      companyId: contact.customer.id,
+      companyName: contact.customer.name,
+      createdAt: contact.createdAt,
+      updatedAt: contact.updatedAt,
+      user: contact.user,
+    })),
+  ].sort((left, right) => left.fullName.localeCompare(right.fullName, "az"));
   const accounts = buildAccounts(accountRows.slice(0, 500), sessions, actor.id);
   const users = buildSessionUsers(sessions, accounts);
   const recentThreshold = generatedAt.getTime() - 15 * 60_000;
@@ -232,25 +289,30 @@ function buildAccounts(
     if (!current.lastSeenAt || session.lastSeenAt > current.lastSeenAt) current.lastSeenAt = session.lastSeenAt;
     sessionSummary.set(session.userId, current);
   }
-  return rows.map((employee) => {
-    const user = employee.user;
+  return rows.map((profile) => {
+    const user = profile.user;
     const summary = user ? sessionSummary.get(user.id) : undefined;
     const roles = user?.roles.map(({ role }) => ({ id: role.id, name: role.name, code: role.code })) ?? [];
     return {
-      employeeId: employee.id,
+      profileId: profile.id,
+      profileType: profile.profileType,
+      employeeId: profile.profileType === "EMPLOYEE" ? profile.id : null,
+      corporateContactId: profile.profileType === "CORPORATE_CONTACT" ? profile.id : null,
+      companyId: profile.companyId,
+      companyName: profile.companyName,
       userId: user?.id ?? null,
-      fullName: employee.fullName,
-      profilePhotoUrl: employee.profilePhotoUrl,
-      contactEmail: employee.email,
+      fullName: profile.fullName,
+      profilePhotoUrl: profile.profilePhotoUrl,
+      contactEmail: profile.email,
       loginEmail: user?.email ?? null,
-      department: employee.department,
-      position: employee.position,
+      department: profile.department,
+      position: profile.position,
       roles,
       status: !user?.authUserId ? "NOT_CREATED" : user.isActive ? "ACTIVE" : "DISABLED",
       activeSessionCount: summary?.count ?? 0,
       lastSeenAt: summary?.lastSeenAt ?? null,
-      createdAt: (user?.createdAt ?? employee.createdAt).toISOString(),
-      updatedAt: (user?.updatedAt ?? employee.updatedAt).toISOString(),
+      createdAt: (user?.createdAt ?? profile.createdAt).toISOString(),
+      updatedAt: (user?.updatedAt ?? profile.updatedAt).toISOString(),
       protectedRole: roles.some((role) => role.code === AppRole.SUPER_ADMIN || role.code === AppRole.ADMIN),
       isCurrent: user?.id === actorId,
     };

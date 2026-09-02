@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
 import {
   Building2,
   Check,
@@ -11,8 +13,10 @@ import {
   Pencil,
   Plus,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
   Trash2,
+  UserPlus,
   WalletCards,
 } from "lucide-react";
 import {
@@ -64,11 +68,13 @@ export function CorporateCustomerWorkspace({
   onCreate,
   onEdit,
   onDelete,
+  onManageAccounts,
 }: {
   data: CorporateCustomerData;
   onCreate: () => void;
   onEdit: (customer: CorporateCustomerRow) => void;
   onDelete: (customer: CorporateCustomerRow) => void;
+  onManageAccounts: (customer: CorporateCustomerRow) => void;
 }) {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -203,7 +209,7 @@ export function CorporateCustomerWorkspace({
                 <th>Ödəniş tarixi</th>
                 <th>Status</th>
                 <th>Son yenilənmə</th>
-                {data.permissions.canManage ? <th className="corporate-action-cell"><span className="sr-only">Əməliyyatlar</span></th> : null}
+                {data.permissions.canManage || data.permissions.canManageAccounts ? <th className="corporate-action-cell"><span className="sr-only">Əməliyyatlar</span></th> : null}
               </tr>
             </thead>
             <tbody>
@@ -212,13 +218,15 @@ export function CorporateCustomerWorkspace({
                   key={customer.id}
                   customer={customer}
                   canManage={data.permissions.canManage}
+                  canManageAccounts={data.permissions.canManageAccounts}
                   onEdit={onEdit}
                   onDelete={onDelete}
+                  onManageAccounts={onManageAccounts}
                 />
               ))}
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={data.permissions.canManage ? 8 : 7} className="corporate-empty-cell">
+                  <td colSpan={data.permissions.canManage || data.permissions.canManageAccounts ? 8 : 7} className="corporate-empty-cell">
                     <Building2 />
                     <strong>{data.customers.length ? "Uyğun şirkət tapılmadı" : "Korporativ müştəri yoxdur"}</strong>
                     <span>{data.customers.length ? "Axtarış və filtrləri dəyişin." : "İlk şirkəti və əlaqəli şəxsləri əlavə edin."}</span>
@@ -290,13 +298,17 @@ function CorporateKpi({
 function CorporateCustomerTableRow({
   customer,
   canManage,
+  canManageAccounts,
   onEdit,
   onDelete,
+  onManageAccounts,
 }: {
   customer: CorporateCustomerRow;
   canManage: boolean;
+  canManageAccounts: boolean;
   onEdit: (customer: CorporateCustomerRow) => void;
   onDelete: (customer: CorporateCustomerRow) => void;
+  onManageAccounts: (customer: CorporateCustomerRow) => void;
 }) {
   const primaryContact = customer.contacts.find((contact) => contact.isPrimary) ?? customer.contacts[0];
 
@@ -327,6 +339,7 @@ function CorporateCustomerTableRow({
           <span>
             <strong>{primaryContact?.fullName ?? "—"}</strong>
             <small>{primaryContact ? `${primaryContact.position || "Əlaqəli şəxs"} · ${customer.contacts.length} nəfər` : "Əlaqəli şəxs yoxdur"}</small>
+            {customer.contacts.some((contact) => contact.accountStatus !== "NOT_CREATED") ? <em className="corporate-account-indicator"><ShieldCheck /> Giriş hesabı var</em> : null}
           </span>
         </div>
       </td>
@@ -335,13 +348,14 @@ function CorporateCustomerTableRow({
       <td className="corporate-payment-date">{formatDate(customer.paymentDate)}</td>
       <td><Badge variant="outline" className={`corporate-status ${statusMeta[customer.status].className}`}>{statusMeta[customer.status].label}</Badge></td>
       <td className="corporate-updated">{formatUpdatedAt(customer.updatedAt)}</td>
-      {canManage ? (
+      {canManage || canManageAccounts ? (
         <td className="corporate-action-cell">
           <details className="corporate-row-menu">
             <summary aria-label={`${customer.name} üçün əməliyyatlar`}><MoreHorizontal /></summary>
             <div>
-              <button type="button" onClick={() => onEdit(customer)}><Pencil /> Redaktə et</button>
-              <button type="button" className="is-danger" onClick={() => onDelete(customer)}><Trash2 /> Sil</button>
+              {canManageAccounts ? <button type="button" onClick={() => onManageAccounts(customer)}><ShieldCheck /> Giriş hesabları</button> : null}
+              {canManage ? <button type="button" onClick={() => onEdit(customer)}><Pencil /> Redaktə et</button> : null}
+              {canManage ? <button type="button" className="is-danger" onClick={() => onDelete(customer)}><Trash2 /> Sil</button> : null}
             </div>
           </details>
         </td>
@@ -489,7 +503,8 @@ export function CorporateCustomerDialog({
                     size="icon-sm"
                     className="corporate-remove-contact"
                     aria-label={`Əlaqəli şəxs ${index + 1}-i sil`}
-                    disabled={contacts.length === 1}
+                    disabled={contacts.length === 1 || Boolean(contact.userId)}
+                    title={contact.userId ? "ERP hesabı olan əlaqəli şəxs silinə bilməz" : undefined}
                     onClick={() => removeContact(contact.key)}
                   >
                     <Trash2 />
@@ -558,8 +573,125 @@ export function CorporateCustomerDeleteDialog({
   );
 }
 
+export function CorporateContactAccountsDialog({
+  customer,
+  roleOptions,
+  pending,
+  onClose,
+  onSubmit,
+}: {
+  customer: CorporateCustomerRow;
+  roleOptions: CorporateCustomerData["accountRoleOptions"];
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (formData: FormData) => void;
+}) {
+  const [selectedId, setSelectedId] = useState(customer.contacts[0]?.id ?? "");
+  const selected = customer.contacts.find((contact) => contact.id === selectedId) ?? customer.contacts[0] ?? null;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="corporate-account-dialog">
+        <DialogHeader className="corporate-dialog-header">
+          <span className="corporate-dialog-icon"><ShieldCheck /></span>
+          <div>
+            <DialogTitle>Əlaqəli şəxslərin giriş hesabları</DialogTitle>
+            <DialogDescription>{customer.name} üçün login məlumatlarını və icazə rollarını idarə edin.</DialogDescription>
+          </div>
+        </DialogHeader>
+        <div className="corporate-account-layout">
+          <nav aria-label="Əlaqəli şəxslər">
+            {customer.contacts.map((contact) => (
+              <button key={contact.id} type="button" className={contact.id === selected?.id ? "is-selected" : undefined} onClick={() => setSelectedId(contact.id)}>
+                <i>{initials(contact.fullName)}</i>
+                <span><strong>{contact.fullName}</strong><small>{contact.position || "Əlaqəli şəxs"}</small></span>
+                <AccountDot status={contact.accountStatus} />
+              </button>
+            ))}
+          </nav>
+          <section className="corporate-account-detail">
+            {selected ? (
+              <>
+                <header>
+                  <div><small>Korporativ profil</small><h3>{selected.fullName}</h3><p>{selected.position || "Əlaqəli şəxs"} · {customer.name}</p></div>
+                  <AccountLabel status={selected.accountStatus} />
+                </header>
+                {selected.accountStatus === "NOT_CREATED" ? (
+                  <CorporateAccountCreationForm key={selected.id} contact={selected} roleOptions={roleOptions} pending={pending} onSubmit={onSubmit} />
+                ) : (
+                  <div className="corporate-existing-account">
+                    <dl>
+                      <div><dt>Login e-poçtu</dt><dd>{selected.loginEmail ?? "—"}</dd></div>
+                      <div><dt>Sistem rolları</dt><dd>{selected.roles.map((role) => role.name).join(", ") || "Rol yoxdur"}</dd></div>
+                    </dl>
+                    <p>Parol, login e-poçtu, rollar, aktiv sessiyalar və hesab statusu Audit və təhlükəsizlik bölməsində idarə olunur.</p>
+                    <Link className="corporate-account-audit-link" href={`/audit?tab=accounts&profileType=CORPORATE_CONTACT&profileId=${selected.id}` as Route}><ShieldCheck /> Audit və təhlükəsizlikdə aç</Link>
+                  </div>
+                )}
+              </>
+            ) : <div className="corporate-account-empty">Əlaqəli şəxs tapılmadı.</div>}
+          </section>
+        </div>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Bağla</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CorporateAccountCreationForm({
+  contact,
+  roleOptions,
+  pending,
+  onSubmit,
+}: {
+  contact: CorporateContactRow;
+  roleOptions: CorporateCustomerData["accountRoleOptions"];
+  pending: boolean;
+  onSubmit: (formData: FormData) => void;
+}) {
+  const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get("password") ?? "");
+    if (!roleIds.length) { setError("Ən az bir sistem rolu seçilməlidir."); return; }
+    if (!strongPassword(password)) { setError("Parol ən az 10 simvol, böyük/kiçik hərf, rəqəm və xüsusi simvol daxil etməlidir."); return; }
+    if (password !== form.get("confirmation")) { setError("Parollar eyni deyil."); return; }
+    form.delete("confirmation");
+    form.set("roleIds", JSON.stringify(roleIds));
+    onSubmit(form);
+  }
+
+  return (
+    <form className="corporate-account-form" onSubmit={submit}>
+      <input type="hidden" name="profileType" value="CORPORATE_CONTACT" />
+      <input type="hidden" name="profileId" value={contact.id} />
+      <label><span>Login e-poçtu</span><Input name="loginEmail" type="email" defaultValue={contact.email} required autoComplete="off" /></label>
+      <fieldset><legend>İcazə rolları</legend><div>{roleOptions.map((role) => <label key={role.id}><input type="checkbox" checked={roleIds.includes(role.id)} onChange={() => setRoleIds((current) => current.includes(role.id) ? current.filter((id) => id !== role.id) : [...current, role.id])} /><span>{role.name}</span></label>)}</div></fieldset>
+      <div className="corporate-account-passwords"><label><span>İlkin parol</span><Input name="password" type="password" minLength={10} maxLength={72} required autoComplete="new-password" /></label><label><span>Parolu təsdiqlə</span><Input name="confirmation" type="password" minLength={10} maxLength={72} required autoComplete="new-password" /></label></div>
+      {error ? <p className="corporate-account-error">{error}</p> : null}
+      <Button type="submit" disabled={pending || !roleOptions.length}><UserPlus /> {pending ? "Hesab yaradılır..." : "Giriş hesabı yarat"}</Button>
+    </form>
+  );
+}
+
+function AccountDot({ status }: { status: CorporateContactRow["accountStatus"] }) {
+  return <em className="corporate-account-dot" data-status={status} aria-label={status === "ACTIVE" ? "Aktiv hesab" : status === "DISABLED" ? "Deaktiv hesab" : "Hesab yaradılmayıb"} />;
+}
+
+function AccountLabel({ status }: { status: CorporateContactRow["accountStatus"] }) {
+  return <span className="corporate-account-label" data-status={status}><i />{status === "ACTIVE" ? "Aktiv hesab" : status === "DISABLED" ? "Deaktiv hesab" : "Hesab yaradılmayıb"}</span>;
+}
+
+function strongPassword(value: string) {
+  return value.length >= 10 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value);
+}
+
 function emptyContact(key: string, isPrimary: boolean): ContactDraft {
-  return { id: "", key, fullName: "", position: "", phone: "", email: "", isPrimary };
+  return { id: "", key, fullName: "", position: "", phone: "", email: "", isPrimary, userId: null, loginEmail: null, accountStatus: "NOT_CREATED", roles: [] };
 }
 
 function matchesBudget(value: number, filter: string) {

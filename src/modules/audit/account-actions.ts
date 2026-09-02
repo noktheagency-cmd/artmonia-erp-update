@@ -14,13 +14,32 @@ import {
   TeacherAccountLinkError,
 } from "@/modules/audit/teacher-account-link";
 
+type AccountProfileType = "EMPLOYEE" | "CORPORATE_CONTACT";
+type AccountUser = Prisma.UserGetPayload<{ include: { roles: { include: { role: true } } } }>;
+type AccountProfile = {
+  id: string;
+  profileType: AccountProfileType;
+  userId: string | null;
+  teacherId: string | null;
+  companyId: string | null;
+  companyName: string | null;
+  fullName: string;
+  phone: string | null;
+  profilePhotoUrl: string | null;
+  user: AccountUser | null;
+};
+
 const roleIdsSchema = z.preprocess((value) => {
   if (typeof value !== "string") return value;
   try { return JSON.parse(value); } catch { return value; }
 }, z.array(z.string().uuid()).max(20));
 
-const accountSchema = z.object({
-  employeeId: z.string().uuid(),
+const profileSchema = z.object({
+  profileType: z.enum(["EMPLOYEE", "CORPORATE_CONTACT"]),
+  profileId: z.string().uuid(),
+});
+
+const accountSchema = profileSchema.extend({
   loginEmail: z.string().trim().email(),
   roleIds: roleIdsSchema,
 });
@@ -29,49 +48,45 @@ const createSchema = accountSchema.extend({ password: passwordSchema() }).refine
   (value) => value.roleIds.length > 0,
   { path: ["roleIds"], message: "Ən az bir sistem rolu seçilməlidir" },
 );
-const passwordChangeSchema = z.object({ employeeId: z.string().uuid(), password: passwordSchema() });
-const statusSchema = z.object({ employeeId: z.string().uuid(), active: z.enum(["true", "false"]).transform((value) => value === "true") });
+const passwordChangeSchema = profileSchema.extend({ password: passwordSchema() });
+const statusSchema = profileSchema.extend({ active: z.enum(["true", "false"]).transform((value) => value === "true") });
 
 async function createAccount(formData: FormData) {
   const actor = await requireSuperAdmin();
   const input = createSchema.parse(Object.fromEntries(formData));
-  const [employee, roles, emailOwner] = await Promise.all([
-    getPrisma().hrEmployee.findUnique({
-      where: { id: input.employeeId },
-      include: { user: { include: { roles: { include: { role: true } } } } },
-    }),
+  const [profile, roles, emailOwner] = await Promise.all([
+    loadProfile(input.profileType, input.profileId),
     loadAssignableRoles(input.roleIds),
     getPrisma().user.findFirst({ where: { email: { equals: input.loginEmail, mode: "insensitive" } }, select: { id: true } }),
   ]);
-  if (!employee) throw new PublicActionError("Əməkdaş tapılmadı", "NOT_FOUND");
-  if (employee.user?.authUserId) throw new PublicActionError("Bu əməkdaşın giriş hesabı artıq mövcuddur", "DUPLICATE");
-  if (emailOwner && emailOwner.id !== employee.userId) throw new PublicActionError("Bu e-poçt başqa giriş hesabında istifadə olunur", "DUPLICATE");
+  if (profile.user?.authUserId) throw new PublicActionError("Bu profilin giriş hesabı artıq mövcuddur", "DUPLICATE");
+  if (emailOwner && emailOwner.id !== profile.userId) throw new PublicActionError("Bu e-poçt başqa giriş hesabında istifadə olunur", "DUPLICATE");
 
   const { data, error } = await getSupabaseAdminClient().auth.admin.createUser({
     email: input.loginEmail,
     password: input.password,
     email_confirm: true,
-    user_metadata: { full_name: employee.fullName, avatar_url: employee.profilePhotoUrl },
+    user_metadata: { full_name: profile.fullName, avatar_url: profile.profilePhotoUrl },
   });
   if (error || !data.user) throw new PublicActionError(error?.message ?? "Giriş hesabı yaradıla bilmədi");
 
   try {
     const userId = await getPrisma().$transaction(async (tx) => {
-      const user = employee.user
+      const user = profile.user
         ? await tx.user.update({
-            where: { id: employee.user.id },
-            data: { authUserId: data.user.id, email: input.loginEmail, fullName: employee.fullName, phone: employee.phone, isActive: true },
+            where: { id: profile.user.id },
+            data: { authUserId: data.user.id, email: input.loginEmail, fullName: profile.fullName, phone: profile.phone, isActive: true },
           })
         : await tx.user.create({
-            data: { authUserId: data.user.id, email: input.loginEmail, fullName: employee.fullName, phone: employee.phone, isActive: true },
+            data: { authUserId: data.user.id, email: input.loginEmail, fullName: profile.fullName, phone: profile.phone, isActive: true },
           });
-      if (!employee.userId) await tx.hrEmployee.update({ where: { id: employee.id }, data: { userId: user.id } });
-      const protectedRoles = employee.user?.roles.map(({ role }) => role).filter((role) => isProtectedTeamRole(role.code)) ?? [];
+      if (!profile.userId) await linkProfileToUser(tx, profile.profileType, profile.id, user.id);
+      const protectedRoles = profile.user?.roles.map(({ role }) => role).filter((role) => isProtectedTeamRole(role.code)) ?? [];
       const effectiveRoles = uniqueRoles([...protectedRoles, ...roles]);
       await tx.userRole.deleteMany({ where: { userId: user.id } });
       await tx.userRole.createMany({ data: effectiveRoles.map((role) => ({ userId: user.id, roleId: role.id })) });
       const teacherLink = await syncTeacherAccountLinkForAction(tx, {
-        teacherId: employee.teacherId,
+        teacherId: profile.teacherId,
         userId: user.id,
         hasTeacherRole: effectiveRoles.some((role) => role.code === AppRole.TEACHER),
       });
@@ -79,13 +94,13 @@ async function createAccount(formData: FormData) {
         actorUserId: actor.id,
         action: "auth.account.create",
         entityType: "auth_account",
-        entityId: employee.id,
-        after: { userId: user.id, employeeId: employee.id, loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name), status: "ACTIVE", teacherLink },
-        reason: "Əməkdaş üçün ERP giriş hesabı təhlükəsizlik panelindən yaradıldı",
+        entityId: profile.id,
+        after: profileAuditDetails(profile, { userId: user.id, loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name), status: "ACTIVE", teacherLink }),
+        reason: `${profileLabel(profile.profileType)} üçün ERP giriş hesabı təhlükəsizlik panelindən yaradıldı`,
       });
       return user.id;
     });
-    revalidateSecurity(employee.id);
+    revalidateSecurity(profile);
     return { userId };
   } catch (databaseError) {
     await getSupabaseAdminClient().auth.admin.deleteUser(data.user.id).catch(() => undefined);
@@ -96,11 +111,11 @@ async function createAccount(formData: FormData) {
 async function updateAccount(formData: FormData) {
   const actor = await requireSuperAdmin();
   const input = accountSchema.parse(Object.fromEntries(formData));
-  const [employee, roles] = await Promise.all([
-    loadAccount(input.employeeId),
+  const [profile, roles] = await Promise.all([
+    loadAccount(input.profileType, input.profileId),
     loadAssignableRoles(input.roleIds),
   ]);
-  const user = employee.user!;
+  const user = profile.user!;
   const currentProtectedRoles = user.roles.map(({ role }) => role).filter((role) => isProtectedTeamRole(role.code));
   if (!roles.length && !currentProtectedRoles.length) {
     throw new PublicActionError("Ən az bir sistem rolu seçilməlidir");
@@ -113,7 +128,7 @@ async function updateAccount(formData: FormData) {
   const previousEmail = user.email;
   const { error } = await getSupabaseAdminClient().auth.admin.updateUserById(user.authUserId!, {
     email: input.loginEmail,
-    user_metadata: { full_name: employee.fullName, avatar_url: employee.profilePhotoUrl },
+    user_metadata: { full_name: profile.fullName, avatar_url: profile.profilePhotoUrl },
   });
   if (error) throw new PublicActionError(error.message);
   try {
@@ -123,7 +138,7 @@ async function updateAccount(formData: FormData) {
       await tx.userRole.deleteMany({ where: { userId: user.id } });
       await tx.userRole.createMany({ data: effectiveRoles.map((role) => ({ userId: user.id, roleId: role.id })) });
       const teacherLink = await syncTeacherAccountLinkForAction(tx, {
-        teacherId: employee.teacherId,
+        teacherId: profile.teacherId,
         userId: user.id,
         hasTeacherRole: effectiveRoles.some((role) => role.code === AppRole.TEACHER),
       });
@@ -131,9 +146,9 @@ async function updateAccount(formData: FormData) {
         actorUserId: actor.id,
         action: "auth.account.update",
         entityType: "auth_account",
-        entityId: employee.id,
+        entityId: profile.id,
         before: { loginEmail: previousEmail, roles: user.roles.map(({ role }) => role.name) },
-        after: { loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name), teacherLink },
+        after: profileAuditDetails(profile, { loginEmail: input.loginEmail, roles: effectiveRoles.map((role) => role.name), teacherLink }),
         reason: "Giriş e-poçtu və hesab rolları təhlükəsizlik panelindən yeniləndi",
       });
     });
@@ -141,34 +156,34 @@ async function updateAccount(formData: FormData) {
     await getSupabaseAdminClient().auth.admin.updateUserById(user.authUserId!, { email: previousEmail }).catch(() => undefined);
     throw databaseError;
   }
-  revalidateSecurity(employee.id);
+  revalidateSecurity(profile);
 }
 
 async function changePassword(formData: FormData) {
   const actor = await requireSuperAdmin();
   const input = passwordChangeSchema.parse(Object.fromEntries(formData));
-  const employee = await loadAccount(input.employeeId);
-  const { error } = await getSupabaseAdminClient().auth.admin.updateUserById(employee.user!.authUserId!, { password: input.password });
+  const profile = await loadAccount(input.profileType, input.profileId);
+  const { error } = await getSupabaseAdminClient().auth.admin.updateUserById(profile.user!.authUserId!, { password: input.password });
   if (error) throw new PublicActionError(error.message);
   await getPrisma().$transaction(async (tx) => {
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "auth.password.reset",
       entityType: "auth_account",
-      entityId: employee.id,
-      after: { userId: employee.user!.id, passwordChanged: true },
-      reason: "Əməkdaşın parolu təhlükəsizlik panelindən yeniləndi",
+      entityId: profile.id,
+      after: profileAuditDetails(profile, { userId: profile.user!.id, passwordChanged: true }),
+      reason: `${profileLabel(profile.profileType)} parolu təhlükəsizlik panelindən yeniləndi`,
     });
   });
-  await revokeTargetSessions(employee.user!.id, actor.id, actor.currentSessionId, "Parol dəyişikliyindən sonra sessiya bağlandı");
-  revalidateSecurity(employee.id);
+  await revokeTargetSessions(profile.user!.id, actor.id, actor.currentSessionId, "Parol dəyişikliyindən sonra sessiya bağlandı");
+  revalidateSecurity(profile);
 }
 
 async function setAccountStatus(formData: FormData) {
   const actor = await requireSuperAdmin();
   const input = statusSchema.parse(Object.fromEntries(formData));
-  const employee = await loadAccount(input.employeeId);
-  const user = employee.user!;
+  const profile = await loadAccount(input.profileType, input.profileId);
+  const user = profile.user!;
   if (!input.active && user.id === actor.id) throw new PublicActionError("Aktiv Super Admin öz hesabını deaktiv edə bilməz", "FORBIDDEN");
   const { error } = await getSupabaseAdminClient().auth.admin.updateUserById(user.authUserId!, {
     ban_duration: input.active ? "none" : "876000h",
@@ -180,14 +195,14 @@ async function setAccountStatus(formData: FormData) {
       actorUserId: actor.id,
       action: input.active ? "auth.account.enable" : "auth.account.disable",
       entityType: "auth_account",
-      entityId: employee.id,
+      entityId: profile.id,
       before: { status: user.isActive ? "ACTIVE" : "DISABLED" },
-      after: { status: input.active ? "ACTIVE" : "DISABLED" },
+      after: profileAuditDetails(profile, { status: input.active ? "ACTIVE" : "DISABLED" }),
       reason: input.active ? "ERP giriş hesabı aktiv edildi" : "ERP giriş hesabı deaktiv edildi",
     });
   });
   if (!input.active) await revokeTargetSessions(user.id, actor.id, actor.currentSessionId, "Hesab deaktiv edildiyi üçün sessiya bağlandı");
-  revalidateSecurity(employee.id);
+  revalidateSecurity(profile);
 }
 
 export const createSecurityAccountAction = safeServerAction(createAccount, "Giriş hesabı yaradıla bilmədi.");
@@ -209,14 +224,81 @@ async function loadAssignableRoles(roleIds: string[]) {
   return roles;
 }
 
-async function loadAccount(employeeId: string) {
-  const employee = await getPrisma().hrEmployee.findUnique({
-    where: { id: employeeId },
-    include: { user: { include: { roles: { include: { role: true } } } } },
+async function loadProfile(profileType: AccountProfileType, profileId: string): Promise<AccountProfile> {
+  if (profileType === "EMPLOYEE") {
+    const employee = await getPrisma().hrEmployee.findUnique({
+      where: { id: profileId },
+      include: { user: { include: { roles: { include: { role: true } } } } },
+    });
+    if (!employee) throw new PublicActionError("Əməkdaş tapılmadı", "NOT_FOUND");
+    return {
+      id: employee.id,
+      profileType,
+      userId: employee.userId,
+      teacherId: employee.teacherId,
+      companyId: null,
+      companyName: null,
+      fullName: employee.fullName,
+      phone: employee.phone,
+      profilePhotoUrl: employee.profilePhotoUrl,
+      user: employee.user,
+    };
+  }
+
+  const contact = await getPrisma().hrCorporateContact.findUnique({
+    where: { id: profileId },
+    include: {
+      customer: { select: { id: true, name: true } },
+      user: { include: { roles: { include: { role: true } } } },
+    },
   });
-  if (!employee) throw new PublicActionError("Əməkdaş tapılmadı", "NOT_FOUND");
-  if (!employee.user?.authUserId) throw new PublicActionError("Əməkdaşın giriş hesabı yaradılmayıb", "NOT_FOUND");
-  return employee;
+  if (!contact) throw new PublicActionError("Əlaqəli şəxs tapılmadı", "NOT_FOUND");
+  return {
+    id: contact.id,
+    profileType,
+    userId: contact.userId,
+    teacherId: null,
+    companyId: contact.customer.id,
+    companyName: contact.customer.name,
+    fullName: contact.fullName,
+    phone: contact.phone,
+    profilePhotoUrl: null,
+    user: contact.user,
+  };
+}
+
+async function loadAccount(profileType: AccountProfileType, profileId: string) {
+  const profile = await loadProfile(profileType, profileId);
+  if (!profile.user?.authUserId) throw new PublicActionError("Profilin giriş hesabı yaradılmayıb", "NOT_FOUND");
+  return profile;
+}
+
+async function linkProfileToUser(
+  tx: Prisma.TransactionClient,
+  profileType: AccountProfileType,
+  profileId: string,
+  userId: string,
+) {
+  if (profileType === "EMPLOYEE") {
+    await tx.hrEmployee.update({ where: { id: profileId }, data: { userId } });
+    return;
+  }
+  await tx.hrCorporateContact.update({ where: { id: profileId }, data: { userId } });
+}
+
+function profileAuditDetails(profile: AccountProfile, details: Record<string, unknown>) {
+  return {
+    profileType: profile.profileType,
+    employeeId: profile.profileType === "EMPLOYEE" ? profile.id : null,
+    corporateContactId: profile.profileType === "CORPORATE_CONTACT" ? profile.id : null,
+    companyId: profile.companyId,
+    companyName: profile.companyName,
+    ...details,
+  };
+}
+
+function profileLabel(profileType: AccountProfileType) {
+  return profileType === "EMPLOYEE" ? "Əməkdaş" : "Korporativ əlaqəli şəxs";
 }
 
 function passwordSchema() {
@@ -266,11 +348,11 @@ async function revokeTargetSessions(userId: string, actorId: string, currentSess
   });
 }
 
-function revalidateSecurity(employeeId: string) {
+function revalidateSecurity(profile: AccountProfile) {
   revalidatePath("/audit");
   revalidatePath("/dashboard");
   revalidatePath("/groups");
   revalidatePath("/hr");
-  revalidatePath(`/hr/${employeeId}`);
+  if (profile.profileType === "EMPLOYEE") revalidatePath(`/hr/${profile.id}`);
   revalidatePath("/playbook");
 }

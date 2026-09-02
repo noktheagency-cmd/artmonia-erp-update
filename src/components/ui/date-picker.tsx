@@ -39,7 +39,7 @@ const monthNames = [
 export function DatePicker({
   name,
   value,
-  defaultValue = "",
+  defaultValue,
   onValueChange,
   placeholder = "DD.MM.YYYY",
   allowClear = true,
@@ -50,7 +50,9 @@ export function DatePicker({
   compact = false,
 }: DatePickerProps) {
   const isControlled = value !== undefined;
-  const [internalValue, setInternalValue] = useState(defaultValue);
+  const [internalValue, setInternalValue] = useState(
+    () => defaultValue ?? currentBakuDateValue(),
+  );
   const selectedValue = isControlled ? value : internalValue;
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(() => parsePickerDate(selectedValue) ?? new Date());
@@ -339,6 +341,18 @@ function toPickerDate(date: Date) {
   const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+export function currentBakuDateValue(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Baku",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = new Map(parts.map((part) => [part.type, part.value]));
+
+  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
 }
 
 function formatPickerDisplay(value: string) {

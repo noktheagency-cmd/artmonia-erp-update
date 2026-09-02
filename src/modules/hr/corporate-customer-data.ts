@@ -1,6 +1,6 @@
 import "server-only";
 
-import { HrCorporateCustomerStatus } from "@/generated/prisma/client";
+import { AppRole, HrCorporateCustomerStatus } from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 
@@ -13,6 +13,10 @@ export type CorporateContactRow = {
   phone: string;
   email: string;
   isPrimary: boolean;
+  userId: string | null;
+  loginEmail: string | null;
+  accountStatus: "ACTIVE" | "DISABLED" | "NOT_CREATED";
+  roles: Array<{ id: string; name: string; code: string | null }>;
 };
 
 export type CorporateCustomerRow = {
@@ -30,6 +34,7 @@ export type CorporateCustomerRow = {
 
 export type CorporateCustomerData = {
   customers: CorporateCustomerRow[];
+  accountRoleOptions: Array<{ id: string; name: string; code: string | null }>;
   stats: {
     activeCustomers: number;
     monthlyBudget: number;
@@ -42,6 +47,7 @@ export type CorporateCustomerData = {
     canRead: boolean;
     canManage: boolean;
     canExport: boolean;
+    canManageAccounts: boolean;
   };
 };
 
@@ -55,7 +61,8 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
   }
 
   const prisma = getPrisma();
-  const [customerRows, totals, activeCustomers, contactCount] = await Promise.all([
+  const canManageAccounts = actor.roles.includes(AppRole.SUPER_ADMIN) && actor.permissions.has("auth.user.manage");
+  const [customerRows, totals, activeCustomers, contactCount, accountRoleOptions] = await Promise.all([
     prisma.hrCorporateCustomer.findMany({
       select: {
         id: true,
@@ -75,6 +82,15 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
             phone: true,
             email: true,
             isPrimary: true,
+            user: {
+              select: {
+                id: true,
+                email: true,
+                authUserId: true,
+                isActive: true,
+                roles: { select: { role: { select: { id: true, name: true, code: true } } } },
+              },
+            },
           },
           orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
           take: 20,
@@ -91,6 +107,14 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
       where: { status: HrCorporateCustomerStatus.ACTIVE },
     }),
     prisma.hrCorporateContact.count(),
+    canManageAccounts
+      ? prisma.role.findMany({
+          where: { OR: [{ code: null }, { code: { notIn: [AppRole.SUPER_ADMIN, AppRole.ADMIN] } }] },
+          select: { id: true, name: true, code: true },
+          orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+          take: 100,
+        })
+      : Promise.resolve([]),
   ]);
 
   const isTruncated = customerRows.length > MAX_CUSTOMERS;
@@ -110,12 +134,21 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
       phone: contact.phone ?? "",
       email: contact.email ?? "",
       isPrimary: contact.isPrimary,
+      userId: contact.user?.id ?? null,
+      loginEmail: contact.user?.email ?? null,
+      accountStatus: !contact.user?.authUserId
+        ? "NOT_CREATED" as const
+        : contact.user.isActive
+          ? "ACTIVE" as const
+          : "DISABLED" as const,
+      roles: contact.user?.roles.map(({ role }) => ({ id: role.id, name: role.name, code: role.code })) ?? [],
     })),
     updatedAt: customer.updatedAt.toISOString(),
   }));
 
   return {
     customers,
+    accountRoleOptions,
     isTruncated,
     stats: {
       activeCustomers,
@@ -128,6 +161,7 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
       canRead: true,
       canManage: actor.permissions.has("hr.corporate.manage"),
       canExport: actor.permissions.has("report.export"),
+      canManageAccounts,
     },
   };
 }
@@ -135,6 +169,7 @@ export async function getCorporateCustomerData(): Promise<CorporateCustomerData>
 function emptyCorporateCustomerData(): CorporateCustomerData {
   return {
     customers: [],
+    accountRoleOptions: [],
     stats: {
       activeCustomers: 0,
       monthlyBudget: 0,
@@ -143,6 +178,6 @@ function emptyCorporateCustomerData(): CorporateCustomerData {
       totalCustomers: 0,
     },
     isTruncated: false,
-    permissions: { canRead: false, canManage: false, canExport: false },
+    permissions: { canRead: false, canManage: false, canExport: false, canManageAccounts: false },
   };
 }

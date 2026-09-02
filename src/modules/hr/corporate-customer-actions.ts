@@ -158,13 +158,22 @@ async function updateCorporateCustomerActionImpl(formData: FormData) {
       paymentDate: true,
       note: true,
       contacts: {
-        select: { id: true, fullName: true, position: true, phone: true, email: true, isPrimary: true },
+        select: { id: true, userId: true, fullName: true, position: true, phone: true, email: true, isPrimary: true },
         take: 20,
       },
     },
   });
   if (!before) throw new PublicActionError("Şirkət tapılmadı", "NOT_FOUND");
   await ensureTaxIdAvailable(input.taxId, input.id);
+  const existingContactIds = new Set(before.contacts.map((contact) => contact.id));
+  const submittedContactIds = input.contacts.flatMap((contact) => contact.id ? [contact.id] : []);
+  if (new Set(submittedContactIds).size !== submittedContactIds.length || submittedContactIds.some((id) => !existingContactIds.has(id))) {
+    throw new PublicActionError("Əlaqəli şəxs siyahısı dəyişib. Səhifəni yeniləyib təkrar yoxlayın", "CONFLICT");
+  }
+  const removedAccountContact = before.contacts.find((contact) => contact.userId && !submittedContactIds.includes(contact.id));
+  if (removedAccountContact) {
+    throw new PublicActionError("ERP hesabı olan əlaqəli şəxs silinə bilməz. Hesabı Audit və təhlükəsizlik bölməsində idarə edin", "CONFLICT");
+  }
 
   await prisma.$transaction(async (tx) => {
     const updated = await tx.hrCorporateCustomer.update({
@@ -189,17 +198,36 @@ async function updateCorporateCustomerActionImpl(formData: FormData) {
       },
     });
 
-    await tx.hrCorporateContact.deleteMany({ where: { customerId: input.id } });
-    await tx.hrCorporateContact.createMany({
-      data: input.contacts.map((contact) => ({
+    await tx.hrCorporateContact.deleteMany({
+      where: {
         customerId: input.id,
+        ...(submittedContactIds.length ? { id: { notIn: submittedContactIds } } : {}),
+      },
+    });
+    for (const contact of input.contacts) {
+      const data = {
         fullName: contact.fullName,
         position: contact.position || null,
         phone: contact.phone || null,
         email: contact.email || null,
         isPrimary: contact.isPrimary,
-      })),
-    });
+      };
+      if (contact.id) {
+        const updatedContact = await tx.hrCorporateContact.update({
+          where: { id: contact.id },
+          data,
+          select: { userId: true },
+        });
+        if (updatedContact.userId) {
+          await tx.user.update({
+            where: { id: updatedContact.userId },
+            data: { fullName: contact.fullName, phone: contact.phone || null },
+          });
+        }
+      } else {
+        await tx.hrCorporateContact.create({ data: { customerId: input.id, ...data } });
+      }
+    }
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -239,9 +267,18 @@ async function deleteCorporateCustomerActionImpl(formData: FormData) {
   const prisma = getPrisma();
   const before = await prisma.hrCorporateCustomer.findUnique({
     where: { id: parsed.data.id },
-    select: { id: true, name: true, taxId: true, _count: { select: { contacts: true } } },
+    select: {
+      id: true,
+      name: true,
+      taxId: true,
+      contacts: { where: { userId: { not: null } }, select: { id: true }, take: 1 },
+      _count: { select: { contacts: true } },
+    },
   });
   if (!before) throw new PublicActionError("Şirkət tapılmadı", "NOT_FOUND");
+  if (before.contacts.length) {
+    throw new PublicActionError("ERP hesabı olan əlaqəli şəxsi olan şirkət silinə bilməz. Hesabı Audit və təhlükəsizlik bölməsində idarə edin", "CONFLICT");
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.hrCorporateCustomer.delete({ where: { id: before.id } });
