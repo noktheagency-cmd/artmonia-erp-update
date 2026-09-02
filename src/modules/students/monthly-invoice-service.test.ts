@@ -27,6 +27,8 @@ test("prepayment anchors billing to the confirmed first lesson before activation
               id: "enrollment-1",
               firstLessonAt,
               monthlyFee: 149,
+              lessonsPerMonth: 8,
+              discountType: null,
             }],
           };
         }
@@ -44,6 +46,7 @@ test("prepayment anchors billing to the confirmed first lesson before activation
         invoiceCreate = args;
       },
     },
+    $queryRaw: async () => [],
   } as unknown as Prisma.TransactionClient;
 
   const periodMonth = await ensureStudentMonthlyInvoicesForPeriod(tx, {
@@ -85,7 +88,13 @@ test("prepayment is rejected when no first lesson has been confirmed", async () 
         code: "ART-0001",
         billingAnchorDate: null,
         originalFirstLessonAt: null,
-        enrollments: [{ id: "enrollment-1", firstLessonAt: null, monthlyFee: 149 }],
+        enrollments: [{
+          id: "enrollment-1",
+          firstLessonAt: null,
+          monthlyFee: 149,
+          lessonsPerMonth: 8,
+          discountType: null,
+        }],
       }),
     },
   } as unknown as Prisma.TransactionClient;

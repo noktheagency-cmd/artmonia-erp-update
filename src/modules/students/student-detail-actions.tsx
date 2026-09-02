@@ -687,6 +687,33 @@ export function StudentDetailActions({
                     max={120}
                   />
                 </label>
+                <label className="form-field">
+                  <span>Qiymət dəyişikliyinin tətbiqi</span>
+                  <FormSelect
+                    name="billingChangeMode"
+                    defaultValue="FROM_MONTH"
+                    options={[
+                      { value: "FROM_MONTH", label: "Seçilən aydan etibarən" },
+                      { value: "ONLY_MONTH", label: "Yalnız seçilən ay üçün" },
+                    ]}
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Qüvvəyə minən ay</span>
+                  <Input
+                    name="billingEffectiveMonth"
+                    type="month"
+                    defaultValue={student.detail.paymentDefaultMonth}
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Qiymət/dərs dəyişikliyi səbəbi</span>
+                  <Input
+                    name="billingChangeReason"
+                    maxLength={240}
+                    placeholder="Məsələn: 4 dərslik paket və ya yarımay"
+                  />
+                </label>
                 {permissions.canChangeStatus ? (
                   <label className="form-field">
                     <span>Status dəyişiklik qeydi</span>
@@ -707,7 +734,7 @@ export function StudentDetailActions({
 
             <div className="premium-edit-notice">
               <span className="sparkle">✨</span>
-              <span>Mövcud faktura və ödəniş tarixçəsi qorunur; proqram və qiymət dəyişiklikləri cari tədris planına tətbiq edilir.</span>
+              <span>Qiymət və ya dərs sayı dəyişirsə tətbiq ayını və səbəbi seçin. “Yalnız seçilən ay” yarımay və müvəqqəti güzəştlər üçündür; daimi paket dəyişiklikləri seçilən aydan etibarən tətbiq olunur.</span>
             </div>
 
             <DialogFooter>

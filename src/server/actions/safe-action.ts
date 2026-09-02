@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import type {
-  ActionErrorCode,
   ActionFailure,
   ActionResult,
 } from "@/lib/action-result";
@@ -12,16 +11,9 @@ import {
   getPublicValidationMessage,
   isUuidDatabaseError,
 } from "@/server/actions/validation-errors";
+import { PublicActionError } from "@/server/actions/public-action-error";
 
-export class PublicActionError extends Error {
-  constructor(
-    message: string,
-    readonly code: ActionErrorCode = "VALIDATION",
-  ) {
-    super(message);
-    this.name = "PublicActionError";
-  }
-}
+export { PublicActionError } from "@/server/actions/public-action-error";
 
 export function safeServerAction<Args extends unknown[], Result>(
   operation: (...args: Args) => Promise<Result>,

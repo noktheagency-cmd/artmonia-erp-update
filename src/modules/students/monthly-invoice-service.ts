@@ -8,6 +8,7 @@ import {
   billingDateForMonth,
   resolvePaymentBillingPeriod,
 } from "@/modules/students/payment-billing-period";
+import { resolveEnrollmentBillingTerms } from "@/modules/students/enrollment-billing-terms";
 
 type MissingMonthlyInvoiceRow = {
   studentId: string;
@@ -49,6 +50,8 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
           id: true,
           firstLessonAt: true,
           monthlyFee: true,
+          lessonsPerMonth: true,
+          discountType: true,
         },
       },
     },
@@ -132,7 +135,14 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
       continue;
     }
 
-    const amount = toNumber(enrollment.monthlyFee);
+    const billingTerms = await resolveEnrollmentBillingTerms(tx, {
+      enrollmentId: enrollment.id,
+      periodMonth,
+      fallbackMonthlyFee: toNumber(enrollment.monthlyFee),
+      fallbackLessonsPerMonth: enrollment.lessonsPerMonth,
+      fallbackDiscountType: enrollment.discountType,
+    });
+    const amount = billingTerms.monthlyFee;
     if (amount <= 0) continue;
 
     await tx.invoice.create({
@@ -178,7 +188,7 @@ export async function ensureMissingStudentMonthlyInvoices(
         e.student_id,
         e.start_date,
         s.billing_anchor_date as billing_anchor,
-        e.monthly_fee,
+        erp.enrollment_billing_amount(e.id, ${throughMonth}::date) as monthly_fee,
         count(*) over (partition by e.student_id) as enrollment_count
       from erp.enrollments e
       join erp.students s on s.id = e.student_id

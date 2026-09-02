@@ -41,6 +41,11 @@ import {
 } from "@/modules/students/monthly-invoice-service";
 import { parseBillingMonthInput } from "@/modules/students/payment-billing-period";
 import {
+  applyEnrollmentBillingChange,
+  enrollmentBillingChangeModeValues,
+  parseEnrollmentBillingMonth,
+} from "@/modules/students/enrollment-billing-terms";
+import {
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
   closeCompletedStudentBilling,
   getStatusChangeReason as getSharedStatusChangeReason,
@@ -189,6 +194,12 @@ const updateStudentProfileSchema = z.object({
   lessonsPerMonth: optionalInteger,
   statusEffectiveDate: optionalText(20),
   statusNote: optionalText(240),
+  billingChangeMode: z.preprocess(
+    optionalFormString,
+    z.enum(enrollmentBillingChangeModeValues).optional(),
+  ),
+  billingEffectiveMonth: optionalText(7),
+  billingChangeReason: optionalText(240),
   notes: optionalText(500),
 }).superRefine((value, context) => {
   if (!isGiftDiscount(value.discountType) && value.monthlyFee <= 0) {
@@ -817,6 +828,38 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     }
 
     const effectiveMonthlyFee = resolveStudentMonthlyFee(discountType?.value, input.monthlyFee);
+    const requestedLessonsPerMonth = input.lessonsPerMonth ?? null;
+    const requestedDiscountType = discountType?.value ?? null;
+    const billingTermsChanged =
+      toNumber(currentEnrollment.monthlyFee) !== effectiveMonthlyFee
+      || currentEnrollment.lessonsPerMonth !== requestedLessonsPerMonth
+      || currentEnrollment.discountType !== requestedDiscountType;
+    const billingChangeMode = billingTermsChanged ? input.billingChangeMode : undefined;
+    const billingEffectiveMonth = billingTermsChanged && input.billingEffectiveMonth
+      ? parseEnrollmentBillingMonth(input.billingEffectiveMonth)
+      : null;
+
+    if (billingTermsChanged && (!billingChangeMode || !billingEffectiveMonth)) {
+      throw new PublicActionError(
+        "Aylıq məbləğ və ya dərs sayı dəyişdikdə tətbiq rejimi və qüvvəyə minən ay seçilməlidir.",
+      );
+    }
+    if (billingTermsChanged && !input.billingChangeReason) {
+      throw new PublicActionError(
+        "Qiymət və dərs planı dəyişikliyinin səbəbi yazılmalıdır.",
+      );
+    }
+
+    const persistEnrollmentTerms = billingChangeMode !== "ONLY_MONTH";
+    const persistedMonthlyFee = persistEnrollmentTerms
+      ? effectiveMonthlyFee
+      : toNumber(currentEnrollment.monthlyFee);
+    const persistedLessonsPerMonth = persistEnrollmentTerms
+      ? requestedLessonsPerMonth
+      : currentEnrollment.lessonsPerMonth;
+    const persistedDiscountType = persistEnrollmentTerms
+      ? requestedDiscountType
+      : currentEnrollment.discountType;
 
     await tx.contact.update({
       where: { id: current.contact.id },
@@ -849,11 +892,30 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         programId: input.programId,
         teacherId: input.teacherId ?? null,
         firstLessonAt,
-        monthlyFee: effectiveMonthlyFee,
-        discountType: discountType?.value ?? null,
-        lessonsPerMonth: input.lessonsPerMonth ?? null,
+        monthlyFee: persistedMonthlyFee,
+        discountType: persistedDiscountType,
+        lessonsPerMonth: persistedLessonsPerMonth,
       },
     });
+
+    const billingChangeResult = billingTermsChanged && billingChangeMode && billingEffectiveMonth
+      ? await applyEnrollmentBillingChange(tx, {
+          actorUserId: actor.id,
+          studentId: current.id,
+          studentCode: current.code,
+          enrollmentId: currentEnrollment.id,
+          effectiveMonth: billingEffectiveMonth,
+          mode: billingChangeMode,
+          previousMonthlyFee: toNumber(currentEnrollment.monthlyFee),
+          previousLessonsPerMonth: currentEnrollment.lessonsPerMonth,
+          previousDiscountType: currentEnrollment.discountType,
+          monthlyFee: effectiveMonthlyFee,
+          lessonsPerMonth: requestedLessonsPerMonth,
+          discountType: requestedDiscountType,
+          reason: input.billingChangeReason ?? "Billing şərtləri yeniləndi",
+          today: startOfToday(),
+        })
+      : null;
 
     if (currentEnrollment.teacherId !== (input.teacherId ?? null)) {
       await tx.teacherAssignmentHistory.create({
@@ -992,9 +1054,18 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           ?? currentEnrollment.firstLessonAt
           ?? firstLessonAt
         )?.toISOString() ?? null,
-        monthlyFee: effectiveMonthlyFee,
-        discountType: discountType?.value ?? null,
-        lessonsPerMonth: input.lessonsPerMonth ?? null,
+        monthlyFee: persistedMonthlyFee,
+        discountType: persistedDiscountType,
+        lessonsPerMonth: persistedLessonsPerMonth,
+        billingChange: billingChangeResult
+          ? {
+              mode: billingChangeMode,
+              effectiveMonth: billingEffectiveMonth?.toISOString() ?? null,
+              requestedMonthlyFee: effectiveMonthlyFee,
+              requestedLessonsPerMonth,
+              repricedInvoiceIds: billingChangeResult.repricedInvoiceIds,
+            }
+          : null,
         notes: input.notes ?? null,
       } satisfies Prisma.InputJsonValue,
       reason: "Tələbənin profil və tədris məlumatları yeniləndi",

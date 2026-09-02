@@ -544,6 +544,7 @@ model User {
   authSessions                     AuthSessionRecord[]             @relation("AuthSessionUser")
   revokedAuthSessions              AuthSessionRecord[]             @relation("AuthSessionRevoker")
   createdStudentMobileAccounts     StudentMobileAccount[]          @relation("StudentMobileAccountCreator")
+  createdEnrollmentBillingTerms    EnrollmentBillingTerm[]         @relation("EnrollmentBillingTermCreator")
   updatedStudentMobileAccounts     StudentMobileAccount[]          @relation("StudentMobileAccountUpdater")
   createdAttendanceSites           AttendanceSite[]                @relation("AttendanceSiteCreator")
   updatedAttendanceSites           AttendanceSite[]                @relation("AttendanceSiteUpdater")
@@ -1800,6 +1801,7 @@ model Enrollment {
   teacher             Teacher?                    @relation(fields: [teacherId], references: [id])
   invoices            Invoice[]
   billingCycles       StudentBillingCycle[]
+  billingTerms        EnrollmentBillingTerm[]
   assignmentHistory   TeacherAssignmentHistory[]
   payoutLines         TeacherPayoutLine[]
   lessons             Lesson[]
@@ -1813,6 +1815,29 @@ model Enrollment {
   @@index([teacherId, status])
   @@index([programId, status])
   @@map("enrollments")
+  @@schema("erp")
+}
+
+model EnrollmentBillingTerm {
+  id              String   @id @default(uuid()) @db.Uuid
+  enrollmentId    String   @map("enrollment_id") @db.Uuid
+  effectiveMonth  DateTime @map("effective_month") @db.Date
+  mode            String   @db.VarChar(20)
+  monthlyFee      Decimal  @map("monthly_fee") @db.Decimal(12, 2)
+  lessonsPerMonth Int?     @map("lessons_per_month")
+  discountType    String?  @map("discount_type")
+  reason          String
+  createdById     String?  @map("created_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  createdBy  User?      @relation("EnrollmentBillingTermCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([enrollmentId, effectiveMonth, mode], map: "enrollment_billing_terms_period_mode_key")
+  @@index([enrollmentId, effectiveMonth(sort: Desc)], map: "enrollment_billing_terms_lookup_idx")
+  @@index([createdById], map: "enrollment_billing_terms_created_by_idx")
+  @@map("enrollment_billing_terms")
   @@schema("erp")
 }
 

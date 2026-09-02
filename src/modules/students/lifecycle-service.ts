@@ -6,6 +6,7 @@ import {
 } from "@/generated/prisma/client";
 import { toNumber } from "@/modules/shared/format";
 import { billingDateForMonth } from "@/modules/students/payment-billing-period";
+import { resolveEnrollmentBillingTerms } from "@/modules/students/enrollment-billing-terms";
 
 export function isBillingPausedStatus(status: StudentLifecycleStatus) {
   switch (status) {
@@ -152,6 +153,8 @@ export async function syncActivationBilling(
       startDate: true,
       firstLessonAt: true,
       monthlyFee: true,
+      lessonsPerMonth: true,
+      discountType: true,
       student: {
         select: {
           originalFirstLessonAt: true,
@@ -246,7 +249,14 @@ export async function syncActivationBilling(
     };
   }
 
-  const amount = toNumber(enrollment.monthlyFee);
+  const billingTerms = await resolveEnrollmentBillingTerms(tx, {
+    enrollmentId: enrollment.id,
+    periodMonth,
+    fallbackMonthlyFee: toNumber(enrollment.monthlyFee),
+    fallbackLessonsPerMonth: enrollment.lessonsPerMonth,
+    fallbackDiscountType: enrollment.discountType,
+  });
+  const amount = billingTerms.monthlyFee;
 
   await tx.invoice.create({
     data: {
