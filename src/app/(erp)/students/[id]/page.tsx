@@ -99,8 +99,14 @@ export default async function StudentDetailPage({
         </div>
         <div className="student-profile-quick-item is-balance">
           <Banknote />
-          <span><small>Açıq balans</small><strong>{student.balance}</strong></span>
+          <span><small>Cari borc</small><strong>{student.dueDebt}</strong></span>
         </div>
+        {student.hasFutureReceivable ? (
+          <div className="student-profile-quick-item is-future-balance">
+            <CalendarDays />
+            <span><small>Gələcək ödəniş · {student.dueDate}</small><strong>{student.futureReceivable}</strong></span>
+          </div>
+        ) : null}
       </div>
 
       <StudentMobileAccountCard
@@ -227,12 +233,18 @@ export default async function StudentDetailPage({
               <strong>{student.clv.creditBalance}</strong>
             </div>
           )}
-          {student.paymentTone !== "success" && (
+          {student.hasDueDebt ? (
             <div className="is-debt">
               <span>Qalan borc</span>
-              <strong>{student.balance}</strong>
+              <strong>{student.dueDebt}</strong>
             </div>
-          )}
+          ) : null}
+          {student.hasFutureReceivable ? (
+            <div className="is-future">
+              <span>Gələcək ödəniş · {student.dueDate}</span>
+              <strong>{student.futureReceivable}</strong>
+            </div>
+          ) : null}
         </div>
         <div className="student-clv-history">
           <div className="student-clv-history-head">

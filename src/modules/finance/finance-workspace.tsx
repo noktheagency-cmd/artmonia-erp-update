@@ -1095,7 +1095,6 @@ function ExpenseDialog({
                 <span>Tarix</span>
                 <DatePicker
                   name="expenseDate"
-                  defaultValue={data.filters.to}
                   allowClear={false}
                   popoverPlacement="floating"
                   required
@@ -2209,7 +2208,7 @@ function DebtLedger({ data }: { data: FinanceData }) {
     { key: "masterclass", label: "Masterclass alacaqları", value: data.receivableSummary.masterclass, tone: "violet" },
   ];
   const debtors = data.debtors.filter((debt) => {
-    if (filter === "student") return debt.sourceKind === "STUDENT";
+    if (filter === "student") return debt.sourceKind === "STUDENT" && debt.receivableState !== "FUTURE";
     if (filter === "overdue") return debt.sourceKind === "STUDENT" && debt.receivableState === "OVERDUE";
     if (filter === "future") return debt.sourceKind === "STUDENT" && debt.receivableState === "FUTURE" && debt.isInSelectedPeriod;
     if (filter === "workshop") return debt.sourceKind === "WORKSHOP";

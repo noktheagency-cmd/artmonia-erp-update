@@ -16,6 +16,16 @@ test("Jasmin: first lesson 18 August and payment 22 August gives 18 September", 
   );
 });
 
+test("Həcər: a fully paid August period still schedules 28 September", () => {
+  assert.equal(
+    resolveNextPaymentAt({
+      billingAnchorDate: utcDate("2026-08-28"),
+      paymentMonth: utcDate("2026-08-01"),
+    })?.toISOString().slice(0, 10),
+    "2026-09-28",
+  );
+});
+
 test("Fatimə: payment cycle stays on the confirmed first lesson day", () => {
   assert.equal(
     resolveNextPaymentDateInput({ billingAnchorDate: "2026-07-22", paidAt: "2026-08-25" }),

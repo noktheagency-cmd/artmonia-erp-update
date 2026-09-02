@@ -511,8 +511,12 @@ function StudentDataTable({
               <strong>{metrics.totalPaid}</strong>
             </div>
             <div className="students-list-metric is-expected">
-              <span>Qalıq məbləğ</span>
+              <span>Cari borc</span>
               <strong>{metrics.expectedPayment}</strong>
+            </div>
+            <div className="students-list-metric is-future">
+              <span>Gələcək ödəniş</span>
+              <strong>{metrics.futurePayment}</strong>
             </div>
             <div className="students-list-metric is-overdue">
               <span>Gecikən ödəniş</span>
@@ -570,7 +574,9 @@ function StudentDataTable({
                       <small data-debt={hasDebt}>
                         {student.paymentTone === "success"
                           ? `Ödənən: ${student.paidThisMonth}`
-                          : student.balance}
+                          : student.hasDueDebt
+                            ? `Borc: ${student.dueDebt}`
+                            : `Gələcək: ${student.futureReceivable}`}
                       </small>
                     </div>
                   </TableCell>

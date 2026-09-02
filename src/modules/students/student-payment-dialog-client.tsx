@@ -121,7 +121,14 @@ export function StudentPaymentDialogClient({
             <div className="student-payment-summary" aria-label="Seçilmiş tələbə məlumatları">
               <span><UserRound />{selectedStudent.code}</span>
               <span><ReceiptText />{selectedStudent.program}</span>
-              <strong><CreditCard />{selectedStudent.balance}</strong>
+              <strong>
+                <CreditCard />
+                {selectedStudent.hasDueDebt
+                  ? `Cari borc: ${selectedStudent.dueDebt}`
+                  : selectedStudent.hasFutureReceivable
+                    ? `Gələcək: ${selectedStudent.futureReceivable}`
+                    : "Borc yoxdur"}
+              </strong>
             </div>
 
             <PaymentScheduleFields

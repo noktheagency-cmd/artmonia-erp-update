@@ -20,6 +20,17 @@ test("does not mark a student as debtor before the next payment date", () => {
   );
 });
 
+test("Aliyə: a 79 AZN September receivable is upcoming, not current debt", () => {
+  const today = utcDate("2026-09-02");
+  const nextPaymentAt = utcDate("2026-09-30");
+
+  assert.equal(isStudentDebtDue({ balance: 79, nextPaymentAt, today }), false);
+  assert.deepEqual(
+    resolveStudentPaymentStatus({ balance: 79, nextPaymentAt, today }),
+    { code: "UPCOMING", label: "Gələcək ödəniş", tone: "neutral" },
+  );
+});
+
 test("marks a student as debtor when the next payment date is today", () => {
   const today = utcDate("2026-08-15");
 

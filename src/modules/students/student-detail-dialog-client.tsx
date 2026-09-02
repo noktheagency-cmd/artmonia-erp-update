@@ -98,8 +98,14 @@ export function StudentDetailDialogClient({
           </div>
           <div>
             <Banknote />
-            <span>{student.balance}</span>
+            <span>Cari borc: {student.dueDebt}</span>
           </div>
+          {student.hasFutureReceivable ? (
+            <div>
+              <CalendarDays />
+              <span>Gələcək: {student.futureReceivable} · {student.dueDate}</span>
+            </div>
+          ) : null}
         </div>
 
         <section className="student-detail-section student-slot-section">

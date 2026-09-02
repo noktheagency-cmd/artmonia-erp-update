@@ -300,13 +300,14 @@ button.students-kpi { cursor: pointer; }
 .students-table-heading h2 { margin: 0; color: var(--students-ink); font-size: 15px; font-weight: 620 !important; letter-spacing: -0.018em !important; }
 .students-table-heading p { margin: 4px 0 0; color: var(--students-muted); font-size: 9.5px; }
 .students-table-heading .ui-button { min-height: 34px; border-radius: 10px; }
-.students-list-metrics { display: grid; grid-template-columns: repeat(3, minmax(126px, 1fr)); gap: 8px; width: 100%; }
+.students-list-metrics { display: grid; grid-template-columns: repeat(4, minmax(126px, 1fr)); gap: 8px; width: 100%; }
 .students-list-metric { position: relative; display: grid; gap: 3px; min-width: 0; padding: 8px 12px 8px 15px; overflow: hidden; background: linear-gradient(135deg, #f8faff, #eef3fb); border: 1px solid #dce5f6; border-radius: 11px; }
 .students-list-metric::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--metric-accent); content: ""; }
 .students-list-metric span { color: var(--students-muted); font-size: 8px; font-weight: 650; line-height: 1.2; letter-spacing: .035em; text-transform: uppercase; white-space: nowrap; }
 .students-list-metric strong { overflow: hidden; color: var(--students-ink); font-size: 13px; font-weight: 700; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
 .students-list-metric.is-clv { --metric-accent: var(--students-blue); }
 .students-list-metric.is-expected { --metric-accent: var(--students-amber); }
+.students-list-metric.is-future { --metric-accent: var(--students-blue); background: linear-gradient(135deg, #f7faff, #eef5ff); border-color: #d5e4fb; }
 .students-list-metric.is-overdue { --metric-accent: var(--students-coral); background: linear-gradient(135deg, #fff9fa, #fff0f2); border-color: #f4dbe0; }
 
 .students-table-panel .ui-table-container { width: 100%; overflow-x: auto; }
@@ -819,7 +820,7 @@ button.students-kpi { cursor: pointer; }
 }
 
 .student-detail-modern-page .student-profile-quick-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
   margin: 0;
 }
@@ -846,6 +847,8 @@ button.students-kpi { cursor: pointer; }
 .student-detail-modern-page .student-profile-quick-item strong { overflow: hidden; color: #263149; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .student-detail-modern-page .student-profile-quick-item.is-balance { background: linear-gradient(135deg, #fff8f8, #fff1f2); border-color: #f6d9de; }
 .student-detail-modern-page .student-profile-quick-item.is-balance > svg { color: #d75368; background: #ffe5e9; }
+.student-detail-modern-page .student-profile-quick-item.is-future-balance { background: linear-gradient(135deg, #f7faff, #eef5ff); border-color: #d5e4fb; }
+.student-detail-modern-page .student-profile-quick-item.is-future-balance > svg { color: #3573cf; background: #e1edff; }
 
 .student-detail-modern-page .student-clv-profile {
   padding: 20px;

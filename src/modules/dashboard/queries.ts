@@ -330,7 +330,9 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         join erp.students s on s.id = i.student_id
         where i.balance_due > 0
           and i.status <> 'VOID'::"erp"."InvoiceStatus"
+          and i.due_date <= ${cachedToday}::date
           and s.is_test_data = false
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "debtAmount",
       coalesce((
         select count(distinct i.student_id)::int
@@ -338,7 +340,9 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         join erp.students s on s.id = i.student_id
         where i.balance_due > 0
           and i.status <> 'VOID'::"erp"."InvoiceStatus"
+          and i.due_date <= ${cachedToday}::date
           and s.is_test_data = false
+          and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "debtStudentCount",
       coalesce((
         select jsonb_agg(
@@ -470,7 +474,9 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             join erp.students s on s.id = i.student_id
             where i.balance_due > 0
               and i.status <> 'VOID'::"erp"."InvoiceStatus"
+              and i.due_date <= ${cachedToday}::date
               and s.is_test_data = false
+              and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           ) open_invoice
           where open_invoice.age_days >= bucket.min_days
             and (
