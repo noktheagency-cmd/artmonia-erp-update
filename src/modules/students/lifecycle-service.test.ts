@@ -233,7 +233,7 @@ test("reactivation on the anchor day keeps the current billing month", () => {
   assert.equal(period.toISOString().slice(0, 10), "2026-08-01");
 });
 
-test("initial activation always uses the current billing month", () => {
+test("initial activation does not backfill months before activation", () => {
   const period = resolveActivationBillingPeriod({
     effectiveAt: utcDate("2026-08-23"),
     billingAnchorDate: utcDate("2026-06-02"),
@@ -241,4 +241,24 @@ test("initial activation always uses the current billing month", () => {
   });
 
   assert.equal(period.toISOString().slice(0, 10), "2026-08-01");
+});
+
+test("initial activation cannot invoice a month before the first lesson anchor", () => {
+  const period = resolveActivationBillingPeriod({
+    effectiveAt: utcDate("2026-08-29"),
+    billingAnchorDate: utcDate("2026-09-05"),
+    isReactivation: false,
+  });
+
+  assert.equal(period.toISOString().slice(0, 10), "2026-09-01");
+});
+
+test("reactivation before a future anchor month cannot invoice the earlier month", () => {
+  const period = resolveActivationBillingPeriod({
+    effectiveAt: utcDate("2026-08-29"),
+    billingAnchorDate: utcDate("2026-09-14"),
+    isReactivation: true,
+  });
+
+  assert.equal(period.toISOString().slice(0, 10), "2026-09-01");
 });

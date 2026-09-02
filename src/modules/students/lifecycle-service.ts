@@ -316,14 +316,18 @@ export function resolveActivationBillingPeriod({
   isReactivation: boolean;
 }) {
   const currentMonth = startOfMonth(effectiveAt);
-  if (!isReactivation) return currentMonth;
+  const anchorMonth = startOfMonth(billingAnchorDate);
+  const firstEligibleMonth = anchorMonth > currentMonth
+    ? anchorMonth
+    : currentMonth;
+  if (!isReactivation) return firstEligibleMonth;
 
-  const currentDueDate = billingDateForMonth(currentMonth, billingAnchorDate);
-  if (effectiveAt.getTime() <= currentDueDate.getTime()) return currentMonth;
+  const currentDueDate = billingDateForMonth(firstEligibleMonth, billingAnchorDate);
+  if (effectiveAt.getTime() <= currentDueDate.getTime()) return firstEligibleMonth;
 
   return new Date(Date.UTC(
-    currentMonth.getUTCFullYear(),
-    currentMonth.getUTCMonth() + 1,
+    firstEligibleMonth.getUTCFullYear(),
+    firstEligibleMonth.getUTCMonth() + 1,
     1,
   ));
 }
