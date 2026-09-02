@@ -234,7 +234,9 @@
 
 .instagram-dm-workspace {
   display: grid;
+  height: clamp(520px, calc(100dvh - 390px), 720px);
   min-height: 520px;
+  max-height: 720px;
   flex: 1;
   grid-template-columns: minmax(280px, 0.82fr) minmax(390px, 1.6fr) minmax(230px, 0.72fr);
   overflow: hidden;
@@ -312,6 +314,7 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 7px;
   scrollbar-color: #c5ccd7 transparent;
   scrollbar-width: thin;
@@ -523,6 +526,7 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px 17px 18px;
   background: linear-gradient(180deg, #fff 0%, #fdfdfd 100%);
   scrollbar-color: #c5ccd7 transparent;
@@ -790,6 +794,8 @@
   }
 
   .instagram-dm-workspace {
+    height: auto;
+    max-height: none;
     grid-template-columns: 1fr;
     overflow: visible;
   }
