@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { MarketingCampaignStatus, Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv, requireEnv } from "@/server/env";
+import { isInvalidMetaAppSecretProof } from "@/modules/meta/appsecret-proof";
 
 const META_GRAPH_HOST = "graph.facebook.com";
 const META_PAGE_LIMIT = 500;
@@ -554,15 +555,19 @@ async function metaGetAll<T>(path: string, params: Record<string, string>): Prom
 async function metaRequest<T>(url: URL): Promise<MetaPage<T>> {
   const env = getEnv();
   const accessToken = requireEnv("META_ACCESS_TOKEN");
-  if (env.META_APP_SECRET && !url.searchParams.has("appsecret_proof")) {
-    url.searchParams.set("appsecret_proof", createHmac("sha256", env.META_APP_SECRET).update(accessToken).digest("hex"));
+  const requestUrl = new URL(url);
+  const attachedAppSecretProof = Boolean(env.META_APP_SECRET && !requestUrl.searchParams.has("appsecret_proof"));
+  if (attachedAppSecretProof && env.META_APP_SECRET) {
+    requestUrl.searchParams.set("appsecret_proof", createHmac("sha256", env.META_APP_SECRET).update(accessToken).digest("hex"));
   }
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
-  const payload = await response.json().catch(() => ({})) as MetaPage<T>;
+
+  let { response, payload } = await fetchMetaPage<T>(requestUrl, accessToken);
+  if (attachedAppSecretProof && isInvalidMetaAppSecretProof(payload.error)) {
+    const retryUrl = new URL(requestUrl);
+    retryUrl.searchParams.delete("appsecret_proof");
+    ({ response, payload } = await fetchMetaPage<T>(retryUrl, accessToken));
+  }
+
   if (!response.ok || payload.error) {
     throw new MetaAdsApiError(
       payload.error?.code ?? null,
@@ -573,6 +578,16 @@ async function metaRequest<T>(url: URL): Promise<MetaPage<T>> {
     );
   }
   return payload;
+}
+
+async function fetchMetaPage<T>(url: URL, accessToken: string) {
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+  const payload = await response.json().catch(() => ({})) as MetaPage<T>;
+  return { response, payload };
 }
 
 function buildMetaUrl(path: string, params: Record<string, string>) {

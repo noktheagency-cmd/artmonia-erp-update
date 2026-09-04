@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { ingestInstagramDmWebhook } from "@/modules/instagram-dm/ingestion";
 import { parseMetaInstagramWebhook } from "@/modules/instagram-dm/webhook-payload";
 import { getEnv, requireEnv } from "@/server/env";
+import { isInvalidMetaAppSecretProof } from "@/modules/meta/appsecret-proof";
 
 const META_INSTAGRAM_HOST = "graph.instagram.com";
 const META_PAGE_LIMIT = 100;
@@ -146,13 +147,31 @@ async function fetchConversationMessages(conversationId: string, accessToken: st
 
 async function metaRequest<T>(url: URL, accessToken: string): Promise<T> {
   const env = getEnv();
-  if (env.META_APP_SECRET && !url.searchParams.has("appsecret_proof")) {
-    url.searchParams.set(
+  const requestUrl = new URL(url);
+  const attachedAppSecretProof = Boolean(env.META_APP_SECRET && !requestUrl.searchParams.has("appsecret_proof"));
+  if (attachedAppSecretProof && env.META_APP_SECRET) {
+    requestUrl.searchParams.set(
       "appsecret_proof",
       createHmac("sha256", env.META_APP_SECRET).update(accessToken).digest("hex"),
     );
   }
 
+  let { response, payload } = await fetchInstagramPage<T>(requestUrl, accessToken);
+  if (attachedAppSecretProof && isInvalidMetaAppSecretProof(payload.error)) {
+    const retryUrl = new URL(requestUrl);
+    retryUrl.searchParams.delete("appsecret_proof");
+    ({ response, payload } = await fetchInstagramPage<T>(retryUrl, accessToken));
+  }
+
+  if (!response.ok || payload.error) {
+    const code = payload.error?.code ? ` (${payload.error.code})` : "";
+    throw new Error(`Instagram Conversations API sorğusu uğursuz oldu${code}.`);
+  }
+
+  return payload;
+}
+
+async function fetchInstagramPage<T>(url: URL, accessToken: string) {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     cache: "no-store",
@@ -161,13 +180,7 @@ async function metaRequest<T>(url: URL, accessToken: string): Promise<T> {
   const payload = await response.json().catch(() => ({})) as T & {
     error?: { message?: string; code?: number; error_subcode?: number };
   };
-
-  if (!response.ok || payload.error) {
-    const code = payload.error?.code ? ` (${payload.error.code})` : "";
-    throw new Error(`Instagram Conversations API sorğusu uğursuz oldu${code}.`);
-  }
-
-  return payload;
+  return { response, payload };
 }
 
 function buildMetaUrl(path: string, params: Record<string, string>) {
