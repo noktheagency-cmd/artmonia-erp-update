@@ -18,6 +18,8 @@ const LEAD_ACTION_TYPES = [
   "onsite_conversion.lead_grouped",
   "onsite_conversion.lead",
   "offsite_conversion.fb_pixel_lead",
+  "onsite_conversion.messaging_conversation_started_7d",
+  "messaging_conversation_started_7d",
 ] as const;
 
 type MetaAction = { action_type?: string; value?: string };

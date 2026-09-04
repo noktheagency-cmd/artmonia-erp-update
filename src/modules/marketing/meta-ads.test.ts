@@ -12,6 +12,7 @@ test("Meta lead action prioritet sırası ilə oxunur", () => {
 
 test("alternativ lead action və boş nəticə təhlükəsiz hesablanır", () => {
   assert.equal(metaLeadActionValue([{ action_type: "onsite_conversion.lead_grouped", value: "7" }]), 7);
+  assert.equal(metaLeadActionValue([{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "18" }]), 18);
   assert.equal(metaLeadActionValue([{ action_type: "link_click", value: "40" }]), 0);
   assert.equal(metaLeadActionValue(undefined), 0);
 });
