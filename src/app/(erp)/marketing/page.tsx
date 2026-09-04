@@ -51,7 +51,7 @@ export default async function MarketingPage({
   }
 
   if (filters.view === "dm") {
-    return <InstagramDmAnalytics data={await getInstagramDmAnalyticsData()} />;
+    return <InstagramDmAnalytics data={await getInstagramDmAnalyticsData({ from: filters.from, to: filters.to })} />;
   }
 
   if (filters.view === "results") {

@@ -75,8 +75,8 @@ function moduleHrefForRange(
     params.set("date", from);
   } else if (pathname === "/marketing" && ["content", "strategy"].includes(params.get("view") ?? "")) {
     params.set("month", from.slice(0, 7));
-    params.delete("from");
-    params.delete("to");
+    params.set("from", from);
+    params.set("to", to);
   } else if (supportsGlobalRange(pathname)) {
     params.set("from", from);
     params.set("to", to);

@@ -1,8 +1,8 @@
 import { Prisma } from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
-import { getEnv } from "@/server/env";
 import { hasMetaAdsConfig } from "@/modules/marketing/meta-ads";
+import { resolveMarketingDateRange } from "@/modules/marketing/date-range";
 
 export type MarketingDashboardData = {
   period: { from: string; to: string; defaultFrom: string; defaultTo: string };
@@ -55,18 +55,7 @@ type CampaignRow = MarketingDashboardData["campaigns"][number];
 
 export async function getMarketingDashboardData(filters?: { from?: string; to?: string }): Promise<MarketingDashboardData> {
   const actor = await requireErpActor("marketing.read");
-  const env = getEnv();
-  const defaultTo = bakuDateKey(new Date());
-  const defaultFrom = subtractMonths(defaultTo, Math.min(env.META_SYNC_MONTHS, 6));
-  const requestedFrom = validDateKey(filters?.from) ? filters.from : defaultFrom;
-  const requestedTo = validDateKey(filters?.to) ? filters.to : defaultTo;
-  const from = requestedFrom <= requestedTo ? requestedFrom : requestedTo;
-  const to = requestedFrom <= requestedTo ? requestedTo : requestedFrom;
-  const rangeStart = new Date(`${from}T00:00:00.000Z`);
-  const rangeEndExclusive = new Date(`${to}T00:00:00.000Z`);
-  rangeEndExclusive.setUTCDate(rangeEndExclusive.getUTCDate() + 1);
-  const businessStart = new Date(rangeStart.getTime() - 4 * 60 * 60 * 1000);
-  const businessEnd = new Date(rangeEndExclusive.getTime() - 4 * 60 * 60 * 1000);
+  const { from, to, defaultFrom, defaultTo, rangeStart, rangeEndExclusive, businessStart, businessEnd } = resolveMarketingDateRange(filters);
   const prisma = getPrisma();
 
   const [totalsRows, trendRows, campaigns] = await Promise.all([
@@ -213,24 +202,6 @@ export async function getMarketingDashboardData(filters?: { from?: string; to?: 
     trend: trendRows.map((item) => ({ ...item, label: monthLabel(item.month) })),
     campaigns,
   };
-}
-
-function validDateKey(value?: string): value is string {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function subtractMonths(value: string, months: number) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - months, 1));
-  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-  target.setUTCDate(Math.min(date.getUTCDate(), lastDay));
-  return target.toISOString().slice(0, 10);
-}
-
-function bakuDateKey(value: Date) {
-  return new Date(value.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 function monthLabel(value: string) {

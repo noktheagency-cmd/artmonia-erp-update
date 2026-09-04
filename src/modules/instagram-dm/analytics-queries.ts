@@ -9,18 +9,18 @@ import {
   type AiAnalysis,
   type ConversationClassification,
 } from "@/modules/instagram-dm/analytics-ai";
+import { resolveMarketingDateRange } from "@/modules/marketing/date-range";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
 
-const ANALYSIS_DAYS = 90;
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const AI_BATCH_SIZE = 25;
-const ANALYSIS_VERSION = "dm-ai-v5";
+const ANALYSIS_VERSION = "dm-ai-v6-date-range";
 
 export type InstagramDmAnalyticsData = {
   account: { connected: boolean; username: string; lastWebhookAt: string };
-  periodDays: number;
+  period: { from: string; to: string; days: number };
   summary: {
     conversations: number;
     participants: number;
@@ -44,9 +44,10 @@ type ResponseSummaryRow = {
   medianFirstResponseMinutes: number | null;
 };
 type PeakHourRow = { hour: number };
+type CountRow = { count: number };
+type ConversationIdRow = { id: string };
 type AnalysisConversation = {
   id: string;
-  lastMessageAt: Date;
   messages: Array<{
     id: string;
     direction: "INBOUND" | "OUTBOUND";
@@ -59,26 +60,42 @@ type AnalysisConversation = {
 const analysisCache = new Map<string, { expiresAt: number; value: AiAnalysis }>();
 const analysisInFlight = new Map<string, Promise<AiAnalysis>>();
 
-export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalyticsData> {
+export async function getInstagramDmAnalyticsData(
+  filters?: { from?: string; to?: string },
+): Promise<InstagramDmAnalyticsData> {
   await requireErpActor("marketing.read");
-  const since = new Date(Date.now() - ANALYSIS_DAYS * 24 * 60 * 60 * 1000);
+  const { from, to, days, businessStart, businessEnd } = resolveMarketingDateRange(filters);
   const prisma = getPrisma();
   const env = getEnv();
-  const [accounts, conversationCount, participantCount, messageCount, responseRows, peakRows, conversations] = await Promise.all([
+  const [accounts, conversationRows, participantRows, messageCount, responseRows, peakRows, conversationIdRows] = await Promise.all([
     prisma.instagramDmAccount.findMany({
       where: { isActive: true },
       orderBy: { lastWebhookAt: "desc" },
       take: 1,
       select: { username: true, lastWebhookAt: true },
     }),
-    prisma.instagramDmConversation.count({ where: { lastMessageAt: { gte: since } } }),
-    prisma.instagramDmParticipant.count({ where: { lastSeenAt: { gte: since } } }),
-    prisma.instagramDmMessage.count({ where: { sentAt: { gte: since }, isDeleted: false } }),
+    prisma.$queryRaw<CountRow[]>(Prisma.sql`
+      select count(distinct message.conversation_id)::int as count
+      from erp.instagram_dm_messages message
+      where message.is_deleted = false
+        and message.sent_at >= ${businessStart} and message.sent_at < ${businessEnd}
+    `),
+    prisma.$queryRaw<CountRow[]>(Prisma.sql`
+      select count(distinct conversation.participant_id)::int as count
+      from erp.instagram_dm_conversations conversation
+      join erp.instagram_dm_messages message on message.conversation_id = conversation.id
+      where message.is_deleted = false
+        and message.sent_at >= ${businessStart} and message.sent_at < ${businessEnd}
+    `),
+    prisma.instagramDmMessage.count({
+      where: { sentAt: { gte: businessStart, lt: businessEnd }, isDeleted: false },
+    }),
     prisma.$queryRaw<ResponseSummaryRow[]>(Prisma.sql`
       with first_inbound as (
         select conversation_id, min(sent_at) as first_inbound_at
         from erp.instagram_dm_messages
-        where direction = 'INBOUND' and is_deleted = false and sent_at >= ${since}
+        where direction = 'INBOUND' and is_deleted = false
+          and sent_at >= ${businessStart} and sent_at < ${businessEnd}
         group by conversation_id
       ), first_response as (
         select inbound.conversation_id, inbound.first_inbound_at, min(message.sent_at) as first_outbound_at
@@ -87,6 +104,7 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
           on message.conversation_id = inbound.conversation_id
           and message.direction = 'OUTBOUND' and message.is_deleted = false
           and message.sent_at >= inbound.first_inbound_at
+          and message.sent_at < ${businessEnd}
         group by inbound.conversation_id, inbound.first_inbound_at
       )
       select count(*)::int as "inboundConversations",
@@ -99,25 +117,37 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
     prisma.$queryRaw<PeakHourRow[]>(Prisma.sql`
       select extract(hour from sent_at + interval '4 hours')::int as hour
       from erp.instagram_dm_messages
-      where direction = 'INBOUND' and is_deleted = false and sent_at >= ${since}
+      where direction = 'INBOUND' and is_deleted = false
+        and sent_at >= ${businessStart} and sent_at < ${businessEnd}
       group by hour order by count(*) desc, hour asc limit 1
     `),
-    prisma.instagramDmConversation.findMany({
-      where: { lastMessageAt: { gte: since } },
-      orderBy: [{ lastMessageAt: "desc" }, { id: "asc" }],
-      take: 120,
-      select: {
-        id: true,
-        lastMessageAt: true,
-        messages: {
-          where: { isDeleted: false },
-          orderBy: [{ sentAt: "desc" }, { id: "desc" }],
-          take: 60,
-          select: { id: true, direction: true, text: true, kind: true, sentAt: true },
-        },
-      },
-    }),
+    prisma.$queryRaw<ConversationIdRow[]>(Prisma.sql`
+      select message.conversation_id::text as id
+      from erp.instagram_dm_messages message
+      where message.is_deleted = false
+        and message.sent_at >= ${businessStart} and message.sent_at < ${businessEnd}
+      group by message.conversation_id
+      order by max(message.sent_at) desc, message.conversation_id asc
+      limit 120
+    `),
   ]);
+
+  const conversationOrder = new Map(conversationIdRows.map((item, index) => [item.id, index]));
+  const conversations = conversationIdRows.length ? await prisma.instagramDmConversation.findMany({
+    where: { id: { in: conversationIdRows.map((item) => item.id) } },
+    select: {
+      id: true,
+      messages: {
+        where: { isDeleted: false, sentAt: { gte: businessStart, lt: businessEnd } },
+        orderBy: [{ sentAt: "desc" }, { id: "desc" }],
+        take: 60,
+        select: { id: true, direction: true, text: true, kind: true, sentAt: true },
+      },
+    },
+  }).then((items) => items.sort((left, right) => (
+    (conversationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
+      - (conversationOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+  ))) : [];
 
   const response = responseRows[0] ?? {
     inboundConversations: 0,
@@ -140,17 +170,17 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
       username: account?.username || "artmoniya.academy",
       lastWebhookAt: account?.lastWebhookAt.toISOString() ?? "",
     },
-    periodDays: ANALYSIS_DAYS,
+    period: { from, to, days },
     summary: {
-      conversations: conversationCount,
-      participants: participantCount,
+      conversations: conversationRows[0]?.count ?? 0,
+      participants: participantRows[0]?.count ?? 0,
       messages: messageCount,
       answeredConversations: response.answeredConversations,
       responseRate,
       medianFirstResponseMinutes: response.medianFirstResponseMinutes,
       peakInboundHour: peakRows[0]?.hour ?? null,
     },
-    ai: await analyzeConversations(conversations, metrics),
+    ai: await analyzeConversations(conversations, metrics, { from, to }),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -158,6 +188,7 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
 async function analyzeConversations(
   conversations: AnalysisConversation[],
   metrics: { responseRate: number; medianFirstResponseMinutes: number | null },
+  period: { from: string; to: string },
 ): Promise<InstagramDmAnalyticsData["ai"]> {
   const usable: PreparedConversation[] = conversations.flatMap((conversation, index) => {
     const messages = [...conversation.messages].reverse().flatMap((message) => {
@@ -180,7 +211,12 @@ async function analyzeConversations(
   }
 
   const fingerprint = createHash("sha256")
-    .update(JSON.stringify([ANALYSIS_VERSION, conversations.map((item) => [item.id, item.lastMessageAt, item.messages.map((message) => message.id)])]))
+    .update(JSON.stringify([
+      ANALYSIS_VERSION,
+      period,
+      metrics,
+      conversations.map((item) => [item.id, item.messages.map((message) => message.id)]),
+    ]))
     .digest("hex");
   const cached = analysisCache.get(fingerprint);
   if (cached && cached.expiresAt > Date.now()) return { state: "ready", generatedAt, ...cached.value };
@@ -188,7 +224,7 @@ async function analyzeConversations(
   try {
     let pending = analysisInFlight.get(fingerprint);
     if (!pending) {
-      pending = classifyConversations(usable).then((classifications) => (
+      pending = classifyConversations(usable, period).then((classifications) => (
         aggregateConversationClassifications(classifications, metrics)
       ));
       analysisInFlight.set(fingerprint, pending);
@@ -210,16 +246,22 @@ type PreparedConversation = {
   messages: Array<{ direction: "MÜŞTƏRİ" | "KOMANDA"; text: string }>;
 };
 
-async function classifyConversations(conversations: PreparedConversation[]) {
+async function classifyConversations(
+  conversations: PreparedConversation[],
+  period: { from: string; to: string },
+) {
   const batches = Array.from(
     { length: Math.ceil(conversations.length / AI_BATCH_SIZE) },
     (_, index) => conversations.slice(index * AI_BATCH_SIZE, (index + 1) * AI_BATCH_SIZE),
   );
-  const results = await Promise.all(batches.map(classifyBatch));
+  const results = await Promise.all(batches.map((batch) => classifyBatch(batch, period)));
   return results.flat();
 }
 
-async function classifyBatch(batch: PreparedConversation[]): Promise<ConversationClassification[]> {
+async function classifyBatch(
+  batch: PreparedConversation[],
+  period: { from: string; to: string },
+): Promise<ConversationClassification[]> {
   const { output } = await generateText({
     model: google("gemini-2.5-flash-lite"),
     output: Output.object({ schema: conversationClassificationBatchSchema }),
@@ -242,7 +284,7 @@ async function classifyBatch(batch: PreparedConversation[]): Promise<Conversatio
       "Qeydiyyata yönləndirmə: 5 = dialoqa uyğun konkret növbəti addım və aydın CTA; sadəcə telefon/WhatsApp paylaşmaq 3, ümumi 'əlaqə saxlayın' 2, CTA fürsəti olduğu halda heç bir addım verməmək 1-dir; real CTA fürsəti yoxdursa null et.",
       "Nəticəni yalnız verilən index-lərlə və hər index üçün dəqiq bir dəfə qaytar. Şəxsi məlumatı və mesaj mətnini nəticəyə köçürmə.",
     ].join("\n"),
-    prompt: `Son ${ANALYSIS_DAYS} günün anonim dialoqları:\n${JSON.stringify(batch)}`,
+    prompt: `${period.from}–${period.to} tarix intervalının anonim dialoqları:\n${JSON.stringify(batch)}`,
   });
   const parsed = conversationClassificationBatchSchema.parse(output).conversations;
   const expected = new Set(batch.map((item) => item.index));

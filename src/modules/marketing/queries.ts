@@ -1,4 +1,5 @@
 import { MarketingCampaignStatus, MarketingReportOutcome, Prisma } from "@/generated/prisma/client";
+import { resolveMarketingDateRange } from "@/modules/marketing/date-range";
 import { hasMetaAdsConfig } from "@/modules/marketing/meta-ads";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -65,17 +66,16 @@ type MarketingCampaignRawRow = Omit<MarketingCampaignRow, "status"> & { status: 
 export async function getMarketingData(filters?: { from?: string; to?: string }): Promise<MarketingData> {
   const actor = await requireErpActor("marketing.read");
   const env = getEnv();
-  const defaultTo = bakuDateKey(new Date());
-  const defaultFrom = subtractMonths(defaultTo, env.META_SYNC_MONTHS);
-  const requestedFrom = validDateKey(filters?.from) ? filters!.from! : defaultFrom;
-  const requestedTo = validDateKey(filters?.to) ? filters!.to! : defaultTo;
-  const rangeStartKey = requestedFrom <= requestedTo ? requestedFrom : requestedTo;
-  const rangeEndKey = requestedFrom <= requestedTo ? requestedTo : requestedFrom;
-  const rangeStart = new Date(`${rangeStartKey}T00:00:00.000Z`);
-  const rangeEndExclusive = new Date(`${rangeEndKey}T00:00:00.000Z`);
-  rangeEndExclusive.setUTCDate(rangeEndExclusive.getUTCDate() + 1);
-  const businessRangeStart = new Date(rangeStart.getTime() - 4 * 60 * 60 * 1000);
-  const businessRangeEndExclusive = new Date(rangeEndExclusive.getTime() - 4 * 60 * 60 * 1000);
+  const {
+    from: rangeStartKey,
+    to: rangeEndKey,
+    defaultFrom,
+    defaultTo,
+    rangeStart,
+    rangeEndExclusive,
+    businessStart: businessRangeStart,
+    businessEnd: businessRangeEndExclusive,
+  } = resolveMarketingDateRange(filters);
   const campaigns = await getPrisma().$queryRaw<MarketingCampaignRawRow[]>(Prisma.sql`
     select
       campaign.id::text as id,
@@ -184,16 +184,7 @@ export async function getMarketingCampaignAds(
   filters?: { from?: string; to?: string },
 ): Promise<{ ads: MarketingAdRow[]; period: { from: string; to: string } }> {
   await requireErpActor("marketing.read");
-  const env = getEnv();
-  const defaultTo = bakuDateKey(new Date());
-  const defaultFrom = subtractMonths(defaultTo, env.META_SYNC_MONTHS);
-  const requestedFrom = validDateKey(filters?.from) ? filters.from : defaultFrom;
-  const requestedTo = validDateKey(filters?.to) ? filters.to : defaultTo;
-  const from = requestedFrom <= requestedTo ? requestedFrom : requestedTo;
-  const to = requestedFrom <= requestedTo ? requestedTo : requestedFrom;
-  const rangeStart = new Date(`${from}T00:00:00.000Z`);
-  const rangeEndExclusive = new Date(`${to}T00:00:00.000Z`);
-  rangeEndExclusive.setUTCDate(rangeEndExclusive.getUTCDate() + 1);
+  const { from, to, rangeStart, rangeEndExclusive } = resolveMarketingDateRange(filters);
 
   const ads = await getPrisma().$queryRaw<MarketingAdRow[]>(Prisma.sql`
     select
@@ -242,22 +233,4 @@ export async function getMarketingCampaignAds(
   `);
 
   return { ads, period: { from, to } };
-}
-
-function validDateKey(value?: string): value is string {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function subtractMonths(value: string, months: number) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - months, 1));
-  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-  target.setUTCDate(Math.min(date.getUTCDate(), lastDay));
-  return target.toISOString().slice(0, 10);
-}
-
-function bakuDateKey(value: Date) {
-  return new Date(value.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }

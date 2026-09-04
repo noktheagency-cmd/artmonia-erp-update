@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/button";
-import { DatePicker } from "@/components/ui/date-picker";
 import { cx } from "@/components/ui/cx";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
@@ -60,13 +59,6 @@ export function MarketingDashboard({ data }: { data: MarketingDashboardData }) {
               {syncPending ? "Meta yenilənir..." : "Meta sync"}
             </Button>
           ) : null}
-          <form className="marketing-dashboard-period" method="get">
-            <input type="hidden" name="view" value="dashboard" />
-            <DatePicker name="from" defaultValue={data.period.from} allowClear={false} aria-label="Başlanğıc tarixi" />
-            <span>—</span>
-            <DatePicker name="to" defaultValue={data.period.to} allowClear={false} aria-label="Son tarix" />
-            <Button type="submit" variant="outline">Tətbiq et</Button>
-          </form>
         </div>
       </header>
 

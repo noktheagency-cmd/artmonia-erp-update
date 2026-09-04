@@ -35,7 +35,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
           <span className="instagram-dm-connection">
             <i className={cx(data.account.connected && "is-connected")} />
             {data.account.connected ? "Instagram bağlıdır" : "Instagram bağlantısı yoxdur"}
-            <b>· Son {data.periodDays} gün</b>
+            <b>· {displayDate(data.period.from)}–{displayDate(data.period.to)}</b>
           </span>
         </div>
         <div className="instagram-dm-header-actions">
@@ -182,6 +182,10 @@ function dateTime(value: string) {
   if (Number.isNaN(date.getTime())) return "—";
   const baku = new Date(date.getTime() + 4 * 60 * 60 * 1000);
   return `${pad(baku.getUTCDate())}.${pad(baku.getUTCMonth() + 1)}.${baku.getUTCFullYear()} ${pad(baku.getUTCHours())}:${pad(baku.getUTCMinutes())}`;
+}
+function displayDate(value: string) {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}.${month}.${year}` : value;
 }
 function pad(value: number) {
   return String(value).padStart(2, "0");
