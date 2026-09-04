@@ -23,6 +23,8 @@ import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-sc
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
+import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -62,6 +64,7 @@ export function StudentPaymentDialogClient({
   );
 
   async function recordPayment(formData: FormData) {
+    if (!confirmPaymentMonthMismatch(formData)) return;
     try {
       const result = unwrapActionResult(await recordPaymentAction(formData)) as {
         redirectTo: string;
@@ -214,6 +217,7 @@ function PaymentScheduleFields({ student }: { student: StudentRow }) {
           name="paidDate"
           value={paidDate}
           onValueChange={setPaidDate}
+          maxValue={currentBakuDateValue()}
           allowClear={false}
           popoverPlacement="floating"
           required

@@ -1,4 +1,10 @@
-import { LeadStage, MarketingCampaignStatus, Prisma } from "@/generated/prisma/client";
+import {
+  EnrollmentStatus,
+  LeadStage,
+  MarketingCampaignStatus,
+  Prisma,
+  StudentLifecycleStatus,
+} from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 
@@ -117,7 +123,19 @@ async function teacherDashboard(actorId: string, actorName: string): Promise<Rol
         startTime: true,
         endTime: true,
         room: true,
-        _count: { select: { assignments: { where: { validTo: null } } } },
+        _count: {
+          select: {
+            assignments: {
+              where: {
+                validTo: null,
+                enrollment: {
+                  status: EnrollmentStatus.ACTIVE,
+                  student: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+                },
+              },
+            },
+          },
+        },
       },
     }),
   ]);

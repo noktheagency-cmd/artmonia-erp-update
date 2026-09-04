@@ -83,6 +83,13 @@ enum StudentLifecycleStatus {
   @@schema("erp")
 }
 
+enum StudentLifecycleEventType {
+  STATUS_CHANGE
+  REACTIVATED
+
+  @@schema("erp")
+}
+
 enum StudentMobileAccountStatus {
   INVITED
   ACTIVE
@@ -1769,6 +1776,7 @@ model StudentStatusHistory {
   studentId   String                  @map("student_id") @db.Uuid
   oldStatus   StudentLifecycleStatus? @map("old_status")
   newStatus   StudentLifecycleStatus  @map("new_status")
+  eventType   StudentLifecycleEventType @default(STATUS_CHANGE) @map("event_type")
   reason      String
   note        String?
   effectiveAt DateTime                @default(now()) @map("effective_at") @db.Date

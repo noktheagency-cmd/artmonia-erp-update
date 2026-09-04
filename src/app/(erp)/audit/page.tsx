@@ -18,7 +18,13 @@ export default async function AuditPage({
   }
 
   const params = await searchParams;
-  const initialTab = params.tab === "accounts" ? "ACCOUNTS" : params.tab === "activity" ? "ACTIVITY" : "SESSIONS";
+  const initialTab = params.tab === "accounts"
+    ? "ACCOUNTS"
+    : params.tab === "activity"
+      ? "ACTIVITY"
+      : params.tab === "payment-dates"
+        ? "PAYMENT_DATES"
+        : "SESSIONS";
   const initialAccountKey =
     (params.profileType === "EMPLOYEE" || params.profileType === "CORPORATE_CONTACT") && params.profileId
       ? `${params.profileType}:${params.profileId}`

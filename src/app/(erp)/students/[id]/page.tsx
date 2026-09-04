@@ -101,12 +101,13 @@ export default async function StudentDetailPage({
           <Banknote />
           <span><small>Cari borc</small><strong>{student.dueDebt}</strong></span>
         </div>
-        {student.hasFutureReceivable ? (
-          <div className="student-profile-quick-item is-future-balance">
-            <CalendarDays />
-            <span><small>Gələcək ödəniş · {student.dueDate}</small><strong>{student.futureReceivable}</strong></span>
-          </div>
-        ) : null}
+        <div className="student-profile-quick-item is-future-balance">
+          <CalendarDays />
+          <span>
+            <small>Növbəti ödəniş tarixi</small>
+            <strong>{student.dueDate}</strong>
+          </span>
+        </div>
       </div>
 
       <StudentMobileAccountCard

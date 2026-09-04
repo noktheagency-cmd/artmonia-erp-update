@@ -14,6 +14,16 @@ export type TeacherDirectoryStudent = {
   balance: string;
 };
 
+export type TeacherDirectoryHistoricalStudent = {
+  id: string;
+  code: string;
+  name: string;
+  currentStatus: string;
+  firstLesson: string;
+  lastLesson: string;
+  isCurrentlyActive: boolean;
+};
+
 export type TeacherDirectoryLesson = {
   id: string;
   student: string;
@@ -49,6 +59,7 @@ export type TeacherDirectoryTeacher = {
   nextLesson: string;
   nextLessonStudent: string;
   students: TeacherDirectoryStudent[];
+  allStudents: TeacherDirectoryHistoricalStudent[];
   lessons: TeacherDirectoryLesson[];
   assignmentHistory: TeacherAssignmentFallback[];
   salaryPercent: number;
@@ -88,6 +99,7 @@ type TeacherRawRow = {
   nextLessonTime: string | null;
   nextLessonStudent: string | null;
   students: unknown;
+  allStudents: unknown;
   lessons: unknown;
   assignmentHistory: unknown;
 };
@@ -110,6 +122,16 @@ type TeacherLessonRaw = {
   slot: string;
   status: string;
   note: string | null;
+};
+
+type TeacherHistoricalStudentRaw = {
+  id: string;
+  code: string;
+  name: string;
+  currentStatus: string;
+  firstLesson: Date | string | null;
+  lastLesson: Date | string | null;
+  isCurrentlyActive: boolean;
 };
 
 type TeacherAssignmentRaw = {
@@ -163,6 +185,7 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
       next_lesson.start_time as "nextLessonTime",
       next_lesson.student_name as "nextLessonStudent",
       coalesce(students.items, '[]'::jsonb) as "students",
+      coalesce(historical_students.items, '[]'::jsonb) as "allStudents",
       coalesce(lessons.items, '[]'::jsonb) as "lessons",
       coalesce(assignments.items, '[]'::jsonb) as "assignmentHistory"
     from erp.teachers t
@@ -247,6 +270,61 @@ export async function getTeacherDirectoryData(ownTeacherId?: string): Promise<Te
         order by s.id, e.start_date desc, e.created_at desc
       ) student_rows
     ) students on true
+    left join lateral (
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', historical.id::text,
+          'code', historical.code,
+          'name', historical.full_name,
+          'currentStatus', historical.lifecycle_status::text,
+          'firstLesson', historical.first_lesson,
+          'lastLesson', historical.last_lesson,
+          'isCurrentlyActive', historical.is_currently_active
+        )
+        order by historical.full_name asc
+      ) as items
+      from (
+        select
+          s.id,
+          s.code,
+          c.full_name,
+          s.lifecycle_status,
+          coalesce(
+            min(ss.session_date) filter (where ar.teacher_id = t.id),
+            min(ssa.valid_from) filter (where cs.teacher_id = t.id)
+          ) as first_lesson,
+          coalesce(
+            max(ss.session_date) filter (where ar.teacher_id = t.id),
+            max(least(coalesce(ssa.valid_to, current_date), current_date))
+              filter (where cs.teacher_id = t.id)
+          ) as last_lesson,
+          exists (
+            select 1
+            from erp.enrollments current_enrollment
+            join erp.student_schedule_assignments current_assignment
+              on current_assignment.enrollment_id = current_enrollment.id
+            join erp.class_slots current_slot on current_slot.id = current_assignment.slot_id
+            where current_enrollment.student_id = s.id
+              and current_slot.teacher_id = t.id
+              and current_assignment.valid_to is null
+              and current_enrollment.status = 'ACTIVE'::"erp"."EnrollmentStatus"
+              and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+          ) as is_currently_active
+        from erp.students s
+        join erp.contacts c on c.id = s.contact_id
+        left join erp.enrollments e on e.student_id = s.id
+        left join erp.student_schedule_assignments ssa on ssa.enrollment_id = e.id
+        left join erp.class_slots cs on cs.id = ssa.slot_id
+        left join erp.attendance_records ar on ar.enrollment_id = e.id and ar.teacher_id = t.id
+        left join erp.slot_sessions ss on ss.id = ar.session_id
+        where s.is_test_data = false
+          and (
+            cs.teacher_id = t.id
+            or ar.teacher_id = t.id
+          )
+        group by s.id, s.code, c.full_name, s.lifecycle_status
+      ) historical
+    ) historical_students on true
     left join lateral (
       select jsonb_agg(
         jsonb_build_object(
@@ -388,6 +466,15 @@ function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teache
       status: formatStudentStatus(student.status),
       balance: formatAmount(student.balance ?? 0),
     })),
+    allStudents: asJsonArray<TeacherHistoricalStudentRaw>(row.allStudents).map((student) => ({
+      id: student.id,
+      code: student.code,
+      name: student.name,
+      currentStatus: formatStudentStatus(student.currentStatus),
+      firstLesson: student.firstLesson ? formatDate(student.firstLesson) : "—",
+      lastLesson: student.lastLesson ? formatDate(student.lastLesson) : "—",
+      isCurrentlyActive: Boolean(student.isCurrentlyActive),
+    })),
     lessons: asJsonArray<TeacherLessonRaw>(row.lessons).map((lesson) => ({
       id: lesson.id,
       student: lesson.student,
@@ -417,6 +504,12 @@ function formatStudentStatus(value: string) {
       return "Aktiv";
     case "FROZEN":
       return "Dondurulub";
+    case "STOPPED":
+      return "Dayandırılıb";
+    case "DECLINED":
+      return "İmtina edib";
+    case "COMPLETED":
+      return "Tamamlayıb";
     default:
       return value;
   }

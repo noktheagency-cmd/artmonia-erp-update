@@ -6,6 +6,7 @@ import { buildSessionUsers } from "@/modules/audit/session-users";
 import type {
   AuthSessionDto,
   AuditLogDto,
+  PaymentDateRiskDto,
   SessionAuditData,
   SessionDeviceTypeDto,
   SecurityAccountDto,
@@ -59,6 +60,17 @@ type SecurityAccountRow = {
     updatedAt: Date;
     roles: Array<{ role: { id: string; name: string; code: AppRole | null } }>;
   };
+};
+
+type PaymentDateRiskRow = {
+  id: string;
+  studentCode: string;
+  studentName: string;
+  amount: Prisma.Decimal | number | string;
+  paidAt: Date;
+  paymentMonth: Date;
+  createdAt: Date;
+  isFutureToday: boolean;
 };
 
 export async function getSessionAuditData(): Promise<SessionAuditData> {
@@ -144,6 +156,23 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     orderBy: { createdAt: "desc" },
     include: { actor: { select: { fullName: true, email: true } } },
   });
+  const paymentDateRisksPromise = getPrisma().$queryRaw<PaymentDateRiskRow[]>(Prisma.sql`
+    select
+      payment.id::text as "id",
+      student.code as "studentCode",
+      contact.full_name as "studentName",
+      payment.amount,
+      payment.paid_at as "paidAt",
+      payment.payment_month as "paymentMonth",
+      payment.created_at as "createdAt",
+      (payment.paid_at > (now() at time zone 'Asia/Baku')::date) as "isFutureToday"
+    from erp.payments payment
+    join erp.students student on student.id = payment.student_id
+    join erp.contacts contact on contact.id = student.contact_id
+    where payment.paid_at > (payment.created_at at time zone 'Asia/Baku')::date
+    order by payment.paid_at desc, payment.created_at desc
+    limit 500
+  `);
   const employeeAccountsPromise = getPrisma().hrEmployee.findMany({
     select: {
       id: true,
@@ -202,9 +231,10 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
     orderBy: [{ customer: { name: "asc" } }, { fullName: "asc" }],
     take: 501,
   }));
-  const [sessionRows, activityLogs, employeeAccountRows, contactAccountRows, accountRoleOptions] = await Promise.all([
+  const [sessionRows, activityLogs, paymentDateRiskRows, employeeAccountRows, contactAccountRows, accountRoleOptions] = await Promise.all([
     sessionsPromise,
     activityPromise,
+    paymentDateRisksPromise,
     employeeAccountsPromise,
     contactAccountsPromise,
     roleOptionsPromise,
@@ -261,6 +291,16 @@ export async function getSessionAuditData(): Promise<SessionAuditData> {
       after: log.afterJson,
       ipAddress: log.ipAddress,
       createdAt: log.createdAt.toISOString(),
+    })),
+    paymentDateRisks: paymentDateRiskRows.map<PaymentDateRiskDto>((payment) => ({
+      id: payment.id,
+      studentCode: payment.studentCode,
+      studentName: payment.studentName,
+      amount: Number(payment.amount).toFixed(2),
+      paidAt: payment.paidAt.toISOString().slice(0, 10),
+      paymentMonth: payment.paymentMonth.toISOString().slice(0, 7),
+      createdAt: payment.createdAt.toISOString(),
+      isFutureToday: payment.isFutureToday,
     })),
     accounts,
     accountRoleOptions: accountRoleOptions.map((role) => ({ id: role.id, name: role.name, code: role.code })),

@@ -2,6 +2,7 @@ import {
   EnrollmentStatus,
   InvoiceStatus,
   Prisma,
+  StudentLifecycleEventType,
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
 import { toNumber } from "@/modules/shared/format";
@@ -19,6 +20,12 @@ export function isBillingPausedStatus(status: StudentLifecycleStatus) {
     default:
       return false;
   }
+}
+
+export function enrollmentStatusForStudentLifecycle(status: StudentLifecycleStatus) {
+  return status === StudentLifecycleStatus.ACTIVE
+    ? EnrollmentStatus.ACTIVE
+    : EnrollmentStatus.PAUSED;
 }
 
 export function buildStudentStatusUpdateData(
@@ -62,6 +69,9 @@ export function getStatusChangeReason(
   }
 
   if (status === StudentLifecycleStatus.SLOT_WAITING) {
+    if (previousStatus && isInactiveStudentStatus(previousStatus)) {
+      return "Tələbə geri qayıtdı və yeni slot gözləyir";
+    }
     return "Tələbə slot gözləyir statusuna keçirildi";
   }
 
@@ -80,12 +90,125 @@ export function getStatusChangeReason(
   return "Tələbə statusu yeniləndi";
 }
 
+export function isInactiveStudentStatus(status: StudentLifecycleStatus) {
+  return status === StudentLifecycleStatus.FROZEN
+    || status === StudentLifecycleStatus.STOPPED
+    || status === StudentLifecycleStatus.DECLINED;
+}
+
+export function isReactivationTransition(
+  previousStatus: StudentLifecycleStatus,
+  nextStatus: StudentLifecycleStatus,
+) {
+  return isInactiveStudentStatus(previousStatus)
+    && nextStatus === StudentLifecycleStatus.SLOT_WAITING;
+}
+
+export function getStudentLifecycleEventType(
+  previousStatus: StudentLifecycleStatus,
+  nextStatus: StudentLifecycleStatus,
+) {
+  return isReactivationTransition(previousStatus, nextStatus)
+    ? StudentLifecycleEventType.REACTIVATED
+    : StudentLifecycleEventType.STATUS_CHANGE;
+}
+
+export function assertManualStudentStatusTransition(
+  previousStatus: StudentLifecycleStatus,
+  nextStatus: StudentLifecycleStatus,
+) {
+  if (previousStatus !== nextStatus && nextStatus === StudentLifecycleStatus.ACTIVE) {
+    throw new Error(
+      "Tələbə birbaşa aktiv edilə bilməz. Əvvəl Slot gözləyir statusuna keçirin, sonra müəllim və slot seçin.",
+    );
+  }
+}
+
+export async function pauseStudentLifecycleRelations(
+  tx: Prisma.TransactionClient,
+  input: {
+    studentId: string;
+    effectiveAt: Date;
+    changedById?: string;
+    clearTeacherAssignment: boolean;
+  },
+) {
+  const enrollments = await tx.enrollment.findMany({
+    where: {
+      studentId: input.studentId,
+      status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+    },
+    select: { id: true, teacherId: true },
+  });
+  const enrollmentIds = enrollments.map((enrollment) => enrollment.id);
+
+  const futureAssignments = enrollmentIds.length
+    ? await tx.studentScheduleAssignment.deleteMany({
+        where: {
+          enrollmentId: { in: enrollmentIds },
+          validTo: null,
+          validFrom: { gte: input.effectiveAt },
+        },
+      })
+    : { count: 0 };
+  const closedScheduleAssignmentCount = enrollmentIds.length
+    ? await tx.$executeRaw(Prisma.sql`
+        update erp.student_schedule_assignments
+        set valid_to = ${input.effectiveAt}::date - 1, updated_at = now()
+        where enrollment_id in (${Prisma.join(
+          enrollmentIds.map((id) => Prisma.sql`${id}::uuid`),
+        )})
+          and valid_to is null
+          and valid_from < ${input.effectiveAt}::date
+      `)
+    : 0;
+
+  const pausedEnrollments = await tx.enrollment.updateMany({
+    where: {
+      id: { in: enrollmentIds },
+      status: EnrollmentStatus.ACTIVE,
+    },
+    data: { status: EnrollmentStatus.PAUSED },
+  });
+
+  const teacherAssignments = input.clearTeacherAssignment
+    ? enrollments.filter((enrollment) => enrollment.teacherId)
+    : [];
+  if (teacherAssignments.length) {
+    await tx.teacherAssignmentHistory.createMany({
+      data: teacherAssignments.map((enrollment) => ({
+        enrollmentId: enrollment.id,
+        oldTeacherId: enrollment.teacherId,
+        newTeacherId: null,
+        reason: "Tələbə geri qayıtdı; yeni müəllim və slot seçilməlidir",
+        changedById: input.changedById,
+      })),
+    });
+    await tx.enrollment.updateMany({
+      where: { id: { in: teacherAssignments.map((enrollment) => enrollment.id) } },
+      data: { teacherId: null },
+    });
+  }
+
+  return {
+    pausedEnrollmentCount: pausedEnrollments.count,
+    deletedFutureScheduleAssignmentCount: futureAssignments.count,
+    closedScheduleAssignmentCount,
+    clearedTeacherAssignmentCount: teacherAssignments.length,
+  };
+}
+
 export async function closeCompletedStudentBilling(
   tx: Prisma.TransactionClient,
   studentId: string,
   effectiveAt: Date,
 ) {
-  const [enrollments, invoices, scheduleAssignmentCount] = await Promise.all([
+  const scheduleResult = await pauseStudentLifecycleRelations(tx, {
+    studentId,
+    effectiveAt,
+    clearTeacherAssignment: false,
+  });
+  const [enrollments, invoices] = await Promise.all([
     tx.enrollment.updateMany({
       where: {
         studentId,
@@ -108,22 +231,14 @@ export async function closeCompletedStudentBilling(
         balanceDue: 0,
       },
     }),
-    tx.$executeRaw(Prisma.sql`
-      update erp.student_schedule_assignments ssa
-      set
-        valid_to = greatest(ssa.valid_from, ${effectiveAt}::date),
-        updated_at = now()
-      from erp.enrollments e
-      where ssa.enrollment_id = e.id
-        and e.student_id = ${studentId}::uuid
-        and ssa.valid_to is null
-    `),
   ]);
 
   return {
     completedEnrollmentCount: enrollments.count,
     voidedInvoiceCount: invoices.count,
-    closedScheduleAssignmentCount: scheduleAssignmentCount,
+    closedScheduleAssignmentCount:
+      scheduleResult.closedScheduleAssignmentCount
+      + scheduleResult.deletedFutureScheduleAssignmentCount,
   };
 }
 

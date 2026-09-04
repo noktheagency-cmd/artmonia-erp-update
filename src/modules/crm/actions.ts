@@ -2,11 +2,7 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
-import {
-  EnrollmentStatus,
-  LeadStage,
-  StudentLifecycleStatus,
-} from "@/generated/prisma/client";
+import { LeadStage, StudentLifecycleStatus } from "@/generated/prisma/client";
 import type { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
@@ -31,7 +27,10 @@ import {
 } from "@/modules/crm/trial-lesson";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
-import { isBillingPausedStatus } from "@/modules/students/lifecycle-service";
+import {
+  enrollmentStatusForStudentLifecycle,
+  isBillingPausedStatus,
+} from "@/modules/students/lifecycle-service";
 import {
   safeServerAction,
   toActionFailure,
@@ -582,7 +581,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       data: {
         studentId: student.id,
         programId: program.id,
-        status: EnrollmentStatus.ACTIVE,
+        status: enrollmentStatusForStudentLifecycle(StudentLifecycleStatus.SLOT_WAITING),
         startDate: today,
         monthlyFee,
         lessonsPerMonth,

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { cx } from "@/components/ui/cx";
+import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 
 type DatePickerProps = {
   name: string;
@@ -18,6 +19,7 @@ type DatePickerProps = {
   className?: string;
   popoverPlacement?: "default" | "floating";
   compact?: boolean;
+  maxValue?: string;
 };
 
 const weekDays = ["B.e", "Ç.a", "Ç", "C.a", "C", "Ş", "B"];
@@ -48,6 +50,7 @@ export function DatePicker({
   className,
   popoverPlacement = "default",
   compact = false,
+  maxValue,
 }: DatePickerProps) {
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(
@@ -143,7 +146,9 @@ export function DatePicker({
   }
 
   function selectDate(date: Date) {
-    updateValue(toPickerDate(date));
+    const nextValue = toPickerDate(date);
+    if (maxValue && nextValue > maxValue) return;
+    updateValue(nextValue);
     setViewDate(date);
     setIsOpen(false);
   }
@@ -225,6 +230,7 @@ export function DatePicker({
           const dayValue = toPickerDate(day.date);
           const isSelected = selectedDate ? dayValue === toPickerDate(selectedDate) : false;
           const isToday = dayValue === todayValue;
+          const isDisabled = Boolean(maxValue && dayValue > maxValue);
 
           return (
             <button
@@ -237,6 +243,7 @@ export function DatePicker({
                 isSelected && "is-selected",
               )}
               onClick={() => selectDate(day.date)}
+              disabled={isDisabled}
             >
               {day.date.getDate()}
             </button>
@@ -343,17 +350,7 @@ function toPickerDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function currentBakuDateValue(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Baku",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const values = new Map(parts.map((part) => [part.type, part.value]));
-
-  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
-}
+export { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 
 function formatPickerDisplay(value: string) {
   const parsed = parsePickerDate(value);

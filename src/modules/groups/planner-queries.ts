@@ -1,4 +1,4 @@
-import { EnrollmentStatus } from "@/generated/prisma/client";
+import { EnrollmentStatus, StudentLifecycleStatus } from "@/generated/prisma/client";
 import {
   dateFromInput,
   formatDateAz,
@@ -157,7 +157,13 @@ export async function getPlannerWorkspaceData(input?: {
         validFrom: true,
         teacher: { select: { id: true, fullName: true } },
         assignments: {
-          where: { validTo: null },
+          where: {
+            validTo: null,
+            enrollment: {
+              status: EnrollmentStatus.ACTIVE,
+              student: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+            },
+          },
           take: 100,
           orderBy: { createdAt: "asc" },
           select: {
@@ -189,7 +195,14 @@ export async function getPlannerWorkspaceData(input?: {
       : Promise.resolve([]),
     canManage
       ? prisma.enrollment.findMany({
-          where: { status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] } },
+          where: {
+            status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+            student: {
+              lifecycleStatus: {
+                in: [StudentLifecycleStatus.ACTIVE, StudentLifecycleStatus.SLOT_WAITING],
+              },
+            },
+          },
           take: 750,
           orderBy: [{ student: { contact: { fullName: "asc" } } }, { createdAt: "desc" }],
           select: {
@@ -261,6 +274,10 @@ export async function getPlannerWorkspaceData(input?: {
         prisma.studentScheduleAssignment.findMany({
           where: {
             slotId: selectedSlot.id,
+            enrollment: {
+              status: EnrollmentStatus.ACTIVE,
+              student: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+            },
             validFrom: { lte: journalDateValue },
             OR: [{ validTo: null }, { validTo: { gte: journalDateValue } }],
           },
@@ -302,7 +319,14 @@ export async function getPlannerWorkspaceData(input?: {
         }),
         canReadStudentDetails
           ? prisma.studentScheduleAssignment.findMany({
-              where: { slotId: selectedSlot.id, validTo: null },
+              where: {
+                slotId: selectedSlot.id,
+                validTo: null,
+                enrollment: {
+                  status: EnrollmentStatus.ACTIVE,
+                  student: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+                },
+              },
               take: 100,
               orderBy: { createdAt: "asc" },
               select: {

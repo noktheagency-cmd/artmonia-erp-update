@@ -292,6 +292,11 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
             code: true,
             lifecycleStatus: true,
             billingPaused: true,
+            statusHistory: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { eventType: true },
+            },
           },
         },
       },
@@ -301,6 +306,14 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       || (enrollment.status !== EnrollmentStatus.ACTIVE && enrollment.status !== EnrollmentStatus.PAUSED)
     ) {
       throw new Error("Aktiv tələbə qeydiyyatı tapılmadı");
+    }
+    if (
+      enrollment.student.lifecycleStatus !== StudentLifecycleStatus.ACTIVE
+      && enrollment.student.lifecycleStatus !== StudentLifecycleStatus.SLOT_WAITING
+    ) {
+      throw new PublicActionError(
+        "Dondurulmuş, dayandırılmış və ya imtina etmiş tələbəyə slot verilə bilməz. Əvvəl Slot gözləyir statusuna keçirin.",
+      );
     }
 
     await lockSlots(tx, uniqueSlotIds);
@@ -475,6 +488,10 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       where: {
         slotId: slot.id,
         enrollmentId: { in: input.items.map((item) => item.enrollmentId) },
+        enrollment: {
+          status: EnrollmentStatus.ACTIVE,
+          student: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+        },
         validFrom: { lte: date },
         OR: [{ validTo: null }, { validTo: { gte: date } }],
       },
@@ -598,12 +615,14 @@ async function syncStudentActivationAndPayment(
         code: string;
         lifecycleStatus: StudentLifecycleStatus;
         billingPaused: boolean;
+        statusHistory: Array<{ eventType: "STATUS_CHANGE" | "REACTIVATED" }>;
       };
     };
   },
 ) {
   const student = input.enrollment.student;
   if (student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING) {
+    const isReactivation = student.statusHistory[0]?.eventType === "REACTIVATED";
     await tx.student.update({
       where: { id: student.id },
       data: buildStudentStatusUpdateData(StudentLifecycleStatus.ACTIVE, input.slotStartedAt),
@@ -622,14 +641,20 @@ async function syncStudentActivationAndPayment(
       studentId: student.id,
       studentCode: student.code,
       effectiveAt: input.slotStartedAt,
+      isReactivation,
     });
     await writeAuditLog(tx, {
       actorUserId: input.actorId,
-      action: "student.status.change",
+      action: isReactivation ? "student.reactivation.complete" : "student.status.change",
       entityType: "student",
       entityId: student.id,
       before: { lifecycleStatus: student.lifecycleStatus, billingPaused: student.billingPaused },
-      after: { lifecycleStatus: StudentLifecycleStatus.ACTIVE, billingPaused: false },
+      after: {
+        lifecycleStatus: StudentLifecycleStatus.ACTIVE,
+        billingPaused: false,
+        reactivated: isReactivation,
+        createsNewSale: false,
+      },
       reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
     });
   }

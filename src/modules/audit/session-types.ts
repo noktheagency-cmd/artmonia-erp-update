@@ -48,6 +48,17 @@ export type AuditLogDto = {
   createdAt: string;
 };
 
+export type PaymentDateRiskDto = {
+  id: string;
+  studentCode: string;
+  studentName: string;
+  amount: string;
+  paidAt: string;
+  paymentMonth: string;
+  createdAt: string;
+  isFutureToday: boolean;
+};
+
 export type SecurityAccountProfileType = "EMPLOYEE" | "CORPORATE_CONTACT";
 
 export type SecurityAccountDto = {
@@ -90,6 +101,7 @@ export type SessionAuditData = {
   sessions: AuthSessionDto[];
   users: SessionUserDto[];
   activity: AuditLogDto[];
+  paymentDateRisks: PaymentDateRiskDto[];
   accounts: SecurityAccountDto[];
   accountRoleOptions: SecurityRoleOptionDto[];
   summary: {

@@ -22,6 +22,8 @@ import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
+import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
 import {
   isGiftDiscount,
   studentFirstLessonModeOptions,
@@ -35,6 +37,7 @@ type StudentFormValues = {
   monthlyFee: string;
   paymentAmount: string;
   paymentDate: string;
+  paymentMonth: string;
   paymentMethod: string;
   paymentScheduleType: string;
   paymentNote: string;
@@ -60,6 +63,7 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
     notes: "",
     paymentAmount: "",
     paymentDate: createOptions.defaultPaymentDate,
+    paymentMonth: createOptions.defaultPaymentDate.slice(0, 7),
     paymentMethod: "CASH",
     paymentScheduleType: "MONTHLY",
     paymentNote: "",
@@ -185,6 +189,13 @@ export function StudentCreateDialogClient({
   }
 
   async function createStudent(formData: FormData) {
+    if (
+      acceptPayment
+      && !confirmPaymentMonthMismatch(formData, {
+        paidDateField: "paymentDate",
+        paymentMonthField: "paymentMonth",
+      })
+    ) return;
     try {
       const result = unwrapActionResult(await createStudentAction(formData)) as {
         redirectTo: string;
@@ -247,6 +258,7 @@ export function StudentCreateDialogClient({
           <input name="discountType" type="hidden" value={values.discountType} />
           <input name="paymentAmount" type="hidden" value={values.paymentAmount} />
           <input name="paymentDate" type="hidden" value={values.paymentDate} />
+          <input name="paymentMonth" type="hidden" value={values.paymentMonth} />
           <input name="paymentMethod" type="hidden" value={values.paymentMethod} />
           <input name="paymentScheduleType" type="hidden" value={values.paymentScheduleType} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
@@ -638,8 +650,19 @@ function InitialPaymentDialog({
               name="paymentDate"
               value={values.paymentDate}
               onValueChange={(value) => onChange("paymentDate", value)}
+              maxValue={currentBakuDateValue()}
               allowClear={false}
               popoverPlacement="floating"
+              required={open}
+            />
+          </label>
+          <label className="form-field">
+            <span>Aid olduğu ay</span>
+            <Input
+              name="paymentMonth"
+              type="month"
+              value={values.paymentMonth}
+              onChange={(event) => onChange("paymentMonth", event.target.value)}
               required={open}
             />
           </label>

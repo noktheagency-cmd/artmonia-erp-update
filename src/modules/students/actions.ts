@@ -41,16 +41,25 @@ import {
 } from "@/modules/students/monthly-invoice-service";
 import { parseBillingMonthInput } from "@/modules/students/payment-billing-period";
 import {
+  assertPaymentMonthMismatchAcknowledged,
+  parsePaymentDateInput,
+} from "@/modules/students/payment-date-policy";
+import {
   applyEnrollmentBillingChange,
   enrollmentBillingChangeModeValues,
   parseEnrollmentBillingMonth,
 } from "@/modules/students/enrollment-billing-terms";
 import {
+  assertManualStudentStatusTransition,
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
   closeCompletedStudentBilling,
+  enrollmentStatusForStudentLifecycle,
+  getStudentLifecycleEventType,
   getStatusChangeReason as getSharedStatusChangeReason,
   isBillingPausedStatus as isSharedBillingPausedStatus,
-  syncActivationBilling as syncSharedActivationBilling,
+  isInactiveStudentStatus,
+  isReactivationTransition,
+  pauseStudentLifecycleRelations,
 } from "@/modules/students/lifecycle-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import {
@@ -127,6 +136,11 @@ const createStudentSchema = z.object({
   ),
   paymentAmount: optionalAmount,
   paymentDate: optionalText(20),
+  paymentMonth: optionalText(7),
+  paymentMonthMismatchAcknowledged: z.preprocess(
+    (value) => value === "true" || value === "on",
+    z.boolean(),
+  ),
   paymentMethod: z.enum(studentPaymentMethodValues).default("CASH"),
   paymentScheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
   paymentNote: optionalText(240),
@@ -146,6 +160,13 @@ const createStudentSchema = z.object({
       message: "Manual rejimdə ilk dərs tarixi seçilməlidir.",
     });
   }
+  if (value.acceptPayment && !value.paymentMonth) {
+    context.addIssue({
+      code: "custom",
+      path: ["paymentMonth"],
+      message: "Ödənişin aid olduğu ay seçilməlidir.",
+    });
+  }
 });
 
 const recordPaymentSchema = z.object({
@@ -154,6 +175,10 @@ const recordPaymentSchema = z.object({
   amount: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
   paidDate: z.string().trim().min(1).max(20),
   billingMonth: z.string().trim().regex(/^\d{4}-\d{2}$/, "Aid olduğu ay düzgün seçilməyib."),
+  paymentMonthMismatchAcknowledged: z.preprocess(
+    (value) => value === "true" || value === "on",
+    z.boolean(),
+  ),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
   scheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
   note: optionalText(240),
@@ -270,9 +295,18 @@ async function createStudentActionImpl(formData: FormData) {
   const enrollmentStartDate = firstLessonAt ?? registeredAt;
   const billingStartAt: Date | null = null;
   const paymentDate = input.acceptPayment
-    ? parseDateInput(input.paymentDate ?? "", "Ödəniş tarixi")
+    ? parsePaymentDateInput(input.paymentDate ?? "")
     : null;
-  const paymentMonth = paymentDate ? startOfMonth(paymentDate) : null;
+  const paymentMonth = paymentDate
+    ? parseBillingMonthInput(input.paymentMonth, paymentDate)
+    : null;
+  if (paymentDate && paymentMonth) {
+    assertPaymentMonthMismatchAcknowledged({
+      paidAt: paymentDate,
+      paymentMonth,
+      acknowledged: input.paymentMonthMismatchAcknowledged,
+    });
+  }
   const prisma = getPrisma();
 
   const existingStudent = await prisma.student.findUnique({
@@ -387,7 +421,7 @@ async function createStudentActionImpl(formData: FormData) {
         studentId: student.id,
         programId: input.programId,
         teacherId: input.teacherId ?? null,
-        status: EnrollmentStatus.ACTIVE,
+        status: enrollmentStatusForStudentLifecycle(input.lifecycleStatus),
         startDate: enrollmentStartDate,
         firstLessonAt,
         monthlyFee: effectiveMonthlyFee,
@@ -529,8 +563,13 @@ async function createStudentActionImpl(formData: FormData) {
 async function recordStudentPaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = recordPaymentSchema.parse(Object.fromEntries(formData));
-  const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
+  const paidAt = parsePaymentDateInput(input.paidDate);
   const paymentMonth = parseBillingMonthInput(input.billingMonth, paidAt);
+  assertPaymentMonthMismatchAcknowledged({
+    paidAt,
+    paymentMonth,
+    acknowledged: input.paymentMonthMismatchAcknowledged,
+  });
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
@@ -587,6 +626,9 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       throw new Error("Tələbə tapılmadı");
     }
 
+    assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
+    if (current.lifecycleStatus === input.lifecycleStatus) return;
+
     const statusReason = getSharedStatusChangeReason(
       input.lifecycleStatus,
       current.lifecycleStatus,
@@ -603,6 +645,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         studentId: current.id,
         oldStatus: current.lifecycleStatus,
         newStatus: input.lifecycleStatus,
+        eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
         reason: statusReason,
         note: input.note ?? null,
         effectiveAt,
@@ -611,54 +654,45 @@ async function updateStudentStatusActionImpl(formData: FormData) {
     });
 
     let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
-    let activationResult: Awaited<ReturnType<typeof syncSharedActivationBilling>> | null = null;
+    let relationResult: Awaited<ReturnType<typeof pauseStudentLifecycleRelations>> | null = null;
 
-    if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
-      activationResult = await syncSharedActivationBilling(tx, {
-        studentId: current.id,
-        studentCode: current.code,
-        effectiveAt,
-        isReactivation:
-          current.lifecycleStatus === StudentLifecycleStatus.FROZEN
-          || current.lifecycleStatus === StudentLifecycleStatus.STOPPED,
-      });
-      await restartStudentPaymentScheduleForActiveSlot(tx, {
-        studentId: current.id,
-      });
-    } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
+    if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
       await clearStudentPaymentSchedules(tx, [current.id]);
       if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
         completionResult = await closeCompletedStudentBilling(tx, current.id, effectiveAt);
+      } else if (
+        isInactiveStudentStatus(input.lifecycleStatus)
+        || isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus)
+      ) {
+        relationResult = await pauseStudentLifecycleRelations(tx, {
+          studentId: current.id,
+          effectiveAt,
+          changedById: actor.id,
+          clearTeacherAssignment: isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus),
+        });
       }
     }
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
-      action: "student.status.change",
+      action: isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus)
+        ? "student.reactivated"
+        : "student.status.change",
       entityType: "student",
       entityId: current.id,
       before: {
         lifecycleStatus: current.lifecycleStatus,
         billingPaused: current.billingPaused,
-        ...(activationResult
-          ? {
-              currentFirstLessonAt:
-                activationResult.previousFirstLessonAt?.toISOString() ?? null,
-            }
-          : {}),
       },
       after: {
         lifecycleStatus: input.lifecycleStatus,
         billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
         effectiveAt: effectiveAt.toISOString(),
-        ...(activationResult
-          ? {
-              enrollmentId: activationResult.enrollmentId,
-              originalFirstLessonAt: activationResult.originalFirstLessonAt.toISOString(),
-              currentFirstLessonAt: activationResult.currentFirstLessonAt.toISOString(),
-              reactivated: activationResult.reactivated,
-            }
+        eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
+        ...(isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus)
+          ? { createsNewSale: false }
           : {}),
+        ...(relationResult ?? {}),
         ...(completionResult ?? {}),
       },
       reason: input.note ?? statusReason,
@@ -754,6 +788,14 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     ) {
       throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur.");
     }
+    if (statusChanged) {
+      assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
+    }
+
+    const isReactivation = statusChanged
+      && isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus);
+    const effectiveRegisteredAt = isReactivation ? current.registeredAt : registeredAt;
+    const effectiveTeacherId = isReactivation ? null : input.teacherId ?? null;
 
     const managerId = canManageAllStudents
       ? input.managerId ?? null
@@ -764,8 +806,8 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         where: { id: input.programId },
         select: { id: true },
       }),
-      input.teacherId
-        ? tx.teacher.findUnique({ where: { id: input.teacherId }, select: { id: true } })
+      effectiveTeacherId
+        ? tx.teacher.findUnique({ where: { id: effectiveTeacherId }, select: { id: true } })
         : Promise.resolve(null),
       managerId
         ? tx.user.findFirst({
@@ -811,7 +853,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     ]);
 
     if (!program) throw new PublicActionError("Proqram tapılmadı.");
-    if (input.teacherId && !teacher) throw new PublicActionError("Müəllim tapılmadı.");
+    if (effectiveTeacherId && !teacher) throw new PublicActionError("Müəllim tapılmadı.");
     if (managerId && !manager) throw new PublicActionError("Məsul şəxs tapılmadı.");
     if (input.campaignId && !campaign) throw new PublicActionError("Kampaniya tapılmadı.");
     if (
@@ -877,7 +919,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         managerId,
         campaignId: input.campaignId ?? null,
         educationLevel: educationLevel?.value ?? null,
-        registeredAt,
+        registeredAt: effectiveRegisteredAt,
         originalFirstLessonAt:
           current.originalFirstLessonAt
           ?? currentEnrollment.firstLessonAt
@@ -890,7 +932,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       where: { id: currentEnrollment.id },
       data: {
         programId: input.programId,
-        teacherId: input.teacherId ?? null,
+        teacherId: effectiveTeacherId,
         firstLessonAt,
         monthlyFee: persistedMonthlyFee,
         discountType: persistedDiscountType,
@@ -917,12 +959,12 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         })
       : null;
 
-    if (currentEnrollment.teacherId !== (input.teacherId ?? null)) {
+    if (currentEnrollment.teacherId !== effectiveTeacherId) {
       await tx.teacherAssignmentHistory.create({
         data: {
           enrollmentId: currentEnrollment.id,
           oldTeacherId: currentEnrollment.teacherId,
-          newTeacherId: input.teacherId ?? null,
+          newTeacherId: effectiveTeacherId,
           reason: "Tələbə profilindən müəllim təyinatı yeniləndi",
           changedById: actor.id,
         },
@@ -940,6 +982,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           studentId: current.id,
           oldStatus: current.lifecycleStatus,
           newStatus: input.lifecycleStatus,
+          eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
           reason: statusReason,
           note: input.statusNote ?? null,
           effectiveAt: statusEffectiveAt,
@@ -948,30 +991,30 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       });
 
       let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
-      let activationResult: Awaited<ReturnType<typeof syncSharedActivationBilling>> | null = null;
+      let relationResult: Awaited<ReturnType<typeof pauseStudentLifecycleRelations>> | null = null;
 
-      if (input.lifecycleStatus === StudentLifecycleStatus.ACTIVE) {
-        activationResult = await syncSharedActivationBilling(tx, {
-          studentId: current.id,
-          studentCode: current.code,
-          effectiveAt: statusEffectiveAt,
-          isReactivation:
-            current.lifecycleStatus === StudentLifecycleStatus.FROZEN
-            || current.lifecycleStatus === StudentLifecycleStatus.STOPPED,
-        });
-        await restartStudentPaymentScheduleForActiveSlot(tx, {
-          studentId: current.id,
-        });
-      } else if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
+      if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
         await clearStudentPaymentSchedules(tx, [current.id]);
         if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
           completionResult = await closeCompletedStudentBilling(tx, current.id, statusEffectiveAt);
+        } else if (
+          isInactiveStudentStatus(input.lifecycleStatus)
+          || isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus)
+        ) {
+          relationResult = await pauseStudentLifecycleRelations(tx, {
+            studentId: current.id,
+            effectiveAt: statusEffectiveAt,
+            changedById: actor.id,
+            clearTeacherAssignment: isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus),
+          });
         }
       }
 
       await writeAuditLog(tx, {
         actorUserId: actor.id,
-        action: "student.status.change",
+        action: isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus)
+          ? "student.reactivated"
+          : "student.status.change",
         entityType: "student",
         entityId: current.id,
         before: {
@@ -988,14 +1031,9 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           lifecycleStatus: input.lifecycleStatus,
           billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
           effectiveAt: statusEffectiveAt.toISOString(),
-          ...(activationResult
-            ? {
-                enrollmentId: activationResult.enrollmentId,
-                originalFirstLessonAt: activationResult.originalFirstLessonAt.toISOString(),
-                currentFirstLessonAt: activationResult.currentFirstLessonAt.toISOString(),
-                reactivated: activationResult.reactivated,
-              }
-            : {}),
+          eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
+          ...(isReactivation ? { createsNewSale: false } : {}),
+          ...(relationResult ?? {}),
           ...(completionResult ?? {}),
         },
         reason: input.statusNote ?? statusReason,
@@ -1044,10 +1082,10 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         educationLevel: educationLevel?.value ?? null,
         managerId,
         campaignId: input.campaignId ?? null,
-        registeredAt: registeredAt.toISOString(),
+        registeredAt: effectiveRegisteredAt.toISOString(),
         enrollmentId: currentEnrollment.id,
         programId: input.programId,
-        teacherId: input.teacherId ?? null,
+        teacherId: effectiveTeacherId,
         firstLessonAt: firstLessonAt?.toISOString() ?? null,
         originalFirstLessonAt: (
           current.originalFirstLessonAt

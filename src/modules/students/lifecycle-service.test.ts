@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Prisma } from "@/generated/prisma/client";
 import {
+  assertManualStudentStatusTransition,
   closeCompletedStudentBilling,
+  enrollmentStatusForStudentLifecycle,
+  getStudentLifecycleEventType,
   getStatusChangeReason,
   resolveActivationBillingPeriod,
   syncActivationBilling,
@@ -11,6 +14,23 @@ import {
 function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
+
+test("geri qayıdan tələbə REACTIVATED kimi SLOT_WAITING mərhələsinə keçir", () => {
+  assert.equal(getStudentLifecycleEventType("FROZEN", "SLOT_WAITING"), "REACTIVATED");
+  assert.doesNotThrow(() => assertManualStudentStatusTransition("FROZEN", "SLOT_WAITING"));
+});
+
+test("inactive tələbənin birbaşa ACTIVE edilməsi bloklanır", () => {
+  assert.throws(
+    () => assertManualStudentStatusTransition("STOPPED", "ACTIVE"),
+    /Əvvəl Slot gözləyir statusuna keçirin/,
+  );
+});
+
+test("slot gözləyən tələbənin yeni enrollment-i aktiv açılmır", () => {
+  assert.equal(enrollmentStatusForStudentLifecycle("SLOT_WAITING"), "PAUSED");
+  assert.equal(enrollmentStatusForStudentLifecycle("ACTIVE"), "ACTIVE");
+});
 
 function activationTx(enrollment: {
   startDate: Date;
@@ -164,6 +184,7 @@ test("completion closes enrollment and outstanding invoices without deleting his
   let scheduleUpdateCalled = false;
   const tx = {
     enrollment: {
+      findMany: async () => [{ id: "enrollment-1", teacherId: null }],
       updateMany: async (args: unknown) => {
         enrollmentUpdate = args;
         return { count: 1 };
@@ -174,6 +195,9 @@ test("completion closes enrollment and outstanding invoices without deleting his
         invoiceUpdate = args;
         return { count: 2 };
       },
+    },
+    studentScheduleAssignment: {
+      deleteMany: async () => ({ count: 0 }),
     },
     $executeRaw: async () => {
       scheduleUpdateCalled = true;

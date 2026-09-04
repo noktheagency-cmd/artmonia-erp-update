@@ -100,12 +100,10 @@ export function StudentDetailDialogClient({
             <Banknote />
             <span>Cari borc: {student.dueDebt}</span>
           </div>
-          {student.hasFutureReceivable ? (
-            <div>
-              <CalendarDays />
-              <span>Gələcək: {student.futureReceivable} · {student.dueDate}</span>
-            </div>
-          ) : null}
+          <div>
+            <CalendarDays />
+            <span>Növbəti ödəniş tarixi: {student.dueDate}</span>
+          </div>
         </div>
 
         <section className="student-detail-section student-slot-section">

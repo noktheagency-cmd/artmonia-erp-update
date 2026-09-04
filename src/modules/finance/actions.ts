@@ -33,6 +33,10 @@ import {
   ensureStudentMonthlyInvoicesForPeriod,
 } from "@/modules/students/monthly-invoice-service";
 import { parseBillingMonthInput } from "@/modules/students/payment-billing-period";
+import {
+  assertPaymentMonthMismatchAcknowledged,
+  parsePaymentDateInput,
+} from "@/modules/students/payment-date-policy";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
@@ -209,6 +213,10 @@ const recordFinancePaymentSchema = z.object({
   amount: requiredAmount,
   paidDate: z.string().trim().min(1).max(20),
   billingMonth: z.string().trim().regex(/^\d{4}-\d{2}$/, "Aid olduğu ay düzgün seçilməyib."),
+  paymentMonthMismatchAcknowledged: z.preprocess(
+    (value) => value === "true" || value === "on",
+    z.boolean(),
+  ),
   method: z.enum(studentPaymentMethodValues).default("CASH"),
   scheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
   payerName: optionalText(120),
@@ -271,9 +279,14 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor();
   assertFinanceEntryPermission(actor, "billing.payment.create");
   const input = recordFinancePaymentSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
-  const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
+  const paidAt = parsePaymentDateInput(input.paidDate);
   const paymentMonth = parseBillingMonthInput(input.billingMonth, paidAt);
+  assertPaymentMonthMismatchAcknowledged({
+    paidAt,
+    paymentMonth,
+    acknowledged: input.paymentMonthMismatchAcknowledged,
+  });
+  const receipt = await persistReceiptFile(formData.get("receiptFile"), input.idempotencyKey);
   const prisma = getPrisma();
 
   const effectivePaymentMonth = await prisma.$transaction(async (tx) => {
@@ -416,9 +429,14 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
 async function updateFinancePaymentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("billing.payment.create");
   const input = updateFinancePaymentSchema.parse(Object.fromEntries(formData));
-  const receipt = await persistReceiptFile(formData.get("receiptFile"));
-  const paidAt = parseDateInput(input.paidDate, "Ödəniş tarixi");
+  const paidAt = parsePaymentDateInput(input.paidDate);
   const requestedPaymentMonth = parseBillingMonthInput(input.billingMonth, paidAt);
+  assertPaymentMonthMismatchAcknowledged({
+    paidAt,
+    paymentMonth: requestedPaymentMonth,
+    acknowledged: input.paymentMonthMismatchAcknowledged,
+  });
+  const receipt = await persistReceiptFile(formData.get("receiptFile"));
   const prisma = getPrisma();
 
   const paymentMonths = await prisma.$transaction(async (tx) => {

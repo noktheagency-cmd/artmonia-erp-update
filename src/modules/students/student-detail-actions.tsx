@@ -33,9 +33,11 @@ import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import { StudentReminderDialog } from "@/modules/students/student-reminders-client";
+import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
 
 const studentStatusOptions = [
-  { value: "SLOT_WAITING", label: "Slot gözləyir" },
+  { value: "SLOT_WAITING", label: "Slota əlavə et / Slot gözləyir" },
   { value: "ACTIVE", label: "Aktiv" },
   { value: "FROZEN", label: "Dondurulub" },
   { value: "STOPPED", label: "Dayandırılıb" },
@@ -129,6 +131,9 @@ export function StudentDetailActions({
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
   const [paymentMonth, setPaymentMonth] = useState(student.detail.paymentDefaultMonth);
+  const availableStudentStatusOptions = studentStatusOptions.filter(
+    (option) => option.value !== "ACTIVE" || student.lifecycleStatusValue === "ACTIVE",
+  );
   const sourceOptions = editOptions.sourceOptions.includes(student.detail.source)
     ? editOptions.sourceOptions
     : [student.detail.source, ...editOptions.sourceOptions].filter(Boolean);
@@ -277,7 +282,7 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Status dəyiş</DialogTitle>
             <DialogDescription>
-              Status yalnız tədris vəziyyətini dəyişir; ödəniş vəziyyəti faktura və ödənişlərdən avtomatik hesablanır.
+              Dondurma və dayandırma aktiv slotu bağlayır. Geri qayıdan tələbə əvvəl Slot gözləyir mərhələsinə keçir.
             </DialogDescription>
           </DialogHeader>
 
@@ -291,7 +296,7 @@ export function StudentDetailActions({
                 <FormSelect
                   name="lifecycleStatus"
                   defaultValue={student.lifecycleStatusValue}
-                  options={studentStatusOptions}
+                  options={availableStudentStatusOptions}
                 />
               </label>
               <label className="form-field">
@@ -361,6 +366,7 @@ export function StudentDetailActions({
             onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
+              if (!confirmPaymentMonthMismatch(formData)) return;
               try {
                 const result = unwrapActionResult(await recordPaymentAction(formData)) as {
                   redirectTo: string;
@@ -407,6 +413,7 @@ export function StudentDetailActions({
                   name="paidDate"
                   value={paymentDate}
                   onValueChange={setPaymentDate}
+                  maxValue={currentBakuDateValue()}
                   allowClear={false}
                   popoverPlacement="floating"
                   required
@@ -635,7 +642,7 @@ export function StudentDetailActions({
                     <FormSelect
                       name="lifecycleStatus"
                       defaultValue={student.lifecycleStatusValue}
-                      options={studentStatusOptions}
+                      options={availableStudentStatusOptions}
                     />
                   ) : (
                     <>

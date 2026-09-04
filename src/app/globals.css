@@ -20944,6 +20944,16 @@ body .erp-frame th {
   white-space: nowrap;
 }
 
+.date-picker-day:disabled,
+.date-picker-day:disabled:hover {
+  color: #c7cdd7;
+  background: transparent;
+  border-color: transparent;
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
 .sidebar-notification-badge,
 .side-rail .nav-icon > .sidebar-notification-badge {
   display: inline-flex;

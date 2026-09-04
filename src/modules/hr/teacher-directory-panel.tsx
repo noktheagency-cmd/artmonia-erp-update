@@ -190,7 +190,7 @@ function TeacherDetail({
           <section>
             <div className="teacher-section-title">
               <UsersRound size={16} />
-              <span>Müəllim tələbələri</span>
+              <span>Aktiv tələbələr</span>
             </div>
             <div className="teacher-student-list">
               {teacher.students.length > 0 ? (
@@ -209,7 +209,7 @@ function TeacherDetail({
                   </div>
                 ))
               ) : (
-                <HrEmptyState>Bu müəllimə bağlı aktiv enrollment tapılmadı.</HrEmptyState>
+                <HrEmptyState>Bu müəllimə hazırda aktiv slotla bağlı tələbə yoxdur.</HrEmptyState>
               )}
             </div>
           </section>
@@ -241,6 +241,31 @@ function TeacherDetail({
               )}
             </div>
           </section>
+        </div>
+      </HrPanel>
+
+      <HrPanel className="teacher-detail-panel">
+        <HrPanelHeader
+          icon={UsersRound}
+          eyebrow="Arxiv"
+          title={`Bütün tələbələrim (${teacher.allStudents.length})`}
+          description="Müəllimin tarix boyu dərs dediyi unikal tələbələr və onların cari vəziyyəti."
+        />
+        <div className="teacher-student-list">
+          {teacher.allStudents.length ? teacher.allStudents.map((student) => (
+            <div className="teacher-student-row" key={student.id}>
+              <div>
+                <strong>{student.name}</strong>
+                <span>{student.code} · İlk dərs: {student.firstLesson} · Son dərs: {student.lastLesson}</span>
+              </div>
+              <div>
+                <StatusChip tone={student.isCurrentlyActive ? "success" : "neutral"}>
+                  {student.currentStatus}
+                </StatusChip>
+                <small>{student.isCurrentlyActive ? "Hazırda aktivdir" : "Hazırda aktiv deyil"}</small>
+              </div>
+            </div>
+          )) : <HrEmptyState>Bu müəllim üçün tələbə tarixçəsi tapılmadı.</HrEmptyState>}
         </div>
       </HrPanel>
 
@@ -286,6 +311,7 @@ function matchesTeacherQuery(teacher: TeacherDirectoryTeacher, query: string) {
     teacher.phone,
     teacher.nextLessonStudent,
     ...teacher.students.flatMap((student) => [student.name, student.code, student.program]),
+    ...teacher.allStudents.flatMap((student) => [student.name, student.code, student.currentStatus]),
     ...teacher.lessons.flatMap((lesson) => [lesson.student, lesson.program, lesson.slot]),
   ]
     .join(" ")

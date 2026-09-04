@@ -57,6 +57,13 @@ const AccountSecurityPanel = dynamic(
   { loading: () => <div className={styles.activityLoading}>Hesab təhlükəsizliyi yüklənir...</div> },
 );
 
+const PaymentDateAuditPanel = dynamic(
+  () => import("@/modules/audit/payment-date-audit-panel").then((module) => module.PaymentDateAuditPanel),
+  { loading: () => <div className={styles.activityLoading}>Ödəniş tarixi auditi yüklənir...</div> },
+);
+
+type AuditTab = "SESSIONS" | "ACCOUNTS" | "ACTIVITY" | "PAYMENT_DATES";
+
 type RevokeIntent =
   | { kind: "SESSION"; session: AuthSessionDto }
   | { kind: "OTHERS"; user: SessionUserDto; count: number };
@@ -74,12 +81,12 @@ export function SessionAuditWorkspace({
   initialAccountKey = null,
 }: {
   initialData: SessionAuditData;
-  initialTab?: "SESSIONS" | "ACCOUNTS" | "ACTIVITY";
+  initialTab?: AuditTab;
   initialAccountKey?: string | null;
 }) {
   const router = useRouter();
   const [revokedSessionIds, setRevokedSessionIds] = useState<Set<string>>(() => new Set());
-  const [tab, setTab] = useState<"SESSIONS" | "ACCOUNTS" | "ACTIVITY">(initialTab);
+  const [tab, setTab] = useState<AuditTab>(initialTab);
   const [selectedUserId, setSelectedUserId] = useState(
     initialData.users.some((user) => user.id === initialData.currentUserId)
       ? initialData.currentUserId
@@ -206,7 +213,9 @@ export function SessionAuditWorkspace({
           <p>Giriş hesablarını, parolları, rolları və aktiv sessiyaları vahid təhlükəsizlik mərkəzindən idarə edin.</p>
         </div>
         <span className={styles.scopeLabel}>
-          <ShieldCheck /> {tab === "ACTIVITY"
+          <ShieldCheck /> {tab === "PAYMENT_DATES"
+            ? "Ödəniş tarixi riskləri"
+            : tab === "ACTIVITY"
             ? initialData.canViewAudit ? "Bütün əməliyyatlar" : "Mənim təhlükəsizlik qeydlərim"
             : tab === "ACCOUNTS" ? "Super Admin hesab idarəetməsi"
               : initialData.canViewAll ? "Bütün əməkdaşlar" : "Yalnız mənim sessiyalarım"}
@@ -240,6 +249,15 @@ export function SessionAuditWorkspace({
           onClick={() => setTab("ACTIVITY")}
         >
           <History /> Fəaliyyət jurnalı <span>{initialData.activity.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "PAYMENT_DATES"}
+          className={tab === "PAYMENT_DATES" ? styles.activeTab : undefined}
+          onClick={() => setTab("PAYMENT_DATES")}
+        >
+          <AlertTriangle /> Ödəniş tarixləri <span>{initialData.paymentDateRisks.length}</span>
         </button>
       </div>
 
@@ -386,8 +404,10 @@ export function SessionAuditWorkspace({
           generatedAt={initialData.generatedAt}
           initialProfileKey={initialAccountKey}
         />
-      ) : (
+      ) : tab === "ACTIVITY" ? (
         <AuditLogPanel logs={initialData.activity} />
+      ) : (
+        <PaymentDateAuditPanel payments={initialData.paymentDateRisks} />
       )}
 
       <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSessionId(null)}>

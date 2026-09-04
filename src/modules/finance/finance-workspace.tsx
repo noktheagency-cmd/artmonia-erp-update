@@ -78,6 +78,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
+import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { FinanceData } from "@/modules/finance/queries";
 import {
@@ -669,6 +671,7 @@ function PaymentDialog({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    if (!confirmPaymentMonthMismatch(formData)) return;
 
     startSubmitTransition(async () => {
       try {
@@ -792,6 +795,7 @@ function PaymentDialog({
                   name="paidDate"
                   value={values.paidDate}
                   onValueChange={handlePaidDateChange}
+                  maxValue={currentBakuDateValue()}
                   allowClear={false}
                   popoverPlacement="floating"
                   required
@@ -2054,7 +2058,9 @@ function PaymentCrudActions({
 
   function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    runMutation(new FormData(event.currentTarget), updateAction, "Ödəniş yeniləndi");
+    const formData = new FormData(event.currentTarget);
+    if (!confirmPaymentMonthMismatch(formData)) return;
+    runMutation(formData, updateAction, "Ödəniş yeniləndi");
   }
 
   function handleDelete(event: FormEvent<HTMLFormElement>) {
@@ -2095,7 +2101,7 @@ function PaymentCrudActions({
             <div className="field-grid">
               <label className="form-field">
                 <span>Ödəniş tarixi</span>
-                <DatePicker name="paidDate" defaultValue={payment.paidDateValue} allowClear={false} popoverPlacement="floating" required />
+                <DatePicker name="paidDate" defaultValue={payment.paidDateValue} maxValue={currentBakuDateValue()} allowClear={false} popoverPlacement="floating" required />
               </label>
               <label className="form-field">
                 <span>Ödəniş növü</span>
