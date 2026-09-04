@@ -1,5 +1,8 @@
 import "@/modules/instagram-dm/instagram-dm-analytics.css";
+import "@/modules/marketing/marketing.css";
+import "@/modules/marketing/marketing-content.css";
 import "@/modules/marketing/marketing-dashboard.css";
+import "@/modules/marketing/marketing-strategy.css";
 import { InstagramDmAnalytics } from "@/modules/instagram-dm/instagram-dm-analytics";
 import { getInstagramDmAnalyticsData } from "@/modules/instagram-dm/analytics-queries";
 import { MarketingContentPlanner } from "@/modules/marketing/marketing-content-planner";
