@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { google } from "@ai-sdk/google";
+import { openrouter } from "@openrouter/ai-sdk-provider";
 import { generateText, Output } from "ai";
 import { Prisma } from "@/generated/prisma/client";
 import {
@@ -16,7 +17,8 @@ import { getEnv } from "@/server/env";
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const AI_BATCH_SIZE = 25;
-const ANALYSIS_VERSION = "dm-ai-v6-date-range";
+const ANALYSIS_VERSION = "dm-ai-v7-openrouter-gemini-3.8-flash";
+const OPENROUTER_DM_MODEL = "google/gemini-3.8-flash";
 
 export type InstagramDmAnalyticsData = {
   account: { connected: boolean; username: string; lastWebhookAt: string };
@@ -206,7 +208,7 @@ async function analyzeConversations(
 
   const generatedAt = new Date().toISOString();
   if (usable.length === 0) return { state: "no_data", generatedAt, reason: "Analiz üçün mətnli dialoq yoxdur." };
-  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+  if (!process.env.OPENROUTER_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     return { state: "unavailable", generatedAt, reason: "AI xidməti konfiqurasiya edilməyib." };
   }
 
@@ -263,7 +265,19 @@ async function classifyBatch(
   period: { from: string; to: string },
 ): Promise<ConversationClassification[]> {
   const { output } = await generateText({
-    model: google("gemini-2.5-flash-lite"),
+    model: process.env.OPENROUTER_API_KEY
+      ? openrouter(OPENROUTER_DM_MODEL, {
+        reasoning: { effort: "medium", exclude: true },
+        usage: { include: true },
+        extraBody: {
+          provider: {
+            data_collection: "deny",
+            zdr: true,
+            require_parameters: true,
+          },
+        },
+      })
+      : google("gemini-2.5-flash-lite"),
     output: Output.object({ schema: conversationClassificationBatchSchema }),
     temperature: 0,
     maxOutputTokens: 7000,

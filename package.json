@@ -26,6 +26,7 @@
     "@base-ui/react": "^1.6.0",
     "@fontsource/noto-sans": "^5.2.10",
     "@modelcontextprotocol/server": "2.0.0",
+    "@openrouter/ai-sdk-provider": "2.10.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@radix-ui/react-dialog": "^1.1.16",
