@@ -4,6 +4,7 @@ import {
   AttendanceMark,
   EnrollmentStatus,
   Prisma,
+  ProgramLessonTrack,
   SlotSessionStatus,
 } from "@/generated/prisma/client";
 import { calculateMobileJourneyAndGamification } from "@/modules/mobile/mobile-gamification";
@@ -16,6 +17,7 @@ import { MobilePortalError } from "@/modules/mobile/mobile-portal-service";
 import { calculatePackageLessonUsage } from "@/modules/students/package-lesson-usage";
 import { dateFromInput, todayInBaku, toDateInput } from "@/modules/groups/shared";
 import { getPrisma } from "@/server/db/prisma";
+import { programJourneyImageUrl } from "@/server/storage/erp-files";
 
 const DAY_MS = 86_400_000;
 
@@ -121,7 +123,19 @@ export async function getMobileJourney(identity: MobileStudentIdentity) {
   const weekStartsAt = dateFromInput(startOfBakuWeek(todayInBaku()));
   const calculated = calculateMobileJourneyAndGamification({
     programId: enrollment.program.id,
-    topics: enrollment.program.lessonTopics,
+    courseCode: enrollment.program.code,
+    topics: enrollment.program.lessonTopics.map((topic) => ({
+      id: topic.id,
+      sequence: topic.sequence,
+      title: topic.title,
+      materials: topic.materials.map((material) => ({
+        track: material.track === ProgramLessonTrack.TWO_B ? "2B" : material.track,
+        subject: material.subject,
+        objective: material.objective,
+        homework: material.homework,
+        imageUrl: programJourneyImageUrl(material.imageObjectPath),
+      })),
+    })),
     attendance: attendance.map((item) => ({
       status: item.status,
       markedAt: item.markedAt,
@@ -135,6 +149,9 @@ export async function getMobileJourney(identity: MobileStudentIdentity) {
     enrollment.updatedAt,
     enrollment.program.updatedAt,
     ...enrollment.program.lessonTopics.map((topic) => topic.updatedAt),
+    ...enrollment.program.lessonTopics.flatMap((topic) =>
+      topic.materials.map((material) => material.updatedAt),
+    ),
     ...attendance.map((item) => item.updatedAt),
     ...homeworkCompletions.map((item) => item.updatedAt),
   ]);
@@ -427,6 +444,17 @@ async function loadActiveEnrollment(studentId: string) {
               sequence: true,
               title: true,
               updatedAt: true,
+              materials: {
+                orderBy: { track: "asc" },
+                select: {
+                  track: true,
+                  subject: true,
+                  objective: true,
+                  homework: true,
+                  imageObjectPath: true,
+                  updatedAt: true,
+                },
+              },
             },
           },
         },

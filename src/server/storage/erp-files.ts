@@ -19,6 +19,12 @@ const workshopPosterExtensions = new Map([
   ["image/webp", "webp"],
 ]);
 
+const programJourneyImageExtensions = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
+
 const receiptExtensions = new Map([
   ["application/pdf", "pdf"],
   ["image/jpeg", "jpg"],
@@ -104,6 +110,53 @@ export async function deleteWorkshopPoster(fileUrl: string) {
   await getSupabaseAdminClient()
     .storage.from(PUBLIC_BUCKET)
     .remove([objectPath]);
+}
+
+export async function uploadProgramJourneyImage(
+  file: File,
+  input: { topicId: string; track: "H" | "HB" | "B" | "2B" },
+) {
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("Journey şəkli 5 MB-dan böyük ola bilməz");
+  }
+  const extension = programJourneyImageExtensions.get(file.type);
+  if (!extension) {
+    throw new Error("Journey şəkli JPEG, PNG və ya WebP formatında olmalıdır");
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(input.topicId)) {
+    throw new Error("Journey addım identifikatoru yanlışdır");
+  }
+
+  const objectPath =
+    "program-journey/" + input.topicId + "/" + input.track + "/" + randomUUID() + "." + extension;
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase.storage
+    .from(PUBLIC_BUCKET)
+    .upload(objectPath, Buffer.from(await file.arrayBuffer()), {
+      cacheControl: "31536000",
+      contentType: file.type,
+      upsert: false,
+    });
+  if (result.error) {
+    throw new Error("Journey şəkli storage-a yüklənmədi");
+  }
+  return objectPath;
+}
+
+export function programJourneyImageUrl(objectPath: string | null) {
+  if (!objectPath || !isProgramJourneyImagePath(objectPath)) return null;
+  return getSupabaseAdminClient().storage.from(PUBLIC_BUCKET).getPublicUrl(objectPath).data
+    .publicUrl;
+}
+
+export async function deleteProgramJourneyImage(objectPath: string | null) {
+  if (!objectPath || !isProgramJourneyImagePath(objectPath)) return;
+  await getSupabaseAdminClient().storage.from(PUBLIC_BUCKET).remove([objectPath]);
+}
+
+function isProgramJourneyImagePath(objectPath: string) {
+  return /^program-journey\/[0-9a-f-]{36}\/(?:H|HB|B|2B)\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i
+    .test(objectPath);
 }
 
 export async function uploadReceipt(file: File, idempotencyKey?: string) {

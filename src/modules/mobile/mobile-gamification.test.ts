@@ -6,11 +6,13 @@ const topics = [1, 2, 3].map((sequence) => ({
   id: `topic-${sequence}`,
   sequence,
   title: `Mövzu ${sequence}`,
+  materials: [],
 }));
 
 test("PRESENT mövzunu və XP-ni irəli aparır", () => {
   const result = calculateMobileJourneyAndGamification({
     programId: "program-1",
+    courseCode: "RƏSM-101",
     topics,
     attendance: [{
       status: "PRESENT",
@@ -25,6 +27,11 @@ test("PRESENT mövzunu və XP-ni irəli aparır", () => {
   assert.equal(result.journey.completedTopicCount, 1);
   assert.equal(result.journey.currentTopic?.number, 2);
   assert.equal(result.journey.topics[0].status, "completed");
+  assert.equal(
+    result.journey.topics[0].identifier,
+    "program:program-1:topic:topic-1",
+  );
+  assert.equal(result.journey.topics[0].courseCode, "RƏSM-101");
   assert.equal(result.gamification.xp.total, 125);
   assert.equal(result.gamification.xp.earnedThisWeek, 125);
 });
@@ -32,6 +39,7 @@ test("PRESENT mövzunu və XP-ni irəli aparır", () => {
 test("ABSENT seriyanı qırır, EXCUSED isə mövzunu və seriyanı dəyişmir", () => {
   const result = calculateMobileJourneyAndGamification({
     programId: "program-1",
+    courseCode: "RƏSM-101",
     topics,
     attendance: [
       event("PRESENT", "2026-08-01", "10:00"),

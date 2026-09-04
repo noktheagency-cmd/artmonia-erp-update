@@ -513,15 +513,29 @@ components:
                 remainingLessons: { type: [integer, 'null'], minimum: 0 }
                 overLimitLessons: { type: integer, minimum: 0 }
         updatedAt: { type: string, format: date-time }
+    JourneyMaterial:
+      type: object
+      required: [track, subject, objective, homework, imageUrl]
+      properties:
+        track: { type: string, enum: [H, HB, B, 2B] }
+        subject: { type: string }
+        objective: { type: string }
+        homework: { type: string }
+        imageUrl: { type: [string, 'null'], format: uri }
     JourneyTopic:
       type: object
-      required: [identifier, number, title, status, completedAt]
+      required: [identifier, number, title, courseCode, status, completedAt, materials]
       properties:
-        identifier: { type: string, pattern: '^program:[0-9a-f-]{36}:topic:[1-9][0-9]*$' }
+        identifier: { type: string, pattern: '^program:[0-9a-f-]{36}:topic:[0-9a-f-]{36}$' }
         number: { type: integer, minimum: 1 }
         title: { type: string }
+        courseCode: { type: [string, 'null'] }
         status: { type: string, enum: [completed, current, locked] }
         completedAt: { type: [string, 'null'], format: date-time }
+        materials:
+          type: array
+          maxItems: 4
+          items: { $ref: '#/components/schemas/JourneyMaterial' }
     Achievement:
       type: object
       required: [id, title, description, iconKey, status, earnedAt]

@@ -258,6 +258,15 @@ enum AttendanceMark {
   @@schema("erp")
 }
 
+enum ProgramLessonTrack {
+  H
+  HB
+  B
+  TWO_B @map("2B")
+
+  @@schema("erp")
+}
+
 enum SlotSessionStatus {
   SCHEDULED
   COMPLETED
@@ -1604,10 +1613,30 @@ model ProgramLessonTopic {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  program   Program                 @relation(fields: [programId], references: [id], onDelete: Cascade)
+  materials ProgramLessonMaterial[]
 
   @@unique([programId, sequence])
   @@map("program_lesson_topics")
+  @@schema("erp")
+}
+
+model ProgramLessonMaterial {
+  id              String             @id @default(uuid()) @db.Uuid
+  topicId         String             @map("topic_id") @db.Uuid
+  track           ProgramLessonTrack
+  subject         String
+  objective       String
+  homework        String
+  imageObjectPath String?            @map("image_object_path")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  topic ProgramLessonTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, track])
+  @@index([topicId])
+  @@map("program_lesson_materials")
   @@schema("erp")
 }
 

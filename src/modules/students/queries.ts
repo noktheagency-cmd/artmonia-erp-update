@@ -25,6 +25,10 @@ import {
   normalizeStudentPage,
   STUDENT_LIST_PAGE_SIZE,
 } from "@/modules/students/student-pagination";
+import type {
+  ProgramJourneyMaterial,
+  ProgramJourneyStep,
+} from "@/modules/students/program-journey";
 import {
   resolveStudentPaymentStatus,
 } from "@/modules/students/student-debt-status";
@@ -44,6 +48,7 @@ import {
   type StudentReminderKind,
 } from "@/modules/students/student-reminders";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
+import { programJourneyImageUrl } from "@/server/storage/erp-files";
 
 type SummaryTone = "blue" | "coral" | "yellow" | "mint";
 type StudentTone = "success" | "warning" | "danger" | "neutral" | "info";
@@ -139,7 +144,7 @@ export type StudentListData = {
       monthlyFee: string;
       lessonsPerMonth: string;
       description: string;
-      lessonTopics: string[];
+      lessonTopics: ProgramJourneyStep[];
       isActive: boolean;
     }>;
     teachers: Array<{ id: string; fullName: string }>;
@@ -1309,7 +1314,7 @@ type StudentCreateOptionRows = {
     defaultMonthlyFee: unknown;
     defaultLessonsPerMonth: number | null;
     description: string | null;
-    lessonTopics: string[];
+    lessonTopics: ProgramJourneyStep[];
     isActive: boolean;
   }>;
   teachers: Array<{ id: string; fullName: string }>;
@@ -1318,6 +1323,18 @@ type StudentCreateOptionRows = {
   discountTypes: Array<{ value: string; label: string }>;
   sources: string[];
   leads: StudentListData["createOptions"]["leads"];
+};
+
+type ProgramJourneyMaterialRow = Omit<ProgramJourneyMaterial, "imageUrl">;
+type ProgramJourneyStepRow = Omit<ProgramJourneyStep, "materials"> & {
+  materials: ProgramJourneyMaterialRow[];
+};
+
+type StudentCreateOptionProgramRow = Omit<
+  StudentCreateOptionRows["programs"][number],
+  "lessonTopics"
+> & {
+  lessonTopics: ProgramJourneyStepRow[];
 };
 
 type StudentCreateOptionsRawRow = {
@@ -1340,7 +1357,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v16"],
+  ["student-list-data-v17"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -1940,7 +1957,34 @@ async function getStudentCreateOptions(
             'defaultLessonsPerMonth', p.default_lessons_per_month
             ,'description', p.description
             ,'lessonTopics', coalesce((
-              select jsonb_agg(topic.title order by topic.sequence asc)
+              select jsonb_agg(
+                jsonb_build_object(
+                  'id', topic.id::text,
+                  'sequence', topic.sequence,
+                  'title', topic.title,
+                  'materials', coalesce((
+                    select jsonb_agg(
+                      jsonb_build_object(
+                        'id', material.id::text,
+                        'track', material.track::text,
+                        'subject', material.subject,
+                        'objective', material.objective,
+                        'homework', material.homework,
+                        'imageObjectPath', material.image_object_path
+                      )
+                      order by case material.track::text
+                        when 'H' then 1
+                        when 'HB' then 2
+                        when 'B' then 3
+                        else 4
+                      end
+                    )
+                    from erp.program_lesson_materials material
+                    where material.topic_id = topic.id
+                  ), '[]'::jsonb)
+                )
+                order by topic.sequence asc
+              )
               from erp.program_lesson_topics topic
               where topic.program_id = p.id
             ), '[]'::jsonb)
@@ -2048,9 +2092,18 @@ async function getStudentCreateOptions(
     unscheduledDebtCount: toNumber(row?.unscheduledDebtCount),
     archiveDebtCount: toNumber(row?.archiveDebtCount),
     archiveDebtBalance: toNumber(row?.archiveDebtBalance),
-    programs: asJsonArray<StudentCreateOptionRows["programs"][number]>(
+    programs: asJsonArray<StudentCreateOptionProgramRow>(
       row?.programs
-    ),
+    ).map((program) => ({
+      ...program,
+      lessonTopics: program.lessonTopics.map((topic) => ({
+        ...topic,
+        materials: topic.materials.map((material) => ({
+          ...material,
+          imageUrl: programJourneyImageUrl(material.imageObjectPath),
+        })),
+      })),
+    })),
     teachers: asJsonArray<StudentCreateOptionRows["teachers"][number]>(
       row?.teachers
     ),

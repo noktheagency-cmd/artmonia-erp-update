@@ -11,6 +11,13 @@ type TopicInput = {
   id: string;
   sequence: number;
   title: string;
+  materials: Array<{
+    track: "H" | "HB" | "B" | "2B";
+    subject: string;
+    objective: string;
+    homework: string;
+    imageUrl: string | null;
+  }>;
 };
 
 type AttendanceInput = {
@@ -26,6 +33,7 @@ type HomeworkInput = {
 
 type GamificationInput = {
   programId: string;
+  courseCode: string | null;
   topics: TopicInput[];
   attendance: AttendanceInput[];
   homeworkCompletions: HomeworkInput[];
@@ -46,13 +54,15 @@ export function calculateMobileJourneyAndGamification(input: GamificationInput) 
         ? "current" as const
         : "locked" as const;
     return {
-      identifier: `program:${input.programId}:topic:${topic.sequence}`,
+      identifier: "program:" + input.programId + ":topic:" + topic.id,
       number: topic.sequence,
       title: topic.title,
+      courseCode: input.courseCode,
       status,
       completedAt: status === "completed"
         ? present[index]?.markedAt.toISOString() ?? null
         : null,
+      materials: topic.materials,
     };
   });
   const currentTopic = topics.find((topic) => topic.status === "current") ?? null;
