@@ -1,344 +1,171 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AtSign,
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
   Clock3,
-  Inbox,
+  LockKeyhole,
   MessageCircle,
   RefreshCw,
-  Reply,
-  Search,
-  Send,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingUp,
   UsersRound,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
-import type {
-  InstagramDmAnalyticsConversation,
-  InstagramDmAnalyticsData,
-  InstagramDmAnalyticsMessage,
-} from "@/modules/instagram-dm/analytics-queries";
+import type { InstagramDmAnalyticsData } from "@/modules/instagram-dm/analytics-queries";
 import { MarketingViewTabs } from "@/modules/marketing/marketing-view-tabs";
-
-type ConversationFilter = "all" | "answered" | "unanswered";
-
-const BAKU_OFFSET_MS = 4 * 60 * 60 * 1000;
-const AZ_MONTHS = ["yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avq", "sen", "okt", "noy", "dek"];
 
 export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData }) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<ConversationFilter>("all");
-  const [selectedId, setSelectedId] = useState(data.conversations[0]?.id ?? "");
   const [refreshPending, startRefresh] = useTransition();
-
-  const filteredConversations = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase("az-AZ");
-
-    return data.conversations.filter((conversation) => {
-      const matchesStatus = filter === "all"
-        || (filter === "answered" && conversation.isAnswered)
-        || (filter === "unanswered" && !conversation.isAnswered);
-      const matchesSearch = !normalizedSearch
-        || `${conversation.participantLabel} ${conversation.participantHandle} ${conversation.preview}`
-          .toLocaleLowerCase("az-AZ")
-          .includes(normalizedSearch);
-      return matchesStatus && matchesSearch;
-    });
-  }, [data.conversations, filter, search]);
-
-  const selectedConversation = filteredConversations.find((conversation) => conversation.id === selectedId)
-    ?? filteredConversations[0]
-    ?? null;
-
-  function refresh() {
-    startRefresh(() => router.refresh());
-  }
+  const ai = data.ai.state === "ready" ? data.ai : null;
+  const aiUnavailableReason = data.ai.state === "ready" ? "" : data.ai.reason;
 
   return (
-    <section className="instagram-dm-page">
+    <section className="page-stack instagram-dm-page">
       <header className="instagram-dm-header">
         <div>
-          <h1>Instagram DM Intelligence</h1>
-          <p>Müştəri mesajlarını və davranış axınını izləyin.</p>
+          <h1>DM Intelligence</h1>
+          <p>Customer behavior və ümumi komanda danışıq keyfiyyətinin AI analizi.</p>
+          <span className="instagram-dm-connection">
+            <i className={cx(data.account.connected && "is-connected")} />
+            {data.account.connected ? "Instagram bağlıdır" : "Instagram bağlantısı yoxdur"}
+            <b>· Son {data.periodDays} gün</b>
+          </span>
         </div>
         <div className="instagram-dm-header-actions">
-          <span className={cx("instagram-dm-connection", data.account.connected && "is-connected")}>
-            <i />
-            {data.account.connected ? "Instagram bağlıdır" : "Instagram bağlantısı yoxdur"}
-          </span>
+          <span className="instagram-dm-privacy"><LockKeyhole size={14} /> Mesaj mətnləri göstərilmir</span>
           <button
             type="button"
             className="instagram-dm-refresh"
-            aria-label="Instagram DM məlumatlarını yenilə"
+            aria-label="DM analizini yenilə"
             title="Yenilə"
             disabled={refreshPending}
-            onClick={refresh}
+            onClick={() => startRefresh(() => router.refresh())}
           >
-            <RefreshCw size={17} className={refreshPending ? "is-spinning" : undefined} />
+            <RefreshCw size={16} className={refreshPending ? "is-spinning" : undefined} />
           </button>
         </div>
       </header>
 
       <MarketingViewTabs active="dm" />
 
-      <section className="instagram-dm-metrics" aria-label="Instagram DM əsas göstəriciləri">
+      <section className="instagram-dm-metrics" aria-label="DM əsas göstəriciləri">
+        <Metric icon={MessageCircle} label="Conversation" value={count(data.summary.conversations)} helper={`${count(data.summary.messages)} mesaj`} tone="blue" />
+        <Metric icon={TrendingUp} label="Cavab faizi" value={percent(data.summary.responseRate)} helper={`${count(data.summary.answeredConversations)} cavablanan`} tone="green" />
+        <Metric icon={Clock3} label="Median ilk cavab" value={durationLabel(data.summary.medianFirstResponseMinutes)} helper="İlk inbound → ilk outbound" tone="blue" />
+        <Metric icon={BarChart3} label="Pik saat" value={peakHour(data.summary.peakInboundHour)} helper="Bakı vaxtı ilə" tone="orange" />
         <Metric
-          icon={MessageCircle}
-          label="Conversation"
-          value={count(data.summary.conversations)}
-          helper={`${count(data.summary.participants)} iştirakçı`}
-        />
-        <Metric
-          icon={Inbox}
-          label="Gələn mesajlar"
-          value={count(data.summary.inboundMessages)}
-          helper={peakHourLabel(data.summary.peakInboundHour)}
-        />
-        <Metric
-          icon={Reply}
-          label="Cavablandırılan"
-          value={count(data.summary.answeredConversations)}
-          helper={`${count(data.summary.outboundMessages)} göndərilən mesaj`}
-        />
-        <Metric
-          icon={Clock3}
-          label="Median ilk cavab"
-          value={durationLabel(data.summary.medianFirstResponseMinutes)}
-          helper="İlk inbound → ilk outbound"
+          icon={AlertTriangle}
+          label="Yüksək niyyətli, cavabsız"
+          value={ai ? count(ai.highIntentUnanswered) : "—"}
+          helper={ai ? "AI tərəfindən aşkarlanıb" : "AI nəticəsi gözlənilir"}
+          tone="warning"
         />
       </section>
 
-      <section className="instagram-dm-workspace" aria-label="Instagram conversation iş sahəsi">
-        <aside className="instagram-dm-conversation-panel">
-          <div className="instagram-dm-conversation-tools">
-            <label className="instagram-dm-search">
-              <Search size={16} />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Conversation axtar"
-                aria-label="Conversation axtar"
-              />
-            </label>
-            <select
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as ConversationFilter)}
-              aria-label="Conversation statusu"
-            >
-              <option value="all">Hamısı</option>
-              <option value="unanswered">Cavabsız</option>
-              <option value="answered">Cavablanan</option>
-            </select>
-          </div>
+      {ai ? (
+        <>
+          <section className="instagram-ai-section">
+            <header><Sparkles size={16} /><div><h2>AI ilə müştəri davranışı</h2><p>Conversation-ların toplu paylanması</p></div></header>
+            <div className="instagram-ai-behavior-grid">
+              <InsightCard title="Xidmət marağı" icon={Target} tone="blue" items={ai.serviceInterest} />
+              <IntentCard hot={ai.purchaseIntent.hot} warm={ai.purchaseIntent.warm} cold={ai.purchaseIntent.cold} />
+              <InsightCard title="Maneələr" icon={ShieldCheck} tone="orange" items={ai.barriers} />
+              <InsightCard title="Nəticə və növbəti addım" icon={TrendingUp} tone="violet" items={ai.outcomes} />
+            </div>
+          </section>
 
-          <div className="instagram-dm-conversation-list">
-            {filteredConversations.length ? filteredConversations.map((conversation) => (
-              <ConversationItem
-                key={conversation.id}
-                conversation={conversation}
-                selected={selectedConversation?.id === conversation.id}
-                onSelect={() => setSelectedId(conversation.id)}
-              />
-            )) : (
-              <div className="instagram-dm-list-empty">
-                <Search size={20} />
-                <strong>Nəticə tapılmadı</strong>
-                <span>Axtarışı və ya filtri dəyişin.</span>
+          <section className="instagram-team-grid">
+            <article className="instagram-team-scores">
+              <header><div><h2>Ümumi komanda danışıq analizi</h2><p>Fərdi menecer adı göstərilmir</p></div><UsersRound size={19} /></header>
+              <div>
+                <Score label="Ton və peşəkarlıq" value={ai.teamScores.professionalism} />
+                <Score label="Ehtiyacın aşkarlanması" value={ai.teamScores.needDiscovery} />
+                <Score label="Cavab keyfiyyəti" value={ai.teamScores.answerQuality} />
+                <Score label="Etirazların idarəsi" value={ai.teamScores.objectionHandling} />
+                <Score label="Qeydiyyata yönləndirmə" value={ai.teamScores.registrationDirection} />
               </div>
-            )}
-          </div>
-          <footer>{count(filteredConversations.length)} nəticə</footer>
-        </aside>
+            </article>
 
-        {selectedConversation ? (
-          <>
-            <ConversationTranscript conversation={selectedConversation} />
-            <ConversationFacts conversation={selectedConversation} />
-          </>
-        ) : (
-          <div className="instagram-dm-workspace-empty">
-            <MessageCircle size={26} />
-            <strong>Conversation seçilməyib</strong>
-            <span>Mesaj axınını görmək üçün conversation seçin.</span>
-          </div>
-        )}
-      </section>
+            <article className="instagram-incomplete-card">
+              <span><AlertTriangle size={17} /></span>
+              <small>Yarımçıq dialoqlar</small>
+              <strong>{count(ai.incompleteDialogs)}</strong>
+              <p>AI conversation axınına əsasən hesablayıb.</p>
+            </article>
+
+            <article className="instagram-ai-advice">
+              <header><Sparkles size={17} /><div><h2>AI insaytı və tövsiyələr</h2><p>{ai.summary}</p></div></header>
+              <ul>{ai.recommendations.map((recommendation, index) => <li key={`${index}-${recommendation}`}><CheckCircle2 size={14} />{recommendation}</li>)}</ul>
+            </article>
+          </section>
+        </>
+      ) : (
+        <section className="instagram-ai-unavailable">
+          <Sparkles size={24} />
+          <div><h2>AI analizi hazır deyil</h2><p>{aiUnavailableReason}</p></div>
+        </section>
+      )}
 
       <footer className="instagram-dm-page-foot">
-        <span>Son webhook: {data.account.lastWebhookAt ? fullDateTime(data.account.lastWebhookAt) : "—"}</span>
-        <span>Məlumat yeniləndi: {fullDateTime(data.generatedAt)}</span>
+        <span>Son webhook: {data.account.lastWebhookAt ? dateTime(data.account.lastWebhookAt) : "—"}</span>
+        <span>Analiz yeniləndi: {dateTime(data.generatedAt)}</span>
       </footer>
     </section>
   );
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value,
-  helper,
-}: {
-  icon: typeof MessageCircle;
-  label: string;
-  value: string;
-  helper: string;
+function Metric({ icon: Icon, label, value, helper, tone }: {
+  icon: typeof MessageCircle; label: string; value: string; helper: string; tone: string;
 }) {
-  return (
-    <article className="instagram-dm-metric">
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{helper}</small>
-      </div>
-      <i><Icon size={19} /></i>
-    </article>
-  );
+  return <article className={`instagram-dm-metric is-${tone}`}>
+    <div><span>{label}</span><strong>{value}</strong><small>{helper}</small></div>
+    <i><Icon size={19} /></i>
+  </article>;
 }
 
-function ConversationItem({
-  conversation,
-  selected,
-  onSelect,
-}: {
-  conversation: InstagramDmAnalyticsConversation;
-  selected: boolean;
-  onSelect: () => void;
+function InsightCard({ title, icon: Icon, tone, items }: {
+  title: string; icon: typeof Target; tone: string; items: Array<{ label: string; percentage: number }>;
 }) {
-  return (
-    <button
-      type="button"
-      className={cx("instagram-dm-conversation-item", selected && "is-selected")}
-      aria-pressed={selected}
-      onClick={onSelect}
-    >
-      <span className="instagram-dm-avatar"><AtSign size={19} /></span>
-      <span className="instagram-dm-conversation-copy">
-        <span className="instagram-dm-conversation-title">
-          <strong>{conversation.participantLabel}</strong>
-          <time>{compactDateTime(conversation.lastMessageAt)}</time>
-        </span>
-        <small>{conversation.participantHandle}</small>
-        <p>{conversation.preview}</p>
-        <span className="instagram-dm-conversation-meta">
-          <span><MessageCircle size={12} /> {count(conversation.messageCount)}</span>
-          <span className={conversation.isAnswered ? "is-answered" : undefined}>
-            {conversation.isAnswered ? "Cavablanıb" : "Cavabsız"}
-          </span>
-        </span>
-      </span>
-    </button>
-  );
+  return <article className={`instagram-insight-card is-${tone}`}>
+    <header><Icon size={16} /><h3>{title}</h3></header>
+    <dl>{items.map((item) => <div key={item.label}><dt>{item.label}</dt><dd>{percent(item.percentage)}</dd></div>)}</dl>
+  </article>;
 }
 
-function ConversationTranscript({ conversation }: { conversation: InstagramDmAnalyticsConversation }) {
-  return (
-    <article className="instagram-dm-transcript">
-      <header>
-        <span className="instagram-dm-avatar"><AtSign size={20} /></span>
-        <div>
-          <h2>{conversation.participantLabel} <small>· {conversation.participantHandle}</small></h2>
-          <p>Instagram conversation</p>
-        </div>
-        <span className="instagram-dm-transcript-activity">
-          <strong>{count(conversation.messageCount)} mesaj</strong>
-          <small>Son aktivlik: {compactDateTime(conversation.lastMessageAt)}</small>
-        </span>
-      </header>
-
-      <div className="instagram-dm-message-stream">
-        {conversation.messages.length ? conversation.messages.map((message, index) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            showDate={index === 0 || dateKey(message.sentAt) !== dateKey(conversation.messages[index - 1]!.sentAt)}
-          />
-        )) : (
-          <div className="instagram-dm-stream-empty">Bu conversation üçün mesaj yoxdur.</div>
-        )}
-
-        {conversation.inboundCount > 0 && !conversation.isAnswered ? (
-          <div className="instagram-dm-no-response">
-            <span><Send size={19} /></span>
-            <strong>Hələ cavab yoxdur</strong>
-            <p>Bu conversation üçün hələ heç bir çıxan cavab saxlanmayıb.</p>
-          </div>
-        ) : null}
-      </div>
-    </article>
-  );
+function IntentCard({ hot, warm, cold }: { hot: number; warm: number; cold: number }) {
+  return <article className="instagram-insight-card is-green">
+    <header><TrendingUp size={16} /><h3>Alış niyyəti</h3></header>
+    <dl>
+      <div><dt>Yüksək niyyətli</dt><dd>{percent(hot)}</dd></div>
+      <div><dt>Orta niyyətli</dt><dd>{percent(warm)}</dd></div>
+      <div><dt>Aşağı niyyətli</dt><dd>{percent(cold)}</dd></div>
+    </dl>
+  </article>;
 }
 
-function MessageBubble({ message, showDate }: { message: InstagramDmAnalyticsMessage; showDate: boolean }) {
-  return (
-    <>
-      {showDate ? <div className="instagram-dm-date-separator"><span>{dateLabel(message.sentAt)}</span></div> : null}
-      <div className={cx("instagram-dm-message", message.direction === "OUTBOUND" && "is-outbound")}>
-        <span className="instagram-dm-message-icon">
-          {message.direction === "INBOUND" ? <AtSign size={15} /> : <Send size={14} />}
-        </span>
-        <div>
-          <p>{message.text}</p>
-          <time>{time(message.sentAt)}</time>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function ConversationFacts({ conversation }: { conversation: InstagramDmAnalyticsConversation }) {
-  const answered = conversation.isAnswered;
-  return (
-    <aside className="instagram-dm-facts">
-      <header>
-        <h3>Sistem məlumatı</h3>
-        <p>Conversation əsasında hesablanır</p>
-      </header>
-      <dl>
-        <Fact icon={MessageCircle} label="Ümumi mesaj sayı" value={count(conversation.messageCount)} />
-        <Fact icon={Inbox} label="Gələn" value={count(conversation.inboundCount)} />
-        <Fact icon={Reply} label="Göndərilən" value={count(conversation.outboundCount)} />
-      </dl>
-      <dl>
-        <Fact icon={Clock3} label="İlk mesaj" value={compactDateTime(conversation.firstMessageAt)} />
-        <Fact icon={Clock3} label="Son aktivlik" value={compactDateTime(conversation.lastMessageAt)} />
-      </dl>
-      <dl>
-        <Fact
-          icon={UsersRound}
-          label="Cavab statusu"
-          value={answered ? "Cavablanıb" : "Cavablandırılmayıb"}
-          tone={answered ? "positive" : "warning"}
-        />
-      </dl>
-    </aside>
-  );
-}
-
-function Fact({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: typeof MessageCircle;
-  label: string;
-  value: string;
-  tone?: "positive" | "warning";
-}) {
-  return (
-    <div>
-      <dt><Icon size={15} /> {label}</dt>
-      <dd className={tone ? `is-${tone}` : undefined}>{value}</dd>
-    </div>
-  );
+function Score({ label, value }: { label: string; value: number }) {
+  const safeValue = Math.max(0, Math.min(100, value));
+  return <div className="instagram-score-row">
+    <span>{label}</span>
+    <i><b style={{ width: `${safeValue}%` }} /></i>
+    <strong>{Math.round(safeValue)}/100</strong>
+  </div>;
 }
 
 function count(value: number) {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return Math.round(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
-
+function percent(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+  return `${String(rounded).replace(".", ",")}%`;
+}
 function durationLabel(minutes: number | null) {
   if (minutes === null) return "—";
   const rounded = Math.max(0, Math.round(minutes));
@@ -347,39 +174,15 @@ function durationLabel(minutes: number | null) {
   const remainder = rounded % 60;
   return remainder ? `${hours} saat ${remainder} dəq` : `${hours} saat`;
 }
-
-function peakHourLabel(hour: number | null) {
-  if (hour === null) return "Pik saat hələ hesablanmayıb";
-  return `Pik saat ${hour.toString().padStart(2, "0")}:00–${((hour + 1) % 24).toString().padStart(2, "0")}:00`;
+function peakHour(hour: number | null) {
+  return hour === null ? "—" : `${String(hour).padStart(2, "0")}:00–${String((hour + 1) % 24).padStart(2, "0")}:00`;
 }
-
-function dateKey(value: string) {
-  const date = bakuDate(value);
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+function dateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const baku = new Date(date.getTime() + 4 * 60 * 60 * 1000);
+  return `${pad(baku.getUTCDate())}.${pad(baku.getUTCMonth() + 1)}.${baku.getUTCFullYear()} ${pad(baku.getUTCHours())}:${pad(baku.getUTCMinutes())}`;
 }
-
-function dateLabel(value: string) {
-  const date = bakuDate(value);
-  return `${pad(date.getUTCDate())} ${AZ_MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-}
-
-function time(value: string) {
-  const date = bakuDate(value);
-  return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
-}
-
-function compactDateTime(value: string) {
-  return `${dateLabel(value)} ${time(value)}`;
-}
-
-function fullDateTime(value: string) {
-  return `${dateLabel(value)}, ${time(value)}`;
-}
-
-function bakuDate(value: string) {
-  return new Date(new Date(value).getTime() + BAKU_OFFSET_MS);
-}
-
 function pad(value: number) {
   return String(value).padStart(2, "0");
 }

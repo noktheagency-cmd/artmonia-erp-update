@@ -12,6 +12,12 @@ const CONVERSATION_ACTION_TYPES = [
   "onsite_conversion.messaging_conversation_started_7d",
   "messaging_conversation_started_7d",
 ] as const;
+const LEAD_ACTION_TYPES = [
+  "lead",
+  "onsite_conversion.lead_grouped",
+  "onsite_conversion.lead",
+  "offsite_conversion.fb_pixel_lead",
+] as const;
 
 type MetaAction = { action_type?: string; value?: string };
 type MetaCampaign = {
@@ -194,6 +200,7 @@ export async function syncMetaMarketing(options?: { months?: number; since?: Dat
     if (!campaignId) return [];
     const spend = safeNumber(row.spend);
     const conversations = actionValue(row.actions, CONVERSATION_ACTION_TYPES);
+    const leads = metaLeadActionValue(row.actions);
     const reportedCost = actionValue(row.cost_per_action_type, CONVERSATION_ACTION_TYPES);
     return [{
       campaignId,
@@ -203,6 +210,7 @@ export async function syncMetaMarketing(options?: { months?: number; since?: Dat
       impressions: safeInteger(row.impressions),
       reach: safeInteger(row.reach),
       clicks: safeInteger(row.clicks),
+      leads: Math.round(leads),
       conversations: Math.round(conversations),
       costPerConversation: reportedCost || (conversations > 0 ? spend / conversations : 0),
       cpc: safeNumber(row.cpc),
@@ -425,6 +433,7 @@ async function upsertMetaStats(
     impressions: number;
     reach: number;
     clicks: number;
+    leads: number;
     conversations: number;
     costPerConversation: number;
     cpc: number;
@@ -440,18 +449,19 @@ async function upsertMetaStats(
     if (!batch.length) continue;
     const values = batch.map((row) => Prisma.sql`(
       gen_random_uuid(), ${row.campaignId}::uuid, ${row.recordedOn}::date,
-      ${row.spend}, ${row.impressions}, ${row.reach}, ${row.clicks}, ${row.conversations},
+      ${row.spend}, ${row.leads}, ${row.impressions}, ${row.reach}, ${row.clicks}, ${row.conversations},
       ${row.costPerConversation}, ${row.cpc}, ${row.cpm}, ${row.ctr}, ${row.frequency},
       ${currency}, 'META', ${syncedAt}, now(), now()
     )`);
     await prisma.$executeRaw(Prisma.sql`
       insert into erp.marketing_campaign_stats (
-        id, campaign_id, recorded_on, spend, impressions, reach, clicks, conversations,
+        id, campaign_id, recorded_on, spend, leads, impressions, reach, clicks, conversations,
         cost_per_conversation, cpc, cpm, ctr, frequency, currency, source, synced_at,
         created_at, updated_at
       ) values ${Prisma.join(values)}
       on conflict (campaign_id, recorded_on) do update set
         spend = excluded.spend,
+        leads = excluded.leads,
         impressions = excluded.impressions,
         reach = excluded.reach,
         clicks = excluded.clicks,
@@ -615,6 +625,10 @@ function actionValue(actions: MetaAction[] | undefined, candidates: readonly str
     if (match) return safeNumber(match.value);
   }
   return 0;
+}
+
+export function metaLeadActionValue(actions: MetaAction[] | undefined) {
+  return actionValue(actions, LEAD_ACTION_TYPES);
 }
 
 function safeNumber(value: unknown) {
