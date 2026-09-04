@@ -1,42 +1,22 @@
 import { createHash } from "node:crypto";
 import { google } from "@ai-sdk/google";
 import { generateText, Output } from "ai";
-import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
+import {
+  aggregateConversationClassifications,
+  conversationClassificationBatchSchema,
+  normalizeConversationClassification,
+  type AiAnalysis,
+  type ConversationClassification,
+} from "@/modules/instagram-dm/analytics-ai";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
 
 const ANALYSIS_DAYS = 90;
 const CACHE_TTL_MS = 15 * 60 * 1000;
-
-const percentageItemSchema = z.object({
-  label: z.string().min(2).max(80),
-  percentage: z.number().min(0).max(100),
-});
-const aiAnalysisSchema = z.object({
-  serviceInterest: z.array(percentageItemSchema).min(1).max(6),
-  purchaseIntent: z.object({
-    hot: z.number().min(0).max(100),
-    warm: z.number().min(0).max(100),
-    cold: z.number().min(0).max(100),
-  }),
-  barriers: z.array(percentageItemSchema).min(1).max(6),
-  outcomes: z.array(percentageItemSchema).min(1).max(6),
-  teamScores: z.object({
-    professionalism: z.number().min(0).max(100),
-    needDiscovery: z.number().min(0).max(100),
-    answerQuality: z.number().min(0).max(100),
-    objectionHandling: z.number().min(0).max(100),
-    registrationDirection: z.number().min(0).max(100),
-  }),
-  incompleteDialogs: z.number().int().min(0),
-  highIntentUnanswered: z.number().int().min(0),
-  summary: z.string().min(20).max(700),
-  recommendations: z.array(z.string().min(8).max(240)).min(1).max(5),
-});
-
-type AiAnalysis = z.infer<typeof aiAnalysisSchema>;
+const AI_BATCH_SIZE = 25;
+const ANALYSIS_VERSION = "dm-ai-v5";
 
 export type InstagramDmAnalyticsData = {
   account: { connected: boolean; username: string; lastWebhookAt: string };
@@ -77,6 +57,7 @@ type AnalysisConversation = {
 };
 
 const analysisCache = new Map<string, { expiresAt: number; value: AiAnalysis }>();
+const analysisInFlight = new Map<string, Promise<AiAnalysis>>();
 
 export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalyticsData> {
   await requireErpActor("marketing.read");
@@ -130,7 +111,7 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
         lastMessageAt: true,
         messages: {
           where: { isDeleted: false },
-          orderBy: [{ sentAt: "asc" }, { id: "asc" }],
+          orderBy: [{ sentAt: "desc" }, { id: "desc" }],
           take: 60,
           select: { id: true, direction: true, text: true, kind: true, sentAt: true },
         },
@@ -145,6 +126,14 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
   };
   const account = accounts[0];
 
+  const responseRate = response.inboundConversations > 0
+    ? response.answeredConversations * 100 / response.inboundConversations
+    : 0;
+  const metrics = {
+    responseRate,
+    medianFirstResponseMinutes: response.medianFirstResponseMinutes,
+  };
+
   return {
     account: {
       connected: Boolean(env.META_INSTAGRAM_ACCESS_TOKEN && env.META_APP_SECRET),
@@ -157,32 +146,31 @@ export async function getInstagramDmAnalyticsData(): Promise<InstagramDmAnalytic
       participants: participantCount,
       messages: messageCount,
       answeredConversations: response.answeredConversations,
-      responseRate: response.inboundConversations > 0
-        ? response.answeredConversations * 100 / response.inboundConversations
-        : 0,
+      responseRate,
       medianFirstResponseMinutes: response.medianFirstResponseMinutes,
       peakInboundHour: peakRows[0]?.hour ?? null,
     },
-    ai: await analyzeConversations(conversations),
+    ai: await analyzeConversations(conversations, metrics),
     generatedAt: new Date().toISOString(),
   };
 }
 
-async function analyzeConversations(conversations: AnalysisConversation[]): Promise<InstagramDmAnalyticsData["ai"]> {
-  let remainingCharacters = 60_000;
-  const usable = conversations.flatMap((conversation, index) => {
-    if (remainingCharacters <= 0) return [];
-    const messages = conversation.messages.flatMap((message) => {
+async function analyzeConversations(
+  conversations: AnalysisConversation[],
+  metrics: { responseRate: number; medianFirstResponseMinutes: number | null },
+): Promise<InstagramDmAnalyticsData["ai"]> {
+  const usable: PreparedConversation[] = conversations.flatMap((conversation, index) => {
+    const messages = [...conversation.messages].reverse().flatMap((message) => {
       const text = message.text?.trim();
-      if (!text || remainingCharacters <= 0) return [];
-      const clipped = text.slice(0, Math.min(260, remainingCharacters));
-      remainingCharacters -= clipped.length;
+      if (!text) return [];
+      const direction: "MÜŞTƏRİ" | "KOMANDA" = message.direction === "INBOUND" ? "MÜŞTƏRİ" : "KOMANDA";
       return [{
-        direction: message.direction === "INBOUND" ? "MÜŞTƏRİ" : "KOMANDA",
-        text: clipped,
+        direction,
+        text: text.slice(0, 260),
       }];
     });
-    return messages.length ? [{ index: index + 1, messages }] : [];
+    const hasInboundText = messages.some((message) => message.direction === "MÜŞTƏRİ");
+    return hasInboundText ? [{ index: index + 1, messages }] : [];
   });
 
   const generatedAt = new Date().toISOString();
@@ -192,38 +180,83 @@ async function analyzeConversations(conversations: AnalysisConversation[]): Prom
   }
 
   const fingerprint = createHash("sha256")
-    .update(JSON.stringify(conversations.map((item) => [item.id, item.lastMessageAt, item.messages.map((message) => message.id)])))
+    .update(JSON.stringify([ANALYSIS_VERSION, conversations.map((item) => [item.id, item.lastMessageAt, item.messages.map((message) => message.id)])]))
     .digest("hex");
   const cached = analysisCache.get(fingerprint);
   if (cached && cached.expiresAt > Date.now()) return { state: "ready", generatedAt, ...cached.value };
 
   try {
-    const { output } = await generateText({
-      model: google("gemini-2.5-flash-lite"),
-      output: Output.object({ schema: aiAnalysisSchema }),
-      temperature: 0.15,
-      maxOutputTokens: 3500,
-      system: [
-        "Sən Artmonia təhsil ERP-si üçün Azərbaycan dilində işləyən customer behavior analitikisən.",
-        "Yalnız təqdim edilən Instagram DM dialoqlarına əsaslan; rəqəm və səbəb uydurma.",
-        "Nəticələri ayrı-ayrı əməkdaşlara deyil, ümumi komanda səviyyəsində qiymətləndir.",
-        "Şəxsi ad, username, telefon və mesaj mətnini nəticədə təkrar etmə.",
-        "Faizlər müşahidə olunan conversation-ların payıdır.",
-        "Alış niyyəti: qiymət, tarix, qeydiyyat və konkret xidmət soruşanlar yüksək; ümumi maraq orta; əlaqəsiz və qeyri-müəyyən mesajlar aşağıdır.",
-        "Cavabsız yüksək niyyətli sayı: son müştəri mesajı yüksək niyyət göstərən və ardınca komanda cavabı olmayan conversation-lardır.",
-        "Komanda ballarında ton, ehtiyacın aşkarlanması, cavabın faydalılığı, etirazın idarəsi və konkret qeydiyyat CTA-sını qiymətləndir.",
-      ].join("\n"),
-      prompt: [
-        `Dövr: son ${ANALYSIS_DAYS} gün. Conversation sayı: ${usable.length}.`,
-        "Anonimləşdirilmiş dialoqları 4 customer behavior hissəsi və ümumi komanda danışıq keyfiyyəti üzrə analiz et.",
-        JSON.stringify(usable),
-      ].join("\n\n"),
-    });
+    let pending = analysisInFlight.get(fingerprint);
+    if (!pending) {
+      pending = classifyConversations(usable).then((classifications) => (
+        aggregateConversationClassifications(classifications, metrics)
+      ));
+      analysisInFlight.set(fingerprint, pending);
+    }
+    const output = await pending;
     analysisCache.clear();
     analysisCache.set(fingerprint, { expiresAt: Date.now() + CACHE_TTL_MS, value: output });
     return { state: "ready", generatedAt, ...output };
   } catch (error) {
     console.error("Instagram DM aggregate AI analysis failed", error instanceof Error ? error.name : "UnknownError");
     return { state: "unavailable", generatedAt, reason: "AI analizi hazırda yenilənə bilmədi." };
+  } finally {
+    analysisInFlight.delete(fingerprint);
   }
+}
+
+type PreparedConversation = {
+  index: number;
+  messages: Array<{ direction: "MÜŞTƏRİ" | "KOMANDA"; text: string }>;
+};
+
+async function classifyConversations(conversations: PreparedConversation[]) {
+  const batches = Array.from(
+    { length: Math.ceil(conversations.length / AI_BATCH_SIZE) },
+    (_, index) => conversations.slice(index * AI_BATCH_SIZE, (index + 1) * AI_BATCH_SIZE),
+  );
+  const results = await Promise.all(batches.map(classifyBatch));
+  return results.flat();
+}
+
+async function classifyBatch(batch: PreparedConversation[]): Promise<ConversationClassification[]> {
+  const { output } = await generateText({
+    model: google("gemini-2.5-flash-lite"),
+    output: Output.object({ schema: conversationClassificationBatchSchema }),
+    temperature: 0,
+    maxOutputTokens: 7000,
+    system: [
+      "Sən Artmonia təhsil ERP-si üçün Azərbaycan dilində işləyən customer behavior təsnifatçısısan.",
+      "Hər dialoqu ayrıca təsnif et. Heç bir faiz, ümumi say, xülasə və tövsiyə yaratma.",
+      "kind, service, purchaseIntent və barriers yalnız MÜŞTƏRİ mesajlarından müəyyən edilməlidir; KOMANDA mesajlarından müştəri niyyəti çıxarma.",
+      "İş/vakansiya müraciətini HR, spam və mövzuya aid olmayan dialoqu IRRELEVANT et. Bu hallarda service və purchaseIntent null, barriers boş, outcome NOT_CUSTOMER, needsReply false olmalıdır.",
+      "CUSTOMER üçün purchaseIntent: konkret qiymət, tarix, qeydiyyat, yer və ya konkret xidmət soruşulursa HOT; aydın xidmət marağı varsa WARM; zəif və qeyri-müəyyən maraqdırsa COLD.",
+      "Maneəni yalnız müştəri açıq dedikdə seç; sadəcə məlumat soruşmasını avtomatik maneə sayma. UNCERTAINTY yalnız qərara mane olan qeyri-müəyyənlik olduqda istifadə edilir.",
+      "needsReply yalnız son mənalı müştəri mesajı cavab və ya əməliyyat tələb edir və ondan sonra komanda cavabı yoxdur; təşəkkür, təsdiq, emoji və söhbəti bağlayan mesaj üçün false et.",
+      "outcome qaydası: CONTACT_SHARED yalnız müştəri əlaqə məlumatı verəndə; INFO_PROVIDED komanda sualı məzmunlu şəkildə cavablandırıb açıq gözləyən əməl qalmayanda; FOLLOW_UP_REQUIRED yalnız konkret növbəti əməl hələ yerinə yetirilməyəndə; CUSTOMER_CLOSED müştəri söhbəti bağlayanda; NO_RESOLUTION yalnız məzmunlu komanda cavabı olmayanda və ya cavab açıq şəkildə problemi həll etməyəndə seçilir. Komanda məlumat veribsə, müştəri cavab yazmasa və qeydiyyata keçməsə belə bunu NO_RESOLUTION etmə. Sadəcə CTA və ya WhatsApp nömrəsi göndərilməsi FOLLOW_UP_REQUIRED deyil.",
+      "teamRatings yalnız KOMANDA cavabı varsa verilir. Hər meyar 1–5 baldır; tətbiq olunmayan meyar null olmalıdır. Maksimum 5 balı yalnız açıq sübut olduqda ver, standart nəzakətli cavaba avtomatik 5 vermə.",
+      "Peşəkarlıq: 5 = fərdiləşdirilmiş, aydın, yığcam və qüsursuz; uzun şablon, təkrar və ya robotik cavab 3-dən yuxarı ola bilməz; kobud/qarışıq cavab 1–2-dir.",
+      "Ehtiyacın aşkarlanması: 5 = həll təklifindən əvvəl məqsəd, səviyyə və uyğunluğu konkret suallarla aydınlaşdırır; yalnız salam, ad/telefon soruşmaq və ya məlumat yığını 1–2-dir.",
+      "Cavab keyfiyyəti: 5 = müştərinin konkret sualını birbaşa və tam cavablandırır; qismən cavab 3, sualdan yayınan ümumi şablon 1–2-dir.",
+      "Etirazların idarəsi yalnız müştəri açıq etiraz etdikdə qiymətləndirilir: etirazı qəbul edib konkret həll/alternativ verirsə 5, sadəcə təkrar məlumat verirsə 2–3, etirazı cavabsız qoyursa 1-dir; etiraz yoxdursa null et.",
+      "Qeydiyyata yönləndirmə: 5 = dialoqa uyğun konkret növbəti addım və aydın CTA; sadəcə telefon/WhatsApp paylaşmaq 3, ümumi 'əlaqə saxlayın' 2, CTA fürsəti olduğu halda heç bir addım verməmək 1-dir; real CTA fürsəti yoxdursa null et.",
+      "Nəticəni yalnız verilən index-lərlə və hər index üçün dəqiq bir dəfə qaytar. Şəxsi məlumatı və mesaj mətnini nəticəyə köçürmə.",
+    ].join("\n"),
+    prompt: `Son ${ANALYSIS_DAYS} günün anonim dialoqları:\n${JSON.stringify(batch)}`,
+  });
+  const parsed = conversationClassificationBatchSchema.parse(output).conversations;
+  const expected = new Set(batch.map((item) => item.index));
+  const actual = new Set(parsed.map((item) => item.index));
+  if (actual.size !== parsed.length || actual.size !== expected.size || [...expected].some((index) => !actual.has(index))) {
+    throw new Error("AI classification indices did not match the requested batch");
+  }
+  const sourceByIndex = new Map(batch.map((item) => [item.index, item]));
+  return parsed.map((item) => {
+    const source = sourceByIndex.get(item.index)!;
+    const lastMessage = source.messages.at(-1);
+    return normalizeConversationClassification(item, {
+      lastDirection: lastMessage?.direction ?? "MÜŞTƏRİ",
+      hasTeamMessage: source.messages.some((message) => message.direction === "KOMANDA"),
+    });
+  });
 }

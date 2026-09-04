@@ -72,7 +72,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
       {ai ? (
         <>
           <section className="instagram-ai-section">
-            <header><Sparkles size={16} /><div><h2>AI ilə müştəri davranışı</h2><p>Conversation-ların toplu paylanması</p></div></header>
+            <header><Sparkles size={16} /><div><h2>AI ilə müştəri davranışı</h2><p>{count(ai.customerConversations)} müştəri dialoqu · {count(ai.excludedConversations)} HR/əlaqəsiz dialoq çıxarılıb</p></div></header>
             <div className="instagram-ai-behavior-grid">
               <InsightCard title="Xidmət marağı" icon={Target} tone="blue" items={ai.serviceInterest} />
               <IntentCard hot={ai.purchaseIntent.hot} warm={ai.purchaseIntent.warm} cold={ai.purchaseIntent.cold} />
@@ -97,7 +97,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
               <span><AlertTriangle size={17} /></span>
               <small>Yarımçıq dialoqlar</small>
               <strong>{count(ai.incompleteDialogs)}</strong>
-              <p>AI conversation axınına əsasən hesablayıb.</p>
+              <p>Son müştəri mesajı cavab və ya əməliyyat tələb edir.</p>
             </article>
 
             <article className="instagram-ai-advice">
