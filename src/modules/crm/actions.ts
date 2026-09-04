@@ -95,7 +95,7 @@ const updateLeadSchema = z.object({
   nextActionType: optionalNextActionType,
   nextFollowUpDate: optionalText(20),
   trialLessonCount: optionalTrialLessonCount,
-  note: optionalText(240),
+  note: z.string({ error: "Yeniləmə qeydi daxil edilməlidir." }).trim().min(1, "Yeniləmə qeydi daxil edilməlidir.").max(240),
   returnTo: optionalText(260),
 });
 
@@ -111,6 +111,7 @@ const convertLeadSchema = z.object({
 
 const deleteLeadSchema = z.object({
   leadId: z.string().uuid(),
+  reason: z.string({ error: "Silinmə açıqlaması daxil edilməlidir." }).trim().min(1, "Silinmə açıqlaması daxil edilməlidir.").max(500),
   returnTo: optionalText(260),
 });
 
@@ -187,6 +188,9 @@ async function createLead(formData: FormData) {
   let createdLeadId = "";
 
   await prisma.$transaction(async (tx) => {
+    if (input.programId && !await tx.program.findUnique({ where: { id: input.programId, isActive: true }, select: { id: true } })) {
+      throw new Error("Proqram tapılmadı və ya arxivdədir.");
+    }
     const educationLevel = await resolveEducationLevelName(tx, input.educationLevel);
     const contact = await tx.contact.create({
       data: {
@@ -289,6 +293,9 @@ async function updateLeadActionImpl(formData: FormData) {
 
     assertCanAccessLead(actor, current, "crm.lead.update");
 
+    if (input.programId && input.programId !== current.programInterestId && !await tx.program.findUnique({ where: { id: input.programId, isActive: true }, select: { id: true } })) {
+      throw new Error("Proqram tapılmadı və ya arxivdədir.");
+    }
     const educationLevel =
       input.educationLevel === current.educationLevel
         ? current.educationLevel
@@ -442,7 +449,7 @@ async function deleteLeadActionImpl(formData: FormData) {
         source: lead.source,
         contact: lead.contact,
       },
-      reason: "Müraciət profili və bağlı izləmə tapşırıqları silindi",
+      reason: input.reason,
     });
   });
 

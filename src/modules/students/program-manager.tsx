@@ -1,9 +1,12 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
+  Archive,
+  ArchiveRestore,
   ChevronDown,
   ChevronUp,
   ImagePlus,
@@ -50,12 +53,18 @@ export function ProgramManager({
   canManage,
   saveAction,
   deleteAction,
+  archiveAction,
 }: {
   programs: Program[];
   canManage: boolean;
   saveAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteAction: (formData: FormData) => unknown | Promise<unknown>;
+  archiveAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
+  const router = useRouter();
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiving, setArchiving] = useState<Program | null>(null);
+  const [archivePending, setArchivePending] = useState(false);
   const [editing, setEditing] = useState<Program | null>(null);
   const [deleting, setDeleting] = useState<Program | null>(null);
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
@@ -63,6 +72,21 @@ export function ProgramManager({
     Record<string, ProgramMaterialTrack>
   >({});
   const [saving, setSaving] = useState(false);
+
+  async function changeArchiveStatus(formData: FormData) {
+    if (!archiving || archivePending) return;
+    setArchivePending(true);
+    try {
+      unwrapActionResult(await archiveAction(formData));
+      notifySuccess(archiving.isActive ? "Proqram arxivləndi" : "Proqram arxivdən çıxarıldı");
+      setArchiving(null);
+      router.refresh();
+    } catch (error) {
+      notifyCaughtError(error, "Proqramın arxiv statusu dəyişdirilmədi.");
+    } finally {
+      setArchivePending(false);
+    }
+  }
 
   function openEditor(program?: Program) {
     const next = program ? cloneProgram(program) : emptyProgram();
@@ -251,11 +275,15 @@ export function ProgramManager({
         </Button>
       </div>
 
+      <div className="program-card-actions" role="group" aria-label="Proqram arxivi">
+        <Button type="button" variant={showArchived ? "outline" : "default"} aria-pressed={!showArchived} onClick={() => setShowArchived(false)}>Aktiv proqramlar ({programs.filter((program) => program.isActive).length})</Button>
+        <Button type="button" variant={showArchived ? "default" : "outline"} aria-pressed={showArchived} onClick={() => setShowArchived(true)}>Arxiv ({programs.filter((program) => !program.isActive).length})</Button>
+      </div>
       <div className="program-manager-grid">
-        {programs.map((program) => (
-          <article className="program-card" key={program.id} data-active="true">
+        {programs.filter((program) => program.isActive !== showArchived).map((program) => (
+          <article className="program-card" key={program.id} data-active={program.isActive}>
             <div>
-              <span>Tədris proqramı</span>
+              <span>{program.isActive ? "Tədris proqramı" : "Arxivdə"}</span>
               <strong>{program.name}</strong>
               <small>{program.description || "Qeyd yoxdur"}</small>
             </div>
@@ -273,6 +301,10 @@ export function ProgramManager({
             </div>
             {canManage ? (
               <div className="program-card-actions">
+                <Button type="button" variant="outline" size="sm" onClick={() => setArchiving(program)}>
+                  {program.isActive ? <Archive /> : <ArchiveRestore />}
+                  {program.isActive ? "Arxivlə" : "Arxivdən çıxar"}
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -297,6 +329,27 @@ export function ProgramManager({
         ))}
       </div>
 
+      {programs.every((program) => program.isActive === showArchived) ? (
+        <p className="empty-state">{showArchived ? "Arxivdə proqram yoxdur." : "Aktiv proqram yoxdur."}</p>
+      ) : null}
+      <Dialog open={archiving !== null} onOpenChange={(open) => { if (!open && !archivePending) setArchiving(null); }}>
+        <DialogContent className="program-dialog">
+          <DialogHeader>
+            <DialogTitle>{archiving?.isActive ? "Proqramı arxivlə" : "Proqramı arxivdən çıxar"}</DialogTitle>
+            <DialogDescription>
+              {archiving?.name}. {archiving?.isActive ? "Proqram yeni qeydiyyat seçimlərindən çıxarılacaq. Mövcud tələbələr, onların tədris paketləri və ödəniş tarixçəsi saxlanılacaq." : "Proqram yenidən yeni qeydiyyat seçimlərində görünəcək."}
+            </DialogDescription>
+          </DialogHeader>
+          <form action={changeArchiveStatus}>
+            <input type="hidden" name="id" value={archiving?.id ?? ""} />
+            <input type="hidden" name="archived" value={String(archiving?.isActive ?? false)} />
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={archivePending} onClick={() => setArchiving(null)}>Ləğv et</Button>
+              <Button type="submit" disabled={archivePending}>{archivePending ? "İcra olunur..." : archiving?.isActive ? "Arxivlə" : "Arxivdən çıxar"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={editing !== null}
         onOpenChange={(open) => {

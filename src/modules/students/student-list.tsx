@@ -42,7 +42,7 @@ import { StudentCreateDialogClient } from "@/modules/students/student-create-dia
 import { StudentFilterForm } from "@/modules/students/student-filter-form";
 import { StudentOverviewCharts } from "@/modules/students/student-overview-charts";
 import { ProgramManager } from "@/modules/students/program-manager";
-import { deleteProgramAction, saveProgramAction } from "@/modules/students/program-actions";
+import { deleteProgramAction, saveProgramAction, setProgramArchivedAction } from "@/modules/students/program-actions";
 import { StudentPaymentDialogClient } from "@/modules/students/student-payment-dialog-client";
 import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { StudentListData } from "@/modules/students/queries";
@@ -253,7 +253,7 @@ export function StudentList({ data }: { data: StudentListData }) {
       </div>
 
       {activeTab === "programs" ? (
-        <ProgramManager programs={data.createOptions.programs} canManage={data.permissions.canManagePrograms} saveAction={saveProgramAction} deleteAction={deleteProgramAction} />
+        <ProgramManager programs={data.managedPrograms} archiveAction={setProgramArchivedAction} canManage={data.permissions.canManagePrograms} saveAction={saveProgramAction} deleteAction={deleteProgramAction} />
       ) : activeTab === "overview" ? (
         <>
           <StudentOverviewCharts

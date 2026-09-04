@@ -319,7 +319,7 @@ async function createStudentActionImpl(formData: FormData) {
     studentId = await prisma.$transaction(async (tx) => {
       const [program, discountType] = await Promise.all([
         tx.program.findUnique({
-          where: { id: input.programId },
+          where: { id: input.programId, isActive: true },
           select: { id: true },
         }),
         input.discountType
@@ -803,7 +803,10 @@ async function updateStudentProfileActionImpl(formData: FormData) {
 
     const [program, teacher, manager, campaign, educationLevel, discountType] = await Promise.all([
       tx.program.findUnique({
-        where: { id: input.programId },
+        where: {
+          id: input.programId,
+          ...(current.enrollments[0]?.programId === input.programId ? {} : { isActive: true }),
+        },
         select: { id: true },
       }),
       effectiveTeacherId
@@ -1152,7 +1155,7 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
     }
 
     const [program, teacher, discountType, existingEnrollment] = await Promise.all([
-      tx.program.findUnique({ where: { id: input.programId }, select: { id: true, name: true } }),
+      tx.program.findUnique({ where: { id: input.programId, isActive: true }, select: { id: true, name: true } }),
       input.teacherId
         ? tx.teacher.findUnique({ where: { id: input.teacherId }, select: { id: true } })
         : Promise.resolve(null),

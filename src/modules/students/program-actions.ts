@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { z } from "zod";
 import { ProgramLessonTrack } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
@@ -92,7 +93,6 @@ async function saveProgramActionImpl(formData: FormData) {
     defaultMonthlyFee: input.monthlyFee,
     defaultLessonsPerMonth: input.lessonsPerMonth ?? null,
     description: input.description ?? null,
-    isActive: true,
   };
 
   const previous = input.id
@@ -293,3 +293,29 @@ export const deleteProgramAction = safeServerAction(
   deleteProgramActionImpl,
   "Proqram silinmədi.",
 );
+
+async function setProgramArchivedActionImpl(formData: FormData) {
+  const actor = await requireMutationActor("settings.manage");
+  const input = z.object({ id: z.string().uuid(), archived: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
+  const isActive = input.archived === "false";
+  await getPrisma().$transaction(async (tx) => {
+    const program = await tx.program.findUnique({ where: { id: input.id }, select: { id: true, name: true, isActive: true } });
+    if (!program) throw new PublicActionError("Proqram tapılmadı", "NOT_FOUND");
+    if (program.isActive === isActive) return;
+    await tx.program.update({ where: { id: program.id }, data: { isActive } });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: isActive ? "program.restore" : "program.archive",
+      entityType: "program",
+      entityId: program.id,
+      before: program,
+      after: { ...program, isActive },
+      reason: isActive ? "Proqram arxivdən çıxarıldı" : "Proqram arxivləndi",
+    });
+  });
+  revalidatePath("/students");
+  revalidatePath("/crm");
+  for (const tag of Object.values(erpCacheTags)) updateTag(tag);
+}
+
+export const setProgramArchivedAction = safeServerAction(setProgramArchivedActionImpl, "Proqramın arxiv statusu dəyişdirilmədi.");

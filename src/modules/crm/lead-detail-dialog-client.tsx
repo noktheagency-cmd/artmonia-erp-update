@@ -70,6 +70,10 @@ export function LeadDetailDialogClient({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [stage, setStage] = useState<LeadStageValue>(lead.detail.stage);
   const [nextActionType, setNextActionType] = useState<NextActionTypeValue | "">(
     lead.detail.nextActionType,
@@ -82,6 +86,7 @@ export function LeadDetailDialogClient({
     setOpen(nextOpen);
     if (!nextOpen) return;
 
+    setNote("");
     setStage(lead.detail.stage);
     setNextActionType(lead.detail.nextActionType);
     setTrialLessonCount(String(lead.detail.trialLessonCount || DEFAULT_TRIAL_LESSON_COUNT));
@@ -98,6 +103,8 @@ export function LeadDetailDialogClient({
   }
 
   async function updateLead(formData: FormData) {
+    if (!note.trim() || saving) return;
+    setSaving(true);
     try {
       const result = unwrapActionResult(await updateLeadAction(formData)) as {
         redirectTo: string;
@@ -108,10 +115,14 @@ export function LeadDetailDialogClient({
       router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Müraciət yenilənmədi.");
+    } finally {
+      setSaving(false);
     }
   }
 
   async function deleteLead(formData: FormData) {
+    if (!deleteReason.trim() || deleting) return;
+    setDeleting(true);
     try {
       const result = unwrapActionResult(await deleteLeadAction(formData)) as {
         redirectTo: string;
@@ -123,6 +134,8 @@ export function LeadDetailDialogClient({
       router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Müraciət silinmədi.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -301,12 +314,15 @@ export function LeadDetailDialogClient({
                   <DatePicker name="nextFollowUpDate" defaultValue={lead.detail.nextFollowUpDate} />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor={`lead-note-${lead.id}`}>Yeniləmə qeydi</FieldLabel>
+                  <FieldLabel htmlFor={`lead-note-${lead.id}`}>Yeniləmə qeydi *</FieldLabel>
                   <InputGroup>
                     <InputGroupAddon aria-hidden="true"><FileText /></InputGroupAddon>
                     <InputGroupInput
                       id={`lead-note-${lead.id}`}
                       name="note"
+                      value={note}
+                      onChange={(event) => setNote(event.currentTarget.value)}
+                      required
                       placeholder="Səbəb və ya növbəti addım"
                       maxLength={240}
                     />
@@ -338,13 +354,13 @@ export function LeadDetailDialogClient({
               className="crm-detail-delete-trigger"
               type="button"
               variant="ghost"
-              onClick={() => setDeleteOpen(true)}
+              onClick={() => { setDeleteReason(""); setDeleteOpen(true); }}
             >
               <Trash2 data-icon="inline-start" />
               Müraciəti sil
             </Button>
             <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
-            <Button type="submit"><Pencil data-icon="inline-start" />Yadda saxla</Button>
+            <Button type="submit" disabled={!note.trim() || saving}><Pencil data-icon="inline-start" />Yadda saxla</Button>
           </DialogFooter>
         </form>
 
@@ -357,11 +373,17 @@ export function LeadDetailDialogClient({
               </DialogDescription>
             </DialogHeader>
             <form action={deleteLead}>
+              <Field>
+                <FieldLabel htmlFor={`lead-delete-reason-${lead.id}`}>Silinmə açıqlaması *</FieldLabel>
+                <InputGroup>
+                  <InputGroupInput id={`lead-delete-reason-${lead.id}`} name="reason" value={deleteReason} onChange={(event) => setDeleteReason(event.currentTarget.value)} placeholder="Müraciətin silinmə səbəbini yazın" required maxLength={500} />
+                </InputGroup>
+              </Field>
               <input name="leadId" type="hidden" value={lead.id} />
               <input name="returnTo" type="hidden" value={returnTo} />
               <DialogFooter className="crm-dialog-actions">
                 <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
-                <Button type="submit" variant="destructive"><Trash2 data-icon="inline-start" />Bəli, sil</Button>
+                <Button type="submit" variant="destructive" disabled={!deleteReason.trim() || deleting}><Trash2 data-icon="inline-start" />Bəli, sil</Button>
               </DialogFooter>
             </form>
           </DialogContent>

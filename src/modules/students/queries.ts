@@ -125,6 +125,7 @@ export type StudentListData = {
     canManagePrograms: boolean;
     canExport: boolean;
   };
+  managedPrograms: StudentListData["createOptions"]["programs"];
   createOptions: {
     leads: Array<{
       id: string;
@@ -581,9 +582,19 @@ export async function getStudentListData(
       canManagePrograms: actor.permissions.has("settings.manage"),
       canExport: actor.permissions.has("report.export"),
     },
+    managedPrograms: programs.map((program) => ({
+        id: program.id,
+        name: program.name,
+        code: program.code ?? "",
+        monthlyFee: formatDecimalInput(program.defaultMonthlyFee),
+        lessonsPerMonth: program.defaultLessonsPerMonth?.toString() ?? "",
+        description: program.description ?? "",
+        lessonTopics: program.lessonTopics,
+        isActive: program.isActive,
+      })),
     createOptions: {
       leads: convertibleLeads,
-      programs: programs.map((program) => ({
+      programs: programs.filter((program) => program.isActive).map((program) => ({
         id: program.id,
         name: program.name,
         code: program.code ?? "",
@@ -1993,7 +2004,6 @@ async function getStudentCreateOptions(
           order by p.name asc
         )
         from erp.programs p
-        where p.is_active = true
       ), '[]'::jsonb) as "programs",
       coalesce((
         select jsonb_agg(
@@ -2931,7 +2941,7 @@ export async function getStudentDetailData(studentId: string) {
     packageUsageRows.map((usage) => [usage.enrollmentId, usage]),
   );
 
-  const programs = options.programs.map((program) => ({
+  const programs = options.programs.filter((program) => program.isActive).map((program) => ({
     id: program.id,
     name: program.name,
     monthlyFee: formatDecimalInput(program.defaultMonthlyFee),
