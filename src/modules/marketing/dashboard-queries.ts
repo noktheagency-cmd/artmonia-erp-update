@@ -65,6 +65,7 @@ export async function getMarketingDashboardData(filters?: { from?: string; to?: 
           from erp.finance_expenses expense
           join erp.finance_expense_categories category on category.id = expense.category_id
           where expense.voided_at is null
+            and expense.workshop_event_id is null
             and expense.cost_center = 'MARKETING'
             and expense.expense_date >= ${rangeStart}
             and expense.expense_date < ${rangeEndExclusive}
@@ -73,6 +74,7 @@ export async function getMarketingDashboardData(filters?: { from?: string; to?: 
           from erp.finance_expenses expense
           join erp.finance_expense_categories category on category.id = expense.category_id
           where expense.voided_at is null
+            and expense.workshop_event_id is null
             and expense.cost_center = 'MARKETING'
             and expense.expense_date >= ${rangeStart}
             and expense.expense_date < ${rangeEndExclusive}
