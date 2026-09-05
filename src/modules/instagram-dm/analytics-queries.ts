@@ -241,7 +241,7 @@ async function classifyBatch(
   signal: AbortSignal,
 ): Promise<ConversationClassification[]> {
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
-  const { output } = await generateText({
+  const response = generateText({
     model: openRouterKey
       ? createOpenRouter({ apiKey: openRouterKey })(OPENROUTER_DM_MODEL, {
         reasoning: { effort: "medium", exclude: true },
@@ -281,6 +281,12 @@ async function classifyBatch(
     ].join("\n"),
     prompt: `${period.from}–${period.to} tarix intervalının əlaqə məlumatları maskalanmış dialoqları:\n${JSON.stringify(batch)}`,
   });
+  const { output } = await response.catch(async (error: unknown) => {
+    if ((error as { statusCode?: number })?.statusCode === 400 && openRouterKey) {
+      await diagnoseDmProvider(openRouterKey);
+    }
+    throw error;
+  });
   const parsed = conversationClassificationBatchSchema.parse(output).conversations;
   const expected = new Set(batch.map((item) => item.index));
   const actual = new Set(parsed.map((item) => item.index));
@@ -296,4 +302,35 @@ async function classifyBatch(
       hasTeamMessage: source.messages.some((message) => message.direction === "KOMANDA"),
     });
   });
+}
+
+let providerProbe: Promise<void> | undefined;
+function diagnoseDmProvider(apiKey: string) {
+  // A single bounded synthetic probe: NEVER use real customer input or the failed
+  // request body. This isolates account/provider compatibility from DM content.
+  return providerProbe ??= (async () => {
+    for (const withSchema of [false, true]) {
+      try {
+        await generateText({
+          model: createOpenRouter({ apiKey })(OPENROUTER_DM_MODEL, {
+            reasoning: { effort: "medium", exclude: true },
+            usage: { include: true },
+            extraBody: { provider: { data_collection: "deny", zdr: true, require_parameters: true } },
+          }),
+          ...(withSchema ? { output: Output.object({ schema: conversationClassificationBatchSchema }) } : {}),
+          prompt: withSchema ? "Classify one synthetic test conversation, index 1: CUSTOMER says Salam. No team messages. Return the specified JSON." : "Reply with OK.",
+          maxOutputTokens: 9000,
+          maxRetries: 0,
+          abortSignal: AbortSignal.timeout(20_000),
+        });
+        console.info("DM synthetic provider probe", { withSchema, status: "OK" });
+      } catch (error) {
+        const candidate = error as { statusCode?: number; message?: string; responseBody?: string };
+        const detail = String(candidate.responseBody ?? candidate.message ?? "Unknown")
+          .split(apiKey).join("[REDACTED]")
+          .replace(/sk-[a-zA-Z0-9_-]+/g, "[REDACTED]").slice(0, 1600);
+        console.error("DM synthetic provider probe", { withSchema, status: candidate.statusCode, detail });
+      }
+    }
+  })();
 }
