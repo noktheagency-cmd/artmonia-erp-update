@@ -16,7 +16,7 @@ import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
 import { getDailyDmAnalysis, type DailyAnalysisOutput } from "@/modules/instagram-dm/daily-analysis";
-import { createAnalysisBatches, dmProviderOptions, DM_ANALYSIS_TIMEOUT_MS, OPENROUTER_DM_MODEL, redactDmContactDetails, type PreparedConversation } from "@/modules/instagram-dm/analysis-policy";
+import { createAnalysisBatches, dmProviderOptions, DM_ANALYSIS_TIMEOUT_MS, OPENROUTER_DM_MODEL, redactDmContactDetails, isRetryableDmOutput, safeAnalysisError, type PreparedConversation } from "@/modules/instagram-dm/analysis-policy";
 
 
 export type InstagramDmAnalyticsData = {
@@ -242,6 +242,21 @@ async function classifyBatch(
   period: { from: string; to: string },
   signal: AbortSignal,
 ): Promise<ConversationClassification[]> {
+  try {
+    return await classifyBatchAttempt(batch, period, signal, 16_000);
+  } catch (error) {
+    if (!isRetryableDmOutput(error) || signal.aborted) throw error;
+    console.warn("DM AI output retry", { code: safeAnalysisError(error).code, batchSize: batch.length });
+    return classifyBatchAttempt(batch, period, signal, 32_000);
+  }
+}
+
+async function classifyBatchAttempt(
+  batch: PreparedConversation[],
+  period: { from: string; to: string },
+  signal: AbortSignal,
+  maxOutputTokens: number,
+): Promise<ConversationClassification[]> {
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
   const { output } = await generateText({
     model: openRouterKey
@@ -261,7 +276,7 @@ async function classifyBatch(
     ...dmProviderOptions(Boolean(openRouterKey)),
     abortSignal: signal,
     maxRetries: 1,
-    maxOutputTokens: 9000,
+    maxOutputTokens,
     system: [
       "Sən Artmonia təhsil ERP-si üçün Azərbaycan dilində işləyən customer behavior təsnifatçısısan.",
       "Hər dialoqu ayrıca təsnif et. Heç bir faiz, ümumi say, xülasə və tövsiyə yaratma.",
@@ -288,7 +303,9 @@ async function classifyBatch(
   const expected = new Set(batch.map((item) => item.index));
   const actual = new Set(parsed.map((item) => item.index));
   if (actual.size !== parsed.length || actual.size !== expected.size || [...expected].some((index) => !actual.has(index))) {
-    throw new Error("AI classification indices did not match the requested batch");
+    const error = new Error("AI classification indices did not match the requested batch");
+    error.name = "DmClassificationIndexError";
+    throw error;
   }
   const sourceByIndex = new Map(batch.map((item) => [item.index, item]));
   return parsed.map((item) => {

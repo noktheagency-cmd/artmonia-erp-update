@@ -27,7 +27,8 @@ const base: ConversationClassification = {
 
 test("OpenRouter JSON rejimi istifadə edir, nəticə yenə sərt sxemlə yoxlanır", async () => {
   assert.deepEqual(await conversationClassificationOutput(true).responseFormat, { type: "json" });
-  assert.ok("schema" in await conversationClassificationOutput(false).responseFormat);
+  const structuredFormat = await conversationClassificationOutput(false).responseFormat;
+  assert.ok(structuredFormat && "schema" in structuredFormat);
   assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [base] }).success, true);
   assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [{ ...base, index: 0 }] }).success, false);
   assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [{ ...base, purchaseIntent: "INVALID" }] }).success, false);

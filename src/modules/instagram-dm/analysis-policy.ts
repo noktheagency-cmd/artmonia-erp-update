@@ -1,4 +1,4 @@
-export const DM_ANALYSIS_VERSION = "dm-ai-v11-validated-json";
+export const DM_ANALYSIS_VERSION = "dm-ai-v12-bounded-output-retry";
 export const OPENROUTER_DM_MODEL = "google/gemini-3.8-flash";
 export const DM_RETRY_AFTER_MS = 15 * 60 * 1000;
 export const DM_ANALYSIS_TIMEOUT_MS = 5 * 60 * 1000;
@@ -14,9 +14,13 @@ export function dmProviderOptions(useOpenRouter: boolean) {
 }
 
 export function safeAnalysisError(error: unknown): { code: string; reason: string } {
-  const candidate = error as { name?: string; statusCode?: number; cause?: unknown } | null;
+  const candidate = error as { name?: string; statusCode?: number; cause?: unknown; finishReason?: string } | null;
   if (candidate?.cause && candidate.name === "AI_RetryError") return safeAnalysisError(candidate.cause);
   const status = candidate?.statusCode;
+  if (candidate?.name === "AI_NoObjectGeneratedError" && candidate.finishReason === "length") return { code: "OUTPUT_LIMIT", reason: "AI cavabı çıxış limitinə çatdı; natamam nəticə saxlanılmadı." };
+  if (candidate?.name === "AI_NoObjectGeneratedError" || candidate?.name === "AI_NoOutputGeneratedError") return { code: "INVALID_JSON", reason: "AI tamamlanmış JSON cavabı qaytarmadı; nəticə saxlanılmadı." };
+  if (candidate?.name === "ZodError") return { code: "INVALID_SCHEMA", reason: "AI cavabı analiz qaydalarına uyğun deyil; nəticə saxlanılmadı." };
+  if (candidate?.name === "DmClassificationIndexError") return { code: "INVALID_INDICES", reason: "AI bütün dialoqları tam təsnif etmədi; natamam nəticə saxlanılmadı." };
   if (status === 401 || status === 403) return { code: `HTTP_${status}`, reason: "AI açarı və ya modelə giriş icazəsi yoxlanmalıdır." };
   if (status === 402) return { code: "HTTP_402", reason: "OpenRouter balansı və ya açarın xərc limiti kifayət etmir." };
   if (status === 404) return { code: "HTTP_404", reason: "Model üçün tələb olunan parametrlərə və məxfilik qaydasına uyğun AI marşrutu tapılmadı." };
@@ -24,6 +28,10 @@ export function safeAnalysisError(error: unknown): { code: string; reason: strin
   if (candidate?.name === "TimeoutError" || candidate?.name === "AbortError") return { code: "TIMEOUT", reason: "AI analizi vaxt limitini keçdi." };
   if (candidate?.name === "DmContextLimitError") return { code: "CONTEXT_LIMIT", reason: "Dialoq həcmi bir analiz paketinin limitini keçir; mətn kəsilmədi. Daha qısa tarix aralığı seçin." };
   return { code: status ? `HTTP_${status}` : "ANALYSIS_FAILED", reason: "AI analizi yenilənə bilmədi. Xəta qeydə alındı; 15 dəqiqə sonra yenidən yoxlamaq olar." };
+}
+
+export function isRetryableDmOutput(error: unknown) {
+  return ["OUTPUT_LIMIT", "INVALID_JSON", "INVALID_SCHEMA", "INVALID_INDICES"].includes(safeAnalysisError(error).code);
 }
 
 // Only fixed diagnostic labels leave this function, never provider response text,

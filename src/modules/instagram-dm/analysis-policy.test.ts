@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bakuAnalysisDay, createAnalysisBatches, dmProviderOptions, redactDmContactDetails, safeAnalysisError, safeProviderDiagnostics } from "./analysis-policy";
+import { bakuAnalysisDay, createAnalysisBatches, dmProviderOptions, redactDmContactDetails, safeAnalysisError, safeProviderDiagnostics, isRetryableDmOutput } from "./analysis-policy";
 
 test("gündəlik açar UTC deyil, Bakı gecəyarısında dəyişir", () => {
   assert.equal(bakuAnalysisDay(new Date("2026-09-05T19:59:59Z")), "2026-09-05");
@@ -35,4 +35,11 @@ test("əlaqə məlumatı gizlənir, qısa mesaj süni qısaldılmır", () => {
 test("provider diaqnostikası yalnız sabit etiketlər qaytarır", () => {
   assert.deepEqual(safeProviderDiagnostics({ responseBody: JSON.stringify({ error: { message: "Provider returned error", metadata: { raw: "Invalid argument: schema unsupported. secret-key customer@example.com" } } }) }), ["SCHEMA", "UNSUPPORTED", "INVALID_ARGUMENT", "PROVIDER_ERROR"]);
   assert.deepEqual(safeProviderDiagnostics({ message: "secret-key customer@example.com" }), []);
+});
+
+test("yalnız natamam və ya etibarsız AI çıxışı təkrar edilir, API xətaları yox", () => {
+  for (const name of ["AI_NoObjectGeneratedError", "AI_NoOutputGeneratedError", "ZodError", "DmClassificationIndexError"]) assert.equal(isRetryableDmOutput({ name }), true);
+  for (const statusCode of [400, 401, 402, 403, 404, 429, 500]) assert.equal(isRetryableDmOutput({ statusCode }), false);
+  assert.equal(safeAnalysisError({ name: "AI_NoObjectGeneratedError", finishReason: "length" }).code, "OUTPUT_LIMIT");
+  assert.equal(isRetryableDmOutput({ name: "AbortError" }), false);
 });
