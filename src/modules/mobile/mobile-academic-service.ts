@@ -269,8 +269,8 @@ type NotificationCandidate = {
   metadata: unknown;
 };
 
-async function loadNotificationCandidates(studentId: string) {
-  return getPrisma().$queryRaw<NotificationCandidate[]>(Prisma.sql`
+export async function loadNotificationCandidates(studentId: string, db: Prisma.TransactionClient = getPrisma()) {
+  return db.$queryRaw<NotificationCandidate[]>(Prisma.sql`
     with active_enrollments as (
       select e.id, e.program_id, e.status, e.updated_at
       from erp.enrollments e
@@ -348,6 +348,22 @@ async function loadNotificationCandidates(studentId: string) {
       notifications.event_name as "eventName",
       notifications.metadata
     from (
+      select
+        ('push:' || d.id::text) as id,
+        c.category::text as type,c.title::text,c.body::text,
+        c.scheduled_at as occurred_at,
+        'mobile_push_campaign'::text as entity_type,c.id::text as entity_id,
+        'erp.push.published'::text as event_name,
+        jsonb_build_object('version',1,'destination',c.destination,'url',c.link_url,
+          'imageUrl',c.image_url,'priority',c.priority) as metadata
+      from erp.mobile_push_deliveries d
+      join erp.mobile_push_campaigns c on c.id=d.campaign_id
+      join erp.student_mobile_accounts a on a.id=d.mobile_account_id
+      where a.student_id=${studentId}::uuid and c.scheduled_at<=now()
+        and (c.cancelled_at is null or d.state in ('processing','accepted','delivered'))
+
+      union all
+
       select
         ('announcement:' || a.id::text || ':' || extract(epoch from a.updated_at)::bigint::text) as id,
         'announcement'::text as type,

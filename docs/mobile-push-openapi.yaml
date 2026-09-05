@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: Artmonia ERP server-only push dispatcher
+  version: 1.0.0
+  description: Never expose these worker routes through the student gateway. See mobile-push-integration.md for retry, lease, receipt and device deduplication rules.
+servers:
+  - url: https://erp.artmoniya.com
+security:
+  - serverToken: []
+paths:
+  /api/mobile/v1/push/claim:
+    post:
+      operationId: claimMobilePushDeliveries
+      summary: Lease due deliveries for five minutes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                limit: { type: integer, minimum: 1, maximum: 50, default: 25 }
+      responses:
+        '200':
+          description: Claimed deliveries; an empty items array is normal
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, serverTime]
+                properties:
+                  serverTime: { type: string, format: date-time }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Delivery' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /api/mobile/v1/push/acknowledge:
+    post:
+      operationId: acknowledgeMobilePushDelivery
+      summary: Report a provider outcome using the lease token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deliveryId, leaseToken, status]
+              properties:
+                deliveryId: { type: string, format: uuid }
+                leaseToken: { type: string, format: uuid }
+                status: { type: string, enum: [accepted, delivered, retry, failed, skipped] }
+                providerReference: { type: string, minLength: 1, maxLength: 300 }
+                code: { type: string, pattern: '^[A-Za-z0-9_.-]{1,120}$' }
+      responses:
+        '200':
+          description: Persisted state; accepted is not a read or device-display confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, repeated]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, enum: [pending, accepted, delivered, failed, skipped, cancelled] }
+                  repeated: { type: boolean }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    serverToken:
+      type: http
+      scheme: bearer
+      description: ERP_ATTENDANCE_SERVER_TOKEN held only in the dispatcher server secret
+  responses:
+    Error:
+      description: Error envelope; 401 UNAUTHORIZED, 400/413 INVALID_REQUEST, 404 NOT_FOUND, 409 CONFLICT, 500 INTERNAL_ERROR
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, message, requestId]
+            properties:
+              requestId: { type: string, format: uuid }
+              code: { type: string }
+              message: { type: string }
+  schemas:
+    Delivery:
+      type: object
+      required: [deliveryId, recipientAuthUserId, leaseToken, leaseExpiresAt, attempt, notification]
+      properties:
+        deliveryId: { type: string, format: uuid }
+        recipientAuthUserId: { type: string, format: uuid }
+        leaseToken: { type: string, format: uuid }
+        leaseExpiresAt: { type: string, format: date-time }
+        attempt: { type: integer, minimum: 1, maximum: 5 }
+        notification:
+          type: object
+          required: [id, title, body, type, imageUrl, priority, occurredAt, expiresAt, data]
+          properties:
+            id: { type: string, description: 'Opaque inbox ID: push:<deliveryUuid>' }
+            title: { type: string, maxLength: 100 }
+            body: { type: string, maxLength: 1000 }
+            type: { type: string, description: Custom categories are supported; render unknown values as generic notifications }
+            imageUrl: { type: string, format: uri, nullable: true }
+            priority: { type: string, enum: [normal, high] }
+            occurredAt: { type: string, format: date-time }
+            expiresAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [version, event, notificationId, campaignId, destination, url]
+              properties:
+                version: { type: integer, enum: [1] }
+                event: { type: string, enum: [erp.push.published] }
+                notificationId: { type: string }
+                campaignId: { type: string, format: uuid }
+                destination: { type: string, enum: [notifications, home, lessons, journey, package, profile, external] }
+                url: { type: string, format: uri, nullable: true }

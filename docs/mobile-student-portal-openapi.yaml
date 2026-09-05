@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Mobile Student Portal API
-  version: 1.1.0
+  version: 1.2.0
 servers:
   - url: https://erp.artmoniya.com
 paths:
@@ -638,7 +638,9 @@ components:
       required: [id, type, title, body, readAt, occurredAt, entity, event]
       properties:
         id: { type: string, maxLength: 180 }
-        type: { type: string, enum: [announcement, attendance, homework, lesson, package] }
+        type:
+          type: string
+          description: Academic type or ERP-defined push category. Unknown categories must render as a generic notification.
         title: { type: string }
         body: { type: string }
         readAt: { type: [string, 'null'], format: date-time }
@@ -655,7 +657,7 @@ components:
             version: { type: integer, const: 1 }
             name:
               type: string
-              enum: [announcement.published, attendance.updated, homework.assigned, homework.completed, lesson.cancelled, lesson.rescheduled, package.updated]
+              enum: [announcement.published, attendance.updated, homework.assigned, homework.completed, lesson.cancelled, lesson.rescheduled, package.updated, erp.push.published]
             metadata: { type: object, additionalProperties: true }
     NotificationList:
       type: object
