@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bakuAnalysisDay, createAnalysisBatches, dmProviderOptions, redactDmContactDetails, safeAnalysisError } from "./analysis-policy";
+import { bakuAnalysisDay, createAnalysisBatches, dmProviderOptions, redactDmContactDetails, safeAnalysisError, safeProviderDiagnostics } from "./analysis-policy";
 
 test("gündəlik açar UTC deyil, Bakı gecəyarısında dəyişir", () => {
   assert.equal(bakuAnalysisDay(new Date("2026-09-05T19:59:59Z")), "2026-09-05");
@@ -30,4 +30,9 @@ test("əlaqə məlumatı gizlənir, qısa mesaj süni qısaldılmır", () => {
   assert.ok(!value.includes("a@example.com"));
   assert.ok(!value.includes("123 45 67"));
   assert.ok(value.includes("Qiymət 150 AZN"));
+});
+
+test("provider diaqnostikası yalnız sabit etiketlər qaytarır", () => {
+  assert.deepEqual(safeProviderDiagnostics({ responseBody: JSON.stringify({ error: { message: "Provider returned error", metadata: { raw: "Invalid argument: schema unsupported. secret-key customer@example.com" } } }) }), ["SCHEMA", "UNSUPPORTED", "INVALID_ARGUMENT", "PROVIDER_ERROR"]);
+  assert.deepEqual(safeProviderDiagnostics({ message: "secret-key customer@example.com" }), []);
 });

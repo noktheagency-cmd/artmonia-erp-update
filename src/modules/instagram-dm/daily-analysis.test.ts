@@ -94,6 +94,23 @@ test("konfiqurasiya olmadıqda gün tutulmur, sonradan açar əlavə edilə bili
   assert.equal(calls, 1);
 });
 
+test("yeni versiya yalnız uğursuz nəticəni cooldown gözləmədən yeniləyir", async () => {
+  const { db, rows } = fakeDatabase();
+  let calls = 0;
+  const input = { period: { from: "2026-09-01", to: "2026-09-30" }, now: new Date("2026-09-05T10:00:00Z"), model: "test", metrics: {}, analyze: async () => {
+    calls++;
+    if (calls === 1) throw { statusCode: 400 };
+    return { analysis: emptyAnalysis, classifications: [] };
+  } };
+  await getDailyDmAnalysis(input, db);
+  rows[0].analysisVersion = "old-version";
+  const fixed = await getDailyDmAnalysis({ ...input, now: new Date("2026-09-05T10:01:00Z") }, db);
+  assert.equal(fixed.ai.state, "ready");
+  rows[0].analysisVersion = "old-version";
+  await getDailyDmAnalysis({ ...input, now: new Date("2026-09-05T10:02:00Z") }, db);
+  assert.equal(calls, 2);
+});
+
 test("yaddaş işləməyəndə saxlanılmayan pullu AI analizi çağırılmır", async () => {
   const { db, raw } = fakeDatabase();
   raw.instagramDmDailyAnalysis.findUnique = async () => { throw new Error("storage unavailable"); };

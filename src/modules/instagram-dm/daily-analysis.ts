@@ -1,6 +1,6 @@
 import { Prisma, type InstagramDmDailyAnalysis } from "@/generated/prisma/client";
 import type { AiAnalysis, ConversationClassification } from "@/modules/instagram-dm/analytics-ai";
-import { bakuAnalysisDay, DM_ANALYSIS_VERSION, DM_RETRY_AFTER_MS, safeAnalysisError } from "@/modules/instagram-dm/analysis-policy";
+import { bakuAnalysisDay, DM_ANALYSIS_VERSION, DM_RETRY_AFTER_MS, safeAnalysisError, safeProviderDiagnostics } from "@/modules/instagram-dm/analysis-policy";
 import { getPrisma } from "@/server/db/prisma";
 
 export type DailyAiResult = ({ state: "ready"; generatedAt: string } & AiAnalysis) | {
@@ -60,8 +60,9 @@ export async function getDailyDmAnalysis(input: {
         claimed = (await prisma.instagramDmDailyAnalysis.createMany({ data: [claimData], skipDuplicates: true })).count;
       } else if (row.status === "FAILED" || row.status === "RUNNING") {
         // Only failed or abandoned attempts may retry; a completed daily result is immutable.
+        const repairedFailure = row.status === "FAILED" && row.analysisVersion !== DM_ANALYSIS_VERSION;
         claimed = (await prisma.instagramDmDailyAnalysis.updateMany({
-          where: { id: row.id, status: row.status, startedAt: { lte: new Date(input.now.getTime() - DM_RETRY_AFTER_MS) } },
+          where: { id: row.id, status: row.status, startedAt: repairedFailure ? row.startedAt : { lte: new Date(input.now.getTime() - DM_RETRY_AFTER_MS) } },
           data: { ...claimData, errorCode: null, finishedAt: null, result: Prisma.DbNull },
         })).count;
       }
@@ -82,7 +83,7 @@ export async function getDailyDmAnalysis(input: {
           });
         } catch (error) {
           const failure = safeAnalysisError(error);
-          console.error("Instagram DM daily AI analysis failed", { code: failure.code, model: input.model, period: input.period, day });
+          console.error("Instagram DM daily AI analysis failed", { code: failure.code, diagnostics: safeProviderDiagnostics(error), model: input.model, period: input.period, day });
           await prisma.instagramDmDailyAnalysis.updateMany({
             where: { ...key, status: "RUNNING", startedAt: input.now },
             data: {

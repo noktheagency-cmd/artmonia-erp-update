@@ -1,4 +1,4 @@
-export const DM_ANALYSIS_VERSION = "dm-ai-v8-daily-full-text";
+export const DM_ANALYSIS_VERSION = "dm-ai-v9-safe-provider-diagnostics";
 export const OPENROUTER_DM_MODEL = "google/gemini-3.8-flash";
 export const DM_RETRY_AFTER_MS = 15 * 60 * 1000;
 export const DM_ANALYSIS_TIMEOUT_MS = 5 * 60 * 1000;
@@ -24,6 +24,27 @@ export function safeAnalysisError(error: unknown): { code: string; reason: strin
   if (candidate?.name === "TimeoutError" || candidate?.name === "AbortError") return { code: "TIMEOUT", reason: "AI analizi vaxt limitini keçdi." };
   if (candidate?.name === "DmContextLimitError") return { code: "CONTEXT_LIMIT", reason: "Dialoq həcmi bir analiz paketinin limitini keçir; mətn kəsilmədi. Daha qısa tarix aralığı seçin." };
   return { code: status ? `HTTP_${status}` : "ANALYSIS_FAILED", reason: "AI analizi yenilənə bilmədi. Xəta qeydə alındı; 15 dəqiqə sonra yenidən yoxlamaq olar." };
+}
+
+// Only fixed diagnostic labels leave this function, never provider response text,
+// request bodies, credentials or customer messages echoed by an upstream service.
+export function safeProviderDiagnostics(error: unknown): string[] {
+  const candidate = error as { name?: string; cause?: unknown; message?: unknown; responseBody?: unknown } | null;
+  if (candidate?.cause && candidate.name === "AI_RetryError") return safeProviderDiagnostics(candidate.cause);
+  const text = [candidate?.message, candidate?.responseBody].filter((value) => typeof value === "string").join(" ").toLowerCase();
+  const patterns: Record<string, RegExp> = {
+    AUTH: /api.?key|authorization|authentication|unauthorized|user not found/,
+    BALANCE: /credit|balance|spending|payment/,
+    SCHEMA: /schema|structured.output|response_format/,
+    REASONING: /reasoning|thinking/,
+    TOKEN_LIMIT: /max_tokens|max.output.tokens|token.limit|context.length/,
+    UNSUPPORTED: /unsupported|not supported|not allowed/,
+    INVALID_ARGUMENT: /invalid.argument|invalid parameter|invalid request/,
+    PROVIDER_ERROR: /provider returned error/,
+    ROUTING: /no endpoints|no available|routing|data.policy|zero.data.retention/,
+    MODEL: /model/,
+  };
+  return Object.entries(patterns).filter(([, pattern]) => pattern.test(text)).map(([label]) => label);
 }
 
 export type PreparedConversation = {
