@@ -1,4 +1,4 @@
-export const DM_ANALYSIS_VERSION = "dm-ai-v10-provider-compatibility-probe";
+export const DM_ANALYSIS_VERSION = "dm-ai-v11-validated-json";
 export const OPENROUTER_DM_MODEL = "google/gemini-3.8-flash";
 export const DM_RETRY_AFTER_MS = 15 * 60 * 1000;
 export const DM_ANALYSIS_TIMEOUT_MS = 5 * 60 * 1000;

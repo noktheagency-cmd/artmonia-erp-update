@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Output } from "ai";
 
 export const conversationClassificationSchema = z.object({
   index: z.number().int().positive(),
@@ -41,6 +42,14 @@ export const conversationClassificationSchema = z.object({
 export const conversationClassificationBatchSchema = z.object({
   conversations: z.array(conversationClassificationSchema).min(1).max(30),
 });
+
+export function conversationClassificationOutput(useOpenRouter: boolean) {
+  // The live Gemini Vertex route rejects this nested JSON schema. JSON mode
+  // retains strict server-side Zod validation before any result is used.
+  return useOpenRouter ? Output.json() : Output.object({ schema: conversationClassificationBatchSchema });
+}
+
+export const conversationClassificationFormatInstruction = `Yalnız bu sxemə uyğun JSON obyektini qaytar (markdown deyil). Bütün sahələr məcburidir; tətbiq olunmayan nullable sahələr null olmalıdır:\n${JSON.stringify(z.toJSONSchema(conversationClassificationBatchSchema))}`;
 
 export type ConversationClassification = z.infer<typeof conversationClassificationSchema>;
 

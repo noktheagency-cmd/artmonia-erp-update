@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   aggregateConversationClassifications,
+  conversationClassificationBatchSchema,
+  conversationClassificationOutput,
   normalizeConversationClassification,
   type ConversationClassification,
 } from "@/modules/instagram-dm/analytics-ai";
@@ -22,6 +24,16 @@ const base: ConversationClassification = {
     registrationDirection: 4,
   },
 };
+
+test("OpenRouter JSON rejimi istifadə edir, nəticə yenə sərt sxemlə yoxlanır", async () => {
+  assert.deepEqual(await conversationClassificationOutput(true).responseFormat, { type: "json" });
+  assert.ok("schema" in await conversationClassificationOutput(false).responseFormat);
+  assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [base] }).success, true);
+  assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [{ ...base, index: 0 }] }).success, false);
+  assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [{ ...base, purchaseIntent: "INVALID" }] }).success, false);
+  assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [{ ...base, teamRatings: { ...base.teamRatings, professionalism: 6 } }] }).success, false);
+  assert.equal(conversationClassificationBatchSchema.safeParse({ conversations: [] }).success, false);
+});
 
 test("workshop/masterclass ümumi kurs marketinqinin davranış faizlərindən çıxarılır", () => {
   const workshop = normalizeConversationClassification({ ...base, kind: "WORKSHOP" }, { lastDirection: "MÜŞTƏRİ", hasTeamMessage: true });
