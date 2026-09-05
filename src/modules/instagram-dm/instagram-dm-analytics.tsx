@@ -44,7 +44,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
             type="button"
             className="instagram-dm-refresh"
             aria-label="DM analizini yenilə"
-            title="Yenilə"
+            title="Göstəriciləri yenilə; tamamlanmış gündəlik AI analizi təkrar hesablanmır"
             disabled={refreshPending}
             onClick={() => startRefresh(() => router.refresh())}
           >
@@ -56,7 +56,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
       <MarketingViewTabs active="dm" />
 
       <section className="instagram-dm-metrics" aria-label="DM əsas göstəriciləri">
-        <Metric icon={MessageCircle} label="Conversation" value={count(data.summary.conversations)} helper={`${count(data.summary.messages)} mesaj`} tone="blue" />
+        <Metric icon={MessageCircle} label="Aktiv dialoqlar" value={count(data.summary.conversations)} helper={`${count(data.summary.inboundConversations)} müştəri yazan · ${count(data.summary.outboundOnlyConversations)} yalnız komanda`} tone="blue" />
         <Metric icon={TrendingUp} label="Cavab faizi" value={percent(data.summary.responseRate)} helper={`${count(data.summary.answeredConversations)} cavablanan`} tone="green" />
         <Metric icon={Clock3} label="Median ilk cavab" value={durationLabel(data.summary.medianFirstResponseMinutes)} helper="İlk inbound → ilk outbound" tone="blue" />
         <Metric icon={BarChart3} label="Pik saat" value={peakHour(data.summary.peakInboundHour)} helper="Bakı vaxtı ilə" tone="orange" />
@@ -69,10 +69,21 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
         />
       </section>
 
+      <p className="instagram-dm-scope-note">
+        {count(data.summary.messages)} mesaj · Aktiv dialoq: seçilmiş dövrdə ən azı bir mesajı olan unikal söhbət; yeni lead sayı deyil.
+        Cavab faizi yalnız müştərinin yazdığı {count(data.summary.inboundConversations)} dialoq üzrədir.
+        Səs və şəkil məzmunu AI tərəfindən oxunmur; nəticələr bazaya toplanmış mətnlərlə məhdudlaşır.
+      </p>
+      <p className="instagram-dm-scope-note">
+        Hər tarix aralığı üçün Bakı vaxtı ilə gündə ilk girişdə bir analiz saxlanır. Sonrakı girişlər həmin nəticəni göstərir.
+        {data.snapshot ? ` Model: ${data.snapshot.model}. Məlumat kəsiyi: ${dateTime(data.snapshot.dataCutoffAt)}.` : ""}
+        {data.snapshot?.status === "FAILED" ? " Uğursuz cəhdə 15 dəqiqə sonra yenidən cəhd edilə bilər." : ""}
+      </p>
+
       {ai ? (
         <>
           <section className="instagram-ai-section">
-            <header><Sparkles size={16} /><div><h2>AI ilə müştəri davranışı</h2><p>{count(ai.customerConversations)} müştəri dialoqu · {count(ai.excludedConversations)} HR/əlaqəsiz dialoq çıxarılıb</p></div></header>
+            <header><Sparkles size={16} /><div><h2>AI ilə müştəri davranışı</h2><p>{count(ai.analyzedConversations)} mətnli dialoq analiz edilib · {count(ai.customerConversations)} müştəri dialoqu · {count(ai.excludedConversations)} HR/tədbir/əlaqəsiz dialoq çıxarılıb</p></div></header>
             <div className="instagram-ai-behavior-grid">
               <InsightCard title="Xidmət marağı" icon={Target} tone="blue" items={ai.serviceInterest} />
               <IntentCard hot={ai.purchaseIntent.hot} warm={ai.purchaseIntent.warm} cold={ai.purchaseIntent.cold} />
@@ -113,9 +124,29 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
         </section>
       )}
 
+      {data.history.length > 0 ? (
+        <section className="instagram-dm-history" aria-label="Gündəlik analiz tarixçəsi">
+          <h2>Gündəlik analiz tarixçəsi</h2>
+          <p>{displayDate(data.period.from)}–{displayDate(data.period.to)} dövrünün gündəlik vəziyyəti. Aylıq nəticə üçün sətirlər toplanmır: eyni dialoq müxtəlif günlərdə görünə bilər. Son 31 qeyd göstərilir.</p>
+          <div className="instagram-dm-history-scroll">
+            <table>
+              <thead><tr><th>Analiz günü</th><th>Vəziyyət</th><th>Analiz edilən</th><th>Müştəri sorğusu</th><th>Yüksək niyyətli, cavabsız</th></tr></thead>
+              <tbody>{data.history.map((entry) => <tr key={entry.day}>
+                <td>{displayDate(entry.day)}</td>
+                <td>{({ READY: "Hazır", RUNNING: "Hazırlanır", FAILED: "Xəta", NO_DATA: "Mətnli dialoq yoxdur" })[entry.state] ?? entry.state}</td>
+                <td>{entry.analyzedConversations === null ? "—" : count(entry.analyzedConversations)}</td>
+                <td>{entry.customerConversations === null ? "—" : count(entry.customerConversations)}</td>
+                <td>{entry.highIntentUnanswered === null ? "—" : count(entry.highIntentUnanswered)}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
       <footer className="instagram-dm-page-foot">
         <span>Son webhook: {data.account.lastWebhookAt ? dateTime(data.account.lastWebhookAt) : "—"}</span>
-        <span>Analiz yeniləndi: {dateTime(data.generatedAt)}</span>
+        <span>Göstəricilər yeniləndi: {dateTime(data.generatedAt)}</span>
+        <span>AI analiz edildi: {data.ai.generatedAt ? dateTime(data.ai.generatedAt) : "—"}</span>
       </footer>
     </section>
   );
@@ -135,7 +166,7 @@ function InsightCard({ title, icon: Icon, tone, items }: {
 }) {
   return <article className={`instagram-insight-card is-${tone}`}>
     <header><Icon size={16} /><h3>{title}</h3></header>
-    <dl>{items.map((item) => <div key={item.label}><dt>{item.label}</dt><dd>{percent(item.percentage)}</dd></div>)}</dl>
+    <dl>{items.length ? items.map((item) => <div key={item.label}><dt>{item.label}</dt><dd>{percent(item.percentage)}</dd></div>) : <div><dt>Açıq sübut aşkarlanmayıb</dt><dd>—</dd></div>}</dl>
   </article>;
 }
 
@@ -155,7 +186,7 @@ function Score({ label, value }: { label: string; value: number }) {
   return <div className="instagram-score-row">
     <span>{label}</span>
     <i><b style={{ width: `${safeValue}%` }} /></i>
-    <strong>{Math.round(safeValue)}/100</strong>
+    <strong title={safeValue === 0 ? "Bu meyar üçün qiymətləndirilə bilən cavab yoxdur" : undefined}>{safeValue === 0 ? "—" : `${Math.round(safeValue)}/100`}</strong>
   </div>;
 }
 

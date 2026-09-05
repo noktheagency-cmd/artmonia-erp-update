@@ -48,7 +48,7 @@ export function MarketingViewTabs({
         <CalendarDays size={16} />
         Content plan
       </Link>
-      <Link href={hrefFor("dm")} className={cx(active === "dm" && "is-active")}>
+      <Link href={hrefFor("dm")} prefetch={false} className={cx(active === "dm" && "is-active")}>
         <MessagesSquare size={16} />
         DM intelligence
       </Link>

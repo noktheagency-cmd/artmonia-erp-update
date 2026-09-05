@@ -105,3 +105,22 @@
   .instagram-team-grid > * { grid-column: auto; }
   .instagram-dm-page-foot { flex-direction: column; }
 }
+.instagram-dm-scope-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted-foreground, #64748b);
+}
+.instagram-dm-metric small { white-space: normal; line-height: 1.5; }
+.instagram-dm-history {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 16px;
+  background: var(--card, #fff);
+}
+.instagram-dm-history h2 { margin: 0 0 8px; font-size: 16px; }
+.instagram-dm-history p { font-size: 12px; line-height: 1.6; color: var(--muted-foreground, #64748b); }
+.instagram-dm-history-scroll { overflow-x: auto; }
+.instagram-dm-history table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 12px; }
+.instagram-dm-history th, .instagram-dm-history td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--border, #e2e8f0); }

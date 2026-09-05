@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const conversationClassificationSchema = z.object({
   index: z.number().int().positive(),
-  kind: z.enum(["CUSTOMER", "HR", "IRRELEVANT"]),
+  kind: z.enum(["CUSTOMER", "HR", "WORKSHOP", "IRRELEVANT"]),
   service: z.enum([
     "ABILITY_PREP",
     "ART_COURSE",
@@ -242,7 +242,7 @@ function buildSummary(analysis: Omit<AiAnalysis, "summary" | "recommendations">)
   const replySentence = analysis.highIntentUnanswered > 0
     ? `${analysis.highIntentUnanswered} yüksək niyyətli dialoq cavab gözləyir.`
     : "Cavab gözləyən yüksək niyyətli dialoq aşkarlanmadı.";
-  return `${analysis.analyzedConversations} inbound dialoq təsnif edildi; ${analysis.customerConversations} müştəri sorğusu analizə daxil edildi, ${analysis.excludedConversations} HR və ya əlaqəsiz dialoq faizlərdən çıxarıldı. ${serviceSentence} Yüksək alış niyyəti ${formatPercent(analysis.purchaseIntent.hot)} təşkil edir. ${replySentence}`;
+  return `${analysis.analyzedConversations} inbound dialoq təsnif edildi; ${analysis.customerConversations} müştəri sorğusu analizə daxil edildi, ${analysis.excludedConversations} HR, workshop/masterclass və ya əlaqəsiz dialoq faizlərdən çıxarıldı. ${serviceSentence} Yüksək alış niyyəti ${formatPercent(analysis.purchaseIntent.hot)} təşkil edir. ${replySentence}`;
 }
 
 function buildRecommendations(

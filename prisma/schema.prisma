@@ -1315,6 +1315,27 @@ model MarketingAdStat {
   @@schema("erp")
 }
 
+model InstagramDmDailyAnalysis {
+  id              String    @id @default(uuid()) @db.Uuid
+  periodFrom      DateTime  @map("period_from") @db.Date
+  periodTo        DateTime  @map("period_to") @db.Date
+  snapshotDay     DateTime  @map("snapshot_day") @db.Date
+  status          String
+  model           String
+  analysisVersion String    @map("analysis_version")
+  startedAt       DateTime  @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  dataCutoffAt    DateTime  @map("data_cutoff_at")
+  result          Json?
+  metrics         Json
+  classifications Json?
+  errorCode       String?   @map("error_code")
+
+  @@unique([periodFrom, periodTo, snapshotDay], map: "instagram_dm_daily_analyses_period_day_key")
+  @@map("instagram_dm_daily_analyses")
+  @@schema("erp")
+}
+
 model InstagramDmAccount {
   id            String   @id @default(uuid()) @db.Uuid
   metaAccountId String   @unique @map("meta_account_id")

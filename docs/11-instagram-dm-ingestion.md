@@ -1,6 +1,6 @@
 # Instagram DM ingestion
 
-This stage only collects and normalizes Instagram DM data. AI classification and the behavior dashboard are intentionally deferred.
+Instagram DM ingestion collects and normalizes messages; DM Intelligence provides period-scoped operational metrics and daily AI analysis snapshots.
 
 ## Flow
 
@@ -64,3 +64,17 @@ Meta currently limits retrievable details for older messages and may omit inacti
 ## Storage security
 
 All DM tables live in the `erp` schema, have RLS enabled, and revoke access from `anon` and `authenticated`. The browser does not receive raw message text during this stage.
+
+## Daily DM Intelligence
+
+- Apply the `20260905134611_instagram_dm_daily_analysis` migration before deploying the daily analysis code.
+- Configure `OPENROUTER_API_KEY` on the ERP web service (not only the Meta sync service). The selected model is `google/gemini-3.8-flash`. The existing Google direct fallback is used only when the OpenRouter key is absent.
+- OpenRouter routing retains `data_collection: deny`, `zdr: true`, and `require_parameters: true`. Do not send `temperature` to this model: its Vertex ZDR endpoints do not advertise support for that parameter.
+- First access to a selected header date range each Baku calendar day claims one database snapshot. Completed READY/NO_DATA snapshots are reused across refreshes, users and process restarts. A different date range gets its own snapshot.
+- Failed or abandoned attempts may retry after 15 minutes. Generation is limited to five minutes and two concurrent batches. There is no scheduled run when nobody opens DM Intelligence, and missed days are not fabricated.
+- Snapshots represent the selected period as known at first access (month-to-date for the current month), not isolated daily message totals. Do not add daily snapshot counts/percentages together to obtain monthly results. Previous snapshots are retained; the UI lists the latest 31 for that exact period.
+- `metrics`, aggregate `result`, model/version, cutoff and per-conversation classifications are stored in `erp.instagram_dm_daily_analyses`. Raw message text is not duplicated in this table or sent to the frontend.
+- All in-period conversations with inbound text are eligible, without the old 120-conversation/60-message/260-character truncation. Large input is batched; an oversized individual conversation fails explicitly rather than being silently truncated. Phone numbers, email addresses and URLs are masked before model calls; free-text names may remain, so this is not full anonymization.
+- Active conversations includes outbound-only threads. It is not a new-customer, Meta ad lead or unique new lead count. AI analyzes only collected text; audio/image meaning and uncollected history are not covered.
+- The statistics refresh timestamp and the AI generation timestamp are distinct. A refresh during the same day can update live metrics without regenerating the saved AI snapshot.
+- Errors log only a safe error code, model and period; never log the full provider error, request payload or API key. HTTP 401/403 means key/access, 402 balance/limit, 404 model/routing, 429 throttling.

@@ -23,6 +23,14 @@ const base: ConversationClassification = {
   },
 };
 
+test("workshop/masterclass ümumi kurs marketinqinin davranış faizlərindən çıxarılır", () => {
+  const workshop = normalizeConversationClassification({ ...base, kind: "WORKSHOP" }, { lastDirection: "MÜŞTƏRİ", hasTeamMessage: true });
+  const analysis = aggregateConversationClassifications([base, workshop], { responseRate: 50, medianFirstResponseMinutes: 10 });
+  assert.equal(analysis.customerConversations, 1);
+  assert.equal(analysis.excludedConversations, 1);
+  assert.equal(workshop.teamRatings, null);
+});
+
 test("HR və əlaqəsiz dialoqlar customer behavior faizlərindən çıxarılır", () => {
   const analysis = aggregateConversationClassifications([
     base,
