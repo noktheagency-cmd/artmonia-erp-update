@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -25,6 +25,12 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
   const [refreshPending, startRefresh] = useTransition();
   const ai = data.ai.state === "ready" ? data.ai : null;
   const aiUnavailableReason = data.ai.state === "ready" ? "" : data.ai.reason;
+  const analysisRunning = data.snapshot?.status === "RUNNING";
+  useEffect(() => {
+    if (!analysisRunning || refreshPending) return;
+    const timer = window.setTimeout(() => startRefresh(() => router.refresh()), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [analysisRunning, refreshPending, router, data.generatedAt]);
 
   return (
     <section className="page-stack instagram-dm-page">
@@ -120,7 +126,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
       ) : (
         <section className="instagram-ai-unavailable">
           <Sparkles size={24} />
-          <div><h2>AI analizi hazır deyil</h2><p>{aiUnavailableReason}</p></div>
+          <div role="status"><h2>{analysisRunning ? "AI analizi hazırlanır" : "AI analizi hazır deyil"}</h2><p>{aiUnavailableReason}</p></div>
         </section>
       )}
 

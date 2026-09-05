@@ -1,6 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText } from "ai";
+import { after } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import {
   aggregateConversationClassifications,
@@ -154,6 +155,7 @@ export async function getInstagramDmAnalyticsData(
   };
   const daily = await getDailyDmAnalysis({
     period: { from, to }, now, metrics: summary,
+    schedule: (task) => after(task),
     model: process.env.OPENROUTER_API_KEY?.trim() ? OPENROUTER_DM_MODEL
       : process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ? "gemini-2.5-flash-lite" : null,
     analyze: async () => {

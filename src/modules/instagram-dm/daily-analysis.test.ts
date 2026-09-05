@@ -119,3 +119,20 @@ test("yaddaş işləməyəndə saxlanılmayan pullu AI analizi çağırılmır",
   assert.equal(result.ai.state, "unavailable");
   assert.equal(calls, 0);
 });
+
+test("arxa plan işi səhifəni bloklamır və poll yeni AI işi yaratmır", async () => {
+  const { db } = fakeDatabase();
+  const scheduled: Array<() => Promise<void>> = [];
+  let calls = 0;
+  const input = { period: { from: "2026-09-01", to: "2026-09-30" }, now: new Date(), model: "test", metrics: {}, schedule: (task: () => Promise<void>) => { scheduled.push(task); }, analyze: async () => { calls++; return { analysis: emptyAnalysis, classifications: [] }; } };
+  const pending = await getDailyDmAnalysis(input, db);
+  assert.equal(pending.snapshot?.status, "RUNNING");
+  assert.equal(calls, 0);
+  await getDailyDmAnalysis(input, db);
+  assert.equal(scheduled.length, 1);
+  await scheduled[0]();
+  const ready = await getDailyDmAnalysis(input, db);
+  assert.equal(ready.ai.state, "ready");
+  assert.equal(scheduled.length, 1);
+  assert.equal(calls, 1);
+});

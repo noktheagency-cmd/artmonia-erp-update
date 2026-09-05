@@ -31,6 +31,7 @@ export async function getDailyDmAnalysis(input: {
   now: Date;
   model: string | null;
   metrics: object;
+  schedule?: (task: () => Promise<void>) => void;
   analyze: () => Promise<{
     analysis: AiAnalysis | null;
     classifications: Array<ConversationClassification & { conversationId: string }>;
@@ -67,30 +68,40 @@ export async function getDailyDmAnalysis(input: {
         })).count;
       }
       if (claimed) {
-        try {
-          const result = await input.analyze();
-          const finishedAt = new Date();
-          const ai: DailyAiResult = result.analysis
-            ? { state: "ready", generatedAt: finishedAt.toISOString(), ...result.analysis }
-            : { state: "no_data", generatedAt: finishedAt.toISOString(), reason: "Seçilmiş dövrdə analiz üçün mətnli müştəri dialoqu yoxdur." };
-          await prisma.instagramDmDailyAnalysis.updateMany({
-            where: { ...key, status: "RUNNING", startedAt: input.now },
-            data: {
-              status: result.analysis ? "READY" : "NO_DATA", finishedAt,
-              result: ai as unknown as Prisma.InputJsonObject,
-              classifications: result.classifications as unknown as Prisma.InputJsonArray,
-            },
+        const runAnalysis = async () => {
+          try {
+            const result = await input.analyze();
+            const finishedAt = new Date();
+            const ai: DailyAiResult = result.analysis
+              ? { state: "ready", generatedAt: finishedAt.toISOString(), ...result.analysis }
+              : { state: "no_data", generatedAt: finishedAt.toISOString(), reason: "Seçilmiş dövrdə analiz üçün mətnli müştəri dialoqu yoxdur." };
+            await prisma.instagramDmDailyAnalysis.updateMany({
+              where: { ...key, status: "RUNNING", startedAt: input.now },
+              data: {
+                status: result.analysis ? "READY" : "NO_DATA", finishedAt,
+                result: ai as unknown as Prisma.InputJsonObject,
+                classifications: result.classifications as unknown as Prisma.InputJsonArray,
+              },
+            });
+          } catch (error) {
+            const failure = safeAnalysisError(error);
+            console.error("Instagram DM daily AI analysis failed", { code: failure.code, diagnostics: safeProviderDiagnostics(error), model: input.model, period: input.period, day });
+            await prisma.instagramDmDailyAnalysis.updateMany({
+              where: { ...key, status: "RUNNING", startedAt: input.now },
+              data: {
+                status: "FAILED", finishedAt: new Date(), errorCode: failure.code,
+                result: { state: "unavailable", generatedAt: "", reason: failure.reason },
+              },
+            });
+          }
+        };
+        if (input.schedule) {
+          input.schedule(async () => {
+            try { await runAnalysis(); }
+            catch { console.error("Instagram DM background analysis storage unavailable"); }
           });
-        } catch (error) {
-          const failure = safeAnalysisError(error);
-          console.error("Instagram DM daily AI analysis failed", { code: failure.code, diagnostics: safeProviderDiagnostics(error), model: input.model, period: input.period, day });
-          await prisma.instagramDmDailyAnalysis.updateMany({
-            where: { ...key, status: "RUNNING", startedAt: input.now },
-            data: {
-              status: "FAILED", finishedAt: new Date(), errorCode: failure.code,
-              result: { state: "unavailable", generatedAt: "", reason: failure.reason },
-            },
-          });
+        } else {
+          await runAnalysis();
         }
       }
       row = await prisma.instagramDmDailyAnalysis.findUnique({ where: { periodFrom_periodTo_snapshotDay: key } });
@@ -132,6 +143,6 @@ function resultFromRow(row: InstagramDmDailyAnalysis): DailyAiResult {
   const stale = Date.now() - row.startedAt.getTime() >= DM_RETRY_AFTER_MS;
   return {
     state: "unavailable", generatedAt: "",
-    reason: stale ? "Əvvəlki analiz yarımçıq qalıb. Səhifəni yeniləyin." : "Bu günün analizi hazırlanır. Bir qədər sonra səhifəni yeniləyin.",
+    reason: stale ? "Əvvəlki analiz yarımçıq qalıb. Səhifəni yeniləyin." : "Bu günün analizi arxa planda hazırlanır. Hazır olduqda nəticə avtomatik görünəcək.",
   };
 }
