@@ -62,6 +62,7 @@ import {
   pauseStudentLifecycleRelations,
 } from "@/modules/students/lifecycle-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
+import { planLifecycleHistoryChange } from "@/modules/students/lifecycle-history-policy";
 import {
   deleteStudentMobileAuthUser,
   inviteStudentMobileAccount,
@@ -629,13 +630,20 @@ async function updateStudentStatusActionImpl(formData: FormData) {
     assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
     if (current.lifecycleStatus === input.lifecycleStatus) return;
 
+    const { historicalOnly } = await planLifecycleHistoryChange(tx, {
+      studentId: current.id,
+      currentStatus: current.lifecycleStatus,
+      requestedStatus: input.lifecycleStatus,
+      effectiveAt,
+    });
+
     const statusReason = getSharedStatusChangeReason(
       input.lifecycleStatus,
       current.lifecycleStatus,
     );
     const updateData = buildSharedStudentStatusUpdateData(input.lifecycleStatus, effectiveAt);
 
-    await tx.student.update({
+    if (!historicalOnly) await tx.student.update({
       where: { id: current.id },
       data: updateData,
     });
@@ -656,7 +664,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
     let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
     let relationResult: Awaited<ReturnType<typeof pauseStudentLifecycleRelations>> | null = null;
 
-    if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
+    if (!historicalOnly && isSharedBillingPausedStatus(input.lifecycleStatus)) {
       await clearStudentPaymentSchedules(tx, [current.id]);
       if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
         completionResult = await closeCompletedStudentBilling(tx, current.id, effectiveAt);
@@ -685,8 +693,9 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         billingPaused: current.billingPaused,
       },
       after: {
-        lifecycleStatus: input.lifecycleStatus,
-        billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
+        lifecycleStatus: historicalOnly ? current.lifecycleStatus : input.lifecycleStatus,
+        billingPaused: historicalOnly ? current.billingPaused : isSharedBillingPausedStatus(input.lifecycleStatus),
+        historicalOnly,
         effectiveAt: effectiveAt.toISOString(),
         eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
         ...(isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus)
@@ -791,6 +800,15 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     if (statusChanged) {
       assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
     }
+
+    const { historicalOnly } = statusChanged
+      ? await planLifecycleHistoryChange(tx, {
+          studentId: current.id,
+          currentStatus: current.lifecycleStatus,
+          requestedStatus: input.lifecycleStatus,
+          effectiveAt: statusEffectiveAt,
+        })
+      : { historicalOnly: false };
 
     const isReactivation = statusChanged
       && isReactivationTransition(current.lifecycleStatus, input.lifecycleStatus);
@@ -975,7 +993,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     }
 
     if (statusChanged) {
-      await tx.student.update({
+      if (!historicalOnly) await tx.student.update({
         where: { id: current.id },
         data: buildSharedStudentStatusUpdateData(input.lifecycleStatus, statusEffectiveAt),
       });
@@ -996,7 +1014,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
       let relationResult: Awaited<ReturnType<typeof pauseStudentLifecycleRelations>> | null = null;
 
-      if (isSharedBillingPausedStatus(input.lifecycleStatus)) {
+      if (!historicalOnly && isSharedBillingPausedStatus(input.lifecycleStatus)) {
         await clearStudentPaymentSchedules(tx, [current.id]);
         if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
           completionResult = await closeCompletedStudentBilling(tx, current.id, statusEffectiveAt);
@@ -1031,8 +1049,9 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           currentFirstLessonAt: currentEnrollment.firstLessonAt?.toISOString() ?? null,
         },
         after: {
-          lifecycleStatus: input.lifecycleStatus,
-          billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
+          lifecycleStatus: historicalOnly ? current.lifecycleStatus : input.lifecycleStatus,
+          billingPaused: historicalOnly ? current.billingPaused : isSharedBillingPausedStatus(input.lifecycleStatus),
+          historicalOnly,
           effectiveAt: statusEffectiveAt.toISOString(),
           eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
           ...(isReactivation ? { createsNewSale: false } : {}),

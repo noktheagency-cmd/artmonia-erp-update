@@ -2,6 +2,7 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
+import { planLifecycleHistoryChange } from "@/modules/students/lifecycle-history-policy";
 import {
   AttendanceCaptureSource,
   AttendanceMark,
@@ -622,6 +623,12 @@ async function syncStudentActivationAndPayment(
 ) {
   const student = input.enrollment.student;
   if (student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING) {
+    await planLifecycleHistoryChange(tx, {
+      studentId: student.id,
+      currentStatus: student.lifecycleStatus,
+      requestedStatus: StudentLifecycleStatus.ACTIVE,
+      effectiveAt: input.slotStartedAt,
+    });
     const isReactivation = student.statusHistory[0]?.eventType === "REACTIVATED";
     await tx.student.update({
       where: { id: student.id },

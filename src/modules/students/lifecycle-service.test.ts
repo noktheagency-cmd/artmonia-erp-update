@@ -36,11 +36,13 @@ function activationTx(enrollment: {
   startDate: Date;
   firstLessonAt: Date | null;
   billingAnchorDate?: Date | null;
+  frozenAtDue?: boolean;
 }) {
   let enrollmentUpdate: unknown;
   const studentUpdates: unknown[] = [];
   let invoiceUpdate: unknown;
   const tx = {
+    studentStatusHistory: { findFirst: async () => enrollment.frozenAtDue ? { newStatus: "FROZEN" } : null },
     student: {
       updateMany: async (args: unknown) => {
         studentUpdates.push(args);
@@ -275,6 +277,18 @@ test("initial activation cannot invoice a month before the first lesson anchor",
   });
 
   assert.equal(period.toISOString().slice(0, 10), "2026-09-01");
+});
+
+test("slot activation after freezing cannot recreate the cancelled month", async () => {
+  const { tx, getInvoiceUpdate } = activationTx({
+    startDate: utcDate("2026-02-07"),
+    firstLessonAt: utcDate("2026-02-07"),
+    frozenAtDue: true,
+  });
+  await syncActivationBilling(tx, {
+    studentId: "student-1", studentCode: "ART-0001", effectiveAt: utcDate("2026-08-17"),
+  });
+  assert.equal((getInvoiceUpdate() as { data: { periodMonth: Date } }).data.periodMonth.toISOString().slice(0,10), "2026-09-01");
 });
 
 test("reactivation before a future anchor month cannot invoice the earlier month", () => {

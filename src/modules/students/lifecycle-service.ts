@@ -319,12 +319,22 @@ export async function syncActivationBilling(
     },
   });
 
-  const periodMonth = resolveActivationBillingPeriod({
+  let periodMonth = resolveActivationBillingPeriod({
     effectiveAt: input.effectiveAt,
     billingAnchorDate,
     isReactivation: Boolean(input.isReactivation),
   });
-  const dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
+  let dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
+  const historyAtDue = await tx.studentStatusHistory.findFirst({
+    where: { studentId: input.studentId, effectiveAt: { lte: dueDate } },
+    orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: { newStatus: true },
+  });
+  if (historyAtDue?.newStatus === StudentLifecycleStatus.FROZEN) {
+    // An import/slot activation must not recreate a cycle cancelled for freezing.
+    periodMonth = new Date(Date.UTC(periodMonth.getUTCFullYear(), periodMonth.getUTCMonth() + 1, 1));
+    dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
+  }
   const existingInvoice = await tx.invoice.findFirst({
     where: {
       studentId: input.studentId,
