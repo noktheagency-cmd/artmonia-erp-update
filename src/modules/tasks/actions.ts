@@ -20,6 +20,7 @@ import {
   canAdministerTasks,
 } from "@/modules/tasks/task-permissions";
 import { taskStatusUpdateSchema } from "@/modules/tasks/task-status-update";
+import { taskEditSchema } from "@/modules/tasks/task-edit";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -227,3 +228,34 @@ export const deleteTaskAction = safeServerAction(
   deleteTaskActionImpl,
   "Task silinmədi.",
 );
+
+async function updateTaskActionImpl(formData: FormData) {
+  const actor = await requireMutationActor();
+  await assertCanAdministerTasks(actor);
+  const input = taskEditSchema.parse(Object.fromEntries(formData));
+  const reassignedTo = await getPrisma().$transaction(async (tx) => {
+    const current = await tx.task.findFirst({ where: { id: input.taskId, ...buildTaskWorkspaceWhere() } });
+    if (!current) throw new PublicActionError("Task tapılmadı.", "NOT_FOUND");
+    if (current.ownerUserId !== input.ownerUserId && !await tx.user.findFirst({ where: buildCurrentTaskAssigneeWhere(input.ownerUserId), select: { id: true } })) {
+      throw new PublicActionError("Seçilmiş əməkdaş artıq aktiv deyil.", "NOT_FOUND");
+    }
+    const updated = await tx.task.update({ where: { id: current.id }, data: {
+      title: input.title, description: input.description || null, ownerUserId: input.ownerUserId,
+      dueAt: new Date(`${input.dueDate}T12:00:00.000Z`), priority: input.priority,
+    } });
+    if (current.ownerUserId !== updated.ownerUserId) {
+      await createAssignedTaskNotification(tx, {
+        ...updated, ownerUserId: input.ownerUserId,
+        assignmentKey: `task:${updated.id}:assigned:${input.ownerUserId}:${updated.updatedAt.toISOString()}`,
+      });
+    }
+    const snapshot = (task: typeof current) => ({ title: task.title, description: task.description, ownerUserId: task.ownerUserId, dueAt: task.dueAt?.toISOString() ?? null, priority: task.priority });
+    await writeAuditLog(tx, { actorUserId: actor.id, action: "task.update", entityType: "task", entityId: current.id, before: snapshot(current), after: snapshot(updated), reason: "Task məlumatları redaktə edildi" });
+    return current.ownerUserId !== updated.ownerUserId ? input.ownerUserId : null;
+  });
+  if (reassignedTo) await broadcastNotificationChange(reassignedTo);
+  revalidatePath("/tasks");
+  revalidatePath("/dashboard");
+}
+
+export const updateTaskAction = safeServerAction(updateTaskActionImpl, "Task yenilənmədi.");

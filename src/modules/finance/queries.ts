@@ -507,9 +507,9 @@ export async function getFinanceData(
   const needsPayroll = normalizedFilters.type === "overview" || normalizedFilters.type === "payroll";
   const needsDebts = normalizedFilters.type === "overview" || normalizedFilters.type === "debts";
   const expenseModeSql = normalizedFilters.type === "expenses"
-    ? Prisma.sql`and fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode"`
+    ? Prisma.sql`and (fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode" or fec.code = 'OP_MANAGEMENT_COMP')`
     : normalizedFilters.type === "payroll"
-      ? Prisma.sql`and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"`
+      ? Prisma.sql`and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode" and fec.code is distinct from 'OP_MANAGEMENT_COMP'`
       : Prisma.empty;
   const studentReceivableCtes = Prisma.sql`
     current_enrollment as (
@@ -601,6 +601,7 @@ export async function getFinanceData(
           fe.financial_class,
           fe.transaction_type,
           fe.salary_mode,
+          fec.code as category_code,
           fe.workshop_event_id
         from erp.finance_expenses fe
         join erp.finance_expense_categories fec on fec.id = fe.category_id
@@ -752,6 +753,7 @@ export async function getFinanceData(
         coalesce((
           select sum(amount) from filtered_expenses
           where salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"
+            and category_code is distinct from 'OP_MANAGEMENT_COMP'
         ), 0) as "payroll",
         0 as "debt",
         0 as "debtors"
@@ -1068,7 +1070,7 @@ export async function getFinanceData(
       where fe.expense_date >= ${fromDate}
         and fe.expense_date < ${endDateExclusive}
         and fe.voided_at is null
-        and fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode"
+        and (fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode" or fec.code = 'OP_MANAGEMENT_COMP')
         ${expenseSourceSql}
         ${categorySql}
         ${searchSql.expenses}
@@ -1112,7 +1114,7 @@ export async function getFinanceData(
       where fe.expense_date >= ${fromDate}
         and fe.expense_date < ${endDateExclusive}
         and fe.voided_at is null
-        and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"
+        and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode" and fec.code is distinct from 'OP_MANAGEMENT_COMP'
         ${expenseSourceSql}
         ${categorySql}
         ${searchSql.expenses}

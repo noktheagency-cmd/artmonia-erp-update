@@ -1,3 +1,4 @@
+import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
@@ -203,13 +204,7 @@ async function getActuals(periodStart: Date, actualEnd: Date): Promise<CompanyKp
             s.lifecycle_status
           ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "openingActiveStudents",
-      coalesce((
-        select count(*)::int
-        from erp.students s
-        where s.registered_at >= ${periodStart}
-          and s.registered_at < ${actualEnd}
-          and s.is_test_data = false
-      ), 0) as "newSales",
+      ${companySalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${actualEnd}`)} as "newSales",
       coalesce((
         select count(distinct h.student_id)::int
         from erp.student_status_history h

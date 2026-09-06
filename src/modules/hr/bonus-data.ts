@@ -48,6 +48,7 @@ export type HrBonusCampaignDto = {
   perUnitBonusPercent: number;
   perUnitBonusAmount: number;
   currentValue: number;
+  scheduledValue?: number;
   baseValue: number;
   adjustmentValue: number;
   maxThreshold: number;
@@ -150,6 +151,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         baseValue: 0,
         adjustmentValue: 0,
         currentValue: 0,
+        scheduledValue: 0,
       };
       const maxThreshold = Number(campaign.stages.at(-1)?.threshold ?? 0);
       const ownParticipant = campaign.participants.find((participant) => participant.employeeId === actorEmployee?.id);
@@ -167,6 +169,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         perUnitBonusPercent: Number(campaign.perUnitBonusPercent),
         perUnitBonusAmount: Number(campaign.perUnitBonusAmount),
         currentValue: value.currentValue,
+        scheduledValue: value.scheduledValue,
         baseValue: value.baseValue,
         adjustmentValue: value.adjustmentValue,
         maxThreshold,

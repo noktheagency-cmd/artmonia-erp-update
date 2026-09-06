@@ -1,3 +1,4 @@
+import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
 import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
@@ -138,6 +139,7 @@ type DashboardRawRow = {
   programStats: unknown;
   totalLeadsThisMonth: unknown;
   convertedLeadsThisMonth: unknown;
+  companySalesCount: unknown;
   studentStatusCounts: unknown;
   teamPerformance: unknown;
 };
@@ -539,6 +541,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           and l.created_at < ${periodEndExclusive}
           and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
       ), 0) as "convertedLeadsThisMonth",
+      ${companySalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${periodEndExclusive}`)} as "companySalesCount",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -847,7 +850,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     teamPerformance,
     conversionRate,
     conversionHelper: `${convertedLeadsThisMonth} satış / ${totalLeadsThisMonth} müraciət`,
-    salesCount: convertedLeadsThisMonth,
+    salesCount: toNumber(row?.companySalesCount),
     totalLeadCount: totalLeadsThisMonth,
     churnRate,
     churnCounts: {

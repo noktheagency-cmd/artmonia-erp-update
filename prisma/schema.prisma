@@ -709,6 +709,9 @@ model KnowledgeArticle {
   createdAt   DateTime               @default(now()) @map("created_at")
   updatedAt   DateTime               @updatedAt @map("updated_at")
 
+  inheritAudience Boolean @default(true) @map("inherit_audience")
+  audiences KnowledgeArticleAudience[]
+
   category  KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   createdBy User?             @relation("KnowledgeArticleCreator", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy User?             @relation("KnowledgeArticleUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
@@ -717,6 +720,19 @@ model KnowledgeArticle {
   @@index([createdById])
   @@index([updatedById])
   @@map("knowledge_articles")
+  @@schema("erp")
+}
+
+model KnowledgeArticleAudience {
+  articleId String @map("article_id") @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  article KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  employee HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, employeeId])
+  @@index([employeeId, articleId])
+  @@map("knowledge_article_audiences")
   @@schema("erp")
 }
 
@@ -755,6 +771,7 @@ model HrEmployee {
   notes                HrEmployeeNote[]
   documents            HrEmployeeDocument[]
   knowledgeAudiences   KnowledgeCategoryAudience[]
+  knowledgeArticleAudiences KnowledgeArticleAudience[]
   archivedBy           User?                 @relation("HrEmployeeArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
 
   @@index([status])

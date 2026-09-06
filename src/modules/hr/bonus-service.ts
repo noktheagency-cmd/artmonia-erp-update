@@ -1,3 +1,4 @@
+import { actualRegistrationSql } from "@/modules/students/sales-metrics-sql";
 import {
   HrBonusCampaignStatus,
   Prisma,
@@ -18,6 +19,7 @@ type CampaignValueRow = {
   id: string;
   baseValue: Prisma.Decimal | number | string | null;
   adjustmentValue: Prisma.Decimal | number | string | null;
+  scheduledValue: Prisma.Decimal | number | string | null;
 };
 
 type TeacherPerformanceRow = {
@@ -41,7 +43,7 @@ export async function calculateBonusCampaignValues(
   campaigns: BonusCampaignValueInput[],
 ) {
   if (campaigns.length === 0) {
-    return new Map<string, { baseValue: number; adjustmentValue: number; currentValue: number }>();
+    return new Map<string, { baseValue: number; adjustmentValue: number; currentValue: number; scheduledValue: number }>();
   }
 
   const rows = await getPrisma().$queryRaw<CampaignValueRow[]>(Prisma.sql`
@@ -75,6 +77,7 @@ export async function calculateBonusCampaignValues(
                 and participant.employee_id = employee.id
                 and participant.is_eligible = true
             )
+            and ${actualRegistrationSql(Prisma.sql`student.registered_at`)}
             and student.registered_at >= campaign.starts_at
             and student.registered_at <= campaign.ends_at
             and student.is_test_data = false
@@ -90,6 +93,15 @@ export async function calculateBonusCampaignValues(
         )
         else 0
       end as "baseValue",
+      case when campaign.metric_kind = 'DEPARTMENT_SALES_COUNT' then (
+        select count(*)::int from erp.students student
+        join erp.hr_employees employee on employee.user_id = student.manager_id
+        where employee.department = campaign.department
+          and exists (select 1 from erp.hr_bonus_participants participant where participant.campaign_id = campaign.id and participant.employee_id = employee.id and participant.is_eligible = true)
+          and student.registered_at >= campaign.starts_at and student.registered_at <= campaign.ends_at
+          and student.registered_at > (now() at time zone 'Asia/Baku')::date
+          and student.is_test_data = false
+      ) else 0 end as "scheduledValue",
       coalesce((
         select sum(adjustment.amount)
         from erp.hr_bonus_progress_adjustments adjustment
@@ -104,6 +116,7 @@ export async function calculateBonusCampaignValues(
     const adjustmentValue = Number(row.adjustmentValue ?? 0);
     return [row.id, {
       baseValue,
+      scheduledValue: Number(row.scheduledValue ?? 0),
       adjustmentValue,
       currentValue: Math.max(0, baseValue + adjustmentValue),
     }];
@@ -149,6 +162,7 @@ export async function calculateBonusCampaignValue(campaignId: string) {
             and participant.employee_id = he.id
             and participant.is_eligible = true
         )
+        and ${actualRegistrationSql(Prisma.sql`s.registered_at`)}
         and s.registered_at >= ${campaign.startsAt}
         and s.registered_at <= ${campaign.endsAt}
         and s.is_test_data = false
@@ -403,6 +417,7 @@ async function calculateParticipantSalesValues(campaignId: string) {
     from erp.hr_bonus_participants participant
     left join erp.hr_employees employee on employee.id = participant.employee_id
     left join erp.students student on student.manager_id = employee.user_id
+      and ${actualRegistrationSql(Prisma.sql`student.registered_at`)}
       and student.registered_at >= (
         select campaign.starts_at from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
       )

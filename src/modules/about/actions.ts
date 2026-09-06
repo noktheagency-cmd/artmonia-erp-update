@@ -34,7 +34,9 @@ const articleSchema = z.object({
   title: z.string().trim().min(2).max(180),
   content: z.string().min(1).max(300_000),
   status: statusSchema,
-});
+  inheritAudience: z.boolean(),
+  employeeIds: z.array(z.string().uuid()).max(300).transform((ids) => [...new Set(ids)]),
+}).refine((input) => input.inheritAudience || input.employeeIds.length > 0, { message: "Ən azı bir əməkdaş seçin." });
 const moveSchema = z.object({
   id: z.string().uuid(),
   direction: z.enum(["up", "down"]),
@@ -143,7 +145,8 @@ async function moveCategoryActionImpl(categoryId: string, direction: "up" | "dow
 
 async function createArticleActionImpl(formData: FormData): Promise<MutationResult> {
   const actor = await requireKnowledgeAdmin();
-  const parsed = articleSchema.omit({ id: true }).parse(readArticleForm(formData));
+  const parsed = articleSchema.parse(readArticleForm(formData));
+  await validateAudienceEmployees(parsed.employeeIds);
   const category = await requireCompanyCategory(parsed.categoryId);
   const document = parseKnowledgeDocument(parsed.content);
   const prisma = getPrisma();
@@ -160,11 +163,13 @@ async function createArticleActionImpl(formData: FormData): Promise<MutationResu
         content: document as Prisma.InputJsonValue,
         plainText: knowledgeDocumentToPlainText(document),
         status: parsed.status,
+        inheritAudience: parsed.inheritAudience,
+        audiences: { create: (parsed.inheritAudience ? [] : parsed.employeeIds).map((employeeId) => ({ employeeId })) },
         position: (lastArticle?.position ?? -1) + 1,
         createdById: actor.id,
         updatedById: actor.id,
       },
-      select: { id: true, categoryId: true, title: true, status: true, position: true },
+      select: { id: true, categoryId: true, title: true, status: true, position: true, inheritAudience: true, audiences: { select: { employeeId: true } } },
     });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -182,10 +187,12 @@ async function createArticleActionImpl(formData: FormData): Promise<MutationResu
 async function updateArticleActionImpl(formData: FormData): Promise<MutationResult> {
   const actor = await requireKnowledgeAdmin();
   const parsed = articleSchema.parse(readArticleForm(formData));
+  await validateAudienceEmployees(parsed.employeeIds);
   const current = await requireCompanyArticle(parsed.id!);
   await requireCompanyCategory(parsed.categoryId);
   const document = parseKnowledgeDocument(parsed.content);
   await getPrisma().$transaction(async (tx) => {
+    await tx.knowledgeArticleAudience.deleteMany({ where: { articleId: current.id } });
     const updated = await tx.knowledgeArticle.update({
       where: { id: current.id },
       data: {
@@ -194,9 +201,11 @@ async function updateArticleActionImpl(formData: FormData): Promise<MutationResu
         content: document as Prisma.InputJsonValue,
         plainText: knowledgeDocumentToPlainText(document),
         status: parsed.status,
+        inheritAudience: parsed.inheritAudience,
+        audiences: { create: (parsed.inheritAudience ? [] : parsed.employeeIds).map((employeeId) => ({ employeeId })) },
         updatedById: actor.id,
       },
-      select: { id: true, categoryId: true, title: true, status: true, position: true },
+      select: { id: true, categoryId: true, title: true, status: true, position: true, inheritAudience: true, audiences: { select: { employeeId: true } } },
     });
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -259,6 +268,8 @@ function readArticleForm(formData: FormData) {
     title: formData.get("title"),
     content: formData.get("content"),
     status: formData.get("status"),
+    inheritAudience: formData.get("inheritAudience") !== "false",
+    employeeIds: formData.getAll("employeeIds"),
   };
 }
 
@@ -291,7 +302,7 @@ async function requireCompanyCategory(id: string) {
 async function requireCompanyArticle(id: string) {
   const article = await getPrisma().knowledgeArticle.findFirst({
     where: { id, category: { section: { key: COMPANY_KNOWLEDGE_KEY } } },
-    select: { id: true, categoryId: true, title: true, status: true, position: true },
+    select: { id: true, categoryId: true, title: true, status: true, position: true, inheritAudience: true, audiences: { select: { employeeId: true } } },
   });
   if (!article) throw new PublicActionError("Məqalə tapılmadı.", "NOT_FOUND");
   return article;

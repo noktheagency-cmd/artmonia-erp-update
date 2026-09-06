@@ -18,6 +18,8 @@ export type KnowledgeDocument = KnowledgeDocumentNode & { type: "doc" };
 export type KnowledgeArticle = {
   id: string;
   categoryId: string;
+  inheritAudience: boolean;
+  audienceEmployeeIds: string[];
   title: string;
   content: KnowledgeDocument;
   plainText: string;

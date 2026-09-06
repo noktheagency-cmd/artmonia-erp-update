@@ -23,6 +23,8 @@ import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import type { TaskRow, TaskStatusValue } from "@/modules/tasks/queries";
+import { TaskEditDialog } from "@/modules/tasks/task-edit-dialog";
+import type { TaskData } from "@/modules/tasks/queries";
 import { TaskCompletionDialog } from "@/modules/tasks/task-completion-dialog";
 import "./task-details.css";
 
@@ -46,11 +48,15 @@ export function TaskDetailsDialog({
   open,
   onOpenChange,
   updateTaskStatusAction,
+  canEdit = false,
+  employees = [],
 }: {
   task: TaskRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   updateTaskStatusAction: TaskAction;
+  canEdit?: boolean;
+  employees?: TaskData["employees"];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -118,6 +124,7 @@ export function TaskDetailsDialog({
         </DialogHeader>
 
         <div className="task-detail-scroll" data-dialog-scroll-body>
+          {canEdit ? <TaskEditDialog task={task} employees={employees} onSaved={() => onOpenChange(false)} /> : null}
           <section className="task-detail-description-block">
             <h3>Açıqlama</h3>
             <p>{task.description || "Bu task üçün əlavə açıqlama qeyd edilməyib."}</p>

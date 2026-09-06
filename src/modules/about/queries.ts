@@ -1,3 +1,4 @@
+import { articleVisibilityWhere, categoryVisibilityWhere } from "@/modules/about/visibility";
 import "server-only";
 
 import type { KnowledgeContentStatus, Prisma } from "@/generated/prisma/client";
@@ -15,13 +16,7 @@ export async function getCompanyKnowledgeData(includeDrafts: boolean, actorUserI
       select: {
         id: true,
         categories: {
-          where: includeDrafts ? undefined : {
-            status: "PUBLISHED",
-            OR: [
-              { audiences: { none: {} } },
-              ...(actorUserId ? [{ audiences: { some: { employee: { userId: actorUserId } } } }] : []),
-            ],
-          },
+          where: includeDrafts ? undefined : categoryVisibilityWhere(actorUserId),
           orderBy: [{ position: "asc" }, { createdAt: "asc" }],
           select: {
             id: true,
@@ -30,12 +25,14 @@ export async function getCompanyKnowledgeData(includeDrafts: boolean, actorUserI
             status: true,
             audiences: { select: { employeeId: true } },
             articles: {
-              where: includeDrafts ? undefined : { status: "PUBLISHED" },
+              where: includeDrafts ? undefined : articleVisibilityWhere(actorUserId),
               orderBy: [{ position: "asc" }, { createdAt: "asc" }],
               select: {
                 id: true,
                 categoryId: true,
                 title: true,
+                inheritAudience: true,
+                audiences: { select: { employeeId: true } },
                 content: true,
                 plainText: true,
                 position: true,
@@ -64,6 +61,8 @@ export async function getCompanyKnowledgeData(includeDrafts: boolean, actorUserI
         status: category.status as KnowledgeContentStatus,
         articles: category.articles.map((article) => ({
           ...article,
+          audienceEmployeeIds: article.audiences.map((audience) => audience.employeeId),
+          audiences: undefined,
           content: parseStoredDocument(article.content),
           status: article.status as KnowledgeContentStatus,
           updatedAt: article.updatedAt.toISOString(),

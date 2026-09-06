@@ -346,6 +346,7 @@ export function AboutWorkspace({
           <ArticleDialogView
             key={articleDialog.mode === "edit" ? articleDialog.article.id : `new-${articleDialog.categoryId}`}
             dialog={articleDialog}
+            employeeOptions={data.employeeOptions}
             categories={data.categories}
             isPending={isPending}
             onClose={() => setArticleDialog(null)}
@@ -433,17 +434,21 @@ function CategoryDialogView({
 function ArticleDialogView({
   dialog,
   categories,
+  employeeOptions,
   isPending,
   onClose,
   onSubmit,
 }: {
   dialog: ArticleDialog;
   categories: KnowledgeCategory[];
+  employeeOptions: CompanyKnowledgeData["employeeOptions"];
   isPending: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }) {
   const article = dialog.mode === "edit" ? dialog.article : null;
+  const [inheritAudience, setInheritAudience] = useState(article?.inheritAudience ?? true);
+  const [employeeIds, setEmployeeIds] = useState(article?.audienceEmployeeIds ?? []);
   const initialCategoryId = article?.categoryId ?? (dialog.mode === "create" ? dialog.categoryId : categories[0]?.id ?? "");
   const [content, setContent] = useState(JSON.stringify(article?.content ?? emptyKnowledgeDocument));
 
@@ -470,10 +475,19 @@ function ArticleDialogView({
           </div>
           <div className="knowledge-editor-field"><span>Məqalə mətni</span><KnowledgeRichTextEditor value={article?.content ?? emptyKnowledgeDocument} onChange={setContent} /></div>
           <StatusField defaultValue={article?.status ?? "DRAFT"} />
+          <fieldset className="knowledge-audience-field">
+            <legend>Bu qaydanı kimlər görə bilər?</legend>
+            <input type="hidden" name="inheritAudience" value={String(inheritAudience)} />
+            <label className="knowledge-audience-all"><input type="checkbox" checked={inheritAudience} onChange={(event) => setInheritAudience(event.currentTarget.checked)} /><span>Kateqoriyanın icazələrini tətbiq et</span></label>
+            {!inheritAudience ? <div className="knowledge-audience-list">
+              {employeeOptions.map((employee) => <label key={employee.id}><input type="checkbox" name="employeeIds" value={employee.id} checked={employeeIds.includes(employee.id)} onChange={(event) => setEmployeeIds((ids) => event.target.checked ? [...ids, employee.id] : ids.filter((id) => id !== employee.id))} /><span><strong>{employee.name}</strong><small>{employee.department} · {employee.position}</small></span></label>)}
+              {employeeIds.length === 0 ? <p role="alert">Ən azı bir əməkdaş seçin.</p> : null}
+            </div> : null}
+          </fieldset>
           <footer>
             <span />
             <button type="button" onClick={onClose}>Ləğv et</button>
-            <button className="is-primary" type="submit" disabled={isPending}>{isPending ? <LoaderCircle className="knowledge-spin" size={16} /> : <Check size={16} />} Yadda saxla</button>
+            <button className="is-primary" type="submit" disabled={isPending || (!inheritAudience && employeeIds.length === 0)}>{isPending ? <LoaderCircle className="knowledge-spin" size={16} /> : <Check size={16} />} Yadda saxla</button>
           </footer>
         </form>
       </section>
@@ -486,7 +500,7 @@ function StatusField({ defaultValue }: { defaultValue: KnowledgeStatus }) {
     <fieldset className="knowledge-status-field">
       <legend>Status</legend>
       <label><input type="radio" name="status" value="DRAFT" defaultChecked={defaultValue === "DRAFT"} /><span><strong>Draft</strong><small>Yalnız adminlər görür</small></span></label>
-      <label><input type="radio" name="status" value="PUBLISHED" defaultChecked={defaultValue === "PUBLISHED"} /><span><strong>Published</strong><small>Bütün əməkdaşlar görür</small></span></label>
+      <label><input type="radio" name="status" value="PUBLISHED" defaultChecked={defaultValue === "PUBLISHED"} /><span><strong>Published</strong><small>Görünmə icazəsi olan əməkdaşlar görür</small></span></label>
     </fieldset>
   );
 }

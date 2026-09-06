@@ -41,7 +41,7 @@ export function CompanyKpiProgressPanel({ data }: { data: CompanyKpiData }) {
             <span className="owner-dashboard-company-kpi-headline">
               <span>
                 <strong>Aylıq satış</strong>
-                <small>{data.monthLabel}</small>
+                <small>{data.monthLabel} · yeni qeydiyyat və ödənişli geri dönüş</small>
               </span>
               <span className="owner-dashboard-company-kpi-result">
                 <b>{formatValue(sales.actual, sales.kind)}</b>

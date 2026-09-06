@@ -215,6 +215,8 @@ export function TaskWorkspace({
       <TaskDetailsDialog
         key={selectedTask?.id ?? "closed"}
         task={selectedTask}
+        canEdit={data.permissions.canAdminister}
+        employees={data.employees}
         open={Boolean(selectedTask)}
         onOpenChange={closeTask}
         updateTaskStatusAction={updateTaskStatusAction}
