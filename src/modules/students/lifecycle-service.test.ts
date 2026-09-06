@@ -42,6 +42,7 @@ function activationTx(enrollment: {
   const studentUpdates: unknown[] = [];
   let invoiceUpdate: unknown;
   const tx = {
+    $queryRaw: async () => [],
     studentStatusHistory: { findFirst: async () => enrollment.frozenAtDue ? { newStatus: "FROZEN" } : null },
     student: {
       updateMany: async (args: unknown) => {

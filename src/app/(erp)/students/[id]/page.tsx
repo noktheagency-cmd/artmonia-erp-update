@@ -24,6 +24,7 @@ import {
   createStudentReminderAction,
 } from "@/modules/students/reminder-actions";
 import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
+import { StudentFreezePeriods } from "@/modules/students/student-freeze-periods";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,8 @@ export default async function StudentDetailPage({
           </span>
         </div>
       </div>
+
+      <StudentFreezePeriods studentId={student.id} />
 
       <StudentMobileAccountCard
         studentId={student.id}

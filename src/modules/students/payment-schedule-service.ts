@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { resolveNextPaymentAt } from "@/modules/students/payment-schedule";
 
 export async function resolveStudentNextPaymentAt(
@@ -26,10 +26,15 @@ export async function resolveStudentNextPaymentAt(
 
   if (!student || student.billingPaused) return null;
 
-  return resolveNextPaymentAt({
+  const candidate = resolveNextPaymentAt({
     billingAnchorDate: student.billingAnchorDate,
     paymentMonth: input.paymentMonth,
   });
+  if (!candidate) return null;
+  const [row] = await tx.$queryRaw<Array<{ dueDate: Date | null }>>(Prisma.sql`
+    select erp.next_unfrozen_billing_date(${input.studentId}::uuid,${candidate}::date) as "dueDate"
+  `);
+  return row?.dueDate ?? null;
 }
 
 export async function clearStudentPaymentSchedules(

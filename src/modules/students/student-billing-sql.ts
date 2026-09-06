@@ -84,8 +84,8 @@ export function buildStudentNextPaymentDateSql(studentId: Prisma.Sql = Prisma.sq
             'FROZEN'::"erp"."StudentLifecycleStatus"
           )
         then null
-        else erp.billing_date_for_month(
-          student.billing_anchor_date,
+        else erp.next_unfrozen_billing_date(
+          student.id,
           coalesce(
             (
               select (date_trunc('month', max(invoice.period_month)) + interval '1 month')::date

@@ -28,6 +28,7 @@ test("oldest open billing cycle is the automatic next payment date", async () =>
 
 test("falls back to the protected first-lesson anchor when no cycle is open", async () => {
   const tx = {
+    $queryRaw: async () => [{ dueDate: utcDate("2026-09-18") }],
     studentBillingCycle: { findFirst: async () => null },
     student: {
       findUnique: async () => ({

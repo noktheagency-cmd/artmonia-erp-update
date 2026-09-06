@@ -1754,6 +1754,7 @@ model Student {
   campaign               MarketingCampaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   relationships          StudentRelationship[]
   statusHistory          StudentStatusHistory[]
+  freezePeriods          StudentFreezePeriod[]
   enrollments            Enrollment[]
   invoices               Invoice[]
   payments               Payment[]
@@ -1772,6 +1773,23 @@ model Student {
   @@index([registeredAt])
   @@index([campaignId, registeredAt])
   @@map("students")
+  @@schema("erp")
+}
+
+model StudentFreezePeriod {
+  id          String @id @db.Uuid
+  studentId   String @map("student_id") @db.Uuid
+  startDate   DateTime @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  note        String
+  createdById String @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  student     Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, startDate])
+  @@index([createdById])
+  @@map("student_freeze_periods")
   @@schema("erp")
 }
 

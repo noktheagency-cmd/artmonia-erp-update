@@ -283,6 +283,7 @@ export function StudentDetailActions({
             <DialogTitle>Status dəyiş</DialogTitle>
             <DialogDescription>
               Dondurma və dayandırma aktiv slotu bağlayır. Geri qayıdan tələbə əvvəl Slot gözləyir mərhələsinə keçir.
+              Keçmiş fasilənin borcunu yoxlamaq üçün profildəki “Dondurulma dövrləri” bölməsindən istifadə edin.
             </DialogDescription>
           </DialogHeader>
 

@@ -325,6 +325,14 @@ export async function syncActivationBilling(
     isReactivation: Boolean(input.isReactivation),
   });
   let dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
+  const [explicitFreeze] = await tx.$queryRaw<Array<{ dueDate: Date | null }>>(Prisma.sql`
+    select erp.next_unfrozen_billing_date(${input.studentId}::uuid,${periodMonth}::date) as "dueDate"
+  `);
+  if (explicitFreeze && !explicitFreeze.dueDate) throw new Error("Dondurulma dövrü açıqdır. Əvvəlcə bərpa tarixini qeyd edin.");
+  if (explicitFreeze?.dueDate) {
+    dueDate = explicitFreeze.dueDate;
+    periodMonth = startOfMonth(dueDate);
+  }
   const historyAtDue = await tx.studentStatusHistory.findFirst({
     where: { studentId: input.studentId, effectiveAt: { lte: dueDate } },
     orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],

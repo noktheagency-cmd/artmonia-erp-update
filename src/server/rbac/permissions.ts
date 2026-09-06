@@ -24,6 +24,7 @@ export type PermissionDefinitionShape = {
 const define = <const T extends readonly PermissionDefinitionShape[]>(definitions: T) => definitions;
 
 export const permissionDefinitions = define([
+  { code: "student.freeze.manage", module: "students", moduleLabel: "Tələbələr", tab: "list", tabLabel: "Tələbə siyahısı", action: "special", actionLabel: "Dondurulma dövrü əlavə edə bilər", description: "Keçmiş dondurulma dövrlərini və maliyyə təsirini təsdiqləmək", sensitive: true, supportsScope: true, dependsOn: "student.read" },
   { code: "dashboard.owner.read", module: "dashboard", moduleLabel: "Dashboard", tab: "owner", tabLabel: "Owner dashboard", action: "read", actionLabel: "Görə bilər", description: "Owner dashboard və ümumi biznes göstəriciləri" },
   { code: "dashboard.sales.read", module: "dashboard", moduleLabel: "Dashboard", tab: "sales", tabLabel: "Satış dashboard", action: "read", actionLabel: "Görə bilər", description: "Satış göstəriciləri" },
   { code: "dashboard.finance.read", module: "dashboard", moduleLabel: "Dashboard", tab: "finance", tabLabel: "Maliyyə dashboard", action: "read", actionLabel: "Görə bilər", description: "Maliyyə göstəriciləri", sensitive: true },
@@ -141,6 +142,7 @@ legacyRolePermissionMap[AppRole.ADMIN].unshift("hr.corporate.read", "hr.corporat
 legacyRolePermissionMap[AppRole.FINANCE].unshift("hr.corporate.read");
 legacyRolePermissionMap[AppRole.AUDITOR].unshift("hr.corporate.read");
 legacyRolePermissionMap[AppRole.OWNER].unshift("billing.category.manage");
+for (const role of [AppRole.OWNER,AppRole.ADMIN,AppRole.FINANCE]) legacyRolePermissionMap[role].unshift("student.freeze.manage");
 legacyRolePermissionMap[AppRole.ADMIN].unshift("billing.category.manage");
 legacyRolePermissionMap[AppRole.FINANCE].unshift("billing.category.manage");
 legacyRolePermissionMap[AppRole.OWNER].unshift("hr.note.read", "hr.note.manage", "hr.document.read", "hr.document.manage");
