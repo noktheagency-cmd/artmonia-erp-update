@@ -8,6 +8,7 @@ import { dateFromInput, todayInBaku } from "@/modules/groups/shared";
 import { recalculateTeacherPayoutsForMonthInTransaction } from "@/modules/hr/teacher-payroll";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
+import { getReservedAttendanceKeys } from "./reserved-attendance-policy";
 
 export async function finalizeDueAttendanceSessions(now = new Date(), batchSize = 100) {
   const prisma = getPrisma();
@@ -60,6 +61,7 @@ export async function finalizeDueAttendanceSessions(now = new Date(), batchSize 
     }),
   ]);
   const existingKeys = new Set(existingAttendance.map((item) => `${item.sessionId}:${item.enrollmentId}`));
+  const reservedKeys = await getReservedAttendanceKeys(prisma,sessionIds,[...new Set(assignments.map(item=>item.enrollmentId))]);
   const newAbsenceKeys = new Set<string>();
   const absences = dueSessions.flatMap((session) => {
     const teacherId = session.slot.teacherId;
@@ -71,6 +73,7 @@ export async function finalizeDueAttendanceSessions(now = new Date(), batchSize 
           && assignment.validFrom <= session.sessionDate
           && (!assignment.validTo || assignment.validTo >= session.sessionDate)
           && !existingKeys.has(key)
+          && !reservedKeys.has(key)
           && !newAbsenceKeys.has(key);
         if (eligible) newAbsenceKeys.add(key);
         return eligible;

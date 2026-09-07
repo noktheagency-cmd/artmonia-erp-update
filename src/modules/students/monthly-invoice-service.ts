@@ -16,6 +16,7 @@ type MissingMonthlyInvoiceRow = {
   enrollmentId: string;
   periodMonth: Date | string;
   billingAnchor: Date | string;
+  paymentDueDate?: Date | string;
   amount: unknown;
   balanceDue: unknown;
 };
@@ -97,7 +98,10 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
     requestedMonth: input.requestedPeriodMonth,
     billingAnchorDate,
   });
-  const dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
+  const [dueRule] = await tx.$queryRaw<Array<{dueDate:Date}>>(Prisma.sql`
+    select erp.student_payment_due_date(${input.studentId}::uuid,${periodMonth}::date) as "dueDate"
+  `);
+  const dueDate = dueRule?.dueDate ?? billingDateForMonth(periodMonth, billingAnchorDate);
 
   for (const enrollment of student.enrollments) {
     const existing = await tx.invoice.findFirst({
@@ -196,7 +200,7 @@ export async function ensureMissingStudentMonthlyInvoices(
         and e.status in (
           'ACTIVE'::"erp"."EnrollmentStatus"
         )
-        and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+        and (s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus" or s.freeze_reserved)
         and s.billing_paused = false
         and s.is_test_data = false
         and s.billing_anchor_date is not null
@@ -207,6 +211,7 @@ export async function ensureMissingStudentMonthlyInvoices(
       e.id::text as "enrollmentId",
       ${throughMonth}::date as "periodMonth",
       e.billing_anchor as "billingAnchor",
+      erp.student_payment_due_date(e.student_id,${throughMonth}::date) as "paymentDueDate",
       e.monthly_fee as amount,
       greatest(e.monthly_fee - case when e.enrollment_count = 1 then coalesce((
         select sum(p.amount)
@@ -225,7 +230,7 @@ export async function ensureMissingStudentMonthlyInvoices(
         and i.enrollment_id = e.id
         and date_trunc('month', i.period_month) = ${throughMonth}::date
     )
-      and erp.billing_date_for_month(e.billing_anchor, ${throughMonth}::date)
+      and erp.student_payment_due_date(e.student_id, ${throughMonth}::date)
         <= ${input.throughDate}::date
       and erp.student_is_billable_on_date(
         e.student_id,
@@ -248,7 +253,7 @@ export async function ensureMissingStudentMonthlyInvoices(
       const periodMonth = startOfMonth(new Date(row.periodMonth));
       const amount = toNumber(row.amount);
       const balanceDue = toNumber(row.balanceDue);
-      const dueDate = dateInMonth(periodMonth, new Date(row.billingAnchor).getUTCDate());
+      const dueDate = row.paymentDueDate ? new Date(row.paymentDueDate) : dateInMonth(periodMonth, new Date(row.billingAnchor).getUTCDate());
 
       return {
         studentId: row.studentId,

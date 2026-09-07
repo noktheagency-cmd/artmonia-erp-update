@@ -40,6 +40,7 @@ const studentStatusOptions = [
   { value: "SLOT_WAITING", label: "Slota əlavə et / Slot gözləyir" },
   { value: "ACTIVE", label: "Aktiv" },
   { value: "FROZEN", label: "Dondurulub" },
+  { value: "FROZEN_RESERVED", label: "Dondurulub — yer rezervdir" },
   { value: "STOPPED", label: "Dayandırılıb" },
   { value: "DECLINED", label: "İmtina edib" },
   { value: "COMPLETED", label: "Tamamlayıb" },
@@ -51,6 +52,7 @@ interface StudentDetail {
   phone: string;
   code: string;
   lifecycleStatusValue: string;
+  freezeReserved: boolean;
   detail: {
     email: string;
     source: string;
@@ -127,12 +129,15 @@ export function StudentDetailActions({
   const [packageOpen, setPackageOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [statusValue, setStatusValue] = useState(student.freezeReserved ? "FROZEN_RESERVED" : student.lifecycleStatusValue);
+  const [statusBusy, setStatusBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
   const [paymentMonth, setPaymentMonth] = useState(student.detail.paymentDefaultMonth);
   const availableStudentStatusOptions = studentStatusOptions.filter(
-    (option) => option.value !== "ACTIVE" || student.lifecycleStatusValue === "ACTIVE",
+    (option) => (option.value !== "ACTIVE" || student.lifecycleStatusValue === "ACTIVE" || student.freezeReserved)
+      && (option.value !== "FROZEN_RESERVED" || student.lifecycleStatusValue === "ACTIVE" || student.freezeReserved),
   );
   const sourceOptions = editOptions.sourceOptions.includes(student.detail.source)
     ? editOptions.sourceOptions
@@ -150,6 +155,8 @@ export function StudentDetailActions({
       ];
 
   async function updateStatus(formData: FormData) {
+    if (statusBusy) return;
+    setStatusBusy(true);
     try {
       const result = unwrapActionResult(await updateStudentStatusAction(formData)) as {
         redirectTo: string;
@@ -160,6 +167,8 @@ export function StudentDetailActions({
       router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Tələbə statusu yenilənmədi.");
+    } finally {
+      setStatusBusy(false);
     }
   }
 
@@ -271,7 +280,7 @@ export function StudentDetailActions({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={statusOpen} onOpenChange={setStatusOpen}>
+      <Dialog open={statusOpen} onOpenChange={(value) => { if (statusBusy) return; setStatusOpen(value); if (value) setStatusValue(student.freezeReserved ? "FROZEN_RESERVED" : student.lifecycleStatusValue); }}>
         <DialogTrigger asChild>
           <Button className="student-action-status" variant="outline" type="button" disabled={!permissions.canChangeStatus}>
             <RefreshCcw data-icon="inline-start" />
@@ -282,7 +291,7 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Status dəyiş</DialogTitle>
             <DialogDescription>
-              Dondurma və dayandırma aktiv slotu bağlayır. Geri qayıdan tələbə əvvəl Slot gözləyir mərhələsinə keçir.
+              Adi dondurma slotu bağlayır. Rezervli dondurma yeri saxlayır və aylıq ödəniş hesablanmağa davam edir. Rezervdən birbaşa Aktiv statusuna qayıtmaq mümkündür.
               Keçmiş fasilənin borcunu yoxlamaq üçün profildəki “Dondurulma dövrləri” bölməsindən istifadə edin.
             </DialogDescription>
           </DialogHeader>
@@ -296,7 +305,8 @@ export function StudentDetailActions({
                 <span>Status</span>
                 <FormSelect
                   name="lifecycleStatus"
-                  defaultValue={student.lifecycleStatusValue}
+                  value={statusValue}
+                  onValueChange={setStatusValue}
                   options={availableStudentStatusOptions}
                 />
               </label>
@@ -304,7 +314,7 @@ export function StudentDetailActions({
                 <span>Aktivləşmə / status tarixi</span>
                 <DatePicker
                   name="firstLessonDate"
-                  defaultValue={student.detail.paymentDefaultDate}
+                  defaultValue={currentBakuDateValue()}
                 />
               </label>
             </div>
@@ -314,12 +324,13 @@ export function StudentDetailActions({
               <Input
                 name="note"
                 maxLength={240}
+                required={statusValue === "FROZEN_RESERVED" || student.freezeReserved}
                 placeholder="Məsələn: slot başladı, imtina etdi"
               />
             </label>
 
             <p className="payment-policy-note">
-              İmtina zamanı qəbul edilən ödəniş geri qaytarılmır.
+              {statusValue === "FROZEN_RESERVED" ? "Yer bron olunur, dərs keçirilməsə də aylıq haqq qalır. Ödənişi ayrıca “Ödəniş qəbul et” düyməsindən həmin ay üçün qeyd edin; bu seçim ödənişi avtomatik qəbul etmir." : "İmtina zamanı qəbul edilən ödəniş geri qaytarılmır."}
             </p>
 
             <DialogFooter>
@@ -328,9 +339,9 @@ export function StudentDetailActions({
                   Ləğv et
                 </Button>
               </DialogClose>
-              <Button type="submit">
+              <Button type="submit" disabled={statusBusy}>
                 <RefreshCcw data-icon="inline-start" />
-                Statusu təsdiqlə
+                {statusBusy ? "Saxlanılır…" : "Statusu təsdiqlə"}
               </Button>
             </DialogFooter>
           </form>
@@ -639,16 +650,16 @@ export function StudentDetailActions({
               <div className="student-create-grid">
                 <label className="form-field">
                   <span>Status</span>
-                  {permissions.canChangeStatus ? (
+                  {permissions.canChangeStatus && !student.freezeReserved ? (
                     <FormSelect
                       name="lifecycleStatus"
                       defaultValue={student.lifecycleStatusValue}
-                      options={availableStudentStatusOptions}
+                      options={availableStudentStatusOptions.filter(option=>option.value!=="FROZEN_RESERVED")}
                     />
                   ) : (
                     <>
                       <input name="lifecycleStatus" type="hidden" value={student.lifecycleStatusValue} />
-                      <div className="student-readonly-status"><span /><strong>Status dəyişmə icazəsi yoxdur</strong></div>
+                      <div className="student-readonly-status"><span /><strong>{student.freezeReserved ? "Yer rezervdir — dəyişmək üçün “Status dəyiş” bölməsini açın" : "Status dəyişmə icazəsi yoxdur"}</strong></div>
                     </>
                   )}
                 </label>

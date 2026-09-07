@@ -63,6 +63,8 @@ import {
 } from "@/modules/students/lifecycle-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { planLifecycleHistoryChange } from "@/modules/students/lifecycle-history-policy";
+import { changeReservedFreeze } from "@/modules/students/reserved-freeze-service";
+import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import {
   deleteStudentMobileAuthUser,
   inviteStudentMobileAccount,
@@ -188,7 +190,7 @@ const recordPaymentSchema = z.object({
 
 const updateStudentStatusSchema = z.object({
   studentId: z.string().uuid(),
-  lifecycleStatus: z.enum(studentLifecycleStatusValues),
+  lifecycleStatus: z.union([z.enum(studentLifecycleStatusValues),z.literal("FROZEN_RESERVED")]),
   firstLessonDate: optionalText(20),
   note: optionalText(240),
   returnTo: optionalText(260),
@@ -613,6 +615,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`select id from erp.students where id=${input.studentId}::uuid for update`);
     const current = await tx.student.findUnique({
       where: { id: input.studentId },
       select: {
@@ -620,6 +623,8 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         code: true,
         lifecycleStatus: true,
         billingPaused: true,
+        freezeReserved: true,
+        managerId: true,
       },
     });
 
@@ -627,8 +632,17 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       throw new Error("Tələbə tapılmadı");
     }
 
+    if (scopeFor(actor.permissions,"student.status.change")!=="ALL" && current.managerId!==actor.id)
+      throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur", "FORBIDDEN");
+    if (input.lifecycleStatus==="FROZEN_RESERVED" || (current.freezeReserved && input.lifecycleStatus==="ACTIVE")) {
+      await changeReservedFreeze(tx,{studentId:current.id,actorId:actor.id,reserve:input.lifecycleStatus==="FROZEN_RESERVED",effectiveAt,note:input.note});
+      return;
+    }
+    if (current.freezeReserved && effectiveAt.toISOString().slice(0,10)!==currentBakuDateValue())
+      throw new PublicActionError("Rezervli dondurma statusunu bu gün üçün dəyişin");
+
     assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
-    if (current.lifecycleStatus === input.lifecycleStatus) return;
+    if (current.lifecycleStatus === input.lifecycleStatus && !current.freezeReserved) return;
 
     const { historicalOnly } = await planLifecycleHistoryChange(tx, {
       studentId: current.id,
@@ -1814,6 +1828,9 @@ function safeStudentsRedirect(value: string | undefined) {
 }
 
 function invalidateStudentCaches() {
+  updateTag(erpCacheTags.slots);
+  updateTag(erpCacheTags.attendance);
+  revalidatePath("/groups");
   updateTag(erpCacheTags.students);
   updateTag(erpCacheTags.crm);
   updateTag(erpCacheTags.dashboard);

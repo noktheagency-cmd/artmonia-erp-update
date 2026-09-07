@@ -1743,6 +1743,7 @@ model Student {
   freezeReturnAt         DateTime?              @map("freeze_return_at") @db.Date
   originalFirstLessonAt  DateTime?              @map("original_first_lesson_at") @db.Date
   billingPaused          Boolean                @default(false) @map("billing_paused")
+  freezeReserved         Boolean                @default(false) @map("freeze_reserved")
   billingAnchorDate      DateTime?              @map("billing_anchor_date") @db.Date
   isTestData             Boolean                @default(false) @map("is_test_data")
   notes                  String?
@@ -1755,6 +1756,7 @@ model Student {
   relationships          StudentRelationship[]
   statusHistory          StudentStatusHistory[]
   freezePeriods          StudentFreezePeriod[]
+  dueDateRules           StudentDueDateRule[]
   enrollments            Enrollment[]
   invoices               Invoice[]
   payments               Payment[]
@@ -1773,6 +1775,23 @@ model Student {
   @@index([registeredAt])
   @@index([campaignId, registeredAt])
   @@map("students")
+  @@schema("erp")
+}
+
+model StudentDueDateRule {
+  id String @id @db.Uuid
+  version BigInt @unique @default(autoincrement())
+  studentId String @map("student_id") @db.Uuid
+  effectiveMonth DateTime @map("effective_month") @db.Date
+  mode String
+  dueDay Int @map("due_day")
+  reason String
+  createdById String @map("created_by_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  student Student @relation(fields:[studentId],references:[id],onDelete:Cascade)
+  @@index([studentId,version(sort:Desc)],map:"student_due_rules_lookup_idx")
+  @@index([createdById],map:"student_due_rules_creator_idx")
+  @@map("student_due_date_rules")
   @@schema("erp")
 }
 
@@ -1911,6 +1930,7 @@ model StudentStatusHistory {
   newStatus   StudentLifecycleStatus  @map("new_status")
   eventType   StudentLifecycleEventType @default(STATUS_CHANGE) @map("event_type")
   reason      String
+  freezeReserved Boolean @default(false) @map("freeze_reserved")
   note        String?
   effectiveAt DateTime                @default(now()) @map("effective_at") @db.Date
   changedById String?                 @map("changed_by_id") @db.Uuid

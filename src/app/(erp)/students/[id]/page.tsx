@@ -25,6 +25,9 @@ import {
 } from "@/modules/students/reminder-actions";
 import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
 import { StudentFreezePeriods } from "@/modules/students/student-freeze-periods";
+import { StudentBillingDeadline } from "@/modules/students/student-billing-deadline";
+import { requireErpActor } from "@/server/auth/actor";
+import { canEditBillingDeadline } from "@/modules/students/billing-deadline-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +46,7 @@ export default async function StudentDetailPage({
   }
 
   const { student, permissions, createOptions } = data;
+  const actor = await requireErpActor("student.read");
 
   return (
     <section className="page-stack student-detail-page student-detail-modern-page">
@@ -112,6 +116,7 @@ export default async function StudentDetailPage({
       </div>
 
       <StudentFreezePeriods studentId={student.id} />
+      {canEditBillingDeadline(actor.id) ? <div><StudentBillingDeadline studentId={student.id}/></div> : null}
 
       <StudentMobileAccountCard
         studentId={student.id}

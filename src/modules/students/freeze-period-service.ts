@@ -94,6 +94,15 @@ export async function buildFreezePreview(
       "Bu statusda yalnız başa çatmış keçmiş dövr əlavə edilə bilər",
     );
   const periods = await loadFreezePeriods(tx, input.studentId);
+  const [reservation] = await tx.$queryRaw<Array<{ overlaps: boolean }>>(Prisma.sql`
+    with history as (
+      select freeze_reserved,effective_at,lead(effective_at) over(order by effective_at,created_at,id) ends
+      from erp.student_status_history where student_id=${input.studentId}::uuid
+    ) select exists(select 1 from history where freeze_reserved
+      and effective_at<coalesce(${input.endDate || null}::date,'infinity'::date)
+      and coalesce(ends,'infinity'::date)>${input.startDate}::date) as overlaps
+  `);
+  if (reservation?.overlaps) throw new PublicActionError("Bu intervalda ödənişli yer rezervi var. Rezerv dövrünü ödənişsiz dondurma ilə ləğv etmək olmaz");
   if (
     periods.some(
       (p) =>

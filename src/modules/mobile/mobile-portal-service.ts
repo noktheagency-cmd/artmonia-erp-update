@@ -1,3 +1,4 @@
+import { getReservedAttendanceKeys } from "@/modules/attendance/reserved-attendance-policy";
 import {
   AttendanceMark,
   EnrollmentStatus,
@@ -600,6 +601,7 @@ async function getStudentLessonEntries(
     },
   });
   const presentByEnrollment = new Map<string, typeof presentAttendance>();
+  const reservedKeys=await getReservedAttendanceKeys(prisma,sessions.map(session=>session.id),enrollmentIds);
   for (const record of presentAttendance) {
     const records = presentByEnrollment.get(record.enrollmentId) ?? [];
     records.push(record);
@@ -613,6 +615,7 @@ async function getStudentLessonEntries(
       && (!item.validTo || item.validTo >= session.sessionDate)
     ));
     if (!assignment) return [];
+    if (reservedKeys.has(`${session.id}:${assignment.enrollment.id}`)) return [];
     const attendance = session.attendance.find(
       (item) => item.enrollmentId === assignment.enrollment.id,
     );

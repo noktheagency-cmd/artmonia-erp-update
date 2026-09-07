@@ -334,15 +334,19 @@ export async function syncActivationBilling(
     periodMonth = startOfMonth(dueDate);
   }
   const historyAtDue = await tx.studentStatusHistory.findFirst({
-    where: { studentId: input.studentId, effectiveAt: { lte: dueDate } },
+    where: { studentId: input.studentId, effectiveAt: { lte: billingDateForMonth(periodMonth,billingAnchorDate) } },
     orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-    select: { newStatus: true },
+    select: { newStatus: true, freezeReserved: true },
   });
-  if (historyAtDue?.newStatus === StudentLifecycleStatus.FROZEN) {
+  if (historyAtDue?.newStatus === StudentLifecycleStatus.FROZEN && !historyAtDue.freezeReserved) {
     // An import/slot activation must not recreate a cycle cancelled for freezing.
     periodMonth = new Date(Date.UTC(periodMonth.getUTCFullYear(), periodMonth.getUTCMonth() + 1, 1));
     dueDate = billingDateForMonth(periodMonth, billingAnchorDate);
   }
+  const [paymentRule] = await tx.$queryRaw<Array<{dueDate:Date}>>(Prisma.sql`
+    select erp.student_payment_due_date(${input.studentId}::uuid,${periodMonth}::date) as "dueDate"
+  `);
+  if (paymentRule?.dueDate) dueDate=paymentRule.dueDate;
   const existingInvoice = await tx.invoice.findFirst({
     where: {
       studentId: input.studentId,

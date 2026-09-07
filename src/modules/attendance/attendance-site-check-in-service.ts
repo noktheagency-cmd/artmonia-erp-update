@@ -290,7 +290,7 @@ async function resolveCurrentStudentLesson(
   const sessionDate = dateFromInput(date);
   const assignments = await tx.studentScheduleAssignment.findMany({
     where: {
-      enrollment: { studentId, status: EnrollmentStatus.ACTIVE },
+      enrollment: { studentId, status: EnrollmentStatus.ACTIVE, student: { freezeReserved: false } },
       validFrom: { lte: sessionDate },
       OR: [{ validTo: null }, { validTo: { gte: sessionDate } }],
       slot: { weekday: weekdayFromDate(date) },

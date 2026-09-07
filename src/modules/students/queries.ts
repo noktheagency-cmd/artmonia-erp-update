@@ -217,6 +217,7 @@ export type StudentListData = {
     hasDueDebt: boolean;
     hasFutureReceivable: boolean;
     lifecycleStatusValue: StudentLifecycleStatus;
+    freezeReserved: boolean;
     lifecycleStatus: string;
     lifecycleTone: StudentTone;
     paymentStatus: string;
@@ -740,7 +741,8 @@ export async function getStudentListData(
         hasDueDebt: dueDebt > 0,
         hasFutureReceivable: futureReceivable > 0,
         lifecycleStatusValue: student.lifecycleStatus,
-        lifecycleStatus: lifecycleStatus.label,
+        freezeReserved: student.freezeReserved,
+        lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
         lifecycleTone: lifecycleStatus.tone,
         paymentStatus: paymentStatus.label,
         paymentTone: paymentStatus.tone,
@@ -813,6 +815,7 @@ type StudentListQueryRow = {
   registeredAt: Date | string;
   notes: string | null;
   billingPaused: boolean;
+  freezeReserved: boolean;
   name: string;
   phone: string | null;
   managerName: string | null;
@@ -1134,6 +1137,7 @@ async function getStudentRows(
         s.created_at as "createdAt",
         s.notes,
         s.billing_paused as "billingPaused",
+        s.freeze_reserved as "freezeReserved",
         c.full_name as "name",
         c.phone_display as "phone",
         u.full_name as "managerName",
@@ -1521,6 +1525,7 @@ async function getStudentClvSummary(
             from (
               select
                 history.new_status,
+                history.freeze_reserved,
                 history.effective_at,
                 lead(history.effective_at, 1, eligible.closed_at + 1) over (
                   order by history.effective_at, history.created_at, history.id
@@ -1530,6 +1535,7 @@ async function getStudentClvSummary(
                 and history.effective_at <= eligible.closed_at
             ) status_interval
             where status_interval.new_status = 'FROZEN'::"erp"."StudentLifecycleStatus"
+              and not status_interval.freeze_reserved
               and status_interval.effective_at <= invoice.period_month
               and status_interval.next_effective_at >= (invoice.period_month + interval '1 month')::date
           )
@@ -2617,6 +2623,7 @@ export async function getStudentDetailData(studentId: string) {
         s.created_at as "createdAt",
         s.notes,
         s.billing_paused as "billingPaused",
+        s.freeze_reserved as "freezeReserved",
         s.billing_anchor_date as "billingAnchorDate",
         s.original_first_lesson_at as "originalFirstLessonAt",
         s.education_level as "educationLevel",
@@ -3017,7 +3024,8 @@ export async function getStudentDetailData(studentId: string) {
       hasDueDebt: dueDebt > 0,
       hasFutureReceivable: futureReceivable > 0,
       lifecycleStatusValue: student.lifecycleStatus as StudentLifecycleStatus,
-      lifecycleStatus: lifecycleStatus.label,
+      freezeReserved: student.freezeReserved,
+      lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
       lifecycleTone: lifecycleStatus.tone,
       paymentStatus: paymentStatus.label,
       paymentTone: paymentStatus.tone,
