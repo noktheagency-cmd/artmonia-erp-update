@@ -94,7 +94,13 @@ export function Pattern({ initialRange, canApply, onApply }: PatternProps) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(nextOpen) => {
+      if (nextOpen) {
+        setDate(initialRange);
+        setMonth(initialRange.to);
+      }
+      setOpen(nextOpen);
+    }}>
       <PopoverTrigger
         render={
           <Button
@@ -102,19 +108,19 @@ export function Pattern({ initialRange, canApply, onApply }: PatternProps) {
             type="button"
             variant="outline"
             size="lg"
-            className="group/pick-date h-[50px] max-w-48 justify-between px-3 hover:border-primary/30 hover:bg-background aria-expanded:border-primary/30 aria-expanded:bg-background aria-expanded:text-foreground"
+            className="erp-range-trigger group/pick-date min-h-[44px] justify-between px-3 hover:border-primary/30 hover:bg-background aria-expanded:border-primary/30 aria-expanded:bg-background aria-expanded:text-foreground"
             aria-label="ERP tarix aralığını seç"
           />
         }
       >
-        <span className="hidden truncate lg:inline">{formatRange(date)}</span>
+        <span>{formatRange(initialRange)}</span>
         <CalendarIcon data-icon="inline-end" aria-hidden="true" />
       </PopoverTrigger>
 
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="max-h-[calc(100dvh-1rem)] w-[19rem] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl p-0"
+        className="erp-range-popover max-h-[calc(100dvh-1rem)] w-[20.5rem] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl p-0"
       >
         <Card size="sm" className="gap-0 p-0">
           <CardHeader className="border-b px-3 py-2.5">
@@ -135,7 +141,7 @@ export function Pattern({ initialRange, canApply, onApply }: PatternProps) {
               selected={date}
               locale={az}
               showOutsideDays={false}
-              className="mx-auto p-2 [--cell-size:2rem]"
+              className="mx-auto p-2 [--cell-size:2.5rem]"
               classNames={{
                 month: "flex w-full flex-col gap-2",
                 week: "mt-1 flex w-full",
@@ -179,8 +185,8 @@ export function Pattern({ initialRange, canApply, onApply }: PatternProps) {
             </div>
           </CardContent>
 
-          <CardFooter className="justify-between gap-2 bg-background px-2.5 py-2">
-            <span className="truncate text-xs text-muted-foreground">{formatRange(date)}</span>
+          <CardFooter className="flex-wrap justify-between gap-2 bg-background px-2.5 py-2">
+            <span className="text-sm text-muted-foreground">{formatRange(date)}</span>
             <Button type="button" size="xs" onClick={apply} disabled={!date.from || !date.to || !canApply}>
               Tətbiq et
             </Button>

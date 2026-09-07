@@ -1,8 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { cx } from "@/components/ui/cx";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
@@ -48,7 +47,7 @@ export function DatePicker({
   required,
   "aria-label": ariaLabel,
   className,
-  popoverPlacement = "default",
+  popoverPlacement = "floating",
   compact = false,
   maxValue,
 }: DatePickerProps) {
@@ -62,6 +61,13 @@ export function DatePicker({
   const [floatingStyle, setFloatingStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverId = useId();
+
+  function closeCalendar() {
+    setIsOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  }
 
   useEffect(() => {
     if (!isOpen) {
@@ -78,23 +84,30 @@ export function DatePicker({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsOpen(false);
+        event.preventDefault();
+        event.stopPropagation();
+        closeCalendar();
       }
     }
 
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, true);
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown, true);
     };
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen || popoverPlacement !== "floating") {
+  useLayoutEffect(() => {
+    if (!isOpen) {
       return;
     }
+
+    // The top layer escapes scroll/transform clipping while preserving DOM
+    // ancestry inside a modal's focus scope. A body portal breaks that scope.
+    const panel = popoverRef.current;
+    panel?.showPopover?.();
 
     function updateFloatingPosition() {
       const trigger = rootRef.current?.querySelector(".date-picker-trigger");
@@ -105,33 +118,56 @@ export function DatePicker({
       }
 
       const triggerRect = trigger.getBoundingClientRect();
-      const width = popover.offsetWidth || 324;
-      const height = popover.offsetHeight || 360;
-      const viewportPadding = 16;
-      const left = Math.min(
-        window.innerWidth - width - viewportPadding,
-        Math.max(viewportPadding, triggerRect.left + triggerRect.width / 2 - width / 2)
-      );
-      const belowTop = triggerRect.bottom + 12;
-      const aboveTop = triggerRect.top - height - 12;
-      const top = belowTop + height <= window.innerHeight - viewportPadding
+      const viewport = window.visualViewport;
+      const viewportWidth = viewport?.width ?? window.innerWidth;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const viewportLeft = viewport?.offsetLeft ?? 0;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportPadding = 8;
+      const width = Math.min(compact ? 288 : 324, viewportWidth - viewportPadding * 2);
+      const maxHeight = viewportHeight - viewportPadding * 2;
+      const height = Math.min(popover.offsetHeight || 360, maxHeight);
+      const left = Math.max(viewportLeft + viewportPadding, Math.min(
+        viewportLeft + viewportWidth - width - viewportPadding,
+        triggerRect.left
+      ));
+      const belowTop = triggerRect.bottom + 8;
+      const aboveTop = triggerRect.top - height - 8;
+      const top = belowTop + height <= viewportTop + viewportHeight - viewportPadding
         ? belowTop
-        : Math.max(viewportPadding, aboveTop);
+        : Math.max(viewportTop + viewportPadding, Math.min(aboveTop, viewportTop + viewportHeight - height - viewportPadding));
 
-      setFloatingStyle({ left, top });
+      setFloatingStyle({
+        "--picker-left": `${left}px`,
+        "--picker-top": `${top}px`,
+        "--picker-width": `${width}px`,
+        "--picker-max-height": `${maxHeight}px`,
+      } as CSSProperties);
     }
 
     updateFloatingPosition();
     const frameId = window.requestAnimationFrame(updateFloatingPosition);
     window.addEventListener("resize", updateFloatingPosition);
     window.addEventListener("scroll", updateFloatingPosition, true);
+    window.visualViewport?.addEventListener("resize", updateFloatingPosition);
+    window.visualViewport?.addEventListener("scroll", updateFloatingPosition);
+    const observer = new ResizeObserver(updateFloatingPosition);
+    if (panel) observer.observe(panel);
+    const focusDay = panel?.querySelector<HTMLButtonElement>(".is-selected:not(:disabled)")
+      ?? panel?.querySelector<HTMLButtonElement>(".is-today:not(:disabled)")
+      ?? panel?.querySelector<HTMLButtonElement>(".date-picker-day:not(:disabled)");
+    focusDay?.focus({ preventScroll: true });
 
     return () => {
       window.cancelAnimationFrame(frameId);
       window.removeEventListener("resize", updateFloatingPosition);
       window.removeEventListener("scroll", updateFloatingPosition, true);
+      window.visualViewport?.removeEventListener("resize", updateFloatingPosition);
+      window.visualViewport?.removeEventListener("scroll", updateFloatingPosition);
+      observer.disconnect();
+      panel?.hidePopover?.();
     };
-  }, [isOpen, popoverPlacement]);
+  }, [isOpen, compact]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
   const yearOptions = useMemo(() => buildYearOptions(viewDate), [viewDate]);
@@ -150,7 +186,7 @@ export function DatePicker({
     if (maxValue && nextValue > maxValue) return;
     updateValue(nextValue);
     setViewDate(date);
-    setIsOpen(false);
+    closeCalendar();
   }
 
   function shiftMonth(monthOffset: number) {
@@ -171,18 +207,21 @@ export function DatePicker({
 
   function clearDate() {
     updateValue("");
-    setIsOpen(false);
+    closeCalendar();
   }
 
   const popover = isOpen ? (
     <div
       ref={popoverRef}
+      id={popoverId}
+      popover="manual"
+      data-placement={popoverPlacement}
       className={cx(
         "date-picker-popover",
-        popoverPlacement === "floating" && "is-floating",
+        "is-floating",
         compact && "is-compact"
       )}
-      style={popoverPlacement === "floating" ? floatingStyle : undefined}
+      style={floatingStyle}
       role="dialog"
       aria-label={ariaLabel ?? "Tarix sec"}
     >
@@ -244,6 +283,9 @@ export function DatePicker({
               )}
               onClick={() => selectDate(day.date)}
               disabled={isDisabled}
+              aria-label={formatPickerDisplay(dayValue)}
+              aria-pressed={isSelected}
+              aria-current={isToday ? "date" : undefined}
             >
               {day.date.getDate()}
             </button>
@@ -259,7 +301,7 @@ export function DatePicker({
         ) : (
           <span />
         )}
-        <button type="button" onClick={selectToday}>
+        <button type="button" onClick={selectToday} disabled={Boolean(maxValue && todayValue > maxValue)}>
           Bu gün
         </button>
       </div>
@@ -276,10 +318,13 @@ export function DatePicker({
         suppressHydrationWarning
       />
       <button
+        ref={triggerRef}
         type="button"
         className={cx("date-picker-trigger", isOpen && "is-open", selectedValue && "has-value")}
         aria-label={ariaLabel}
         aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-controls={isOpen ? popoverId : undefined}
         onClick={() => {
           const parsed = parsePickerDate(selectedValue);
           if (!isOpen && parsed) {
@@ -292,9 +337,7 @@ export function DatePicker({
         <span>{selectedValue ? formatPickerDisplay(selectedValue) : placeholder}</span>
       </button>
 
-      {popoverPlacement === "floating" && typeof document !== "undefined"
-        ? createPortal(popover, document.body)
-        : popover}
+      {popover}
     </div>
   );
 }

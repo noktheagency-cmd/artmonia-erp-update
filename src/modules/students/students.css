@@ -527,22 +527,23 @@ button.students-kpi { cursor: pointer; }
 .student-create-dialog .ui-select-trigger-content,
 .student-create-dialog .ui-select-display-value {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .student-create-dialog .ui-select-content {
-  width: max(var(--anchor-width), 310px);
-  max-width: min(420px, calc(100vw - 44px));
+  width: 100%;
+  max-width: calc(100vw - 24px);
 }
 
 .student-create-dialog .ui-select-item {
-  min-height: 42px;
+  min-height: 44px;
   height: auto;
   padding-block: 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.4;
 }
 

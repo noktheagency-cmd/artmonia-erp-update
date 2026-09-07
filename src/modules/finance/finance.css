@@ -772,11 +772,12 @@
 
 .finance-activity-description {
   display: block;
+  min-width: 180px;
   max-width: 280px;
-  overflow: hidden;
   font-weight: 570;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 .finance-movement-type,

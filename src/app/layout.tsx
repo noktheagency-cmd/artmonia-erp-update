@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./mobile-responsive.css";
+import "./responsive-controls.css";
 import "./dark-mode.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";

@@ -23,6 +23,10 @@ export function ErpCalendar({ onNavigate }: { onNavigate: (href: string) => void
     router.push(href as Route);
   }
 
+  // Only show the global control on list/report routes that consume its range.
+  // Detail and settings pages otherwise expose a calendar that cannot apply.
+  if (!supportsGlobalRange(pathname)) return null;
+
   return (
     <div className="shrink-0">
       <ReuiRangeCalendar
@@ -59,7 +63,7 @@ function rangeFromSearch(searchParams: URLSearchParams): CompleteDateRange | nul
 
 function supportsGlobalRange(pathname: string) {
   return ["/dashboard", "/students", "/crm", "/finance", "/hr", "/groups", "/workshops", "/marketing"]
-    .some((route) => pathname === route || pathname.startsWith(`${route}/`));
+    .includes(pathname);
 }
 
 function moduleHrefForRange(

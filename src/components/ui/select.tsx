@@ -137,6 +137,7 @@ export const SelectContent = React.forwardRef<
       className={cx("ui-select-content", className)}
       position={position}
       sideOffset={8}
+      collisionPadding={12}
       {...props}
     >
       <SelectScrollUpButton />
@@ -219,6 +220,7 @@ function FormSelectState({
   const [deleteCandidate, setDeleteCandidate] = React.useState<SelectOption | null>(null);
   const [crudPending, startCrudTransition] = React.useTransition();
   const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const mobileListId = React.useId();
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const editorInputRef = React.useRef<HTMLInputElement>(null);
   const isMobileSheet = useMobileSelectSheet();
@@ -276,7 +278,7 @@ function FormSelectState({
       normalizeSearchText(item.label) === normalizedCreateValue
     );
   const shouldAutoFocusSearch =
-    searchable || (isMobileSheet && (items.length >= 8 || creatable));
+    !isMobileSheet && searchable;
   const canManageOptions = optionCrud?.canManage ?? catalogCanManage;
   const optionCreateLabel = optionCrud?.createLabel ?? createLabel;
 
@@ -568,6 +570,7 @@ function FormSelectState({
         />
         <button
           className={cx("ui-select-trigger", className)}
+          ref={triggerRef}
           type="button"
           data-state={open ? "open" : "closed"}
           aria-label={ariaLabel}
@@ -585,7 +588,21 @@ function FormSelectState({
         </button>
 
         <Dialog open={open} onOpenChange={handleOpenChange}>
-          <DialogContent className={cx("ui-mobile-select-sheet", contentClassName)}>
+          <DialogContent
+            className={cx("ui-mobile-select-sheet", contentClassName)}
+            onOpenAutoFocus={(event) => {
+              // Keep the options visible until the user chooses to search;
+              // focusing the input immediately opens the mobile keyboard.
+              event.preventDefault();
+              window.requestAnimationFrame(() => {
+                document.getElementById(mobileListId)?.focus({ preventScroll: true });
+              });
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              triggerRef.current?.focus({ preventScroll: true });
+            }}
+          >
             <div className="ui-mobile-sheet-handle" aria-hidden="true" />
             <DialogHeader className="ui-mobile-select-header">
               <DialogTitle>{sheetTitle}</DialogTitle>
@@ -608,7 +625,7 @@ function FormSelectState({
               </label>
             ) : null}
 
-            <div className="ui-mobile-select-options" role="listbox" aria-label={sheetTitle}>
+            <div id={mobileListId} tabIndex={-1} className="ui-mobile-select-options" role="listbox" aria-label={sheetTitle}>
               {filteredItems.map((item) => {
                 const checked = item.value === currentValue;
 

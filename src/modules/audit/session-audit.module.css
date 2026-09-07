@@ -37,7 +37,7 @@
 .metric small, .metric strong, .metric p { display: block; }
 .metric small { color: #566174; font-size: 10.5px; }
 .metric strong { margin-top: 1px; color: #152238; font-size: 21px; line-height: 1.1; }
-.metric p { margin: 3px 0 0; overflow: hidden; color: #8a93a1; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+.metric p { margin: 3px 0 0; color: #8a93a1; font-size: 12px; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
 .metric[data-tone="blue"] { --metric-color: #1463d8; --metric-bg: #edf5ff; }
 .metric[data-tone="green"] { --metric-color: #188a4b; --metric-bg: #eef9f2; }
 .metric[data-tone="violet"] { --metric-color: #7750d8; --metric-bg: #f3efff; }

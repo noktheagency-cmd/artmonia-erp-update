@@ -1,0 +1,390 @@
+/* Shared sizing rules also apply to portals outside .erp-frame. */
+html body .ui-select-trigger {
+  height: auto;
+  min-height: 44px;
+  padding-block: 10px;
+  line-height: 1.4;
+}
+
+html body :is(.ui-select-trigger > span, .ui-select-display-value, .ui-select-item-text, .ui-mobile-select-option > span) {
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+html body .ui-select-content {
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 24px);
+}
+
+html body .ui-select-item {
+  min-width: 0;
+  min-height: 44px;
+  padding-block: 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+html body .ui-select-viewport {
+  min-height: 0;
+  flex: 1 1 auto;
+  overscroll-behavior: contain;
+}
+
+html body :is(.ui-select-search, .ui-select-crud-panel, .ui-select-scroll-button) {
+  flex-shrink: 0;
+}
+
+html body .ui-combobox-positioner {
+  z-index: 5020;
+  max-width: calc(100vw - 24px);
+}
+
+html body .ui-combobox-popup {
+  min-width: 0;
+  width: 100%;
+}
+
+html body .ui-popover-positioner {
+  z-index: 5020;
+}
+
+html body .date-picker {
+  min-width: 0;
+  max-width: 100%;
+}
+
+html body .date-picker-trigger {
+  height: auto;
+  min-height: 44px;
+  padding-block: 10px;
+}
+
+html body .date-picker-trigger span {
+  font-size: inherit;
+  line-height: 1.4;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+/* The browser top layer escapes overflow and transformed modal ancestors.
+ * Position/size comes from the visual viewport, including the on-screen keyboard. */
+html body .date-picker-popover[popover] {
+  position: fixed !important;
+  inset: auto !important;
+  top: auto !important;
+  left: auto !important;
+  margin: 0;
+  max-width: calc(100vw - 16px) !important;
+  overflow: auto;
+  overscroll-behavior: contain;
+  transform: none !important;
+  pointer-events: auto;
+  animation: none;
+}
+
+/* Inline placement takes priority over legacy bottom-sheet declarations. */
+html body .date-picker-popover[popover][style] {
+  top: var(--picker-top) !important;
+  left: var(--picker-left) !important;
+  width: var(--picker-width) !important;
+  max-height: var(--picker-max-height) !important;
+}
+
+html body .date-picker-popover::before { display: none; }
+html body .date-picker-popover .date-picker-current { min-width: 0; flex: 1; }
+html body .date-picker-popover .date-picker-current select {
+  min-width: 0;
+  min-height: 36px;
+  font-size: 14px;
+}
+html body .date-picker-popover .date-picker-day {
+  min-width: 0;
+  min-height: 36px;
+  font-size: 14px;
+}
+html body .date-picker-popover .date-picker-footer button {
+  min-height: 40px;
+  font-size: 14px;
+}
+
+html body .ui-dialog-content {
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow-wrap: anywhere;
+}
+
+html body .ui-dialog-content.ui-dialog-content :is(.ui-input, .ui-input-group-input, .ui-select-trigger, .date-picker-trigger, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+html body .ui-dialog-content.ui-dialog-content :is(.form-field > span, .ui-field-label, .ui-dialog-description, .ui-field-description, .student-create-hint, .payment-policy-note) {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+html body .ui-dialog-content :is(.field-grid, .ui-field-group, .form-field, .ui-field) {
+  min-width: 0;
+}
+
+html body .ui-dialog-content :is(.student-create-toolbar, .crm-form-section-heading) {
+  flex-wrap: wrap;
+}
+
+html body .ui-dialog-footer button {
+  height: auto;
+  min-height: 44px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+/* Fixed columns plus nowrap allowed names to paint across adjacent cells. */
+html body .erp-frame :is(.ui-table, [data-erp-table]) {
+  table-layout: auto;
+}
+
+html body .erp-frame :is(.ui-table, [data-erp-table]) :is(th, td) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+html body .erp-frame :is(.students-identity-link, .crm-lead-person-cell) {
+  min-width: 180px;
+  max-width: 300px;
+}
+
+html body .erp-frame :is(.students-table-stack, .crm-table-stack) {
+  min-width: 130px;
+  max-width: 280px;
+}
+
+html body .erp-frame :is(.students-identity-link, .students-table-stack, .crm-table-stack, .crm-lead-person-cell) :is(strong, small, span, button, a) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+html body .erp-frame :is(.crm-note-line, .students-list-metric span, .students-list-metric strong) {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+html body .erp-frame :is(.status-chip, .crm-owner-line) {
+  height: auto;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+html body .erp-frame :is(.route-content-shell, .route-content-shell > *, .students-table-panel, .crm-table-panel, .students-table-heading) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+html body .erp-range-trigger {
+  height: auto;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+html body .erp-frame :is(.students-attention-person, .students-attention-action, .crm-attention-person, .crm-attention-action) :is(strong, small, a, span) {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+html body .erp-frame :is(.students-kpi-label, .students-kpi-note, .crm-metric-label, .crm-metric-note,
+  .students-list-metric span, .students-analytics-row, .students-analytics-row strong,
+  .students-table-heading p, .crm-table-heading p) {
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+html body .erp-frame :is(.students-data-table, .crm-leads-table) :is(th, td, small, strong, .status-chip) {
+  font-size: 13px;
+}
+
+html body .erp-frame :is(.task-main h3, .task-main p, .task-owner strong, .task-deadline strong, .hr-teacher-list b) {
+  display: block;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+html body .erp-frame :is(.playbook-section-button, .playbook-document-name) :is(strong, small),
+html body .erp-frame :is(.knowledge-category-select strong, .knowledge-article-list > button > span,
+  .knowledge-search-results strong, .knowledge-search-results small,
+  .knowledge-breadcrumb, .knowledge-breadcrumb button, .knowledge-breadcrumb strong) {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  line-height: 1.45;
+}
+
+html body .erp-frame .knowledge-breadcrumb { flex-wrap: wrap; padding-block: 10px; }
+html body .erp-frame .playbook-document-name strong { font-size: 13px; }
+html body .erp-frame .playbook-document-name small { font-size: 12px; }
+html body .erp-frame .playbook-section-button small { font-size: 12px; }
+html body .erp-frame .owner-dashboard-revenue-stat-head {
+  flex-wrap: wrap;
+  height: auto;
+}
+html body .erp-frame .owner-dashboard-revenue-stat-head > span {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+html body .erp-frame .hr-teacher-list > span {
+  min-width: 0;
+  grid-template-columns: 29px minmax(0, 1fr) auto;
+}
+
+/* Ledger labels must stay readable inside the horizontally scrolling table. */
+html body .erp-frame .finance-entity-cell {
+  min-width: 150px;
+  max-width: 300px;
+}
+
+html body .erp-frame .finance-table :is(th, td) {
+  font-size: 13px;
+}
+
+html body .erp-frame :is(.finance-entity-cell strong, .finance-entity-cell span,
+  .finance-panel-head span, .finance-panel-head small, .finance-preset-info-text,
+  .finance-receivable-summary span, .finance-receivable-summary small,
+  .finance-expense-pie-legend-row strong, .finance-expense-pie-legend-row small) {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 960px) {
+  /* A pinned action column covered almost half of the mobile ledger. */
+  html body .erp-frame .finance-table :is(th:last-child, td:last-child:not([colspan])) {
+    position: static;
+    right: auto;
+    z-index: auto;
+    box-shadow: none;
+  }
+
+  html body .date-picker-popover .date-picker-current select { font-size: 16px; }
+  html body .erp-frame :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+  html body .ui-dialog-content.ui-dialog-content :is(.ui-input, .ui-input-group-input, .ui-select-trigger, .date-picker-trigger, textarea),
+  html body :is(.ui-select-search input, .ui-mobile-select-search input) {
+    font-size: 16px;
+  }
+
+  html body .erp-frame :is(.students-list-metrics, .students-filter-primary) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  html body .erp-frame :is(.students-table-heading, .crm-table-heading) {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .erp-frame .hr-teacher-list { grid-template-columns: minmax(0, 1fr); }
+  html body .erp-frame .task-main-title { flex-wrap: wrap; }
+  html body .erp-frame .playbook-section-switcher {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+  html body .erp-frame .playbook-section-button {
+    min-width: 0;
+    width: 100%;
+    height: auto;
+  }
+  html body .erp-frame .playbook-document-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    padding-block: 14px;
+  }
+  html body .erp-frame .playbook-document-name { grid-column: 1 / -1; }
+  html body .erp-frame .playbook-document-row > :nth-child(3),
+  html body .erp-frame .playbook-document-row > :nth-child(4) {
+    display: block;
+    grid-column: 1;
+    overflow-wrap: anywhere;
+  }
+  html body .erp-frame .playbook-document-row > :last-child { grid-column: 2; grid-row: 2; }
+  html body .ui-dialog-content :is(.field-grid, .form-grid, .crm-dialog-fields, .crm-form-grid, .students-form-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html body .ui-dialog-content :is(.field-grid, .form-grid, .crm-dialog-fields, .crm-form-grid, .students-form-grid) > * {
+    grid-column: auto;
+  }
+
+  html body .student-create-steps { grid-template-columns: minmax(0, 1fr); }
+  html body .student-create-steps :is(strong, small) {
+    white-space: normal;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  html body .ui-mobile-select-option { min-width: 0; flex-shrink: 0; }
+  html body .ui-mobile-select-options { outline: none; }
+  html body .ui-mobile-select-sheet .ui-dialog-close { flex-shrink: 0; }
+  html body .ui-mobile-select-sheet .ui-mobile-select-header { flex-shrink: 0; }
+
+  html body .erp-frame .ui-table-container {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  html body .erp-range-popover [data-slot="calendar"] { --cell-size: 2.35rem; }
+
+  html body .erp-frame :is(.students-attention-row, .crm-attention-row) {
+    grid-template-columns: 36px minmax(0, 1fr) 18px;
+  }
+  html body .erp-frame :is(.students-attention-person, .crm-attention-person) {
+    grid-column: 2;
+  }
+  html body .erp-frame :is(.students-attention-row, .crm-attention-row) > .status-chip {
+    grid-column: 2;
+    grid-row: auto;
+    justify-self: start;
+    font-size: 12px;
+  }
+  html body .erp-frame :is(.students-attention-action, .crm-attention-action) {
+    grid-column: 2 / -1;
+    grid-row: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  html body .erp-frame :is(.students-attention-open, .crm-attention-open-icon) {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 380px) {
+  html body .erp-frame :is(.students-list-metrics, .students-filter-primary) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

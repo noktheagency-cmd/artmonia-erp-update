@@ -342,8 +342,8 @@
   font-weight: 800;
 }
 .roleMember > div { display: grid; gap: 3px; min-width: 0; }
-.roleMember > div strong { overflow: hidden; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-.roleMember > div small { overflow: hidden; color: var(--role-muted); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+.roleMember > div strong { font-size: 13px; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.roleMember > div small { color: var(--role-muted); font-size: 12px; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
 .roleMember button svg { width: 14px; height: 14px; }
 .roleCount { color: var(--role-muted); font-size: 8.5px; white-space: nowrap; }
 .roleMembersEmpty { margin: 10px 0 0; color: var(--role-muted); font-size: 9.5px; }

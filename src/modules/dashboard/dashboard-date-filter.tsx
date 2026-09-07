@@ -68,7 +68,10 @@ export function DashboardDateFilter({ from, to, label }: DashboardDateFilterProp
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         aria-controls="owner-dashboard-date-popover"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => {
+          if (!isOpen) setDraft({ from, to });
+          setIsOpen((current) => !current);
+        }}
       >
         <CalendarDays size={16} />
         <span>{label}</span>
