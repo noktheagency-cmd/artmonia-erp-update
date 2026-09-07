@@ -734,7 +734,16 @@ function getCrmRawData(
           ) team_stats on true
           where ${teamMemberScopeSql}
             and (
-              he.id is null
+              (
+                he.id is null
+                and not exists (
+                  select 1
+                  from erp.audit_logs deleted_employee
+                  where deleted_employee.action = 'hr.employee.delete'
+                    and deleted_employee.entity_type = 'hr_employee'
+                    and deleted_employee.before_json->>'userId' = u.id::text
+                )
+              )
               or (
                 he.archived_at is null
                 and he.status in (${teamHrStatusSql})
