@@ -1,5 +1,6 @@
 import { unstable_rethrow } from "next/navigation";
 import { getAppErrorDetails } from "@/lib/app-errors";
+import { announceStaleVersion } from "@/lib/app-version";
 
 export type AppNotificationTone = "success" | "error" | "warning" | "info";
 
@@ -33,6 +34,10 @@ export function notifyError(
 ) {
   unstable_rethrow(error);
   const details = getAppErrorDetails(error, fallback);
+  if (details.code === "STALE_APP_VERSION") {
+    announceStaleVersion();
+    return;
+  }
   notify({
     title: title ?? details.title,
     message: details.message,
@@ -48,6 +53,10 @@ export function notifyCaughtError(
 ) {
   unstable_rethrow(error);
   const details = getAppErrorDetails(error, fallback);
+  if (details.code === "STALE_APP_VERSION") {
+    announceStaleVersion();
+    return details.message;
+  }
   notify({
     title: title ?? details.title,
     message: details.message,

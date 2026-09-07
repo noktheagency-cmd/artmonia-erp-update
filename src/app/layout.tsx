@@ -3,10 +3,12 @@ import "./globals.css";
 import "./mobile-responsive.css";
 import "./responsive-controls.css";
 import "./dark-mode.css";
+import "./app-version.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { AppNotifications } from "@/components/ui/app-notifications";
 import { CrudSubmissionGuard } from "@/components/crud-submission-guard";
+import { AppVersionNotice } from "@/components/app-version-notice";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -72,6 +74,7 @@ export default function RootLayout({
         {children}
         <AppNotifications />
         <CrudSubmissionGuard />
+        <AppVersionNotice />
       </body>
     </html>
   );

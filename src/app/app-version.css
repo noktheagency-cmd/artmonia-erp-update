@@ -1,0 +1,40 @@
+.app-version-notice {
+  position: fixed; z-index: 10000; bottom: max(20px, env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%); width: min(720px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 14px; padding: 18px;
+  border: 1px solid #c7d2fe; border-radius: 18px; background: #fff; color: #172554;
+  box-shadow: 0 12px 48px #17255426; pointer-events: auto;
+}
+.app-version-notice > svg { flex-shrink: 0; color: #4f46e5; }
+.app-version-notice strong { font-size: 14px; }
+.app-version-notice p { margin: 4px 0 0; font-size: 12px; line-height: 1.6; }
+.app-version-notice button, .app-version-actions button {
+  cursor: pointer; border: 1px solid #c7d2fe; border-radius: 10px; background: #eef2ff;
+  color: #312e81; padding: 10px 14px; font: inherit; font-size: 13px; font-weight: 600;
+}
+.app-version-notice button { flex-shrink: 0; }
+.app-version-notice button:focus-visible, .app-version-actions button:focus-visible { outline: 3px solid #818cf8; outline-offset: 3px; }
+.app-version-overlay { position: fixed; inset: 0; z-index: 10001; background: #0f172a80; backdrop-filter: blur(3px); }
+.app-version-dialog {
+  position: fixed; z-index: 10002; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(500px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto;
+  background: #fff; color: #172554; border: 1px solid #e0e7ff; border-radius: 22px; padding: 28px;
+  box-shadow: 0 24px 80px #0f172a40;
+}
+.app-version-symbol { display: inline-flex; padding: 12px; background: #eef2ff; color: #4f46e5; border-radius: 14px; }
+.app-version-dialog h2 { font-size: 20px; line-height: 1.4; margin: 18px 0 10px; }
+.app-version-dialog p { font-size: 14px; line-height: 1.7; color: #475569; }
+.app-version-warning { padding: 12px; background: #fffbeb; border-radius: 12px; }
+.app-version-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.app-version-actions .app-version-primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.dark .app-version-notice, .dark .app-version-dialog { background: #172033; color: #eef2ff; border-color: #394867; }
+.dark .app-version-dialog p { color: #cbd5e1; }
+.dark .app-version-warning { background: #373024; }
+@media (max-width: 520px) {
+  .app-version-notice { flex-wrap: wrap; gap: 10px; padding: 14px; }
+  .app-version-notice > div { flex: 1; }
+  .app-version-notice > button { width: 100%; }
+  .app-version-dialog { padding: 22px; }
+  .app-version-actions { flex-direction: column-reverse; }
+  .app-version-actions button { width: 100%; min-height: 44px; }
+}

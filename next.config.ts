@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { randomUUID } from "node:crypto";
 
 const securityHeaders = [
   {
@@ -20,6 +21,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Bake the same public identifier into the browser AND version endpoint.
+  // A commit hash alone would miss rebuilds/redeploys of the same commit.
+  env: {
+    NEXT_PUBLIC_APP_BUILD_ID: process.env.RAILWAY_DEPLOYMENT_ID || randomUUID(),
+  },
   devIndicators: false,
   poweredByHeader: false,
   typedRoutes: true,

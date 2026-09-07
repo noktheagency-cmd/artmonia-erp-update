@@ -1,3 +1,5 @@
+import { isMissingServerAction } from "@/lib/app-version";
+
 export type AppErrorDetails = {
   message: string;
   title: string;
@@ -14,6 +16,13 @@ export function getAppErrorDetails(
   error: unknown,
   fallback = "Əməliyyat tamamlanmadı. Bir az sonra yenidən cəhd edin."
 ): AppErrorDetails {
+  if (isMissingServerAction(error)) {
+    return {
+      title: "Sistemin yeni versiyası mövcuddur",
+      message: "Açıq səhifə serverin cari versiyasına uyğun deyil. Məlumatlarınızı yoxlayıb səhifəni yeniləyin. Əməliyyat avtomatik təkrarlanmayacaq.",
+      code: "STALE_APP_VERSION",
+    };
+  }
   if (
     error &&
     typeof error === "object" &&
