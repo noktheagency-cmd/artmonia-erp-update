@@ -66,12 +66,14 @@ function activationTx(enrollment: {
       },
     },
     invoice: {
-      findFirst: async () => ({
+      findFirst: async (args: { where: { OR: unknown } }) => {
+        assert.deepEqual(args.where.OR, [{ enrollmentId: "enrollment-1" }, { enrollmentId: null }]);
+        return ({
         id: "invoice-1",
         amount: 200,
         balanceDue: 0,
         enrollmentId: "enrollment-1",
-      }),
+      }); },
       update: async (args: unknown) => {
         invoiceUpdate = args;
       },

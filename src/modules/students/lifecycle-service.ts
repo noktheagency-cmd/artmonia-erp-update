@@ -93,6 +93,7 @@ export function getStatusChangeReason(
 export function isInactiveStudentStatus(status: StudentLifecycleStatus) {
   return status === StudentLifecycleStatus.FROZEN
     || status === StudentLifecycleStatus.STOPPED
+    || status === StudentLifecycleStatus.COMPLETED
     || status === StudentLifecycleStatus.DECLINED;
 }
 
@@ -352,6 +353,7 @@ export async function syncActivationBilling(
       studentId: input.studentId,
       status: { not: InvoiceStatus.VOID },
       periodMonth,
+      OR: [{ enrollmentId: enrollment.id }, { enrollmentId: null }],
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     select: {

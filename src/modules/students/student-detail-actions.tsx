@@ -54,6 +54,7 @@ interface StudentDetail {
   lifecycleStatusValue: string;
   freezeReserved: boolean;
   detail: {
+    hasEditableEnrollment: boolean;
     email: string;
     source: string;
     educationLevel: string;
@@ -126,6 +127,10 @@ export function StudentDetailActions({
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
+  const [editScope, setEditScope] = useState<"PROFILE_ONLY" | "WITH_ENROLLMENT">("PROFILE_ONLY");
+  const editingEnrollment = editScope === "WITH_ENROLLMENT" && student.detail.hasEditableEnrollment;
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [packageBusy, setPackageBusy] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -187,13 +192,17 @@ export function StudentDetailActions({
   }
 
   async function addPackage(formData: FormData) {
+    if (packageBusy) return;
+    setPackageBusy(true);
     try {
       unwrapActionResult(await createStudentEnrollmentAction(formData));
       setPackageOpen(false);
-      notifySuccess("Paket əlavə edildi", "Yeni proqram ayrıca tədris və billing qeydi kimi yaradıldı.");
+      notifySuccess("Paket əlavə edildi", "Yeni proqram ayrıca yaradıldı. Əvvəlki paket tarixçəsi saxlanıldı; dərsə başlamaq üçün müəllim və slot təyin edin.");
       router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Paket əlavə edilmədi.");
+    } finally {
+      setPackageBusy(false);
     }
   }
 
@@ -218,7 +227,7 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Yeni tədris paketi</DialogTitle>
             <DialogDescription>
-              Paket ayrıca enrollment və faktura xətti kimi saxlanılır. Tələbənin qorunan billing tarixi dəyişmir.
+              Əvvəlki paket və ödəniş tarixçəsi dəyişmir. Yeni paket ayrıca yaradılır. Tamamlamış tələbə “Slot gözləyir” mərhələsinə keçir; aktivləşmə müəllim və slot təyin ediləndə baş verir. Qorunan billing tarixi dəyişmir.
             </DialogDescription>
           </DialogHeader>
           <form action={addPackage} className="student-payment-form">
@@ -274,7 +283,7 @@ export function StudentDetailActions({
             </label>
             <DialogFooter>
               <DialogClose asChild><Button type="button" variant="ghost">Ləğv et</Button></DialogClose>
-              <Button type="submit"><Plus data-icon="inline-start" />Paketi yarat</Button>
+              <Button type="submit" disabled={packageBusy}><Plus data-icon="inline-start" />{packageBusy ? "Yaradılır…" : "Paketi yarat"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -481,7 +490,7 @@ export function StudentDetailActions({
       </Dialog>
 
       {/* Edit Student Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={editOpen} onOpenChange={(value) => { if (profileBusy) return; setEditOpen(value); if (value) setEditScope("PROFILE_ONLY"); }}>
         <DialogTrigger asChild>
           <Button className="student-action-edit" type="button" disabled={!permissions.canUpdateStudent}>
             <Edit data-icon="inline-start" />
@@ -492,13 +501,15 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Tələbəni redaktə et</DialogTitle>
             <DialogDescription>
-              Şəxsi məlumatları, kampaniyanı, məsul şəxsləri, proqramı və ödəniş planını yeniləyin.
+              Şəxsi məlumatlar slotdan və paket statusundan asılı olmadan redaktə edilir. Tamamlanmış paketi dəyişmək əvəzinə yeni paket əlavə edin.
             </DialogDescription>
           </DialogHeader>
 
           <form
             onSubmit={async (e) => {
               e.preventDefault();
+              if (profileBusy) return;
+              setProfileBusy(true);
               const formData = new FormData(e.currentTarget);
               try {
                 unwrapActionResult(await updateStudentProfileAction(formData));
@@ -507,11 +518,23 @@ export function StudentDetailActions({
                 router.refresh();
               } catch (error) {
                 notifyCaughtError(error, "Tələbə profili yenilənmədi.");
+              } finally {
+                setProfileBusy(false);
               }
             }}
             className="student-create-form student-profile-edit-form"
           >
             <input name="studentId" type="hidden" value={student.id} />
+
+            <input name="editScope" type="hidden" value={editingEnrollment ? "WITH_ENROLLMENT" : "PROFILE_ONLY"} />
+            <div className="field-grid">
+              <Button type="button" variant={editingEnrollment ? "outline" : "default"} onClick={() => setEditScope("PROFILE_ONLY")} aria-pressed={!editingEnrollment}>Şəxsi məlumatlar</Button>
+              {student.detail.hasEditableEnrollment ? (
+                <Button type="button" variant={editingEnrollment ? "default" : "outline"} onClick={() => setEditScope("WITH_ENROLLMENT")} aria-pressed={editingEnrollment}>Cari paket və ödəniş planı</Button>
+              ) : (
+                <Button type="button" variant="outline" onClick={() => { setEditOpen(false); setPackageOpen(true); }}>Yeni paket əlavə et</Button>
+              )}
+            </div>
 
             <section className="student-create-section">
               <div className="student-detail-section-title">
@@ -566,9 +589,10 @@ export function StudentDetailActions({
             <section className="student-create-section">
               <div className="student-detail-section-title">
                 <BookOpen />
-                <span>Tədris və kampaniya məlumatları</span>
+                <span>{editingEnrollment ? "Tədris və kampaniya məlumatları" : "Qeydiyyat və məsul şəxslər"}</span>
               </div>
               <div className="student-create-grid">
+                {editingEnrollment ? <>
                 <label className="form-field">
                   <span>Proqram</span>
                   <FormSelect
@@ -592,6 +616,7 @@ export function StudentDetailActions({
                     searchPlaceholder="Müəllim axtar..."
                   />
                 </label>
+                </> : null}
                 <label className="form-field">
                   <span>Məsul şəxs</span>
                   {permissions.canAssignStudentManager ? (
@@ -631,10 +656,10 @@ export function StudentDetailActions({
                     required
                   />
                 </label>
-                <label className="form-field">
+                {editingEnrollment ? <label className="form-field">
                   <span>Cari paket üzrə ilk dərs</span>
                   <DatePicker name="firstLessonDate" defaultValue={student.detail.firstLessonDate} />
-                </label>
+                </label> : null}
                 <label className="form-field">
                   <span>Billing anchor (qorunan)</span>
                   <Input value={student.detail.billingAnchorDate || "Təsdiqlənməyib"} readOnly aria-readonly="true" />
@@ -643,6 +668,7 @@ export function StudentDetailActions({
             </section>
 
             <section className="student-create-section">
+              {editingEnrollment ? <>
               <div className="student-detail-section-title">
                 <GraduationCap />
                 <span>Status və ödəniş planı</span>
@@ -740,6 +766,7 @@ export function StudentDetailActions({
                   </label>
                 ) : null}
               </div>
+              </> : null}
 
               <label className="form-field student-create-notes">
                 <span>Profil qeydi</span>
@@ -753,7 +780,7 @@ export function StudentDetailActions({
 
             <div className="premium-edit-notice">
               <span className="sparkle">✨</span>
-              <span>Qiymət və ya dərs sayı dəyişirsə tətbiq ayını və səbəbi seçin. “Yalnız seçilən ay” yarımay və müvəqqəti güzəştlər üçündür; daimi paket dəyişiklikləri seçilən aydan etibarən tətbiq olunur.</span>
+              <span>{editingEnrollment ? "Qiymət və ya dərs sayı dəyişirsə tətbiq ayını və səbəbi seçin. Tamamlanmış paketi başqa proqramla əvəz etməyin; yeni paket əlavə edin." : "Bu rejimdə yalnız şəxsi məlumatlar yenilənir. Status, dərs tarixi, paket, ödəniş və borc dəyişmir."}</span>
             </div>
 
             <DialogFooter>
@@ -775,8 +802,8 @@ export function StudentDetailActions({
                   Ləğv et
                 </Button>
               </DialogClose>
-              <Button type="submit">
-                Yadda saxla
+              <Button type="submit" disabled={profileBusy}>
+                {profileBusy ? "Saxlanılır…" : "Yadda saxla"}
               </Button>
             </DialogFooter>
           </form>

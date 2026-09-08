@@ -3059,6 +3059,7 @@ export async function getStudentDetailData(studentId: string) {
         campaignId: student.campaignId ?? "",
         campaign: student.campaignName ?? "Təyin edilməyib",
         enrollmentId: student.enrollmentId ?? "",
+        hasEditableEnrollment: packages.length > 0,
         programId: student.programId ?? "",
         teacherId: student.teacherId ?? "",
         discountType: student.discountType ?? "",
@@ -3111,7 +3112,9 @@ export async function getStudentDetailData(studentId: string) {
             usagePeriodSource: rawUsage?.periodSource === "BILLING_CYCLE"
               ? "Paket dövrü"
               : "Təqvim ayı",
-            status: enrollment.status === EnrollmentStatus.PAUSED ? "Dondurulub" : "Aktiv",
+            status: enrollment.status === EnrollmentStatus.PAUSED
+              ? student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING ? "Slot gözləyir" : "Dondurulub"
+              : "Aktiv",
           };
         }),
         invoices: asJsonArray<StudentInvoiceRecord>(student.invoices).map((invoice) => {

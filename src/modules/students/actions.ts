@@ -65,6 +65,8 @@ import { PublicActionError, safeServerAction } from "@/server/actions/safe-actio
 import { planLifecycleHistoryChange } from "@/modules/students/lifecycle-history-policy";
 import { changeReservedFreeze } from "@/modules/students/reserved-freeze-service";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { updatePersonalStudentProfile } from "@/modules/students/personal-profile-service";
+import { planNewStudentPackage } from "@/modules/students/package-return-policy";
 import {
   deleteStudentMobileAuthUser,
   inviteStudentMobileAccount,
@@ -732,6 +734,15 @@ async function updateStudentStatusActionImpl(formData: FormData) {
 
 async function updateStudentProfileActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.update");
+  if (formData.get("editScope") === "PROFILE_ONLY") {
+    await getPrisma().$transaction(tx => updatePersonalStudentProfile(tx, Object.fromEntries(formData), {
+      id: actor.id, canManageAllStudents: scopeFor(actor.permissions, "student.update") === "ALL",
+    }));
+    revalidatePath(`/students/${formData.get("studentId")}`);
+    revalidatePath("/students");
+    invalidateStudentCaches();
+    return;
+  }
   const input = updateStudentProfileSchema.parse(Object.fromEntries(formData));
   const phoneNormalized = normalizePhone(input.phone);
   if (!phoneNormalized) {
@@ -795,7 +806,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
 
     const currentEnrollment = current.enrollments[0];
     if (!currentEnrollment) {
-      throw new PublicActionError("Tələbənin aktiv tədris qeydiyyatı tapılmadı.");
+      throw new PublicActionError("Tələbənin açıq tədris paketi yoxdur. Şəxsi məlumatları ayrıca redaktə edin, davam etmək üçün isə yeni paket əlavə edin.");
     }
     const firstLessonChanged =
       currentEnrollment.firstLessonAt?.getTime() !== firstLessonAt?.getTime();
@@ -1161,6 +1172,8 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
+    // Serialize new-package creation with lifecycle changes and duplicate clicks.
+    await tx.$queryRaw(Prisma.sql`select id from erp.students where id=${input.studentId}::uuid for update`);
     const student = await tx.student.findUnique({
       where: { id: input.studentId },
       select: {
@@ -1180,12 +1193,15 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
     ) {
       throw new PublicActionError("Bu tələbəyə paket əlavə etmək icazəniz yoxdur.");
     }
-    if (
-      student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
-      || student.lifecycleStatus === StudentLifecycleStatus.DECLINED
-    ) {
-      throw new PublicActionError("Tamamlanmış və ya imtina etmiş tələbəyə aktiv paket əlavə edilə bilməz.");
-    }
+    const hasOpenPackages = await tx.enrollment.count({ where: {
+      studentId: student.id, status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+    } });
+    const packagePlan = planNewStudentPackage({
+      lifecycleStatus: student.lifecycleStatus, billingPaused: student.billingPaused,
+      hasOpenPackages: hasOpenPackages > 0,
+      canChangeStatus: actor.permissions.has("student.status.change")
+        && (scopeFor(actor.permissions, "student.status.change") === "ALL" || student.managerId === actor.id),
+    });
 
     const [program, teacher, discountType, existingEnrollment] = await Promise.all([
       tx.program.findUnique({ where: { id: input.programId, isActive: true }, select: { id: true, name: true } }),
@@ -1223,12 +1239,35 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
     }
 
     const monthlyFee = resolveStudentMonthlyFee(discountType?.value, input.monthlyFee);
+    if (packagePlan.returningAfterCompletion) {
+      const effectiveAt = startOfToday();
+      await planLifecycleHistoryChange(tx, {
+        studentId: student.id, currentStatus: student.lifecycleStatus,
+        requestedStatus: StudentLifecycleStatus.SLOT_WAITING, effectiveAt,
+      });
+      await tx.student.update({ where: { id: student.id }, data: {
+        ...buildSharedStudentStatusUpdateData(StudentLifecycleStatus.SLOT_WAITING, effectiveAt),
+        completedAt: null,
+      } });
+      await tx.studentStatusHistory.create({ data: {
+        studentId: student.id, oldStatus: StudentLifecycleStatus.COMPLETED,
+        newStatus: StudentLifecycleStatus.SLOT_WAITING, eventType: "REACTIVATED",
+        effectiveAt, changedById: actor.id,
+        reason: "Tamamlanmış paketdən sonra yeni tədris paketinə qayıdış",
+      } });
+      await writeAuditLog(tx, {
+        actorUserId: actor.id, action: "student.reactivated", entityType: "student", entityId: student.id,
+        before: { lifecycleStatus: student.lifecycleStatus, billingPaused: student.billingPaused },
+        after: { lifecycleStatus: "SLOT_WAITING", billingPaused: true, createsNewSale: false },
+        reason: "Yeni paket əlavə edildi; əvvəlki paketlər və maliyyə tarixçəsi saxlanıldı",
+      });
+    }
     const enrollment = await tx.enrollment.create({
       data: {
         studentId: student.id,
         programId: program.id,
         teacherId: input.teacherId ?? null,
-        status: student.billingPaused ? EnrollmentStatus.PAUSED : EnrollmentStatus.ACTIVE,
+        status: packagePlan.enrollmentStatus,
         startDate: firstLessonAt,
         firstLessonAt,
         monthlyFee,
