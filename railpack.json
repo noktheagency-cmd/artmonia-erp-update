@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "steps": {
+    "install": {
+      "deployOutputs": [],
+      "commands": [
+        { "path": "/app/node_modules/.bin" },
+        { "src": ".", "dest": "." },
+        "npm ci"
+      ]
+    }
+  }
+}

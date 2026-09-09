@@ -20,6 +20,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - run: npm install --global npm@10.9.4
       - run: npm ci
       - run: npm audit --audit-level=high
       - run: npm run lint
