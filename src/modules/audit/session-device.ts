@@ -162,7 +162,7 @@ function parseDeviceName(
 
 function readIpAddress(headers: HeaderReader) {
   const direct =
-    headers.get("cf-connecting-ip") ??
+    // Railway overwrites X-Real-IP at its trusted edge, including proxied Cloudflare traffic.
     headers.get("x-real-ip") ??
     headers.get("x-forwarded-for")?.split(",")[0];
   return clean(direct, 64);

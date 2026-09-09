@@ -1,6 +1,7 @@
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentErpUser } from "@/server/auth/session";
+import { safeRedirectPath } from "@/server/auth/redirect-path";
 import { LoginForm } from "./login-form";
 import { LoginSceneLazy } from "./login-scene-lazy";
 import styles from "./login.module.css";
@@ -11,10 +12,7 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { next: requestedNext } = await searchParams;
-  const next =
-    requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
-      ? requestedNext
-      : undefined;
+  const next = safeRedirectPath(requestedNext);
   const currentUser = await getCurrentErpUser();
 
   if (currentUser) {

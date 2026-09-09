@@ -1,0 +1,7 @@
+.page{min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f5f3fa;color:#242035}
+.card{width:min(100%,460px);padding:32px;background:white;border:1px solid #e7e1ee;border-radius:20px;box-shadow:0 16px 60px #2414420d}
+.brand{font-size:12px;font-weight:700;letter-spacing:.15em;color:#7054b4}
+.card h1{font-size:26px;margin:16px 0}.card p{line-height:1.6}.form{display:grid;gap:16px}.form form{display:grid;gap:12px}
+.form input{width:100%;padding:12px;border:1px solid #c7bfd6;border-radius:8px;font-size:24px;letter-spacing:.35em}
+.form button{padding:12px 18px;border:0;border-radius:8px;background:#6548a3;color:white;font:inherit;cursor:pointer}.form button:disabled{opacity:.55;cursor:wait}
+.form .secondary{background:#f0edf5;color:#493b64}.qr{margin:auto}.form code{display:block;overflow-wrap:anywhere;margin:12px 0}.help{font-size:13px;color:#71697c}.error{color:#b42338}

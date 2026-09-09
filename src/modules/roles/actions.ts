@@ -11,13 +11,14 @@ import { PublicActionError, safeServerAction } from "@/server/actions/safe-actio
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { isPermissionCode, isSuperAdminManagedPermission, isSuperAdminOnlyPermission, permissionDefinitions, type PermissionCode, type PermissionScope } from "@/server/rbac/permissions";
+import { assertSafePassword } from "@/server/auth/password-security";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
 
 type SubmittedGrant = { code?: unknown; scope?: unknown };
 
 const standaloneUserSchema = z.object({
   email: z.string().trim().toLowerCase().email("Düzgün e-poçt ünvanı daxil edin"),
-  password: z.string().min(8, "Parol ən az 8 simvol olmalıdır").max(72, "Parol maksimum 72 simvol ola bilər"),
+  password: z.string().min(16, "Parol ən az 16 simvol olmalıdır").max(72, "Parol maksimum 72 simvol ola bilər"),
   roleId: z.string().uuid("Etibarlı rol seçin"),
 });
 
@@ -40,6 +41,7 @@ async function createStandaloneUserActionImpl(formData: FormData) {
     throw new PublicActionError("Bu e-poçt ünvanı ilə giriş hesabı artıq mövcuddur", "DUPLICATE");
   }
 
+  await assertSafePassword(input.password);
   const { data, error } = await getSupabaseAdminClient().auth.admin.createUser({
     email: input.email,
     password: input.password,
@@ -354,8 +356,8 @@ export async function updateRoleUserAction(formData: FormData) {
     if (roleIds.length < 1 || roleIds.length > 20 || roleIds.some((id) => !isUuid(id))) {
       return failure("VALIDATION", "Profil üçün ən az bir etibarlı rol seçilməlidir.");
     }
-    if (parsedInput.data.password.length > 0 && parsedInput.data.password.length < 8) {
-      return failure("VALIDATION", "Yeni parol ən az 8 simvol olmalıdır.");
+    if (parsedInput.data.password.length > 0 && parsedInput.data.password.length < 16) {
+      return failure("VALIDATION", "Yeni parol ən az 16 simvol olmalıdır.");
     }
 
     const prisma = getPrisma();
@@ -427,7 +429,7 @@ export async function updateRoleUserAction(formData: FormData) {
         attributes.email = parsedInput.data.email;
         attributes.email_confirm = true;
       }
-      if (passwordChanged) attributes.password = parsedInput.data.password;
+      if (passwordChanged) { await assertSafePassword(parsedInput.data.password); attributes.password = parsedInput.data.password; }
       const { error } = await getSupabaseAdminClient().auth.admin.updateUserById(user.authUserId, attributes);
       if (error) {
         return failure(

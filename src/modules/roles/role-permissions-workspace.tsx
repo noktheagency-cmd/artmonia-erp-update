@@ -678,8 +678,8 @@ export function RolePermissionsWorkspace({
                   type={showAccountPassword ? "text" : "password"}
                   value={accountPassword}
                   onChange={(event) => setAccountPassword(event.target.value)}
-                  placeholder="Ən az 8 simvol"
-                  minLength={8}
+                  placeholder="Ən az 16 simvol"
+                  minLength={16}
                   maxLength={72}
                   autoComplete="new-password"
                   required
@@ -713,7 +713,7 @@ export function RolePermissionsWorkspace({
             <Button variant="outline" onClick={() => setAccountOpen(false)}>Ləğv et</Button>
             <Button
               className={styles.primaryAction}
-              disabled={!accountEmail.trim() || accountPassword.length < 8 || !accountRoleId || isPending}
+              disabled={!accountEmail.trim() || accountPassword.length < 16 || !accountRoleId || isPending}
               onClick={createAccount}
             >
               <UserRoundPlus /> {isPending ? "Yaradılır..." : "Profili yarat"}
@@ -763,7 +763,7 @@ export function RolePermissionsWorkspace({
                   value={editingPassword}
                   onChange={(event) => setEditingPassword(event.target.value)}
                   placeholder="Dəyişmirsə boş saxlayın"
-                  minLength={8}
+                  minLength={16}
                   maxLength={72}
                   autoComplete="new-password"
                   disabled={!initialData.canManageUsers || !editingUser?.hasLogin}
@@ -808,7 +808,7 @@ export function RolePermissionsWorkspace({
               disabled={
                 editingRoleIds.length === 0
                 || !editingEmail.trim()
-                || (editingPassword.length > 0 && editingPassword.length < 8)
+                || (editingPassword.length > 0 && editingPassword.length < 16)
                 || isPending
               }
               onClick={saveUserProfile}

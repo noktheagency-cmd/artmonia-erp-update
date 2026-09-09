@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseSessionDevice } from "./session-device";
+import { parseSessionDevice, readSessionRequestMetadata } from "./session-device";
 
 test("Windows Edge session is identified as a desktop", () => {
   const result = parseSessionDevice(
@@ -39,4 +39,8 @@ test("Android tablet model is preserved", () => {
   assert.equal(result.deviceName, "SM-X710");
   assert.equal(result.browserName, "Chrome");
   assert.equal(result.osName, "Android");
+});
+test("Railway client IP takes precedence over client-supplied Cloudflare headers", () => {
+  const metadata = readSessionRequestMetadata(new Headers({"x-real-ip":"192.0.2.5", "cf-connecting-ip":"198.51.100.7", "x-forwarded-for":"203.0.113.8"}));
+  assert.equal(metadata.ipAddress, "192.0.2.5");
 });

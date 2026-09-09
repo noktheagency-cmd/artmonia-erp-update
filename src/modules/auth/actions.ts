@@ -11,6 +11,9 @@ import { getCurrentErpUser } from "@/server/auth/session";
 import { getPrisma } from "@/server/db/prisma";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
+import { safeRedirectPath } from "@/server/auth/redirect-path";
+import { consumeLoginAttempt, recordLoginEvent } from "@/server/auth/login-security";
+
 const signInSchema = z.object({
   email: z.string().trim().email().max(180),
   password: z.string().min(6).max(160),
@@ -31,6 +34,15 @@ export async function signInAction(
     return { error: "Düzgün e-poçt və şifrə daxil edin." };
   }
 
+  const metadata = readSessionRequestMetadata(await headers());
+  try {
+    if (!(await consumeLoginAttempt(input.data.email, metadata))) {
+      return { error: "Çox sayda giriş cəhdi. 15 dəqiqə sonra yenidən yoxlayın." };
+    }
+  } catch {
+    console.error("Security event", { action: "auth.login.limiter_unavailable" });
+    return { error: "Giriş müvəqqəti əlçatan deyil. Bir az sonra yenidən yoxlayın." };
+  }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword({
     email: input.data.email,
@@ -38,6 +50,7 @@ export async function signInAction(
   });
 
   if (error || !data.user) {
+    await recordLoginEvent("auth.login.failed", input.data.email, metadata);
     return { error: "E-poçt və ya şifrə yanlışdır." };
   }
 
@@ -51,13 +64,12 @@ export async function signInAction(
 
   if (!erpUser?.isActive) {
     await supabase.auth.signOut();
-    return { error: "Bu hesab aktiv Artmonia ERP istifadəçisinə bağlı deyil." };
+    await recordLoginEvent("auth.login.denied", input.data.email, metadata);
+    return { error: "E-poçt və ya şifrə yanlışdır." };
   }
 
-  const next =
-    input.data.next?.startsWith("/") && !input.data.next.startsWith("//")
-      ? input.data.next
-      : "/dashboard";
+  await recordLoginEvent("auth.login.succeeded", input.data.email, metadata, erpUser.id);
+  const next = safeRedirectPath(input.data.next);
 
   revalidatePath("/", "layout");
   redirect(next as Route);

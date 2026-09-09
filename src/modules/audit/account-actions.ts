@@ -8,6 +8,7 @@ import { writeAuditLog } from "@/modules/audit/audit-service";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
+import { assertSafePassword } from "@/server/auth/password-security";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   syncTeacherAccountLink,
@@ -62,6 +63,7 @@ async function createAccount(formData: FormData) {
   if (profile.user?.authUserId) throw new PublicActionError("Bu profilin giriş hesabı artıq mövcuddur", "DUPLICATE");
   if (emailOwner && emailOwner.id !== profile.userId) throw new PublicActionError("Bu e-poçt başqa giriş hesabında istifadə olunur", "DUPLICATE");
 
+  await assertSafePassword(input.password);
   const { data, error } = await getSupabaseAdminClient().auth.admin.createUser({
     email: input.loginEmail,
     password: input.password,
@@ -163,6 +165,7 @@ async function changePassword(formData: FormData) {
   const actor = await requireSuperAdmin();
   const input = passwordChangeSchema.parse(Object.fromEntries(formData));
   const profile = await loadAccount(input.profileType, input.profileId);
+  await assertSafePassword(input.password);
   const { error } = await getSupabaseAdminClient().auth.admin.updateUserById(profile.user!.authUserId!, { password: input.password });
   if (error) throw new PublicActionError(error.message);
   await getPrisma().$transaction(async (tx) => {
@@ -302,7 +305,7 @@ function profileLabel(profileType: AccountProfileType) {
 }
 
 function passwordSchema() {
-  return z.string().min(10, "Parol ən az 10 simvol olmalıdır").max(72)
+  return z.string().min(16, "Parol ən az 16 simvol olmalıdır").max(72)
     .regex(/[a-z]/, "Parolda kiçik hərf olmalıdır")
     .regex(/[A-Z]/, "Parolda böyük hərf olmalıdır")
     .regex(/\d/, "Parolda rəqəm olmalıdır")

@@ -658,7 +658,7 @@ function CorporateAccountCreationForm({
     const form = new FormData(event.currentTarget);
     const password = String(form.get("password") ?? "");
     if (!roleIds.length) { setError("Ən az bir sistem rolu seçilməlidir."); return; }
-    if (!strongPassword(password)) { setError("Parol ən az 10 simvol, böyük/kiçik hərf, rəqəm və xüsusi simvol daxil etməlidir."); return; }
+    if (!strongPassword(password)) { setError("Parol ən az 16 simvol, böyük/kiçik hərf, rəqəm və xüsusi simvol daxil etməlidir."); return; }
     if (password !== form.get("confirmation")) { setError("Parollar eyni deyil."); return; }
     form.delete("confirmation");
     form.set("roleIds", JSON.stringify(roleIds));
@@ -671,7 +671,7 @@ function CorporateAccountCreationForm({
       <input type="hidden" name="profileId" value={contact.id} />
       <label><span>Login e-poçtu</span><Input name="loginEmail" type="email" defaultValue={contact.email} required autoComplete="off" /></label>
       <fieldset><legend>İcazə rolları</legend><div>{roleOptions.map((role) => <label key={role.id}><input type="checkbox" checked={roleIds.includes(role.id)} onChange={() => setRoleIds((current) => current.includes(role.id) ? current.filter((id) => id !== role.id) : [...current, role.id])} /><span>{role.name}</span></label>)}</div></fieldset>
-      <div className="corporate-account-passwords"><label><span>İlkin parol</span><Input name="password" type="password" minLength={10} maxLength={72} required autoComplete="new-password" /></label><label><span>Parolu təsdiqlə</span><Input name="confirmation" type="password" minLength={10} maxLength={72} required autoComplete="new-password" /></label></div>
+      <div className="corporate-account-passwords"><label><span>İlkin parol</span><Input name="password" type="password" minLength={16} maxLength={72} required autoComplete="new-password" /></label><label><span>Parolu təsdiqlə</span><Input name="confirmation" type="password" minLength={16} maxLength={72} required autoComplete="new-password" /></label></div>
       {error ? <p className="corporate-account-error">{error}</p> : null}
       <Button type="submit" disabled={pending || !roleOptions.length}><UserPlus /> {pending ? "Hesab yaradılır..." : "Giriş hesabı yarat"}</Button>
     </form>
@@ -687,7 +687,7 @@ function AccountLabel({ status }: { status: CorporateContactRow["accountStatus"]
 }
 
 function strongPassword(value: string) {
-  return value.length >= 10 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value);
+  return value.length >= 16 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value);
 }
 
 function emptyContact(key: string, isPrimary: boolean): ContactDraft {

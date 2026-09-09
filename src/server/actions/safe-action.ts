@@ -160,6 +160,6 @@ function redactLogMessage(message: string) {
   return message
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
     .replace(/https?:\/\/\S+/gi, "[url]")
-    .replace(/(?:bearer|token|secret|password|key)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+    .replace(/(bearer|token|secret|password|key)\s*[:=]\s*\S+/gi, "$1=[redacted]")
     .slice(0, 800);
 }

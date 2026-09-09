@@ -7,7 +7,7 @@ import {
   type OAuthTokenVerifier,
 } from "@modelcontextprotocol/server";
 import { createClient } from "@supabase/supabase-js";
-import { AppRole } from "@/generated/prisma/client";
+import { AppRole, Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv, requireEnv } from "@/server/env";
 import {
@@ -115,6 +115,21 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
     if (!founder) {
       throw invalidToken("This account is not an active ERP Founder account");
     }
+
+    const sessionId = stringClaim(claims, "session_id");
+    if (!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId) || claims.aal !== "aal2") {
+      throw invalidToken("Reconnect after completing two-factor authentication");
+    }
+    const [session] = await getPrisma().$queryRaw<Array<{ valid: boolean }>>(Prisma.sql`
+      select exists (
+        select 1 from auth.sessions s
+        where s.id = ${sessionId}::uuid and s.user_id = ${subject}::uuid
+          and (s.not_after is null or s.not_after > now())
+          and s.created_at > now() - interval '24 hours'
+          and not exists (select 1 from erp.auth_session_records r where r.id = s.id and r.revoked_at is not null)
+      ) as valid
+    `);
+    if (!session?.valid) throw invalidToken("ERP connector session has expired or was revoked");
 
     return {
       token,

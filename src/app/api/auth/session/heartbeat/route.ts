@@ -23,7 +23,7 @@ export async function POST() {
       sr.revoked_at as "revokedAt",
       sr.last_seen_at as "lastSeenAt",
       u.auth_user_id::text as "authUserId",
-      exists(select 1 from auth.sessions s where s.id = sr.id) as "authSessionExists"
+      exists(select 1 from auth.sessions s where s.id = sr.id and s.user_id = u.auth_user_id and (s.not_after is null or s.not_after > now()) and s.created_at > now() - interval '24 hours' and u.is_active) as "authSessionExists"
     from erp.auth_session_records sr
     join erp.users u on u.id = sr.user_id
     where sr.id = ${sessionId}::uuid

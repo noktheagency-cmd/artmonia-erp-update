@@ -1,4 +1,6 @@
 import { cache } from "react";
+import { redirect } from "next/navigation";
+import { needsMfa } from "@/server/auth/mfa-policy";
 import { cookies, headers } from "next/headers";
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { syncVerifiedAuthSession } from "@/modules/audit/session-registry";
@@ -22,7 +24,8 @@ export type CurrentErpUser = {
   permissions: EffectivePermissions;
 };
 
-export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> => {
+// Only the MFA setup/challenge page may use this password-authenticated identity.
+export const getErpSessionForMfa = cache(async (): Promise<(CurrentErpUser & { assuranceLevel: string; hasVerifiedFactor: boolean }) | null> => {
   if (!hasSupabasePublicEnv()) {
     return null;
   }
@@ -65,7 +68,9 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
         where auth_session.id = ${sessionId}::uuid
           and auth_session.user_id = u.auth_user_id
           and (auth_session.not_after is null or auth_session.not_after > now())
-      ) as "authSessionExists"
+          and auth_session.created_at > now() - interval '24 hours'
+      ) as "authSessionExists",
+      exists (select 1 from auth.mfa_factors f where f.user_id = u.auth_user_id and f.status = 'verified') as "hasVerifiedFactor"
     from erp.users u
     left join erp.hr_employees he on he.user_id = u.id
     left join erp.user_roles ur on ur.user_id = u.id
@@ -97,6 +102,8 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
   const roles = normalizeRoles(user.roles);
 
   return {
+    assuranceLevel: String(data.claims.aal ?? "aal1"),
+    hasVerifiedFactor: user.hasVerifiedFactor,
     id: user.id,
     authUserId: user.authUserId,
     currentSessionId: sessionId,
@@ -108,9 +115,16 @@ export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> 
   };
 });
 
+export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> => {
+  const user = await getErpSessionForMfa();
+  if (user && needsMfa(user.roles, user.hasVerifiedFactor, user.assuranceLevel)) redirect("/auth/mfa");
+  return user;
+});
+
 type CurrentErpUserRow = Omit<CurrentErpUser, "permissions" | "roles" | "currentSessionId"> & {
   roles: unknown;
   authSessionExists: boolean;
+  hasVerifiedFactor: boolean;
 };
 
 function normalizeRoles(value: unknown): AppRole[] {

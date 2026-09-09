@@ -16,6 +16,7 @@ export default function AuthSessionPage() {
     const hash = new URLSearchParams(window.location.hash.slice(1));
     const accessToken = hash.get("access_token");
     const refreshToken = hash.get("refresh_token");
+    if (accessToken || refreshToken) window.history.replaceState(null, "", window.location.pathname + window.location.search);
 
     const sessionPromise = accessToken && refreshToken
       ? supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
