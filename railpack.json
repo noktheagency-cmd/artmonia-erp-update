@@ -9,8 +9,9 @@
         { "src": "package.json", "dest": "package.json" },
         { "src": "prisma.config.ts", "dest": "prisma.config.ts" },
         { "src": "prisma", "dest": "prisma" },
-        "ls -l package-lock.json",
-        "npx --yes npm@10.9.4 ci --package-lock=true --loglevel=verbose"
+        { "src": "scripts/check-lockfile.mjs", "dest": "scripts/check-lockfile.mjs" },
+        "node scripts/check-lockfile.mjs",
+        "npx --yes npm@10.9.4 ci --package-lock=true"
       ]
     }
   }
