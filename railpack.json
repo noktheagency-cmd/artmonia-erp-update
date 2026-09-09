@@ -9,7 +9,8 @@
         { "src": "package.json", "dest": "package.json" },
         { "src": "prisma.config.ts", "dest": "prisma.config.ts" },
         { "src": "prisma", "dest": "prisma" },
-        "npm ci"
+        "node -e \"console.log({cwd:process.cwd(),lockfile:require('./package-lock.json').lockfileVersion})\"",
+        "npx --yes npm@10.9.4 ci"
       ]
     }
   }
