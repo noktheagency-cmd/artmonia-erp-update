@@ -19,7 +19,7 @@ export default function StudentsLoading() {
         </div>
       </section>
       <div className="students-kpi-grid">
-        {Array.from({ length: 7 }, (_, index) => (
+        {Array.from({ length: 8 }, (_, index) => (
           <Skeleton className="students-skeleton-kpi" key={index} />
         ))}
       </div>

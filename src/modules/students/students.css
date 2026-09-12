@@ -200,38 +200,39 @@
 .students-filter-selects { display: grid; grid-template-columns: repeat(4, minmax(145px, 1fr)); }
 .students-filter-selects .ui-select-trigger { width: 100%; min-height: 36px; border-radius: 10px; font-size: 11px; }
 
-.students-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.students-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 8px; }
 .students-kpi {
   --kpi-accent: var(--students-blue);
   position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 126px;
-  padding: 15px 14px 13px 16px;
+  min-height: 96px;
+  padding: 10px 12px;
+  background: var(--students-surface-strong);
+  box-shadow: none;
   overflow: hidden;
   color: var(--students-ink);
   text-align: left;
-  border-radius: 16px;
+  border-radius: 10px;
   transition: transform 190ms cubic-bezier(.16, 1, .3, 1), box-shadow 190ms ease, border-color 190ms ease;
 }
 
 button.students-kpi { cursor: pointer; }
-.students-kpi::before { position: absolute; inset: 0 auto 0 0; width: 3px; content: ""; background: var(--kpi-accent); }
-.students-kpi::after { position: absolute; top: -42px; right: -46px; width: 110px; height: 110px; content: ""; pointer-events: none; background: radial-gradient(circle, color-mix(in srgb, var(--kpi-accent) 15%, transparent), transparent 70%); }
-.students-kpi:hover { border-color: color-mix(in srgb, var(--kpi-accent) 30%, var(--students-line)); box-shadow: 0 16px 34px rgb(39 48 68 / 9%); transform: translateY(-2px); }
+.students-kpi::before { position: absolute; inset: 12px auto 12px 0; width: 2px; content: ""; background: var(--kpi-accent); border-radius: 2px; }
+.students-kpi:hover { border-color: color-mix(in srgb, var(--kpi-accent) 40%, var(--students-line)); background: var(--students-surface); }
 .students-kpi:focus-visible { outline: 3px solid rgb(70 103 232 / 20%); outline-offset: 3px; }
 .students-kpi-mint { --kpi-accent: var(--students-green); }
 .students-kpi-blue { --kpi-accent: var(--students-blue); }
 .students-kpi-coral { --kpi-accent: var(--students-coral); }
 .students-kpi-yellow { --kpi-accent: var(--students-amber); }
 
-.students-kpi-head { display: grid; grid-template-columns: minmax(0, 1fr) 32px; gap: 8px; align-items: center; color: var(--students-muted); font-size: 10.5px; font-weight: 600; }
-.students-kpi-head > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.students-kpi-icon { display: grid; place-items: center; width: 32px; height: 32px; color: var(--kpi-accent); background: color-mix(in srgb, var(--kpi-accent) 10%, var(--students-surface)); border-radius: 10px; }
+.students-kpi-head { display: grid; grid-template-columns: minmax(0, 1fr) 20px; gap: 6px; align-items: center; color: var(--students-muted); font-size: 11px; font-weight: 600; }
+.students-kpi-head > span:first-child { white-space: normal; }
+.students-kpi-icon { display: grid; place-items: center; width: 20px; height: 20px; color: var(--kpi-accent); }
 .students-kpi-icon svg { width: 16px; height: 16px; }
-.students-kpi > strong { margin-top: 13px; color: var(--students-ink); font-size: clamp(22px, 2vw, 28px); font-weight: 620; line-height: 1; letter-spacing: -0.035em; }
-.students-kpi-foot { display: flex; gap: 7px; align-items: flex-end; justify-content: space-between; min-width: 0; margin-top: auto; padding-top: 11px; color: var(--students-muted); font-size: 8.75px; line-height: 1.35; }
+.students-kpi > strong { margin-top: 5px; color: var(--students-ink); font-size: 24px; font-weight: 620; line-height: 1; letter-spacing: -0.035em; }
+.students-kpi-foot { display: flex; gap: 7px; align-items: flex-end; justify-content: space-between; min-width: 0; margin-top: auto; padding-top: 5px; color: var(--students-muted); font-size: 10px; line-height: 1.35; }
 .students-kpi-foot > span { min-width: 0; white-space: normal; }
 .students-kpi-foot small { flex: 0 0 auto; color: var(--students-subtle); font-size: 8.5px; }
 .students-kpi-foot svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--kpi-accent); transition: transform 180ms ease; }
@@ -396,7 +397,7 @@ button.students-kpi { cursor: pointer; }
 .students-skeleton-action { width: 126px; height: 42px; }
 .students-loading-filters { display: grid; grid-template-columns: minmax(260px, 1fr) 150px 150px 210px; gap: 10px; padding: 14px 18px 16px; }
 .students-loading-filters .ui-skeleton { height: 42px; }
-.students-skeleton-kpi { min-height: 126px; border-radius: 16px; }
+.students-skeleton-kpi { min-height: 96px; border-radius: 10px; }
 .students-skeleton-tabs { width: 270px; height: 42px; }
 .students-skeleton-chart { grid-column: span 4; min-height: 248px; border-radius: 18px; }
 .students-skeleton-table { min-height: 330px; border-radius: 18px; }
@@ -588,10 +589,7 @@ button.students-kpi { cursor: pointer; }
 .student-detail-modern-page .student-clv-history { border-color: #d7e0ea; border-radius: 12px; }
 
 @media (max-width: 1380px) {
-  .students-kpi-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-  .students-kpi { grid-column: span 3; }
-  .students-skeleton-kpi { grid-column: span 3; }
-  .students-kpi { min-height: 122px; }
+  .students-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (max-width: 920px) {
@@ -654,8 +652,7 @@ button.students-kpi { cursor: pointer; }
   .students-filter-primary { grid-template-columns: 1fr; }
   .students-filter-primary .students-filter-select-field { min-width: 0; }
   .students-search-field { grid-column: auto; }
-  .students-kpi-grid { grid-template-columns: 1fr; }
-  .students-kpi { min-height: 112px; }
+  .students-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .students-finance-content,
   .students-teacher-content { grid-template-columns: 1fr; justify-items: center; }
   .students-analytics-list { width: 100%; }
@@ -1246,3 +1243,9 @@ button.students-kpi { cursor: pointer; }
   .students-filter-dialog .students-filter-dialog-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
 }
 .erp-frame[data-section="students"] .global-search { flex: 1 1 240px; width: auto; }
+
+/* Keep compact metrics calm under the application light theme. */
+html:not(.dark) .students-command-page .students-kpi {
+  background: var(--students-surface-strong) !important;
+  box-shadow: none !important;
+}
