@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { type FormEvent, type ReactNode, useDeferredValue, useMemo, useState, useTransition } from "react";
+import { type FormEvent, type ReactNode, useDeferredValue, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "@/components/ui/cx";
 import {
@@ -70,6 +70,8 @@ export function AboutWorkspace({
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(initialData.categories[0]?.articles[0]?.id ?? null);
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(initialData.categories[0]?.id ?? null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const contentRef = useRef<HTMLElement>(null);
   const [categoryDialog, setCategoryDialog] = useState<CategoryDialog | null>(null);
   const [articleDialog, setArticleDialog] = useState<ArticleDialog | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -95,6 +97,8 @@ export function AboutWorkspace({
     setSelectedArticleId(article.id);
     setExpandedCategoryId(category.id);
     setSearchQuery("");
+    setLibraryOpen(false);
+    contentRef.current?.focus({ preventScroll: true });
   }
 
   function applyMutation(
@@ -222,11 +226,19 @@ export function AboutWorkspace({
       {data.categories.length ? (
         <div className="knowledge-layout">
           <aside className="knowledge-library" aria-label="Qaydalar kateqoriyaları">
-            <div className="knowledge-library-heading">
-              <span>Kateqoriyalar</span>
-              <small>{data.categories.length}</small>
-            </div>
-            <div className="knowledge-category-list">
+            <button
+              type="button"
+              className="knowledge-library-heading"
+              aria-expanded={libraryOpen}
+              aria-controls="knowledge-categories"
+              onClick={() => setLibraryOpen((open) => !open)}
+            >
+              <FolderOpen size={17} aria-hidden="true" />
+              <span>Kateqoriyalar <small>{data.categories.length}</small></span>
+              <strong>{selectedCategory?.name}</strong>
+              <ChevronDown size={16} className={cx(libraryOpen && "is-open")} aria-hidden="true" />
+            </button>
+            <div id="knowledge-categories" className="knowledge-category-list" hidden={!libraryOpen}>
               {data.categories.map((category, categoryIndex) => {
                 const expanded = expandedCategoryId === category.id;
                 const active = selectedCategory?.id === category.id;
@@ -262,6 +274,7 @@ export function AboutWorkspace({
                             type="button"
                             key={article.id}
                             className={cx(selectedArticle?.id === article.id && "is-active")}
+                            aria-current={selectedArticle?.id === article.id ? "page" : undefined}
                             onClick={() => selectArticle(category, article)}
                           >
                             <BookOpenText size={14} />
@@ -284,7 +297,7 @@ export function AboutWorkspace({
             </div>
           </aside>
 
-          <main className="knowledge-content">
+          <main className="knowledge-content" ref={contentRef} tabIndex={-1} aria-label="Məqalə məzmunu">
             {selectedArticle && selectedCategory ? (
               <>
                 <nav className="knowledge-breadcrumb" aria-label="Breadcrumb">

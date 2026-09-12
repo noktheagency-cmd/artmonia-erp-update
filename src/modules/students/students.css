@@ -200,7 +200,26 @@
 .students-filter-selects { display: grid; grid-template-columns: repeat(4, minmax(145px, 1fr)); }
 .students-filter-selects .ui-select-trigger { width: 100%; min-height: 36px; border-radius: 10px; font-size: 11px; }
 
-.students-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 8px; }
+.students-kpi-grid {
+  container: student-metrics / inline-size;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.students-kpi-grid > :is(.students-kpi, .students-skeleton-kpi) { grid-column: span 8; }
+
+@container student-metrics (min-width: 340px) {
+  .students-kpi-grid > :is(.students-kpi, .students-skeleton-kpi) { grid-column: span 4; }
+}
+
+@container student-metrics (min-width: 700px) {
+  .students-kpi-grid > :is(.students-kpi, .students-skeleton-kpi) { grid-column: span 2; }
+}
+
+@container student-metrics (min-width: 1400px) {
+  .students-kpi-grid > :is(.students-kpi, .students-skeleton-kpi) { grid-column: span 1; }
+}
 .students-kpi {
   --kpi-accent: var(--students-blue);
   position: relative;
@@ -588,10 +607,6 @@ button.students-kpi { cursor: pointer; }
 .student-detail-modern-page .student-mini-table,
 .student-detail-modern-page .student-clv-history { border-color: #d7e0ea; border-radius: 12px; }
 
-@media (max-width: 1380px) {
-  .students-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-
 @media (max-width: 920px) {
   .students-tabs {
     max-width: 100%;
@@ -622,11 +637,6 @@ button.students-kpi { cursor: pointer; }
   .students-filter-form { padding: 12px; }
   .students-filter-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .students-search-field { grid-column: 1 / -1; }
-  .students-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .students-kpi,
-  .students-kpi:nth-child(n + 5) { grid-column: auto; }
-  .students-skeleton-kpi,
-  .students-skeleton-kpi:nth-child(n + 5) { grid-column: auto; }
   .students-analytics-card,
   .students-analytics-card:last-child { grid-column: 1 / -1; }
   .students-skeleton-chart,
@@ -652,7 +662,6 @@ button.students-kpi { cursor: pointer; }
   .students-filter-primary { grid-template-columns: 1fr; }
   .students-filter-primary .students-filter-select-field { min-width: 0; }
   .students-search-field { grid-column: auto; }
-  .students-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .students-finance-content,
   .students-teacher-content { grid-template-columns: 1fr; justify-items: center; }
   .students-analytics-list { width: 100%; }
