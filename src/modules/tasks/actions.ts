@@ -21,6 +21,7 @@ import {
 } from "@/modules/tasks/task-permissions";
 import { taskStatusUpdateSchema } from "@/modules/tasks/task-status-update";
 import { taskEditSchema } from "@/modules/tasks/task-edit";
+import { createTaskStatusNotifications } from "@/modules/notifications/task-status-notifications";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2, "Task adı çox qısadır").max(160),
@@ -123,10 +124,12 @@ async function updateTaskStatusActionImpl(formData: FormData) {
   const prisma = getPrisma();
   const canManageAnyTask = await canAdministerTasks(actor);
 
-  await prisma.$transaction(async (tx) => {
+  const recipientUserIds = await prisma.$transaction(async (tx) => {
+    // Serialize changes so retries and concurrent updates use the actual prior status.
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM erp.tasks WHERE id = ${input.taskId}::uuid FOR UPDATE`);
     const current = await tx.task.findFirst({
       where: { id: input.taskId, ...buildTaskWorkspaceWhere() },
-      select: { id: true, ownerUserId: true, status: true },
+      select: { id: true, title: true, createdById: true, ownerUserId: true, status: true },
     });
 
     if (!current) {
@@ -162,8 +165,19 @@ async function updateTaskStatusActionImpl(formData: FormData) {
       },
       reason: updated.status === TaskStatus.DONE ? "Task tamamlandı" : "Task statusu yeniləndi",
     });
+    return createTaskStatusNotifications(tx, {
+      taskId: current.id,
+      taskTitle: current.title,
+      createdById: current.createdById,
+      previousStatus: current.status,
+      status: updated.status,
+      actorId: actor.id,
+      actorName: actor.fullName,
+    });
   });
 
+  await Promise.all(recipientUserIds.map(broadcastNotificationChange));
+  revalidatePath("/profile");
   revalidatePath("/tasks");
   revalidatePath("/dashboard");
 }

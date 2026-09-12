@@ -12,16 +12,16 @@ test("standalone ERP profili HR əməkdaşı yaratmadan saxlanılır", async () 
     user: {
       async create(args: {
         data: Prisma.UserUncheckedCreateInput;
-        select: { id: true; email: true };
+        select: { id: true; email: true; fullName: true };
       }) {
         calls.push("user.create");
         assert.deepEqual(args.data, {
           authUserId: "33333333-3333-4333-8333-333333333333",
-          fullName: "investor@example.com",
+          fullName: "Süleyman",
           email: "investor@example.com",
           isActive: true,
         });
-        return { id: userId, email: String(args.data.email) };
+        return { id: userId, email: String(args.data.email), fullName: String(args.data.fullName) };
       },
     },
     userRole: {
@@ -46,11 +46,12 @@ test("standalone ERP profili HR əməkdaşı yaratmadan saxlanılır", async () 
   const result = await persistStandaloneUser(db, {
     authUserId: "33333333-3333-4333-8333-333333333333",
     email: "investor@example.com",
+    fullName: "Süleyman",
     role: { id: roleId, name: "Investor" },
     actorUserId: "44444444-4444-4444-8444-444444444444",
   });
 
-  assert.deepEqual(result, { id: userId, email: "investor@example.com" });
+  assert.deepEqual(result, { id: userId, email: "investor@example.com", fullName: "Süleyman" });
   assert.deepEqual(calls, ["user.create", "userRole.create", "auditLog.create"]);
   assert.equal("hrEmployee" in db, false);
 });

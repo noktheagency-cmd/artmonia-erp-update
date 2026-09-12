@@ -1,19 +1,44 @@
 # Artmonia ERP
 
-Artmonia ERP is planned as a fast, role-based education ERP for CRM, student operations, billing, debt control, teacher payroll, dashboards, automation, audit, and Excel migration.
+Artmonia ERP is a role-based education ERP built with Next.js, React, and TypeScript. The repository contains application modules for CRM, student operations, attendance, billing and debt control, HR, dashboards, marketing, audit, and integrations.
 
-Current stage: technical foundation and implementation blueprint. UI/UX will be added in the next stage after the visual direction is provided.
+The application includes UI, server-side domain logic, database migrations, and regression tests. The numbered blueprint documents describe the original plan and may contain historical stage or infrastructure assumptions; they are not a statement of feature completeness or production readiness.
+
+Agent contributors should start with [AGENTS.md](AGENTS.md) for repository boundaries, business rules, security requirements, and verification commands.
 
 ## Core Stack
 
 - App: Next.js App Router, React, TypeScript
-- Hosting: Vercel
+- Deployment configuration: Railway with Railpack (`railway.json`, `railpack.json`); earlier blueprints reference Vercel
 - Backend model: full-stack modular monolith through Next.js Server Components, Server Actions, Route Handlers, and domain services
 - Database: Supabase Postgres
 - Auth: Supabase Auth mapped to internal ERP users and roles
 - ORM: Prisma for transactional domain writes, SQL views for dashboard/reporting reads
-- Storage: Supabase Storage for receipts, exports, and student files
-- Jobs: Vercel Cron for MVP scheduled work; Supabase/Postgres cron or a worker can be added when load requires it
+- Storage: server-side storage adapters, including Supabase and Cloudflare R2; inspect `src/server/storage/` for each file category
+- Integrations: mobile APIs, Meta/Instagram, and MCP; see the feature-specific contracts in `docs/`
+
+## Local Development
+
+Use Node.js `>=22 <25` and npm. CI uses Node 22 and npm 10.9.4.
+
+1. Copy `.env.example` to `.env.local` if a local environment file does not already exist. Fill in the settings for the features you need; keep credentials out of version control.
+2. Run `npm ci` to install locked dependencies and generate the Prisma client.
+3. Run `npm run dev` to start the application, normally at `http://localhost:3000`.
+
+Database-backed flows require a configured database and authentication environment. Installation does not apply migrations or seed data. Inspect `prisma.config.ts` and the migration history before using database commands against an identified development target.
+
+## Verification
+
+```sh
+npm run lint
+npx next typegen
+npm run typecheck
+npm test
+```
+
+Use `npm run build` to verify the production build. After schema changes, run `npm run prisma:validate` and `npm run prisma:generate`. Dependency changes also require `node scripts/check-lockfile.mjs`; CI includes `npm audit --audit-level=high`.
+
+Tests are colocated under `src/` as `*.test.ts` and run with Node's test runner through `tsx`. Operational scripts named `verify-*` are separate from the test suite and must be inspected for database access or writes before use.
 
 ## Foundation Files
 
@@ -40,6 +65,15 @@ Current stage: technical foundation and implementation blueprint. UI/UX will be 
 4. Keep finance correct. Student lifecycle status and payment state stay separate. Debt is calculated from invoice balances, not status text.
 5. Keep every risky mutation auditable. Before/after JSON, actor, entity, timestamp, and reason are required for critical changes.
 
-## Next Stage
+## Repository Structure
 
-After UI/UX direction is provided, the next implementation stage should scaffold the Next.js app, install dependencies, wire Supabase clients, add Prisma schema/migrations, and create seed/demo data for the P0 flows.
+- `src/app/`: routes, layouts, and HTTP endpoints
+- `src/modules/`: domain UI, queries, actions, services, and tests
+- `src/components/`: reusable UI components
+- `src/server/`: authentication, RBAC, database, storage, and integration infrastructure
+- `src/lib/`: shared helpers
+- `prisma/` and `supabase/migrations/`: data model and migration history
+- `scripts/`: test runner and operational tools
+- `docs/`: architecture plans and integration contracts
+
+See [AGENTS.md](AGENTS.md) for detailed ownership and contribution rules.

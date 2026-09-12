@@ -82,6 +82,7 @@ export function RolePermissionsWorkspace({
   const [newRoleDraft, setNewRoleDraft] = useState<PermissionDraft>({});
   const [createQuery, setCreateQuery] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
+  const [accountFullName, setAccountFullName] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
   const [showAccountPassword, setShowAccountPassword] = useState(false);
   const [accountRoleId, setAccountRoleId] = useState("");
@@ -203,6 +204,7 @@ export function RolePermissionsWorkspace({
   }
 
   function openAccountDialog() {
+    setAccountFullName("");
     setAccountEmail("");
     setAccountPassword("");
     setShowAccountPassword(false);
@@ -214,6 +216,7 @@ export function RolePermissionsWorkspace({
   }
 
   function resetAccountForm() {
+    setAccountFullName("");
     setAccountEmail("");
     setAccountPassword("");
     setShowAccountPassword(false);
@@ -222,6 +225,7 @@ export function RolePermissionsWorkspace({
 
   function createAccount() {
     const data = new FormData();
+    data.set("fullName", accountFullName);
     data.set("email", accountEmail);
     data.set("password", accountPassword);
     data.set("roleId", accountRoleId);
@@ -658,6 +662,20 @@ export function RolePermissionsWorkspace({
           </DialogHeader>
           <FieldGroup className={styles.accountForm}>
             <Field>
+              <FieldLabel htmlFor="account-full-name">Ad və soyad</FieldLabel>
+              <Input
+                id="account-full-name"
+                value={accountFullName}
+                onChange={(event) => setAccountFullName(event.target.value)}
+                placeholder="Ad və soyad"
+                minLength={2}
+                maxLength={120}
+                autoComplete="name"
+                autoFocus
+                required
+              />
+            </Field>
+            <Field>
               <FieldLabel htmlFor="account-email">E-poçt</FieldLabel>
               <Input
                 id="account-email"
@@ -666,7 +684,6 @@ export function RolePermissionsWorkspace({
                 onChange={(event) => setAccountEmail(event.target.value)}
                 placeholder="investor@example.com"
                 autoComplete="off"
-                autoFocus
                 required
               />
             </Field>
@@ -713,7 +730,7 @@ export function RolePermissionsWorkspace({
             <Button variant="outline" onClick={() => setAccountOpen(false)}>Ləğv et</Button>
             <Button
               className={styles.primaryAction}
-              disabled={!accountEmail.trim() || accountPassword.length < 16 || !accountRoleId || isPending}
+              disabled={accountFullName.trim().length < 2 || !accountEmail.trim() || accountPassword.length < 16 || !accountRoleId || isPending}
               onClick={createAccount}
             >
               <UserRoundPlus /> {isPending ? "Yaradılır..." : "Profili yarat"}

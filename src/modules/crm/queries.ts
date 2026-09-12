@@ -106,6 +106,7 @@ export type CrmData = {
     tone: "success" | "warning" | "danger" | "neutral" | "info";
   }>;
   attentionFocus: CrmLeadFocusRow[];
+  createdTodayFocus: CrmLeadFocusRow[];
   dashboardStats: {
     salesCount: string;
     conversionRate: string;
@@ -194,6 +195,7 @@ type CrmLeadFocusRow = {
   nextFollowUpAt: string;
   manager: string;
   category: "general" | "workshop_masterclass";
+  createdAt?: string;
 };
 
 type CrmPeriodRange = { gte?: Date; lt?: Date } | null;
@@ -230,6 +232,7 @@ type CrmRawRow = {
   sourceStats: unknown;
   programStats: unknown;
   attentionLeads: unknown;
+  createdTodayLeads: unknown;
   leads: unknown;
   programs: unknown;
   managers: unknown;
@@ -242,7 +245,8 @@ type CrmAttentionRawRow = {
   source: string | null;
   priority: string | null;
   nextActionType: string | null;
-  nextFollowUpAt: string;
+  nextFollowUpAt: string | null;
+  createdAt?: string;
   fullName: string;
   phone: string | null;
   managerName: string | null;
@@ -452,6 +456,18 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       tone: leadStageTones[stage],
     })),
     attentionFocus: attentionRows.map((lead) => formatAttentionRow(lead, todayStart)),
+    createdTodayFocus: asJsonArray<CrmAttentionRawRow>(row?.createdTodayLeads).map(
+      (lead) => ({
+        ...formatAttentionRow(lead, todayStart),
+        createdAt: lead.createdAt ? new Intl.DateTimeFormat("az-AZ", {
+          timeZone: "Asia/Baku",
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(lead.createdAt)) : "-",
+      })
+    ),
     dashboardStats: {
       salesCount: formatCount(salesCount),
       conversionRate: formatPercent(salesCount, totalLeads),
@@ -828,6 +844,27 @@ function getCrmRawData(
           order by l.next_follow_up_at asc, c.full_name asc
         ) attention_rows
       ), '[]'::jsonb) as "attentionLeads",
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', l.id::text,
+            'source', l.source,
+            'priority', l.priority::text,
+            'nextActionType', l.next_action_type::text,
+            'nextFollowUpAt', l.next_follow_up_at,
+            'createdAt', l.created_at,
+            'fullName', c.full_name,
+            'phone', c.phone_display,
+            'managerName', m.full_name
+          ) order by l.created_at desc, l.id
+        )
+        from erp.leads l
+        join erp.contacts c on c.id = l.contact_id
+        left join erp.users m on m.id = l.manager_id
+        where ${scopeSql}
+          and l.created_at >= ${new Date(input.todayStart.getTime() - 4 * 60 * 60 * 1000)}
+          and l.created_at < ${new Date(input.tomorrowStart.getTime() - 4 * 60 * 60 * 1000)}
+      ), '[]'::jsonb) as "createdTodayLeads",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -1297,11 +1334,11 @@ function formatAttentionRow(
     id: lead.id,
     name: lead.fullName,
     phone: lead.phone ?? "-",
-    bucket: new Date(lead.nextFollowUpAt) < todayStart ? "overdue" : "today",
+    bucket: lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < todayStart ? "overdue" : "today",
     priorityLabel: formatLeadPriorityLabel(priority),
     priorityTone: leadPriorityTones[priority],
     nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),
-    nextFollowUpAt: formatShortDate(lead.nextFollowUpAt),
+    nextFollowUpAt: lead.nextFollowUpAt ? formatShortDate(lead.nextFollowUpAt) : "Planlanmayıb",
     manager: lead.managerName ?? "Təyin edilməyib",
     category:
       source.includes("workshop") ||

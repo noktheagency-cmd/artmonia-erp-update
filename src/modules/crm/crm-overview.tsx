@@ -224,6 +224,17 @@ export function CrmOverview({
         </div>
       </article>
 
+      <article className="crm-panel crm-attention-panel crm-enter" style={{ animationDelay: "170ms" }}>
+        <AttentionGroup
+          title="Bu gün daxil olan müraciətlər"
+          description="Bakı vaxtı ilə cari gündə follow-up-a əlavə edilən müraciətlər"
+          tone="today"
+          items={data.createdTodayFocus}
+          onLeadSelect={onLeadSelect}
+          createdToday
+        />
+      </article>
+
       <article className="crm-panel crm-attention-panel crm-enter" style={{ animationDelay: "190ms" }}>
         <PanelHeading
           icon={AlertTriangle}
@@ -347,12 +358,14 @@ function AttentionGroup({
   tone,
   items,
   onLeadSelect,
+  createdToday = false,
 }: {
   title: string;
   description: string;
   tone: "today" | "overdue";
   items: CrmData["attentionFocus"];
   onLeadSelect: (leadName: string) => void;
+  createdToday?: boolean;
 }) {
   const Icon = tone === "today" ? CalendarCheck2 : AlertTriangle;
 
@@ -374,7 +387,9 @@ function AttentionGroup({
               className="crm-attention-row"
               onClick={() => onLeadSelect(item.name)}
               key={item.id}
-              aria-label={`${item.name} ilə əlaqə saxlanılmalıdır. ${item.nextActionTypeLabel}, ${item.nextFollowUpAt}`}
+              aria-label={createdToday
+                ? `${item.name}. Bu gün daxil olub. Müraciəti aç`
+                : `${item.name} ilə əlaqə saxlanılmalıdır. ${item.nextActionTypeLabel}, ${item.nextFollowUpAt}`}
             >
               <span className="crm-person-avatar" aria-hidden="true">
                 {item.name.slice(0, 2).toUpperCase()}
@@ -391,7 +406,7 @@ function AttentionGroup({
                 </span>
                 <small>
                   <Clock3 aria-hidden="true" />
-                  {item.nextFollowUpAt}
+                  {createdToday ? `Daxil olub: ${item.createdAt}` : item.nextFollowUpAt}
                 </small>
               </span>
               <ArrowUpRight className="crm-attention-open-icon" aria-hidden="true" />
@@ -400,7 +415,7 @@ function AttentionGroup({
         ) : (
           <div className="crm-attention-empty">
             <CheckCircle2 aria-hidden="true" />
-            <span>{tone === "today" ? "Bu gün üçün iş yoxdur" : "Gecikən müraciət yoxdur"}</span>
+            <span>{createdToday ? "Bu gün daxil olan müraciət yoxdur" : tone === "today" ? "Bu gün üçün iş yoxdur" : "Gecikən müraciət yoxdur"}</span>
           </div>
         )}
       </div>

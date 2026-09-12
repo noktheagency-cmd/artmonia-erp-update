@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderActionsContext } from "@/components/layout/header-actions-context";
 import Image from "next/image";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -106,6 +107,7 @@ export function AppShell({
   sessionGuardEnabled: boolean;
 }) {
   const pathname = usePathname();
+  const [headerActionsTarget, setHeaderActionsTarget] = useState<HTMLDivElement | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -637,6 +639,7 @@ export function AppShell({
             onNavigate={markNavigation}
           />
           <ErpCalendar onNavigate={markNavigation} />
+          {pathname === "/students" ? <div className="students-header-slot" ref={setHeaderActionsTarget} /> : null}
         </div>
 
         <div
@@ -645,7 +648,7 @@ export function AppShell({
           onMouseOverCapture={handleContentLinkIntent}
           onFocusCapture={handleContentLinkIntent}
         >
-          {children}
+          <HeaderActionsContext.Provider value={headerActionsTarget}>{children}</HeaderActionsContext.Provider>
         </div>
         <div className="route-pending-overlay" data-visible={isNavigating} aria-hidden={!isNavigating}>
           <span />

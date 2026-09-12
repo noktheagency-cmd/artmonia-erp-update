@@ -5,8 +5,8 @@ type StandaloneUserDb = {
   user: {
     create(args: {
       data: Prisma.UserUncheckedCreateInput;
-      select: { id: true; email: true };
-    }): Promise<{ id: string; email: string }>;
+      select: { id: true; email: true; fullName: true };
+    }): Promise<{ id: string; email: string; fullName: string }>;
   };
   userRole: {
     create(args: {
@@ -23,6 +23,7 @@ type StandaloneUserDb = {
 type StandaloneUserInput = {
   authUserId: string;
   email: string;
+  fullName: string;
   role: { id: string; name: string };
   actorUserId: string;
 };
@@ -38,11 +39,11 @@ export async function persistStandaloneUser(
   const created = await db.user.create({
     data: {
       authUserId: input.authUserId,
-      fullName: input.email,
+      fullName: input.fullName,
       email: input.email,
       isActive: true,
     },
-    select: { id: true, email: true },
+    select: { id: true, email: true, fullName: true },
   });
 
   await db.userRole.create({
@@ -54,6 +55,7 @@ export async function persistStandaloneUser(
     entityType: "user",
     entityId: created.id,
     after: {
+      fullName: input.fullName,
       email: input.email,
       role: input.role,
       loginCreated: true,

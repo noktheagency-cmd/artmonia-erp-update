@@ -17,6 +17,7 @@ import { getSupabaseAdminClient } from "@/server/supabase/admin";
 type SubmittedGrant = { code?: unknown; scope?: unknown };
 
 const standaloneUserSchema = z.object({
+  fullName: z.string().trim().min(2, "Ad ən az 2 simvol olmalıdır").max(120, "Ad maksimum 120 simvol ola bilər"),
   email: z.string().trim().toLowerCase().email("Düzgün e-poçt ünvanı daxil edin"),
   password: z.string().min(16, "Parol ən az 16 simvol olmalıdır").max(72, "Parol maksimum 72 simvol ola bilər"),
   roleId: z.string().uuid("Etibarlı rol seçin"),
@@ -46,7 +47,7 @@ async function createStandaloneUserActionImpl(formData: FormData) {
     email: input.email,
     password: input.password,
     email_confirm: true,
-    user_metadata: { full_name: input.email },
+    user_metadata: { full_name: input.fullName },
   });
   if (error || !data.user) {
     throw new PublicActionError(
@@ -60,6 +61,7 @@ async function createStandaloneUserActionImpl(formData: FormData) {
       return persistStandaloneUser(tx, {
         authUserId: data.user.id,
         email: input.email,
+        fullName: input.fullName,
         role: { id: role.id, name: role.name },
         actorUserId: actor.id,
       });
@@ -71,7 +73,7 @@ async function createStandaloneUserActionImpl(formData: FormData) {
       id: user.id,
       employeeId: null,
       kind: "PROFILE",
-      fullName: user.email,
+      fullName: user.fullName,
       email: user.email,
       department: "HR xaricində",
       position: "Giriş profili",
@@ -448,7 +450,6 @@ export async function updateRoleUserAction(formData: FormData) {
             where: { id: user.id },
             data: {
               email: parsedInput.data.email,
-              fullName: user.hrEmployeeProfile ? user.fullName : parsedInput.data.email,
             },
           });
         }
@@ -491,7 +492,7 @@ export async function updateRoleUserAction(formData: FormData) {
       id: user.id,
       employeeId: user.hrEmployeeProfile?.id ?? null,
       kind: user.hrEmployeeProfile ? "EMPLOYEE" : "PROFILE",
-      fullName: user.hrEmployeeProfile ? user.fullName : parsedInput.data.email,
+      fullName: user.fullName,
       email: parsedInput.data.email,
       department: user.hrEmployeeProfile?.department ?? "HR xaricində",
       position: user.hrEmployeeProfile?.position ?? "Giriş profili",

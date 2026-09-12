@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useContext, useEffect, useTransition, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { HeaderActionsContext } from "@/components/layout/header-actions-context";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -65,6 +67,7 @@ const metricIcons: readonly LucideIcon[] = [
 ];
 
 export function StudentList({ data }: { data: StudentListData }) {
+  const headerActionsTarget = useContext(HeaderActionsContext);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -143,12 +146,10 @@ export function StudentList({ data }: { data: StudentListData }) {
     <section className="students-command-page" aria-labelledby="students-page-title">
       <div className="route-progress" aria-hidden={!isPending} data-visible={isPending} />
 
-      <section className="students-command-shell">
-        <header className="students-page-header">
-          <div>
-            <h1 id="students-page-title">Tələbələr və Balans</h1>
-          </div>
-          <div className="students-page-actions">
+      <h1 id="students-page-title" className="sr-only">Tələbələr və Balans</h1>
+      {headerActionsTarget ? createPortal(
+          <div className="students-toolbar-actions">
+            <StudentFilterForm filterOptions={data.filterOptions} filters={data.filters} />
             {data.permissions.canExport ? (
               <ExportDialog
                 module="students"
@@ -171,23 +172,9 @@ export function StudentList({ data }: { data: StudentListData }) {
               returnTo={data.returnTo}
               createStudentAction={createStudentAction}
             />
-          </div>
-        </header>
-
-        <StudentFilterForm
-          key={[
-            data.query,
-            data.filters.status,
-            data.filters.program,
-            data.filters.teacher,
-            data.filters.payment,
-            data.filters.dateFrom,
-            data.filters.dateTo,
-          ].join(":")}
-          filterOptions={data.filterOptions}
-          filters={data.filters}
-        />
-      </section>
+          </div>,
+          headerActionsTarget,
+        ) : null}
 
       <section className="students-kpi-grid" aria-label="Tələbə statistika kartları">
         {data.statusSummary.map((item, index) => {
