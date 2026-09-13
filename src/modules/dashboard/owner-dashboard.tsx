@@ -54,7 +54,7 @@ export function OwnerDashboard({
     <section className="owner-dashboard" aria-labelledby="owner-dashboard-title">
       <header className="owner-dashboard-header">
         <div className="owner-dashboard-greeting">
-          <h1 id="owner-dashboard-title">Salam, {firstName(actorName)}</h1>
+          <h1 id="owner-dashboard-title"><span>Salam,</span> {firstName(actorName)}</h1>
         </div>
         {companyKpiData?.permissions.canRead ? (
           <CompanyKpiProgressPanel data={companyKpiData} />

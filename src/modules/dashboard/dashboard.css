@@ -41,8 +41,8 @@
 
 .owner-dashboard-header {
   display: flex;
-  gap: 24px;
-  align-items: flex-start;
+  gap: 16px;
+  align-items: center;
   justify-content: space-between;
   min-width: 0;
   padding: 1px 2px 4px;
@@ -53,16 +53,18 @@
 }
 
 .owner-dashboard-greeting {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
-.owner-dashboard-header h1 {
+.owner-dashboard-header .owner-dashboard-greeting h1 {
   margin: 0;
   color: var(--dashboard-ink);
-  font-size: clamp(30px, 3vw, 40px);
+  font-size: 18px;
   font-weight: 650;
-  line-height: 1.1;
-  letter-spacing: -0.035em;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
 }
 
 .owner-dashboard-header p {
@@ -1134,3 +1136,5 @@
   .owner-dashboard-header .dashboard-date-trigger.is-open { transform: none; }
 
 }
+
+.owner-dashboard-greeting h1 > span { color: var(--dashboard-muted); font-weight: 450; }
