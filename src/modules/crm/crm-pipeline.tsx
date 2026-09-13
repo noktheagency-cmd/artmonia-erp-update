@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useContext, useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
+import { HeaderActionsContext } from "@/components/layout/header-actions-context";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -55,6 +58,8 @@ const metricIcons = [TrendingUp, UserRoundPlus, Clock3, CheckCircle2];
 type CrmTab = "overview" | "list";
 
 export function CrmPipeline({ data }: { data: CrmData }) {
+  const headerActionsTarget = useContext(HeaderActionsContext);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -166,12 +171,24 @@ export function CrmPipeline({ data }: { data: CrmData }) {
         </div>
       ) : null}
 
-      <header className="crm-command-header crm-enter">
-        <div>
-          <h1 id="crm-page-title">Müraciətlər və İzləmə</h1>
-          <p>Yeni müraciətlər, sınaq namizədləri və izləmələrin qeydiyyata çevrilmə prosesi.</p>
-        </div>
+      <h1 id="crm-page-title" className="sr-only">Müraciətlər və İzləmə</h1>
+      {headerActionsTarget ? createPortal(
         <div className="crm-header-actions">
+          <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <DialogTrigger asChild>
+              <Button type="button" variant="outline"><Filter /> Filtrlər{data.filters.activeCount > 0 ? ` (${data.filters.activeCount})` : ""}</Button>
+            </DialogTrigger>
+            <DialogContent className="crm-filter-dialog" aria-describedby={undefined}>
+              <DialogHeader><DialogTitle>Follow-up filtrləri</DialogTitle></DialogHeader>
+              <CrmFilterPanel
+                key={searchParams.toString()}
+                data={data}
+                isPending={isPending}
+                onSubmit={(event) => { handleFilterSubmit(event); setFiltersOpen(false); }}
+                onClear={() => { handleClearFilters(); setFiltersOpen(false); }}
+              />
+            </DialogContent>
+          </Dialog>
           {data.access.canExport ? (
             <ExportDialog
               module="crm"
@@ -188,16 +205,9 @@ export function CrmPipeline({ data }: { data: CrmData }) {
               currentManagerName={data.access.actorName}
             />
           ) : null}
-        </div>
-      </header>
-
-      <CrmFilterPanel
-        key={`${data.filters.dateFrom}-${data.filters.dateTo}-${data.filters.period}`}
-        data={data}
-        isPending={isPending}
-        onSubmit={handleFilterSubmit}
-        onClear={handleClearFilters}
-      />
+        </div>,
+        headerActionsTarget,
+      ) : null}
 
       <section className="crm-metrics-grid" aria-label="CRM əsas göstəriciləri">
         {data.metrics.map((metric, index) => {
@@ -305,15 +315,6 @@ function CrmFilterPanel({
         <input type="hidden" name="period" value={data.filters.period} />
       ) : null}
 
-      <div className="crm-filter-primary">
-        <Button className="crm-filter-icon-action is-apply" type="submit" size="icon" disabled={isPending} aria-label="Filtrləri göstər" title="Göstər">
-          <Filter />
-        </Button>
-        <Button className="crm-filter-icon-action is-clear" type="button" variant="ghost" size="icon" onClick={onClear} aria-label="Filtrləri təmizlə" title="Təmizlə">
-          <X />
-        </Button>
-      </div>
-
       <div className="crm-filter-secondary">
         <div className="crm-filter-selects">
           <FormSelect
@@ -369,6 +370,10 @@ function CrmFilterPanel({
           />
         </div>
       </div>
+      <DialogFooter>
+        <Button type="button" variant="ghost" disabled={isPending} onClick={onClear}><X /> Sıfırla</Button>
+        <Button type="submit" disabled={isPending}>{isPending ? "Tətbiq edilir…" : "Tətbiq et"}</Button>
+      </DialogFooter>
     </form>
   );
 }

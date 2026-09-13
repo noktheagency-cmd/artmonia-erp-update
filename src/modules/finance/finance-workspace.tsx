@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
+import { useContext, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
@@ -45,6 +45,7 @@ import {
 } from "recharts";
 import type { PieLabelRenderProps } from "recharts";
 import { createPortal, useFormStatus } from "react-dom";
+import { HeaderActionsContext } from "@/components/layout/header-actions-context";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -271,6 +272,7 @@ export function FinanceWorkspace({
   updateExpenseAction: FinanceMutationAction;
   deleteExpenseAction: FinanceMutationAction;
 }) {
+  const headerActionsTarget = useContext(HeaderActionsContext);
   const router = useRouter();
   const [toast, setToast] = useState<FinanceToastMessage | null>(null);
 
@@ -298,10 +300,12 @@ export function FinanceWorkspace({
             <h1>Ödəniş və xərc əlavə et</h1>
             <p>Bu rol yalnız yeni əməliyyat daxil edə bilər. Maliyyə göstəriciləri, balanslar və əməliyyat siyahıları göstərilmir.</p>
           </div>
+          {headerActionsTarget ? createPortal(
           <div className="finance-header-actions">
             <ExpenseDialog data={data} action={createExpenseAction} onNotify={showToast} />
             <PaymentDialog data={data} action={recordPaymentAction} onNotify={showToast} />
-          </div>
+          </div>, headerActionsTarget) : null}
+
         </header>
         <div className="finance-entry-safety-note">
           <ShieldCheck />
@@ -314,15 +318,10 @@ export function FinanceWorkspace({
   return (
     <section className="finance-command-page finance-page">
       <FinanceOperationToast toast={toast} onToastChange={setToast} />
-      <header className="finance-hero finance-command-hero">
-        <div className="finance-hero-head">
-          <div className="finance-header-main">
-            <div className="finance-title-block">
-              <h1>Maliyyə paneli</h1>
-              <p>Tələbə və tədbir gəlirləri, xərclər, alacaqlar və qəbzlər vahid mərkəzdə görünür.</p>
-            </div>
-          </div>
+      <h1 className="sr-only">Maliyyə paneli</h1>
+      {headerActionsTarget ? createPortal(
           <div className="finance-header-actions">
+            <FinanceFilterDialog data={data} />
             {data.permissions.canExport ? (
               <ExportDialog
                 key={`finance-export-${data.filters.type}`}
@@ -343,10 +342,9 @@ export function FinanceWorkspace({
               action={recordPaymentAction}
               onNotify={showToast}
             />
-          </div>
-        </div>
-        <FinanceCommandBar key={`filters-${data.returnTo}`} data={data} />
-      </header>
+          </div>,
+          headerActionsTarget,
+      ) : null}
 
       <FinancePrimaryKpis data={data} />
 
@@ -525,11 +523,24 @@ function FinanceTabs({ data }: { data: FinanceData }) {
   );
 }
 
-function FinanceCommandBar({ data }: { data: FinanceData }) {
+function FinanceFilterDialog({ data }: { data: FinanceData }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button type="button" variant="outline"><ListFilter /> Filtrlər{data.filters.activeCount > 0 ? ` (${data.filters.activeCount})` : ""}</Button></DialogTrigger>
+      <DialogContent className="finance-filter-dialog" aria-describedby={undefined}>
+        <DialogHeader><DialogTitle>Maliyyə filtrləri</DialogTitle></DialogHeader>
+        <FinanceCommandBar key={data.returnTo} data={data} onApplied={() => setOpen(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FinanceCommandBar({ data, onApplied }: { data: FinanceData; onApplied: () => void }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [draft, setDraft] = useState<FinanceFilterDraft>(() => ({
-    query: "",
+    query: data.filters.query,
     category: data.filters.category,
     from: data.filters.from,
     to: data.filters.to,
@@ -549,13 +560,14 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
     });
   }
 
-  function updateDraft(nextValues: Partial<FinanceFilterDraft>, mode: "push" | "replace" = "replace") {
-    applyFilters({ ...draft, ...nextValues }, mode);
+  function updateDraft(nextValues: Partial<FinanceFilterDraft>) {
+    setDraft({ ...draft, ...nextValues });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     applyFilters(draft, "push");
+    onApplied();
   }
 
   return (
@@ -568,6 +580,7 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
         <div className="finance-filter-field">
           <FormSelect
             name="category"
+            aria-label="Kateqoriya"
             defaultValue={draft.category || undefined}
             onValueChange={(value) => updateDraft({ category: cleanSelectValue(value) })}
             placeholder="Bütün kateqoriyalar"
@@ -584,6 +597,7 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
         <div className="finance-filter-field">
           <FormSelect
             name="source"
+            aria-label="Mənbə"
             defaultValue={draft.source}
             onValueChange={(value) => updateDraft({ source: cleanSelectValue(value) as FinanceFilterDraft["source"] })}
             placeholder="Bütün mənbələr"
@@ -600,7 +614,7 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
       <div className="finance-filter-footer">
         <div className="finance-filter-presets">
           <span className="finance-preset-info-text">
-            Tarix headerdəki ümumi calendar, kateqoriya isə bu panel üzərindən tətbiq olunur
+            Tarix aralığını başlıqdakı təqvimdən seçə bilərsiniz.
           </span>
         </div>
 
@@ -610,7 +624,7 @@ function FinanceCommandBar({ data }: { data: FinanceData }) {
             {isPending ? "Yenilənir..." : "Göstər"}
           </Button>
           {data.filters.activeCount > 0 ? (
-            <Link className="ui-button ui-button-ghost ui-button-sm" href="/finance">
+            <Link className="ui-button ui-button-ghost ui-button-sm" href="/finance" onClick={onApplied}>
               Təmizlə
             </Link>
           ) : null}

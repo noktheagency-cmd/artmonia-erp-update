@@ -639,7 +639,7 @@ export function AppShell({
             onNavigate={markNavigation}
           />
           <ErpCalendar onNavigate={markNavigation} />
-          {pathname === "/students" ? <div className="students-header-slot" ref={setHeaderActionsTarget} /> : null}
+          {pathname === "/students" || pathname === "/crm" || pathname === "/finance" ? <div className={pathname === "/finance" ? "finance-header-slot" : pathname === "/crm" ? "crm-header-slot" : "students-header-slot"} ref={setHeaderActionsTarget} /> : null}
         </div>
 
         <div
