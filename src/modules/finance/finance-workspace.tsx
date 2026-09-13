@@ -1374,9 +1374,21 @@ function FinancePrimaryKpis({ data }: { data: FinanceData }) {
             <DialogDescription>{selected === "details" ? "Mövcud maliyyə kartlarının aydın hesablanma qaydası və nəticəsi." : selectedCard?.helper}</DialogDescription>
           </DialogHeader>
           {selected === "details" ? (
-            <div className="finance-detailed-kpi-grid">
-              {data.kpis.filter((kpi) => kpi.label !== "Receivables").map((kpi, index) => { const Icon = financeKpiIcons[index] ?? BarChart3; return <article className={`finance-kpi is-${kpi.tone}`} key={kpi.label}><div className="finance-kpi-top"><span className="finance-kpi-label">{kpi.label}</span><span className="finance-kpi-icon"><Icon size={12} /></span></div><strong>{kpi.value}</strong><div className="finance-kpi-footer"><small>{kpi.helper}</small></div></article>; })}
-            </div>
+            <>
+              <div className="finance-detailed-kpi-grid">
+                {data.kpis.filter((kpi) => kpi.label !== "Receivables").map((kpi, index) => { const Icon = financeKpiIcons[index] ?? BarChart3; return <article className={`finance-kpi is-${kpi.tone}`} key={kpi.label}><div className="finance-kpi-top"><span className="finance-kpi-label">{kpi.label}</span><span className="finance-kpi-icon"><Icon size={12} /></span></div><strong>{kpi.value}</strong><div className="finance-kpi-footer"><small>{kpi.helper}</small></div></article>; })}
+              </div>
+              {data.previousMonthProfit ? (
+                <section className="finance-previous-profit" aria-label="Keçən ayın xalis mənfəəti">
+                  <div>
+                    <span className="finance-previous-profit-period">{data.previousMonthProfit.periodLabel}</span>
+                    <h3>Keçən ayın xalis mənfəəti</h3>
+                    <p>Əvvəlki tam ayın gəliri − birbaşa xərclər − əməliyyat xərcləri. Seçilmiş filtrlərə əsasən.</p>
+                  </div>
+                  <strong>{data.previousMonthProfit.amount}</strong>
+                </section>
+              ) : null}
+            </>
           ) : (
             <dl className="finance-kpi-breakdown">{detailRows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
           )}

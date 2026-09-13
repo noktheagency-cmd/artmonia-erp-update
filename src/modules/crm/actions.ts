@@ -26,6 +26,7 @@ import {
   resolveTrialLessonNextAction,
 } from "@/modules/crm/trial-lesson";
 import { optionalFormString } from "@/modules/shared/form-values";
+import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import {
   enrollmentStatusForStudentLifecycle,
@@ -95,7 +96,7 @@ const updateLeadSchema = z.object({
   nextActionType: optionalNextActionType,
   nextFollowUpDate: optionalText(20),
   trialLessonCount: optionalTrialLessonCount,
-  note: z.string({ error: "Yeniləmə qeydi daxil edilməlidir." }).trim().min(1, "Yeniləmə qeydi daxil edilməlidir.").max(240),
+  note: z.string({ error: "Yeniləmə qeydi daxil edilməlidir." }).trim().min(1, "Yeniləmə qeydi daxil edilməlidir.").max(CRM_UPDATE_NOTE_MAX_LENGTH),
   returnTo: optionalText(260),
 });
 

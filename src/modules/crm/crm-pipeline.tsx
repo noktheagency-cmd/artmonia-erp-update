@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useContext, useEffect, useState, useTransition } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { HeaderActionsContext } from "@/components/layout/header-actions-context";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -28,6 +28,7 @@ import { FormSelect } from "@/components/ui/select";
 import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
 import { CrmConversionDialog } from "@/modules/crm/crm-conversion-dialog";
 import { CrmOverview } from "@/modules/crm/crm-overview";
+import { OverviewLeadDialog } from "@/modules/crm/overview-lead-dialog";
 import type { CrmData } from "@/modules/crm/queries";
 import { NewLeadDialog } from "@/modules/crm/new-lead-dialog";
 import { ExportDialog } from "@/modules/exports/export-dialog";
@@ -60,6 +61,8 @@ type CrmTab = "overview" | "list";
 export function CrmPipeline({ data }: { data: CrmData }) {
   const headerActionsTarget = useContext(HeaderActionsContext);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const leadTriggerRef = useRef<HTMLElement | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -156,6 +159,17 @@ export function CrmPipeline({ data }: { data: CrmData }) {
 
   return (
     <section className="crm-command-page" aria-labelledby="crm-page-title">
+      {selectedLeadId ? (
+        <OverviewLeadDialog
+          key={selectedLeadId}
+          leadId={selectedLeadId}
+          data={data}
+          onClose={() => {
+            setSelectedLeadId(null);
+            requestAnimationFrame(() => leadTriggerRef.current?.focus());
+          }}
+        />
+      ) : null}
       <div className="route-progress" aria-hidden={!isPending} data-visible={isPending} />
 
       {showCreateToast ? (
@@ -279,7 +293,10 @@ export function CrmPipeline({ data }: { data: CrmData }) {
           <CrmOverview
             data={data}
             onStageSelect={(stage) => handleQuickFilter("stage", stage)}
-            onLeadSelect={(name) => handleQuickFilter("q", name)}
+            onLeadSelect={(id) => {
+              leadTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+              setSelectedLeadId(id);
+            }}
           />
           <CrmLeadsTable
             data={data}

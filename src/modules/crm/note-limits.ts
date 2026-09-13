@@ -1,0 +1,1 @@
+export const CRM_UPDATE_NOTE_MAX_LENGTH = 10_000;

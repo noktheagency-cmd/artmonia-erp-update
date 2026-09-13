@@ -19,7 +19,7 @@ import { requireMutationActor, type ErpActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { optionalFormString } from "@/modules/shared/form-values";
-import { startOfMonth, toNumber } from "@/modules/shared/format";
+import { toNumber } from "@/modules/shared/format";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
 import {
   studentPaymentScheduleTypeValues,
@@ -40,6 +40,7 @@ import {
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { uploadReceipt } from "@/server/storage/erp-files";
+import { resolveExpenseStaff, resolveStaffSalarySnapshot } from "./staff-salary";
 import { shouldVoidObsoleteImportedInvoice } from "./obsolete-import-invoice";
 
 const optionalText = (max: number) =>
@@ -341,10 +342,10 @@ async function createFinanceExpenseActionImpl(formData: FormData) {
     const category = await resolveFinanceMovementCategory(tx, input.categoryId);
     const usesPayrollFlow = category.requiresStaff;
     const expenseStaff = usesPayrollFlow
-      ? staff
+      ? await resolveExpenseStaff(tx, staff)
       : { employeeUserId: null, teacherId: null };
     const salarySnapshot = usesPayrollFlow
-      ? await resolveStaffSalarySnapshot(tx, staff, expenseDate)
+      ? await resolveStaffSalarySnapshot(tx, expenseStaff, expenseDate)
       : emptySalarySnapshot();
     const corporateCustomer = !usesPayrollFlow && input.payeeMode === "COMPANY"
       ? await tx.hrCorporateCustomer.findFirst({
@@ -663,10 +664,10 @@ async function updateFinanceExpenseActionImpl(formData: FormData) {
     const category = await resolveFinanceMovementCategory(tx, input.categoryId);
     const usesPayrollFlow = category.requiresStaff;
     const expenseStaff = usesPayrollFlow
-      ? staff
+      ? await resolveExpenseStaff(tx, staff)
       : { employeeUserId: null, teacherId: null };
     const salarySnapshot = usesPayrollFlow
-      ? await resolveStaffSalarySnapshot(tx, staff, expenseDate)
+      ? await resolveStaffSalarySnapshot(tx, expenseStaff, expenseDate)
       : emptySalarySnapshot();
     const corporateCustomer = !usesPayrollFlow && input.payeeMode === "COMPANY"
       ? await tx.hrCorporateCustomer.findFirst({
@@ -1293,121 +1294,6 @@ function emptySalarySnapshot() {
     salaryPercent: null,
     salaryBaseAmount: null,
     salaryCalculatedAmount: null,
-  };
-}
-
-async function resolveStaffSalarySnapshot(
-  tx: Prisma.TransactionClient,
-  staff: ReturnType<typeof parseStaffTarget>,
-  expenseDate: Date
-) {
-  if (!staff.employeeUserId && !staff.teacherId) {
-    throw new Error("Əməkhaqqı xərci üçün əməkdaş seçilməlidir");
-  }
-
-  if (staff.employeeUserId) {
-    const employee = await tx.hrEmployee.findUnique({
-      where: { userId: staff.employeeUserId },
-      select: {
-        id: true,
-        fullName: true,
-        salaryMode: true,
-        salaryAmount: true,
-        salaryPercent: true,
-        user: { select: { isActive: true } },
-      },
-    });
-
-    if (!employee?.user?.isActive) {
-      throw new Error("Seçilmiş əməkdaş tapılmadı və ya aktiv deyil");
-    }
-
-    const lastSalary = await tx.financeExpense.findFirst({
-      where: {
-        employeeUserId: staff.employeeUserId,
-      },
-      orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
-      select: {
-        amount: true,
-        salaryCalculatedAmount: true,
-      },
-    });
-    const salaryBase = roundMoney(toNumber(lastSalary?.salaryCalculatedAmount ?? lastSalary?.amount));
-    const salaryPercent = roundMoney(toNumber(employee.salaryPercent));
-    const salaryAmount = employee.salaryMode === FinanceSalaryMode.PERCENT
-      ? roundMoney(salaryBase * salaryPercent / 100)
-      : roundMoney(toNumber(employee.salaryAmount));
-
-    return {
-      payeeName: employee.fullName,
-      salaryMode: employee.salaryMode,
-      salaryPercent: employee.salaryMode === FinanceSalaryMode.PERCENT ? salaryPercent : null,
-      salaryBaseAmount: employee.salaryMode === FinanceSalaryMode.PERCENT ? salaryBase : salaryAmount,
-      salaryCalculatedAmount: salaryAmount,
-    };
-  }
-
-  const periodMonth = startOfMonth(expenseDate);
-  const teacher = await tx.teacher.findUnique({
-    where: { id: staff.teacherId ?? "" },
-    select: { id: true, fullName: true, isActive: true },
-  });
-
-  if (!teacher?.isActive) {
-    throw new Error("Seçilmiş müəllim tapılmadı və ya aktiv deyil");
-  }
-
-  const [rule, payout, lastSalary] = await Promise.all([
-    tx.teacherContractRule.findFirst({
-      where: {
-        teacherId: teacher.id,
-        validFrom: { lte: periodMonth },
-        OR: [{ validTo: null }, { validTo: { gte: periodMonth } }],
-      },
-      orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }],
-      select: { salaryPercent: true },
-    }),
-    tx.teacherPayout.findFirst({
-      where: {
-        teacherId: teacher.id,
-        periodMonth,
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        eligibleRevenue: true,
-        payoutAmount: true,
-      },
-    }),
-    tx.financeExpense.findFirst({
-      where: {
-        teacherId: teacher.id,
-        salaryMode: FinanceSalaryMode.PERCENT,
-      },
-      orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
-      select: {
-        amount: true,
-        salaryPercent: true,
-        salaryBaseAmount: true,
-        salaryCalculatedAmount: true,
-      },
-    }),
-  ]);
-
-  const salaryPercent = roundMoney(toNumber(rule?.salaryPercent ?? lastSalary?.salaryPercent));
-  const salaryBaseAmount = roundMoney(toNumber(payout?.eligibleRevenue ?? lastSalary?.salaryBaseAmount));
-  const calculatedAmount = payout
-    ? roundMoney(toNumber(payout.payoutAmount))
-    : roundMoney(
-        toNumber(lastSalary?.salaryCalculatedAmount ?? lastSalary?.amount) ||
-          (salaryBaseAmount * salaryPercent) / 100
-      );
-
-  return {
-    payeeName: teacher.fullName,
-    salaryMode: FinanceSalaryMode.PERCENT,
-    salaryPercent,
-    salaryBaseAmount,
-    salaryCalculatedAmount: calculatedAmount,
   };
 }
 

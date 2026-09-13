@@ -1,6 +1,6 @@
 import { LeadStage, Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
-import { getCrmScopeLabel } from "@/modules/crm/access";
+import { getCrmScopeLabel, getLeadReadScope } from "@/modules/crm/access";
 import { getPrisma } from "@/server/db/prisma";
 import {
   isPrivilegedActor,
@@ -1175,6 +1175,48 @@ function buildCrmListWhereSql(input: {
   }
 
   return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
+}
+
+export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][number] | null> {
+  const actor = await requireErpActor("crm.lead.read");
+  const lead = await getPrisma().lead.findFirst({
+    where: { AND: [{ id }, getLeadReadScope(actor)] },
+    select: {
+      id: true, stage: true, source: true, priority: true, nextActionType: true,
+      trialLessonCount: true, createdAt: true, nextFollowUpAt: true,
+      contactId: true, managerId: true, programInterestId: true, educationLevel: true,
+      contact: { select: { fullName: true, phoneDisplay: true } },
+      manager: { select: { fullName: true } },
+      programInterest: { select: { name: true } },
+      convertedStudent: { select: { code: true } },
+      stageHistory: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true, newStage: true, reason: true, createdAt: true,
+          changedBy: { select: { fullName: true } },
+        },
+      },
+    },
+  });
+  if (!lead) return null;
+  return formatLeadRow({
+    ...lead,
+    createdAt: lead.createdAt.toISOString(),
+    nextFollowUpAt: lead.nextFollowUpAt?.toISOString() ?? null,
+    programId: lead.programInterestId,
+    fullName: lead.contact.fullName,
+    phone: lead.contact.phoneDisplay,
+    managerName: lead.manager?.fullName ?? null,
+    programName: lead.programInterest?.name ?? null,
+    convertedStudentCode: lead.convertedStudent?.code ?? null,
+    timeline: lead.stageHistory.map((entry) => ({
+      id: entry.id,
+      newStage: entry.newStage,
+      reason: entry.reason,
+      createdAt: entry.createdAt.toISOString(),
+      changedBy: entry.changedBy?.fullName ?? null,
+    })),
+  });
 }
 
 function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {

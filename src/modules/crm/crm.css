@@ -279,6 +279,10 @@
 
 /* CRM dialog family */
 .ui-dialog-overlay:has(+ .crm-modern-dialog) { z-index: 1200; }
+.crm-detail-dialog.ui-dialog-content { z-index: 1201; }
+.crm-detail-dialog .crm-update-note-group { align-items: flex-start; }
+.crm-detail-dialog .crm-update-note-group .ui-input-group-addon { padding-top: 12px; }
+.crm-detail-dialog .crm-update-note { min-width: 0; min-height: 100px; height: auto; padding-block: 10px; resize: vertical; line-height: 1.6; white-space: pre-wrap; }
 .crm-modern-dialog.crm-conversion-detail-dialog.ui-dialog-content {
   --conversion-surface: #fff;
   --conversion-soft: #f2f5f9;

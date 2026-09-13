@@ -116,6 +116,7 @@ export type StudentListData = {
     teachers: Array<{ name: string; count: number; percentage: number; capacity: number | null; utilization: number | null }>;
   };
   permissions: {
+    canReadAttendance: boolean;
     canCreateStudent: boolean;
     canUpdateStudent: boolean;
     canConvertLead: boolean;
@@ -575,6 +576,7 @@ export async function getStudentListData(
     operations,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
+      canReadAttendance: actor.permissions.has("attendance.read"),
       canUpdateStudent: actor.permissions.has("student.update"),
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canRecordPayment: actor.permissions.has("billing.payment.create"),

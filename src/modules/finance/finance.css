@@ -1191,6 +1191,12 @@
 .finance-kpi-detail-dialog { width: min(900px, calc(100vw - 28px)); max-width: 900px; }
 .finance-detailed-kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .finance-detailed-kpi-grid .finance-kpi-footer small { white-space: normal; overflow: visible; text-overflow: clip; }
+.finance-previous-profit { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; border: 1px solid #d7ccff; border-left: 4px solid #6d48ff; border-radius: 8px; background: #f2edff; color: #38236f; }
+.finance-previous-profit > div { flex: 1 1 240px; min-width: 0; }
+.finance-previous-profit-period { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
+.finance-previous-profit h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.finance-previous-profit p { margin: 7px 0 0; color: #59467f; font-size: 12px; line-height: 1.5; }
+.finance-previous-profit > strong { max-width: 100%; overflow-wrap: anywhere; font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .finance-kpi-breakdown { display: grid; gap: 9px; margin: 0; }
 .finance-kpi-breakdown div { display: flex; justify-content: space-between; gap: 18px; padding: 13px 14px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 12px; }
 .finance-kpi-breakdown dt { color: var(--muted-foreground); font-size: 12px; }

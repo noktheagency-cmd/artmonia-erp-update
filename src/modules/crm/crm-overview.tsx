@@ -88,7 +88,7 @@ export function CrmOverview({
 }: {
   data: CrmData;
   onStageSelect: (stage: string) => void;
-  onLeadSelect: (leadName: string) => void;
+  onLeadSelect: (leadId: string) => void;
 }) {
   const reducedMotion = useReducedMotion();
   const [followUpCategory, setFollowUpCategory] = useState<"all" | "workshop_masterclass">("all");
@@ -364,7 +364,7 @@ function AttentionGroup({
   description: string;
   tone: "today" | "overdue";
   items: CrmData["attentionFocus"];
-  onLeadSelect: (leadName: string) => void;
+  onLeadSelect: (leadId: string) => void;
   createdToday?: boolean;
 }) {
   const Icon = tone === "today" ? CalendarCheck2 : AlertTriangle;
@@ -385,7 +385,7 @@ function AttentionGroup({
             <button
               type="button"
               className="crm-attention-row"
-              onClick={() => onLeadSelect(item.name)}
+              onClick={() => onLeadSelect(item.id)}
               key={item.id}
               aria-label={createdToday
                 ? `${item.name}. Bu gün daxil olub. Müraciəti aç`

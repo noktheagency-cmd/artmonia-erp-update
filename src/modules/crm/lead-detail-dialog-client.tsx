@@ -44,6 +44,7 @@ import {
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { leadStageSelectOptions, type LeadStageValue } from "@/modules/crm/stage";
 import { DEFAULT_TRIAL_LESSON_COUNT } from "@/modules/crm/trial-lesson";
+import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -58,6 +59,8 @@ export function LeadDetailDialogClient({
   returnTo,
   updateLeadAction,
   deleteLeadAction,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   lead: LeadRow;
   programs: CrmData["programs"];
@@ -66,9 +69,16 @@ export function LeadDetailDialogClient({
   returnTo: string;
   updateLeadAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteLeadAction: (formData: FormData) => unknown | Promise<unknown>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  function setOpen(nextOpen: boolean) {
+    setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  }
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [note, setNote] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
@@ -141,12 +151,12 @@ export function LeadDetailDialogClient({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
+      {controlledOpen === undefined ? <DialogTrigger asChild>
         <button className="crm-lead-open-button" type="button">
           <strong>{lead.name}</strong>
           <span>Profili aç</span>
         </button>
-      </DialogTrigger>
+      </DialogTrigger> : null}
       <DialogContent className="crm-modern-dialog crm-detail-dialog">
         <DialogHeader>
           <div className="crm-detail-title-row">
@@ -315,18 +325,24 @@ export function LeadDetailDialogClient({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor={`lead-note-${lead.id}`}>Yeniləmə qeydi *</FieldLabel>
-                  <InputGroup>
+                  <InputGroup className="crm-update-note-group">
                     <InputGroupAddon aria-hidden="true"><FileText /></InputGroupAddon>
-                    <InputGroupInput
+                    <textarea
+                      className="ui-input-group-input crm-update-note"
                       id={`lead-note-${lead.id}`}
                       name="note"
                       value={note}
                       onChange={(event) => setNote(event.currentTarget.value)}
                       required
                       placeholder="Səbəb və ya növbəti addım"
-                      maxLength={240}
+                      rows={4}
+                      maxLength={CRM_UPDATE_NOTE_MAX_LENGTH}
+                      aria-describedby={`lead-note-limit-${lead.id}`}
                     />
                   </InputGroup>
+                  <FieldDescription id={`lead-note-limit-${lead.id}`}>
+                    {note.length.toLocaleString("az-AZ")} / {CRM_UPDATE_NOTE_MAX_LENGTH.toLocaleString("az-AZ")} simvol
+                  </FieldDescription>
                 </Field>
               </FieldGroup>
             </section>

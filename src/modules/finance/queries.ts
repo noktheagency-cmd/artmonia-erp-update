@@ -83,6 +83,7 @@ export type FinanceData = {
     expenseCount: string;
     debtors: string;
   };
+  previousMonthProfit: { amount: string; periodLabel: string } | null;
   receivableSummary: {
     periodLabel: string;
     studentOutstanding: { count: number; amount: string; amountValue: number };
@@ -578,23 +579,8 @@ export async function getFinanceData(
     )
   `;
 
-  const [
-    summaryRows,
-    receivableSummaryRows,
-    expenseBreakdownRows,
-    costCenterBreakdownRows,
-    categoryRows,
-    studentRows,
-    staffRows,
-    paymentRows,
-    workshopPaymentRows,
-    expenseRows,
-    payrollRows,
-    debtRows,
-    workshopDebtRows,
-    corporateCustomerRows,
-  ] = await Promise.all([
-    prisma.$queryRaw<FinanceSummaryRow[]>(Prisma.sql`
+  const previousMonthStart = addMonths(activePeriodStart, -1);
+  const summaryQuery = (periodStart: Date, periodEnd: Date) => Prisma.sql`
       with filtered_expenses as (
         select
           fe.amount,
@@ -607,8 +593,8 @@ export async function getFinanceData(
         join erp.finance_expense_categories fec on fec.id = fe.category_id
         left join erp.users eu on eu.id = fe.employee_user_id
         left join erp.teachers t on t.id = fe.teacher_id
-        where fe.expense_date >= ${fromDate}
-          and fe.expense_date < ${endDateExclusive}
+        where fe.expense_date >= ${periodStart}
+          and fe.expense_date < ${periodEnd}
           and fe.voided_at is null
           ${expenseSourceSql}
           ${categorySql}
@@ -620,8 +606,8 @@ export async function getFinanceData(
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${fromDate}
-            and p.paid_at < ${endDateExclusive}
+          where p.paid_at >= ${periodStart}
+            and p.paid_at < ${periodEnd}
             and s.is_test_data = false
             ${studentSourceSql}
             ${searchSql.payments}
@@ -630,8 +616,8 @@ export async function getFinanceData(
           from erp.workshop_payments wp
           join erp.workshop_events we on we.id = wp.event_id
           join erp.workshop_participants participant on participant.id = wp.participant_id
-          where wp.paid_at >= ${fromDate}
-            and wp.paid_at < ${endDateExclusive}
+          where wp.paid_at >= ${periodStart}
+            and wp.paid_at < ${periodEnd}
             and wp.voided_at is null
             ${workshopSourceSql}
             ${searchSql.workshopPayments}
@@ -641,8 +627,8 @@ export async function getFinanceData(
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${fromDate}
-            and p.paid_at < ${endDateExclusive}
+          where p.paid_at >= ${periodStart}
+            and p.paid_at < ${periodEnd}
             and s.is_test_data = false
             ${studentSourceSql}
             ${searchSql.payments}
@@ -652,8 +638,8 @@ export async function getFinanceData(
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${fromDate}
-            and p.paid_at < ${endDateExclusive}
+          where p.paid_at >= ${periodStart}
+            and p.paid_at < ${periodEnd}
             and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
             and s.is_test_data = false
             ${studentSourceSql}
@@ -664,8 +650,8 @@ export async function getFinanceData(
           from erp.workshop_payments wp
           join erp.workshop_events we on we.id = wp.event_id
           join erp.workshop_participants participant on participant.id = wp.participant_id
-          where wp.paid_at >= ${fromDate}
-            and wp.paid_at < ${endDateExclusive}
+          where wp.paid_at >= ${periodStart}
+            and wp.paid_at < ${periodEnd}
             and wp.voided_at is null
             ${workshopSourceSql}
             ${searchSql.workshopPayments}
@@ -675,8 +661,8 @@ export async function getFinanceData(
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${fromDate}
-            and p.paid_at < ${endDateExclusive}
+          where p.paid_at >= ${periodStart}
+            and p.paid_at < ${periodEnd}
             and s.is_test_data = false
             ${studentSourceSql}
             ${searchSql.payments}
@@ -685,8 +671,8 @@ export async function getFinanceData(
           from erp.workshop_payments wp
           join erp.workshop_events we on we.id = wp.event_id
           join erp.workshop_participants participant on participant.id = wp.participant_id
-          where wp.paid_at >= ${fromDate}
-            and wp.paid_at < ${endDateExclusive}
+          where wp.paid_at >= ${periodStart}
+            and wp.paid_at < ${periodEnd}
             and wp.voided_at is null
             ${workshopSourceSql}
             ${searchSql.workshopPayments}
@@ -757,7 +743,26 @@ export async function getFinanceData(
         ), 0) as "payroll",
         0 as "debt",
         0 as "debtors"
-    `),
+    `;
+  const [
+    summaryRows,
+    previousMonthRows,
+    receivableSummaryRows,
+    expenseBreakdownRows,
+    costCenterBreakdownRows,
+    categoryRows,
+    studentRows,
+    staffRows,
+    paymentRows,
+    workshopPaymentRows,
+    expenseRows,
+    payrollRows,
+    debtRows,
+    workshopDebtRows,
+    corporateCustomerRows,
+  ] = await Promise.all([
+    prisma.$queryRaw<FinanceSummaryRow[]>(summaryQuery(fromDate, endDateExclusive)),
+    prisma.$queryRaw<FinanceSummaryRow[]>(summaryQuery(previousMonthStart, activePeriodStart)),
     prisma.$queryRaw<FinanceReceivableSummaryRow[]>(Prisma.sql`
       with ${studentReceivableCtes},
       event_receivables as (
@@ -927,6 +932,10 @@ export async function getFinanceData(
         limit 1
       ) last_salary on true
       where u.is_active = true and he.status <> 'INACTIVE'::"erp"."HrEmployeeStatus"
+        and not exists (
+          select 1 from erp.teachers linked_teacher
+          where linked_teacher.id = he.teacher_id or linked_teacher.user_id = u.id
+        )
 
       union all
 
@@ -935,12 +944,20 @@ export async function getFinanceData(
         t.full_name as "label",
         'teacher' as "kind",
         coalesce(t.phone, 'Müəllim') as "meta",
-        'PERCENT' as "salaryMode",
-        0 as "staticSalary",
-        coalesce(rule.salary_percent, last_salary.salary_percent, 0) as "salaryPercent",
-        coalesce(payout.eligible_revenue, last_salary.salary_base_amount, 0) as "salaryBase",
-        coalesce(payout.payout_amount, last_salary.salary_calculated_amount, 0) as "calculatedSalary"
+        case when he.salary_mode = 'STATIC' then 'STATIC' else 'PERCENT' end as "salaryMode",
+        case when he.salary_mode = 'STATIC' then he.salary_amount else 0 end as "staticSalary",
+        case when he.salary_mode = 'STATIC' then 0 else coalesce(rule.salary_percent, last_salary.salary_percent, 0) end as "salaryPercent",
+        case when he.salary_mode = 'STATIC' then he.salary_amount else coalesce(payout.eligible_revenue, last_salary.salary_base_amount, 0) end as "salaryBase",
+        case when he.salary_mode = 'STATIC' then he.salary_amount else coalesce(payout.payout_amount, last_salary.salary_calculated_amount, 0) end as "calculatedSalary"
       from erp.teachers t
+      left join lateral (
+        select employee.salary_mode, employee.salary_amount
+        from erp.hr_employees employee
+        where employee.teacher_id = t.id
+          or (employee.teacher_id is null and employee.user_id = t.user_id)
+        order by (employee.teacher_id = t.id) desc nulls last
+        limit 1
+      ) he on true
       left join lateral (
         select tcr.salary_percent
         from erp.teacher_contract_rules tcr
@@ -1244,6 +1261,16 @@ export async function getFinanceData(
     financingOut,
     legacyLiability,
   });
+  const previousSummary = previousMonthRows[0];
+  const previousMonthProfit = calculateFinanceStatement({
+    operatingIncome: toNumber(previousSummary?.income),
+    directCost: toNumber(previousSummary?.directCost),
+    opex: toNumber(previousSummary?.opex),
+    capex: toNumber(previousSummary?.capex),
+    financingIn: toNumber(previousSummary?.financingIn),
+    financingOut: toNumber(previousSummary?.financingOut),
+    legacyLiability: toNumber(previousSummary?.legacyLiability),
+  }).netProfit;
   const grossMargin = income > 0 ? (grossProfit / income) * 100 : 0;
   const net = netProfit;
   const expenses = expenseRows.map(mapExpenseRow);
@@ -1267,6 +1294,10 @@ export async function getFinanceData(
   const educationCollectionDifference = studentIncome - activeStudentIncome;
 
   return {
+    previousMonthProfit: {
+      amount: formatAmount(previousMonthProfit),
+      periodLabel: new Intl.DateTimeFormat("az-AZ", { month: "long", year: "numeric", timeZone: "UTC" }).format(previousMonthStart),
+    },
     accessMode: "FULL",
     returnTo: buildFinanceUrl(normalizedFilters),
     permissions: {
@@ -1897,6 +1928,7 @@ async function getLimitedFinanceData({
 
   const emptyAmount = "—";
   return {
+    previousMonthProfit: null,
     accessMode: "ENTRY_ONLY",
     returnTo: "/finance",
     permissions: {
