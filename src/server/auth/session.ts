@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { needsMfa } from "@/server/auth/mfa-policy";
+import { ERP_SESSION_MAX_AGE_SQL } from "@/server/auth/session-lifetime";
 import { cookies, headers } from "next/headers";
 import { AppRole, Prisma } from "@/generated/prisma/client";
 import { syncVerifiedAuthSession } from "@/modules/audit/session-registry";
@@ -68,7 +69,7 @@ export const getErpSessionForMfa = cache(async (): Promise<(CurrentErpUser & { a
         where auth_session.id = ${sessionId}::uuid
           and auth_session.user_id = u.auth_user_id
           and (auth_session.not_after is null or auth_session.not_after > now())
-          and auth_session.created_at > now() - interval '24 hours'
+          and auth_session.created_at > now() - ${ERP_SESSION_MAX_AGE_SQL}
       ) as "authSessionExists",
       exists (select 1 from auth.mfa_factors f where f.user_id = u.auth_user_id and f.status = 'verified') as "hasVerifiedFactor"
     from erp.users u

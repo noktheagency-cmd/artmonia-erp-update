@@ -8,6 +8,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { createClient } from "@supabase/supabase-js";
 import { AppRole, Prisma } from "@/generated/prisma/client";
+import { ERP_SESSION_MAX_AGE_SQL } from "@/server/auth/session-lifetime";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv, requireEnv } from "@/server/env";
 import {
@@ -125,7 +126,7 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
         select 1 from auth.sessions s
         where s.id = ${sessionId}::uuid and s.user_id = ${subject}::uuid
           and (s.not_after is null or s.not_after > now())
-          and s.created_at > now() - interval '24 hours'
+          and s.created_at > now() - ${ERP_SESSION_MAX_AGE_SQL}
           and not exists (select 1 from erp.auth_session_records r where r.id = s.id and r.revoked_at is not null)
       ) as valid
     `);

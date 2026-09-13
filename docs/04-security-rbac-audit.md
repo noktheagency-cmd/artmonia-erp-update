@@ -12,6 +12,19 @@ Auth flow:
 4. Role and permission set is resolved.
 5. Domain service checks permission before any protected read or mutation.
 
+## ERP Session Lifetime
+
+ERP sessions have an absolute maximum lifetime of 7 days from `auth.sessions.created_at`.
+The server identity check, session heartbeat, and MCP authentication share
+`src/server/auth/session-lifetime.ts`. Refreshing tokens does not restart this window.
+At the 7-day boundary the session is rejected. Earlier provider expiry (`not_after`),
+sign-out, revocation, account deactivation, and MFA requirements still apply.
+This policy does not increase the JWT access-token lifetime or restore ended sessions.
+
+The read-only PostgreSQL boundary regression test can be run with an explicitly
+selected `SESSION_LIFETIME_TEST_DATABASE_URL` and
+`node --import tsx --test src/server/auth/session-lifetime.test.ts`.
+
 ## Roles
 
 Initial roles:
