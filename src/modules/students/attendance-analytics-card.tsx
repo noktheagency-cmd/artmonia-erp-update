@@ -71,17 +71,22 @@ export function AttendanceAnalyticsCard() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button type="button" className="students-attendance-card" aria-label="Müəllimlər üzrə davamiyyət — detalları aç">
-          <span className="students-attendance-title"><CalendarCheck2 size={22} /><span><strong>Müəllimlər üzrə davamiyyət</strong><small>{report ? `${report.from} — ${report.to}` : "Cari ay"} · Slot dərsləri</small></span><ArrowUpRight size={20} /></span>
+        <button type="button" className="students-analytics-card students-attendance-card" aria-label="Müəllimlər üzrə davamiyyət — detalları aç">
+          <span className="students-attendance-title"><span className="students-attendance-icon"><CalendarCheck2 size={20} /></span><span className="students-attendance-heading"><strong>Davamiyyət</strong><small>Müəllimlər üzrə iştirak göstəricisi</small></span><ArrowUpRight className="students-attendance-arrow" size={18} /></span>
           {loading ? <span role="status">Davamiyyət yüklənir…</span> : error ? <span role="alert">{error} Detalları açaraq yenidən cəhd edin.</span> : <>
-            <span className="students-attendance-metrics">
-              <span><strong>{percent(totals.rate)}</strong><small>Ümumi davamiyyət</small></span>
-              <span><strong>{totals.risky}</strong><small>Riskli tələbə</small></span>
-              <span><strong>{totals.missingSessions}</strong><small>Qeydi natamam dərs</small></span>
-              <span><strong>{percent(totals.completeness)}</strong><small>Qeyd tamlığı</small></span>
+            <span className="students-attendance-body">
+              <span className="students-attendance-gauge">
+                <svg viewBox="0 0 120 120" aria-hidden="true"><circle className="students-attendance-track" cx="60" cy="60" r="50" /><circle className="students-attendance-progress" cx="60" cy="60" r="50" pathLength="100" strokeDasharray={`${totals.rate ?? 0} 100`} /></svg>
+                <span><strong>{percent(totals.rate)}</strong><small>iştirak</small></span>
+              </span>
+              <span className="students-attendance-metrics">
+                <span><small><i className="is-risk" />Riskli tələbə</small><strong>{totals.risky}</strong></span>
+                <span><small><i className="is-missing" />Natamam dərs</small><strong>{totals.missingSessions}</strong></span>
+                <span><small><i className="is-complete" />Qeyd tamlığı</small><strong>{percent(totals.completeness)}</strong></span>
+              </span>
             </span>
-            <span className="students-attendance-foot"><span>{delta === null ? "Müqayisə üçün məlumat yoxdur" : `${delta > 0 ? "+" : ""}${delta} faiz bəndi · əvvəlki eyni uzunluqlu dövrə görə`}</span><span>Detallara bax →</span></span>
-            {ranked.length > 0 && <span className="students-attendance-foot"><span>Ən yüksək: {ranked[ranked.length - 1].name} · {percent(ranked[ranked.length - 1].rate)}</span><span>Ən aşağı: {ranked[0].name} · {percent(ranked[0].rate)}</span></span>}
+            <span className="students-attendance-foot"><span className="students-attendance-change" data-direction={delta !== null && delta < 0 ? "down" : "up"}>{delta === null ? "Müqayisə yoxdur" : `${delta > 0 ? "+" : ""}${delta} faiz bəndi`}</span><span>{report ? `${report.from.slice(8)}.${report.from.slice(5, 7)} — ${report.to.slice(8)}.${report.to.slice(5, 7)}.${report.to.slice(0, 4)}` : "Cari ay"}</span></span>
+            {ranked.length > 0 && <span className="students-attendance-ranking"><span><small>Ən yüksək</small><span title={ranked[ranked.length - 1].name}>{ranked[ranked.length - 1].name}</span><strong>{percent(ranked[ranked.length - 1].rate)}</strong></span><span><small>Ən aşağı</small><span title={ranked[0].name}>{ranked[0].name}</span><strong>{percent(ranked[0].rate)}</strong></span></span>}
           </>}
         </button>
       </DialogTrigger>

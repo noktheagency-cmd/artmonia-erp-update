@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AttendanceAnalyticsCard } from "./attendance-analytics-card";
 import {
   Bar,
   BarChart,
@@ -46,9 +47,11 @@ const teacherChartConfig = {
 } satisfies ChartConfig;
 
 export function StudentOverviewCharts({
+  canReadAttendance = false,
   programs,
   teachers,
 }: {
+  canReadAttendance?: boolean;
   programs: DistributionItem[];
   teachers: DistributionItem[];
 }) {
@@ -196,6 +199,7 @@ export function StudentOverviewCharts({
           <ChartEmptyState text="Müəllim məlumatı yoxdur" />
         )}
       </article>
+      {canReadAttendance && <AttendanceAnalyticsCard />}
     </section>
   );
 }

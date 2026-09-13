@@ -43,7 +43,6 @@ import { createStudentAction, recordStudentPaymentAction } from "@/modules/stude
 import { StudentCreateDialogClient } from "@/modules/students/student-create-dialog-client";
 import { StudentFilterForm } from "@/modules/students/student-filter-form";
 import { StudentOverviewCharts } from "@/modules/students/student-overview-charts";
-import { AttendanceAnalyticsCard } from "@/modules/students/attendance-analytics-card";
 import { ProgramManager } from "@/modules/students/program-manager";
 import { deleteProgramAction, saveProgramAction, setProgramArchivedAction } from "@/modules/students/program-actions";
 import { StudentPaymentDialogClient } from "@/modules/students/student-payment-dialog-client";
@@ -245,10 +244,10 @@ export function StudentList({ data }: { data: StudentListData }) {
       ) : activeTab === "overview" ? (
         <>
           <StudentOverviewCharts
+            canReadAttendance={data.permissions.canReadAttendance}
             programs={data.operations.programs}
             teachers={data.operations.teachers}
           />
-          {data.permissions.canReadAttendance && <AttendanceAnalyticsCard />}
           <StudentAttentionAudit
             data={data}
             onOverdue={() => handleQuickFilter("payment", "overdue")}

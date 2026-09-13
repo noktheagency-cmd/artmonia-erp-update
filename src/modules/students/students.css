@@ -1261,19 +1261,45 @@ html:not(.dark) .students-command-page .students-kpi {
 
 /* Attendance overview and drill-down; dialog is portalled outside the page. */
 .students-attendance-card {
-  display: grid; gap: 20px; width: 100%; padding: 22px; text-align: left;
-  border: 1px solid var(--students-line); border-radius: 12px;
-  background: var(--students-surface-strong); color: var(--students-ink); cursor: pointer;
+  display: flex; flex-direction: column; gap: 14px; width: 100%; text-align: left;
+  border: 1px solid var(--students-line);
+  background: radial-gradient(ellipse at top right, rgb(24 167 123 / 8%), transparent 65%), var(--students-surface-strong);
+  color: var(--students-ink); cursor: pointer; font: inherit;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
-.students-attendance-card:hover { border-color: var(--students-blue); }
+.students-attendance-card:hover { border-color: var(--students-green); box-shadow: 0 8px 24px rgb(24 167 123 / 9%); }
 .students-attendance-card:focus-visible { outline: 2px solid var(--students-blue); outline-offset: 3px; }
-.students-attendance-title { display: flex; align-items: center; gap: 12px; }
-.students-attendance-title > span { flex: 1; }
-.students-attendance-title strong { font-size: 16px; }
-.students-attendance-card small { display: block; color: var(--students-muted); font-size: 12px; margin-top: 5px; }
-.students-attendance-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.students-attendance-metrics strong { font-size: 30px; font-weight: 700; }
-.students-attendance-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--students-muted); }
+.students-attendance-title { display: flex; align-items: center; gap: 10px; width: 100%; }
+.students-attendance-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 11px; color: var(--students-green); background: rgb(24 167 123 / 10%); }
+.students-attendance-heading { flex: 1; min-width: 0; }
+.students-attendance-title strong { font-size: 14px; }
+.students-attendance-arrow { flex-shrink: 0; color: var(--students-muted); }
+.students-attendance-card small { display: block; color: var(--students-muted); font-size: 10px; line-height: 1.5; }
+.students-attendance-heading small { margin-top: 3px; }
+.students-attendance-body { display: flex; align-items: center; gap: 16px; width: 100%; flex: 1; }
+.students-attendance-gauge { position: relative; width: 112px; height: 112px; flex: 0 0 112px; }
+.students-attendance-gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.students-attendance-gauge circle { fill: none; stroke-width: 9; }
+.students-attendance-track { stroke: var(--students-chart-track); }
+.students-attendance-progress { stroke: var(--students-green); stroke-linecap: round; }
+.students-attendance-gauge > span { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.students-attendance-gauge strong { font-size: 27px; line-height: 1.2; letter-spacing: -1px; }
+.students-attendance-metrics { display: grid; gap: 12px; flex: 1; min-width: 0; }
+.students-attendance-metrics > span { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.students-attendance-metrics small { display: flex; align-items: center; gap: 6px; }
+.students-attendance-metrics strong { font-size: 13px; font-weight: 700; }
+.students-attendance-metrics i { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px; }
+.students-attendance-metrics .is-risk { background: var(--students-coral); }
+.students-attendance-metrics .is-missing { background: var(--students-amber); }
+.students-attendance-metrics .is-complete { background: var(--students-green); }
+.students-attendance-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; font-size: 10px; color: var(--students-muted); }
+.students-attendance-change { border-radius: 6px; padding: 3px 6px; background: rgb(24 167 123 / 8%); color: var(--students-green); font-weight: 650; }
+.students-attendance-change[data-direction="down"] { color: var(--students-coral); background: rgb(230 93 109 / 8%); }
+.students-attendance-ranking { display: grid; gap: 6px; width: 100%; border-top: 1px solid var(--students-line); padding-top: 10px; }
+.students-attendance-ranking > span { display: flex; align-items: center; gap: 8px; font-size: 10px; }
+.students-attendance-ranking small { min-width: 53px; }
+.students-attendance-ranking > span > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.students-attendance-ranking strong { font-size: 11px; }
 .students-attendance-dialog { width: min(1100px, calc(100vw - 24px)); max-width: 1100px; max-height: 90dvh; overflow-y: auto; }
 .students-attendance-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
 .students-attendance-filters label { display: grid; gap: 6px; font-size: 12px; min-width: 160px; }
@@ -1295,7 +1321,6 @@ html:not(.dark) .students-command-page .students-kpi {
 .students-attendance-pagination { display: flex; align-items: center; justify-content: end; gap: 12px; margin-top: 12px; }
 @media (max-width: 640px) {
   .students-attendance-card { padding: 16px; }
-  .students-attendance-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .students-attendance-dialog { padding: 20px 14px; }
   .students-attendance-filters label { flex: 1; min-width: 130px; }
   .students-attendance-table { min-width: 650px; }
