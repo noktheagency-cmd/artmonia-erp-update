@@ -1,6 +1,8 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { needsMfa } from "@/server/auth/mfa-policy";
+import { safeRedirectPath } from "@/server/auth/redirect-path";
+import type { Route } from "next";
 import { ERP_SESSION_MAX_AGE_SQL } from "@/server/auth/session-lifetime";
 import { cookies, headers } from "next/headers";
 import { AppRole, Prisma } from "@/generated/prisma/client";
@@ -116,9 +118,11 @@ export const getErpSessionForMfa = cache(async (): Promise<(CurrentErpUser & { a
   };
 });
 
-export const getCurrentErpUser = cache(async (): Promise<CurrentErpUser | null> => {
+export const getCurrentErpUser = cache(async (returnTo?: string): Promise<CurrentErpUser | null> => {
   const user = await getErpSessionForMfa();
-  if (user && needsMfa(user.roles, user.hasVerifiedFactor, user.assuranceLevel)) redirect("/auth/mfa");
+  if (user && needsMfa(user.roles, user.hasVerifiedFactor, user.assuranceLevel)) {
+    redirect((returnTo ? `/auth/mfa?next=${encodeURIComponent(safeRedirectPath(returnTo))}` : "/auth/mfa") as Route);
+  }
   return user;
 });
 

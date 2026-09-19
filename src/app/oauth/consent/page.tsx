@@ -5,6 +5,7 @@ import { getCurrentErpUser } from "@/server/auth/session";
 import { isApprovedMcpOAuthClient } from "@/server/mcp/config";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { decideOAuthConsent } from "./actions";
+import { recordMfaDelegation } from "@/server/mcp/delegation";
 import styles from "./styles.module.css";
 
 type ConsentPageProps = {
@@ -25,7 +26,7 @@ export default async function OAuthConsentPage({
     return <ConsentError message="OAuth sorğusunun identifikatoru yoxdur." />;
   }
 
-  const currentUser = await getCurrentErpUser();
+  const currentUser = await getCurrentErpUser(`/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`);
   if (!currentUser) {
     const next = `/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`;
     redirect(`/login?next=${encodeURIComponent(next)}` as Route);
@@ -46,6 +47,9 @@ export default async function OAuthConsentPage({
   }
 
   if (!("authorization_id" in data)) {
+    // Supabase can auto-approve an already-consented client. Bind that new
+    // authorization to this verified MFA session before releasing the code.
+    await recordMfaDelegation(authorizationId, currentUser);
     redirect(data.redirect_url as Route);
   }
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
 import styles from "./mfa.module.css";
 
-export function MfaForm() {
+export function MfaForm({ next = "/dashboard" }: { next?: string }) {
   const [factorId, setFactorId] = useState<string>();
   const [qr, setQr] = useState<string>();
   const [secret, setSecret] = useState<string>();
@@ -55,8 +55,7 @@ export function MfaForm() {
       if (error) throw error;
       setQr(undefined); setSecret(undefined); setCode(""); setVerified(true);
       // A full navigation clears password-only RSC state after the assurance upgrade.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.assign("/dashboard");
+      window.location.assign(next);
     } catch { setError("Kod yanlışdır və ya vaxtı bitib. Cari 6 rəqəmli kodu daxil edin."); }
     finally { setBusy(false); }
   }

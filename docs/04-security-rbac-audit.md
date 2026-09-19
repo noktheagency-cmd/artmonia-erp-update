@@ -21,6 +21,12 @@ At the 7-day boundary the session is rejected. Earlier provider expiry (`not_aft
 sign-out, revocation, account deactivation, and MFA requirements still apply.
 This policy does not increase the JWT access-token lifetime or restore ended sessions.
 
+MCP OAuth tokens may have `aal1` even after browser MFA. Such tokens require
+the latest client/user-specific `MCP_OAUTH_APPROVED` audit decision and an
+OAuth session created after that decision. The originating browser session
+must still be valid, unrevoked, `aal2`, and within the same seven-day limit;
+a verified MFA factor must remain. See `docs/chatgpt-founder-mcp.md`.
+
 The read-only PostgreSQL boundary regression test can be run with an explicitly
 selected `SESSION_LIFETIME_TEST_DATABASE_URL` and
 `node --import tsx --test src/server/auth/session-lifetime.test.ts`.

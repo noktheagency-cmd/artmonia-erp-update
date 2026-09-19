@@ -11,6 +11,7 @@ import { AppRole, Prisma } from "@/generated/prisma/client";
 import { ERP_SESSION_MAX_AGE_SQL } from "@/server/auth/session-lifetime";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv, requireEnv } from "@/server/env";
+import { hasMfaDelegation } from "./delegation";
 import {
   getMcpOAuthClientIds,
   getMcpPublicUrl,
@@ -133,7 +134,8 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
     if (!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)) {
       throw invalidToken("SESSION_ID_INVALID", "Reconnect after completing two-factor authentication");
     }
-    if (claims.aal !== "aal2") {
+    if (claims.aal !== "aal2" &&
+        !(claims.aal === "aal1" && await hasMfaDelegation(founder.id, subject, clientId, sessionId))) {
       throw invalidToken("MFA_REQUIRED", "Reconnect after completing two-factor authentication");
     }
     const [session] = await getPrisma().$queryRaw<Array<{ valid: boolean }>>(Prisma.sql`

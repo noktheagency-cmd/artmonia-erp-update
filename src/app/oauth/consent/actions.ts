@@ -7,6 +7,7 @@ import { AppRole } from "@/generated/prisma/client";
 import { getCurrentErpUser } from "@/server/auth/session";
 import { isApprovedMcpOAuthClient } from "@/server/mcp/config";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { recordMfaDelegation } from "@/server/mcp/delegation";
 
 const decisionSchema = z.object({
   authorizationId: z.string().trim().min(1).max(2048),
@@ -15,7 +16,7 @@ const decisionSchema = z.object({
 
 export async function decideOAuthConsent(formData: FormData) {
   const input = decisionSchema.parse(Object.fromEntries(formData));
-  const currentUser = await getCurrentErpUser();
+  const currentUser = await getCurrentErpUser(`/oauth/consent?authorization_id=${encodeURIComponent(input.authorizationId)}`);
 
   if (!currentUser?.roles.includes(AppRole.SUPER_ADMIN)) {
     throw new Error("Only the active ERP Founder can authorize this connector");
@@ -54,5 +55,8 @@ export async function decideOAuthConsent(formData: FormData) {
     throw new Error("OAuth consent decision could not be completed");
   }
 
+  if (input.decision === "approve") {
+    await recordMfaDelegation(input.authorizationId, currentUser);
+  }
   redirect(result.data.redirect_url as Route);
 }

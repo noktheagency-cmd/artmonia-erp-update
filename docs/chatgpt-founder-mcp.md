@@ -52,6 +52,30 @@ redeploy et. Bu yanaşma hər hesabı ayrıca revoke və audit etməyə imkan ve
 
 ## MCP autentifikasiya diaqnostikası
 
+### MFA və OAuth sessiyaları
+
+Supabase OAuth code exchange ayrıca sessiya yaradır; brauzerin `aal2`
+claim-i OAuth tokeninə avtomatik köçürülmür. ERP consent səhifəsi və action
+MFA təsdiqli Founder tələb edir. Uğurlu təsdiqdən sonra (əvvəlki consent üçün
+avtomatik redirect daxil) `MCP_OAUTH_APPROVED` audit hadisəsi əlavə edilir.
+Client və istifadəçi Supabase-in serverdəki approved authorization qeydindən
+yoxlanılır; brauzerdən göndərilən client/actor məlumatına etibar edilmir.
+
+`aal1` OAuth tokeni yalnız həmin istifadəçi/client üçün ən son MFA icazəsi
+olduqda qəbul edilir. OAuth sessiyası icazədən sonra yaradılmalı, əsas
+brauzer sessiyası hələ `aal2`, aktiv, ləğv edilməmiş və 7 gündən cavan
+olmalıdır. İstifadəçinin təsdiqli MFA faktoru da qalmalıdır. OAuth sessiyasının
+öz 7 günlük, ləğv və Founder yoxlamaları ayrıca qüvvədədir. Yeni icazə əvvəlki
+OAuth sessiyalarını əvəz edir; əsas sessiyanın bağlanması connector-u da bağlayır.
+Audit tarixçəsi dəyişdirilmir; mövcud indekslə son icazə oxunur. Miqrasiya yoxdur.
+
+Deploy-dan sonra connector-u yenidən authorize etmək lazımdır; köhnə tokenlər
+üçün avtomatik icazə/backfill yoxdur. Qəbul yoxlaması: yeni qoşulma ilə oxu
+uğurlu olmalı; əsas ERP sessiyasını bağladıqdan sonra həmin connector rədd
+edilməlidir. Bu canlı yoxlamalar yalnız istifadəçinin test sessiyası ilə edilir.
+
+Mənbə: https://github.com/supabase/auth/blob/master/internal/api/oauthserver/handlers.go
+
 Railway runtime loglarında `[mcp] authentication rejected` axtarın.
 `reason` yalnız sabit kod olur; token, secret, JWT claim-ləri və şəxsi məlumatlar
 bu diaqnostik loga yazılmır. Giriş qaydaları dəyişmir.
@@ -62,8 +86,7 @@ bu diaqnostik loga yazılmır. Giriş qaydaları dəyişmir.
 - `AUDIENCE_MISMATCH`: konfiqurasiya edilmiş audience uyğun deyil.
 - `FOUNDER_NOT_ACTIVE`: aktiv SUPER_ADMIN hesabı tapılmadı.
 - `SESSION_ID_INVALID`: tokenin session ID-si yoxdur və ya formatı yanlışdır.
-- `MFA_REQUIRED`: MCP-yə gələn token `aal2` deyil. Brauzerdə MFA tamamlanması
-  ayrıca OAuth tokeninin də `aal2` olduğunu sübut etmir.
+- `MFA_REQUIRED`: token `aal2` deyil və etibarlı MFA delegasiyası tapılmadı.
 - `SESSION_EXPIRED_OR_REVOKED`: sessiya yoxdur, bitib, 7 günlük həddi keçib və ya ləğv edilib.
 
 Token olmadan ilkin discovery sorğusunun 401 cavabı bu logu yaratmır və normaldır.
