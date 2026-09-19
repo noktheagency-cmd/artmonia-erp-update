@@ -50,6 +50,26 @@ app-in callback URL-si ilə ayrıca Supabase OAuth client yaratmaq tövsiyə olu
 Sonra həmin client ID-ni `MCP_OAUTH_CLIENT_IDS` allowlist-inə əlavə edib Railway
 redeploy et. Bu yanaşma hər hesabı ayrıca revoke və audit etməyə imkan verir.
 
+## MCP autentifikasiya diaqnostikası
+
+Railway runtime loglarında `[mcp] authentication rejected` axtarın.
+`reason` yalnız sabit kod olur; token, secret, JWT claim-ləri və şəxsi məlumatlar
+bu diaqnostik loga yazılmır. Giriş qaydaları dəyişmir.
+
+- `TOKEN_VERIFICATION_FAILED`: tokenin imzası/etibarlılığı təsdiqlənmədi.
+- `TOKEN_CLAIMS_INVALID_OR_EXPIRED`: tələb olunan claim yoxdur, issuer uyğun deyil və ya token bitib.
+- `CLIENT_NOT_APPROVED`: OAuth client allowlist-də yoxdur.
+- `AUDIENCE_MISMATCH`: konfiqurasiya edilmiş audience uyğun deyil.
+- `FOUNDER_NOT_ACTIVE`: aktiv SUPER_ADMIN hesabı tapılmadı.
+- `SESSION_ID_INVALID`: tokenin session ID-si yoxdur və ya formatı yanlışdır.
+- `MFA_REQUIRED`: MCP-yə gələn token `aal2` deyil. Brauzerdə MFA tamamlanması
+  ayrıca OAuth tokeninin də `aal2` olduğunu sübut etmir.
+- `SESSION_EXPIRED_OR_REVOKED`: sessiya yoxdur, bitib, 7 günlük həddi keçib və ya ləğv edilib.
+
+Token olmadan ilkin discovery sorğusunun 401 cavabı bu logu yaratmır və normaldır.
+HTTP 401 təkbaşına MFA problemini sübut etmir. Bu logun olmaması da uğurlu
+autentifikasiya demək deyil; header və infrastruktur xətaları ayrıca araşdırılmalıdır.
+
 ## Qəbul testləri
 
 1. `Artmonia ERP-nin cari ümumi vəziyyətini göstər.`

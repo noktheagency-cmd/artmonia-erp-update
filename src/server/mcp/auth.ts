@@ -60,7 +60,19 @@ function audienceMatches(claims: Claims, expected: string) {
     (Array.isArray(audience) && audience.includes(expected));
 }
 
-function invalidToken(message = "Access token is not valid for this ERP connector") {
+type RejectionReason =
+  | "TOKEN_VERIFICATION_FAILED"
+  | "TOKEN_CLAIMS_INVALID_OR_EXPIRED"
+  | "CLIENT_NOT_APPROVED"
+  | "AUDIENCE_MISMATCH"
+  | "FOUNDER_NOT_ACTIVE"
+  | "SESSION_ID_INVALID"
+  | "MFA_REQUIRED"
+  | "SESSION_EXPIRED_OR_REVOKED";
+
+function invalidToken(reason: RejectionReason, message = "Access token is not valid for this ERP connector") {
+  // Only call with static reason codes. Never log claims, tokens or provider errors.
+  console.warn("[mcp] authentication rejected", { reason });
   return new OAuthError(OAuthErrorCode.InvalidToken, message);
 }
 
@@ -68,7 +80,7 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const { data, error } = await getPublicSupabaseClient().auth.getClaims(token);
     if (error || !data?.claims || typeof data.claims !== "object") {
-      throw invalidToken();
+      throw invalidToken("TOKEN_VERIFICATION_FAILED");
     }
 
     const claims = data.claims as Claims;
@@ -90,18 +102,18 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
       expiresAt <= Math.floor(Date.now() / 1000) ||
       issuer?.replace(/\/$/, "") !== expectedIssuer
     ) {
-      throw invalidToken();
+      throw invalidToken("TOKEN_CLAIMS_INVALID_OR_EXPIRED");
     }
 
     if (!approvedClientIds.has(clientId)) {
-      throw invalidToken();
+      throw invalidToken("CLIENT_NOT_APPROVED");
     }
 
     if (
       env.MCP_EXPECTED_AUDIENCE &&
       !audienceMatches(claims, env.MCP_EXPECTED_AUDIENCE)
     ) {
-      throw invalidToken();
+      throw invalidToken("AUDIENCE_MISMATCH");
     }
 
     const founder = await getPrisma().user.findFirst({
@@ -114,12 +126,15 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
     });
 
     if (!founder) {
-      throw invalidToken("This account is not an active ERP Founder account");
+      throw invalidToken("FOUNDER_NOT_ACTIVE", "This account is not an active ERP Founder account");
     }
 
     const sessionId = stringClaim(claims, "session_id");
-    if (!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId) || claims.aal !== "aal2") {
-      throw invalidToken("Reconnect after completing two-factor authentication");
+    if (!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)) {
+      throw invalidToken("SESSION_ID_INVALID", "Reconnect after completing two-factor authentication");
+    }
+    if (claims.aal !== "aal2") {
+      throw invalidToken("MFA_REQUIRED", "Reconnect after completing two-factor authentication");
     }
     const [session] = await getPrisma().$queryRaw<Array<{ valid: boolean }>>(Prisma.sql`
       select exists (
@@ -130,7 +145,7 @@ export const founderTokenVerifier: OAuthTokenVerifier = {
           and not exists (select 1 from erp.auth_session_records r where r.id = s.id and r.revoked_at is not null)
       ) as valid
     `);
-    if (!session?.valid) throw invalidToken("ERP connector session has expired or was revoked");
+    if (!session?.valid) throw invalidToken("SESSION_EXPIRED_OR_REVOKED", "ERP connector session has expired or was revoked");
 
     return {
       token,
