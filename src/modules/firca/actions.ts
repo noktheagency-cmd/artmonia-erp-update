@@ -78,7 +78,7 @@ export const excludeFircaStudentAction = safeServerAction(
       .strict()
       .parse(raw);
     await getPrisma().$transaction(async (tx) => {
-      await tx.$queryRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + input.studentId},0))`;
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + input.studentId},0))`;
       if (input.excluded)
         await tx.$executeRaw`insert into erp.firca_exclusions(student_id,reason) values(${input.studentId}::uuid,${input.reason}) on conflict(student_id) do update set reason=excluded.reason`;
       else
@@ -111,7 +111,7 @@ export const moderateFircaCommentAction = safeServerAction(
         Prisma.sql`select r.student_id::text as "studentId",r.post_id::text as "postId" from erp.firca_comments r where r.id=${input.id}::uuid and ${commentScope(actor)}`,
       );
       if (!row) throw new PublicActionError("Rəy tapılmadı.", "NOT_FOUND");
-      await tx.$queryRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + row.studentId},0))`;
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + row.studentId},0))`;
       await tx.$executeRaw`update erp.firca_comments set moderated=true where id=${input.id}::uuid`;
       const [claim] = await tx.$queryRaw<
         { id: string }[]

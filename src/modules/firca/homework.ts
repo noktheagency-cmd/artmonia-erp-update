@@ -179,7 +179,7 @@ export async function submitHomework(
   let result: Submission;
   try {
     result = await db.$transaction(async (tx) => {
-      await tx.$queryRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + studentId},0))`;
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + studentId},0))`;
       await assertHomeworkAccess(tx, studentId, homeworkId);
       const [priorRequest] = await tx.$queryRaw<
         { hash: string; id: string }[]
@@ -277,7 +277,7 @@ export async function reviewHomework(
       404,
       "Tapşırıq tapılmadı.",
     );
-  await db.$queryRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + row.studentId},0))`;
+  await db.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + row.studentId},0))`;
   const [latest] = await db.$queryRaw<
     { revision: number; status: string; feedback: string | null }[]
   >`select revision,status,feedback from erp.homework_submissions where id=${row.id}::uuid for update`;

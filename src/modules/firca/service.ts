@@ -144,8 +144,9 @@ export async function applyCommentEvent(db: FircaDb, input: CommentEvent) {
       "Tələbə tapılmadı.",
     );
   const student = mapping.studentId;
-  await db.$queryRaw`select pg_advisory_xact_lock(hashtextextended(${"firca-comment:" + input.commentId},0))`;
-  await db.$queryRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + student},0))`;
+  // These functions return void; execute without Prisma result deserialization.
+  await db.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca-comment:" + input.commentId},0))`;
+  await db.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + student},0))`;
   const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
   const existing = await db.$queryRaw<
     { payloadHash: string }[]

@@ -2,6 +2,19 @@
 
 Tarix: 2026-09-20
 
+## Community HTTP 500 düzəlişi
+
+`59b435ab-6ba3-41d2-9f3c-9713c2d850f4` sorğusunda Railway logu
+Prisma-nın `pg_advisory_xact_lock` funksiyasının `void` nəticəsini oxuya
+bilmədiyini təsdiqlədi. Fırça modulundakı kilidlər `$executeRaw` ilə icra
+edilir; transaction sərhədləri, kilid açarları və ardıcıllığı dəyişmir.
+Payload, token və revision müqaviləsində dəyişiklik yoxdur.
+
+Bu düzəlişin deploy-u ayrıca təsdiqlənməlidir. Deploy-dan sonra mobil tərəf
+eyni body/revision ilə retry, sonra hidden/deleted və duplicate ssenarilərini
+yoxlamalıdır. Növbəni silmək və ya mövcud hadisəni dəyişmək lazım deyil.
+Fırça və dispatcher aktivləşdirilməyib.
+
 ## İcma statusu
 
 `approved` ayrıca insan moderasiyası deyil, şərhin yayımlanmış və görünən olmasıdır:

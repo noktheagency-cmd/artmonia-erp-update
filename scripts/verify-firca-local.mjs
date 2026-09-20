@@ -33,7 +33,13 @@ const query = async (strings, ...values) => {
 };
 const audit = [];
 const db = {
-  $queryRaw: query,
+  $queryRaw: async (strings, ...values) => {
+    const sql = Array.isArray(strings) ? strings.join("?") : strings.text;
+    // PGlite accepts void results, but Prisma cannot deserialize them.
+    assert.doesNotMatch(sql, /select\s+pg_advisory_xact_lock/i,
+      "Use executeRaw for void-returning transaction locks");
+    return query(strings, ...values);
+  },
   $executeRaw: query,
   auditLog: {
     create: async (entry) => {
