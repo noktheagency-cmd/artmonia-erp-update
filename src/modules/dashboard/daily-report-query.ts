@@ -2,10 +2,11 @@ import { Prisma } from "@/generated/prisma/client";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
-import { canReadDailyReport, dailyReportWindow } from "./daily-report-policy";
+import { canReadDailyReport, filteredDailyReportWindow } from "./daily-report-policy";
 
 export type DailyReportData = {
   date: string;
+  availableDates: string[];
   leads: number;
   contacted: number;
   scheduled: number;
@@ -21,17 +22,18 @@ export type DailyReportData = {
   stopped: number;
 };
 
-export async function getDailyReportData(): Promise<DailyReportData | null> {
+export async function getDailyReportData(requestedDate?: string): Promise<DailyReportData | null> {
   const actor = await requireErpActor();
   if (!canReadDailyReport(actor.id, actor.permissions)) return null;
-  const { date, nextDate, start, end, tomorrowEnd } = dailyReportWindow();
-  const [row] = await getPrisma().$queryRaw<Omit<DailyReportData, "date">[]>(Prisma.sql`
+  const { date, nextDate, start, end, tomorrowEnd, availableDates } = filteredDailyReportWindow(requestedDate);
+  const [row] = await getPrisma().$queryRaw<Omit<DailyReportData, "date" | "availableDates">[]>(Prisma.sql`
     with new_leads as (
-      select l.id, l.stage from erp.leads l
+      select l.id, l.stage, l.updated_at from erp.leads l
       where l.created_at >= ${start} and l.created_at < ${end}
     ), open_leads as (
       select l.* from erp.leads l
       where l.stage not in ('REGISTERED', 'LOST') and l.converted_student_id is null
+        and l.created_at < ${end}
     ), appointments as (
       select t.* from erp.tasks t join erp.leads l on l.id = t.entity_id
       where t.type = 'lead_appointment' and t.entity_type = 'lead' and t.status <> 'CANCELLED'
@@ -44,7 +46,7 @@ export async function getDailyReportData(): Promise<DailyReportData | null> {
     )
     select
       (select count(*)::int from new_leads) as leads,
-      (select count(*)::int from new_leads l where l.stage in ('CONTACTED','QUALIFIED','TRIAL_LESSON','TRIAL_CONSULTATION','REGISTERED')
+      (select count(*)::int from new_leads l where (l.updated_at < ${end} and l.stage in ('CONTACTED','QUALIFIED','TRIAL_LESSON','TRIAL_CONSULTATION','REGISTERED'))
         or exists (select 1 from erp.lead_stage_history h where h.lead_id = l.id
           and h.created_at >= ${start} and h.created_at < ${end}
           and h.new_stage in ('CONTACTED','QUALIFIED','TRIAL_LESSON','TRIAL_CONSULTATION','REGISTERED'))) as contacted,
@@ -63,5 +65,5 @@ export async function getDailyReportData(): Promise<DailyReportData | null> {
       (select count(distinct student_id)::int from lifecycle where new_status = 'STOPPED') as stopped
   `);
   if (!row) throw new Error("Daily report query returned no result");
-  return { date, ...row };
+  return { date, availableDates, ...row };
 }

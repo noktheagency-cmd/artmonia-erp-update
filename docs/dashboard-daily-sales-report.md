@@ -1,12 +1,14 @@
 # Gün sonu satış hesabatı
 
-Dashboard-un aşağı hissəsində İsmət və Vaqifin mövcud ERP hesabları üçün göstərilir. Server həm hesab ID-sini, həm də dashboard, CRM, tələbə, ödəniş və tapşırıq oxuma icazələrinin ALL əhatəsini yoxlayır. Hesabat həmişə Bakı vaxtı ilə cari gün üçündür; dashboard-un maliyyə tarix filtrindən asılı deyil.
+Dashboard-un aşağı hissəsində İsmət və Vaqifin mövcud ERP hesabları üçün göstərilir. Server həm hesab ID-sini, həm də dashboard, CRM, tələbə, ödəniş və tapşırıq oxuma icazələrinin ALL əhatəsini yoxlayır. Kartın daxili filtrində yalnız Bakı vaxtı ilə bu gün, dünən və 2 gün əvvəl seçilir. İlkin seçim bu gündür; dashboard-un maliyyə tarix filtrindən asılı deyil. Hər sorğuda server tarix sərhədini yenidən yoxlayır; köhnə, gələcək və yanlış tarixlər rədd edilir. Bu, bu gün daxil olmaqla 3 təqvim günüdür, sürüşən 72 saat deyil.
 
-- Yeni lead: bu gün yaradılan müraciətlər. Əlaqə: həmin müraciətlərin CONTACTED, QUALIFIED, TRIAL_LESSON, TRIAL_CONSULTATION və ya REGISTERED mərhələsinə keçməsi. Cavabsız əlaqə qeydi olmayan yeni müraciətlərdir; zəng provayderindən təsdiqlənmiş nəticə deyil.
-- Görüşlər: CRM profilində “Konsultasiya / sınaq nəticələri” bölməsində qeydə alınan, görüş tarixi bu gün olan konsultasiya və sınaqlar. Baş tutdu və gəlmədi açıq şəkildə qeyd edilir; nəticəsiz və ləğv edilmiş görüşlər ayrılır. Köhnə nextFollowUpAt xatırlatmalarından nəticə təxmin edilmir.
-- Satış: mövcud companySalesCountSql qaydası (qeydiyyat və uyğun ödənişli aktiv qayıdış). Ödəniş: paidAt bu gün olan tələbə ödənişlərinin decimal cəmi. Test tələbələri çıxarılır.
-- Follow-up: bu gün tamamlanan lead_follow_up tapşırıqları; əlaqə tarixi bu gündən əvvəl olan açıq lead-lər; sabaha əlaqəsi planlanan açıq lead-lər. Bağlanmış/çevrilmiş və tarixsiz lead-lər gecikmiş sayılmır.
-- Donduran/dayandıran: effectiveAt bu gün olan faktiki status keçidləri, hər kateqoriyada fərqli tələbə sayı. Test tələbələri çıxarılır.
+- Yeni lead: seçilən gün yaradılan müraciətlər. Əlaqə: həmin günün sonunadək CONTACTED, QUALIFIED, TRIAL_LESSON, TRIAL_CONSULTATION və ya REGISTERED mərhələsinə keçməsi. Sonrakı günün cari mərhələsi əvvəlki günün əlaqəsi sayılmır; mərhələ tarixçəsi nəzərə alınır. Cavabsız əlaqə qeydi olmayan yeni müraciətlərdir; zəng provayderindən təsdiqlənmiş nəticə deyil.
+- Görüşlər: CRM profilində “Konsultasiya / sınaq nəticələri” bölməsində qeydə alınan, görüş tarixi seçilən gün olan konsultasiya və sınaqların hazırkı nəticələri. Baş tutdu və gəlmədi açıq şəkildə qeyd edilir; nəticəsiz və ləğv edilmiş görüşlər ayrılır. Köhnə nextFollowUpAt xatırlatmalarından nəticə təxmin edilmir.
+- Satış: mövcud companySalesCountSql qaydası (qeydiyyat və uyğun ödənişli aktiv qayıdış). Ödəniş: paidAt seçilən gün olan tələbə ödənişlərinin decimal cəmi. Test tələbələri çıxarılır.
+- Follow-up: seçilən gün tamamlanan lead_follow_up tapşırıqları. Gecikmiş və növbəti günə plan göstəriciləri seçilən günün sonunadək yaradılmış, hazırda açıq lead-lərin cari nextFollowUpAt dəyərindən hesablanır. Bu sahənin tarixçəsi saxlanmadığı üçün həmin göstəricilər tarixi snapshot deyil; popup bunu bildirir. Bağlanmış/çevrilmiş və tarixsiz lead-lər gecikmiş sayılmır.
+- Donduran/dayandıran: effectiveAt seçilən gün olan faktiki status keçidləri, hər kateqoriyada fərqli tələbə sayı. Test tələbələri çıxarılır.
+
+Filtr dəyişdikdə yalnız kartın server sorğusu yenilənir. Yüklənərkən idarəetmə düymələri bloklanır; xəta olduqda əvvəlki tarix və rəqəmlər saxlanılır, xəta göstərilir. Popup seçilmiş günə uyğun məlumat verir.
 
 ## Görüş saxlama müqaviləsi
 
