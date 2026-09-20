@@ -10,6 +10,7 @@ test("keeps CRM follow-ups and student reminders outside the standalone task wor
     type: {
       notIn: [
         "lead_follow_up",
+        "lead_appointment",
         "student_payment_reminder",
         "student_general_reminder",
       ],
@@ -27,6 +28,7 @@ test("adds the assigned-user scope without weakening module boundaries", () => {
     type: {
       notIn: [
         "lead_follow_up",
+        "lead_appointment",
         "student_payment_reminder",
         "student_general_reminder",
       ],

@@ -42,13 +42,24 @@ export function canAssignLeadOwner(actor: ErpActor) {
 
 export function resolveLeadManagerId(
   actor: ErpActor,
-  requestedManagerId: string | undefined
+  requestedManagerId: string | undefined,
+  currentManagerId: string | null
 ) {
   if (canAssignLeadOwner(actor)) {
-    return requestedManagerId ?? actor.id;
+    return requestedManagerId ?? currentManagerId;
   }
 
-  return actor.id;
+  return currentManagerId;
+}
+
+// Follow-up edits are shared among CRM editors within their readable records.
+// Assignment, deletion and conversion retain their separate scope checks.
+export function assertCanEditLead(
+  actor: ErpActor,
+  lead: LeadAccessFields | null,
+): asserts lead is LeadAccessFields {
+  assertPermission(actor.permissions, "crm.lead.update");
+  assertCanAccessLead(actor, lead, "crm.lead.read");
 }
 
 export function assertCanAccessLead(

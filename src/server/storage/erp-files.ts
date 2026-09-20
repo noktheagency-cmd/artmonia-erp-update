@@ -114,7 +114,7 @@ export async function deleteWorkshopPoster(fileUrl: string) {
 
 export async function uploadProgramJourneyImage(
   file: File,
-  input: { topicId: string; track: "H" | "HB" | "B" | "2B" },
+  input: { topicId: string },
 ) {
   if (file.size > 5 * 1024 * 1024) {
     throw new Error("Journey şəkli 5 MB-dan böyük ola bilməz");
@@ -128,7 +128,7 @@ export async function uploadProgramJourneyImage(
   }
 
   const objectPath =
-    "program-journey/" + input.topicId + "/" + input.track + "/" + randomUUID() + "." + extension;
+    "program-journey/" + input.topicId + "/lesson/" + randomUUID() + "." + extension;
   const supabase = getSupabaseAdminClient();
   const result = await supabase.storage
     .from(PUBLIC_BUCKET)
@@ -155,7 +155,7 @@ export async function deleteProgramJourneyImage(objectPath: string | null) {
 }
 
 function isProgramJourneyImagePath(objectPath: string) {
-  return /^program-journey\/[0-9a-f-]{36}\/(?:H|HB|B|2B)\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i
+  return /^program-journey\/[0-9a-f-]{36}\/(?:lesson|H|HB|B|2B)\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i
     .test(objectPath);
 }
 

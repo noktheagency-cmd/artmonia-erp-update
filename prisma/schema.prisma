@@ -522,6 +522,8 @@ enum HrNotificationStatus {
 }
 
 model User {
+  fircaLedgerEntries FircaLedger[]
+  reviewedHomeworkSubmissions HomeworkSubmission[]
   mobilePushCampaigns MobilePushCampaign[]
   id              String   @id @default(uuid()) @db.Uuid
   authUserId      String?  @unique @map("auth_user_id") @db.Uuid
@@ -1663,7 +1665,8 @@ model ProgramLessonTopic {
 model ProgramLessonMaterial {
   id              String             @id @default(uuid()) @db.Uuid
   topicId         String             @map("topic_id") @db.Uuid
-  track           ProgramLessonTrack
+  track           ProgramLessonTrack?
+  sequence        Int                @default(1)
   subject         String
   objective       String
   homework        String
@@ -1673,7 +1676,7 @@ model ProgramLessonMaterial {
 
   topic ProgramLessonTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
-  @@unique([topicId, track])
+  @@unique([topicId, sequence], map: "program_lesson_materials_topic_sequence_key")
   @@index([topicId])
   @@map("program_lesson_materials")
   @@schema("erp")
@@ -1728,6 +1731,12 @@ model Teacher {
 }
 
 model Student {
+  fircaExclusion FircaExclusion?
+  fircaAwards FircaAward[]
+  fircaComments FircaComment[]
+  fircaCommentClaims FircaCommentClaim[]
+  homeworkSubmissions HomeworkSubmission[]
+  homeworkSubmissionRequests HomeworkSubmissionRequest[]
   id                     String                 @id @default(uuid()) @db.Uuid
   code                   String                 @unique
   creationIdempotencyKey String?                @unique @map("creation_idempotency_key") @db.Uuid
@@ -2055,6 +2064,7 @@ model StudentScheduleAssignment {
 }
 
 model SlotSession {
+  homeworkSubmissions HomeworkSubmission[]
   id                    String            @id @default(uuid()) @db.Uuid
   slotId                String            @map("slot_id") @db.Uuid
   sessionDate           DateTime          @map("session_date") @db.Date
@@ -2111,6 +2121,7 @@ model AttendanceRecord {
 }
 
 model LessonHomework {
+  submissions HomeworkSubmission[]
   id          String    @id @default(uuid()) @db.Uuid
   sessionId   String    @unique @map("session_id") @db.Uuid
   title       String

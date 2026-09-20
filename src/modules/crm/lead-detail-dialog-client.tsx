@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LeadAppointments } from "./lead-appointments";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
@@ -181,6 +182,7 @@ export function LeadDetailDialogClient({
           <div><Clock3 aria-hidden="true" /><span>Növbəti addım</span><strong>{lead.nextActionTypeLabel}</strong></div>
         </div>
 
+        {open ? <LeadAppointments leadId={lead.id} /> : null}
         <form action={updateLead} className="crm-dialog-form">
           <input name="leadId" type="hidden" value={lead.id} />
           <input name="returnTo" type="hidden" value={returnTo} />

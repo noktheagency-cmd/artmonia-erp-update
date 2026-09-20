@@ -234,8 +234,39 @@ export function GlobalSearch({
 
   useEffect(() => {
     const activeElement = listRef.current?.querySelector<HTMLElement>("[data-search-active='true']");
-    activeElement?.scrollIntoView({ block: "nearest" });
+    const list = listRef.current;
+    if (!activeElement || !list) return;
+    const itemBounds = activeElement.getBoundingClientRect();
+    const listBounds = list.getBoundingClientRect();
+    if (itemBounds.top < listBounds.top) {
+      list.scrollTop += itemBounds.top - listBounds.top;
+    } else if (itemBounds.bottom > listBounds.bottom) {
+      list.scrollTop += itemBounds.bottom - listBounds.bottom;
+    }
   }, [activeIndex]);
+
+  useEffect(() => {
+    if (!open) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const updateAvailableHeight = () => {
+      const viewport = window.visualViewport;
+      const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+      const top = root.getBoundingClientRect().bottom + 9;
+      root.style.setProperty("--search-available-height", `${Math.max(0, bottom - top - 16)}px`);
+    };
+    updateAvailableHeight();
+    window.addEventListener("resize", updateAvailableHeight);
+    window.addEventListener("scroll", updateAvailableHeight, { passive: true });
+    window.visualViewport?.addEventListener("resize", updateAvailableHeight);
+    window.visualViewport?.addEventListener("scroll", updateAvailableHeight);
+    return () => {
+      window.removeEventListener("resize", updateAvailableHeight);
+      window.removeEventListener("scroll", updateAvailableHeight);
+      window.visualViewport?.removeEventListener("resize", updateAvailableHeight);
+      window.visualViewport?.removeEventListener("scroll", updateAvailableHeight);
+    };
+  }, [open]);
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
@@ -278,6 +309,7 @@ export function GlobalSearch({
   }
 
   function selectItem(item: DisplaySearchItem) {
+    inputRef.current?.blur();
     const nextRecentItems = [
       item,
       ...recentItems.filter((recent) => itemKey(recent) !== itemKey(item)),
@@ -306,6 +338,7 @@ export function GlobalSearch({
         <input
           ref={inputRef}
           type="search"
+          enterKeyHint="search"
           value={query}
           role="combobox"
           aria-label="ERP üzrə ağıllı axtarış"
@@ -358,6 +391,18 @@ export function GlobalSearch({
           <span><Sparkles />Ağıllı axtarış</span>
           <small>{hasRemoteQuery ? "Canlı nəticələr" : "Yazmağa başlayın"}</small>
         </header>
+
+        <button
+          type="button"
+          className="global-search-dismiss"
+          aria-label="Axtarışı bağla"
+          onClick={() => {
+            setOpen(false);
+            inputRef.current?.blur();
+          }}
+        >
+          <X aria-hidden="true" />
+        </button>
 
         <div
           ref={listRef}

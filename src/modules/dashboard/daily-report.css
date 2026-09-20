@@ -1,0 +1,13 @@
+.daily-report { margin-top: 20px; }
+.daily-report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.daily-report-card { display: grid; gap: 14px; padding: 18px; text-align: left; border: 1px solid var(--border, #e4e9f2); border-radius: 8px; background: var(--surface, #fff); color: inherit; cursor: pointer; }
+.daily-report-card > span { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.daily-report-card strong { font-size: 17px; overflow-wrap: anywhere; }
+.daily-report-card small { color: var(--muted, #6f7787); }
+.daily-report-card:hover { background: #f8faff; border-color: #90adff; }
+.daily-report-card:focus-visible { outline: 2px solid #3158ff; outline-offset: 3px; }
+.daily-report-dialog { width: min(560px, calc(100vw - 32px)); max-height: 85dvh; overflow-y: auto; }
+.daily-report-metrics { display: grid; gap: 0; margin: 20px 0 0; }
+.daily-report-metrics > div { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 0; border-top: 1px solid #e4e9f2; }
+.daily-report-metrics dt { font-size: 14px; }
+.daily-report-metrics dd { margin: 0; font-weight: 700; font-size: 20px; text-align: right; }

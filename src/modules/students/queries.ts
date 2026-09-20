@@ -1985,18 +1985,13 @@ async function getStudentCreateOptions(
                     select jsonb_agg(
                       jsonb_build_object(
                         'id', material.id::text,
-                        'track', material.track::text,
+                        'sequence', material.sequence,
                         'subject', material.subject,
                         'objective', material.objective,
                         'homework', material.homework,
                         'imageObjectPath', material.image_object_path
                       )
-                      order by case material.track::text
-                        when 'H' then 1
-                        when 'HB' then 2
-                        when 'B' then 3
-                        else 4
-                      end
+                      order by material.sequence, material.id
                     )
                     from erp.program_lesson_materials material
                     where material.topic_id = topic.id

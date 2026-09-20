@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPrisma } from "@/server/db/prisma";
-import { requireErpActor } from "@/server/auth/actor";
+import { requireMutationActor } from "@/server/auth/actor";
 import {
   deleteProgramJourneyImage,
   programJourneyImageUrl,
@@ -13,21 +13,19 @@ export const dynamic = "force-dynamic";
 
 const uploadSchema = z.object({
   topicId: z.string().uuid(),
-  track: z.enum(["H", "HB", "B", "2B"]),
 });
 const deleteSchema = z.object({
   path: z.string().max(500).regex(
-    /^program-journey\/[0-9a-f-]{36}\/(?:H|HB|B|2B)\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i,
+    /^program-journey\/[0-9a-f-]{36}\/(?:lesson|H|HB|B|2B)\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i,
   ),
 });
 
 export async function POST(request: Request) {
   try {
-    await requireErpActor("settings.manage");
+    await requireMutationActor("settings.manage");
     const formData = await request.formData();
     const input = uploadSchema.parse({
       topicId: formData.get("topicId"),
-      track: formData.get("track"),
     });
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
@@ -46,7 +44,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await requireErpActor("settings.manage");
+    await requireMutationActor("settings.manage");
     const { path } = deleteSchema.parse(await request.json());
     const usage = await getPrisma().programLessonMaterial.count({
       where: { imageObjectPath: path },

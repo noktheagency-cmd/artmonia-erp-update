@@ -1,7 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { STUDENT_REMINDER_TASK_TYPES } from "@/modules/students/student-reminders";
 
-export const CRM_TASK_TYPES = ["lead_follow_up"] as const;
+export const CRM_TASK_TYPES = ["lead_follow_up", "lead_appointment"] as const;
 export const CRM_TASK_ENTITY_TYPES = ["lead"] as const;
 export const TASK_WORKSPACE_EXCLUDED_TYPES = [
   ...CRM_TASK_TYPES,

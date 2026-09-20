@@ -28,16 +28,10 @@ import { getSupabaseAdminClient } from "@/server/supabase/admin";
 const DAY_MS = 86_400_000;
 const STUDENT_AVATAR_BUCKET = "student-avatars";
 
-export class MobilePortalError extends Error {
-  constructor(
-    public readonly code: string,
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "MobilePortalError";
-  }
-}
+export { MobilePortalError } from "./mobile-portal-errors";
+import { MobilePortalError } from "./mobile-portal-errors";
+import { getFircaSummary } from "@/modules/firca/service";
+import { Prisma } from "@/generated/prisma/client";
 
 export async function getMobileMe(identity: MobileStudentIdentity) {
   const snapshot = await loadStudentPortalSnapshot(identity.studentId);
@@ -51,7 +45,7 @@ export async function getMobileMe(identity: MobileStudentIdentity) {
 
 export async function getMobileProfile(identity: MobileStudentIdentity) {
   const snapshot = await loadStudentPortalSnapshot(identity.studentId);
-  return buildProfile(snapshot);
+  return { ...buildProfile(snapshot), firca: await getFircaSummary(identity.studentId) };
 }
 
 export async function updateMobileProfile(
@@ -166,6 +160,7 @@ export async function getMobileHome(identity: MobileStudentIdentity) {
   });
 
   return {
+    firca: await getFircaSummary(identity.studentId),
     profile: {
       displayName: snapshot.contact.fullName,
       avatarUrl: studentAvatarUrl(snapshot.mobileAccount.avatarObjectPath),
@@ -243,93 +238,10 @@ export async function getMobileLessonDetail(
 }
 
 export async function setMobileHomeworkCompletion(
-  identity: MobileStudentIdentity,
-  homeworkId: string,
-  input: MobileHomeworkCompletion,
-) {
-  const prisma = getPrisma();
-  const homework = await prisma.lessonHomework.findUnique({
-    where: { id: homeworkId },
-    select: {
-      id: true,
-      updatedAt: true,
-      session: { select: { slotId: true, sessionDate: true, status: true } },
-    },
-  });
-  if (!homework || homework.session.status === SlotSessionStatus.CANCELLED) {
-    throw new MobilePortalError("HOMEWORK_NOT_FOUND", 404, "Ev tapşırığı tapılmadı.");
-  }
-
-  const enrollment = await prisma.enrollment.findFirst({
-    where: {
-      studentId: identity.studentId,
-      status: EnrollmentStatus.ACTIVE,
-      scheduleAssignments: {
-        some: {
-          slotId: homework.session.slotId,
-          validFrom: { lte: homework.session.sessionDate },
-          OR: [{ validTo: null }, { validTo: { gte: homework.session.sessionDate } }],
-        },
-      },
-    },
-    select: { id: true },
-  });
-  if (!enrollment) {
-    throw new MobilePortalError("HOMEWORK_NOT_FOUND", 404, "Ev tapşırığı tapılmadı.");
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    if (input.completed) {
-      const existing = await tx.homeworkCompletion.findUnique({
-        where: { homeworkId_enrollmentId: { homeworkId, enrollmentId: enrollment.id } },
-        select: { completedAt: true, updatedAt: true },
-      });
-      const completion = existing ?? await tx.homeworkCompletion.create({
-        data: { homeworkId, enrollmentId: enrollment.id },
-        select: { completedAt: true, updatedAt: true },
-      });
-      if (!existing) {
-        await tx.auditLog.create({
-          data: {
-            action: "student.homework.complete",
-            entityType: "lesson_homework",
-            entityId: homeworkId,
-            afterJson: { studentId: identity.studentId, enrollmentId: enrollment.id },
-            reason: "Tələbə mobil tətbiqdən ev tapşırığını tamamladı",
-          },
-        });
-      }
-      return {
-        homeworkId,
-        status: "completed" as const,
-        completedAt: completion.completedAt.toISOString(),
-        updatedAt: completion.updatedAt.toISOString(),
-      };
-    }
-
-    const deleted = await tx.homeworkCompletion.deleteMany({
-      where: { homeworkId, enrollmentId: enrollment.id },
-    });
-    const updatedAt = deleted.count ? new Date() : homework.updatedAt;
-    if (deleted.count) {
-      await tx.auditLog.create({
-        data: {
-          action: "student.homework.reopen",
-          entityType: "lesson_homework",
-          entityId: homeworkId,
-          afterJson: { studentId: identity.studentId, enrollmentId: enrollment.id },
-          reason: "Tələbə mobil tətbiqdən ev tapşırığını yenidən açdı",
-        },
-      });
-    }
-    return {
-      homeworkId,
-      status: "pending" as const,
-      completedAt: null,
-      updatedAt: updatedAt.toISOString(),
-    };
-  });
-  return result;
+  identity: MobileStudentIdentity, homeworkId: string, input: MobileHomeworkCompletion,
+): Promise<never> {
+  void identity; void homeworkId; void input;
+  throw new MobilePortalError("HOMEWORK_SUBMISSION_REQUIRED",410,"Tapşırığı fayl kimi göndərin. Müəllim qəbul etdikdə tamamlanacaq.");
 }
 
 export async function getMobileAttendanceSummary(
@@ -584,6 +496,12 @@ async function getStudentLessonEntries(
       },
     },
   });
+  const sessionIds = sessions.map(session=>session.id);
+  const submissions = sessionIds.length ? await prisma.$queryRaw<{sessionId:string;status:string;reviewedAt:Date|null;feedback:string|null}[]>(Prisma.sql`
+    select session_id::text as "sessionId",status,reviewed_at as "reviewedAt",feedback from erp.homework_submissions
+    where student_id=${studentId}::uuid and session_id in (${Prisma.join(sessionIds.map(id=>Prisma.sql`${id}::uuid`))})
+  `) : [];
+  const submissionBySession = new Map(submissions.map(row=>[row.sessionId,row]));
   const presentAttendance = await prisma.attendanceRecord.findMany({
     where: {
       enrollmentId: { in: enrollmentIds },
@@ -619,9 +537,8 @@ async function getStudentLessonEntries(
     const attendance = session.attendance.find(
       (item) => item.enrollmentId === assignment.enrollment.id,
     );
-    const completion = session.homework?.completions.find(
-      (item) => item.enrollmentId === assignment.enrollment.id,
-    );
+    const submission = submissionBySession.get(session.id);
+    const completion = submission?.status === "accepted" ? { completedAt: submission.reviewedAt! } : undefined;
     const date = toDateInput(session.sessionDate);
     const startsAt = bakuLocalDateTimeToUtc(date, session.startTime);
     const endsAt = bakuLocalDateTimeToUtc(date, session.endTime);
@@ -632,6 +549,9 @@ async function getStudentLessonEntries(
     const programTopic = assignment.enrollment.program.lessonTopics[previousPresentCount] ?? null;
     const homework = session.homework ? {
       id: session.homework.id,
+      lessonId: session.id,
+      submissionStatus: submission?.status ?? null,
+      feedback: submission?.feedback ?? null,
       title: session.homework.title,
       description: session.homework.description,
       status: completion
@@ -819,6 +739,7 @@ function buildNextAction(entries: StudentLessonEntry[], now: Date) {
     return {
       type: "homework",
       entityId: homeworkEntry.homework.id,
+      lessonId: homeworkEntry.id,
       title: homeworkEntry.homework.title,
       body: homeworkEntry.homework.status === "overdue"
         ? "Tapşırığın son tarixi keçib."

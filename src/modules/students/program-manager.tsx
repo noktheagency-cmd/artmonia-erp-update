@@ -27,11 +27,9 @@ import {
 import { Input } from "@/components/ui/input";
 import type { StudentListData } from "@/modules/students/queries";
 import {
-  PROGRAM_MATERIAL_TRACKS,
   programMaterialImageInputName,
   type ProgramJourneyMaterial,
   type ProgramJourneyStep,
-  type ProgramMaterialTrack,
 } from "@/modules/students/program-journey";
 import { unwrapActionResult } from "@/lib/action-result";
 import {
@@ -40,13 +38,6 @@ import {
 } from "@/lib/app-notifications";
 
 type Program = StudentListData["createOptions"]["programs"][number];
-
-const TRACK_LABELS: Record<ProgramMaterialTrack, string> = {
-  H: "H",
-  HB: "HB",
-  B: "B",
-  "2B": "2B",
-};
 
 export function ProgramManager({
   programs,
@@ -68,9 +59,6 @@ export function ProgramManager({
   const [editing, setEditing] = useState<Program | null>(null);
   const [deleting, setDeleting] = useState<Program | null>(null);
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
-  const [activeTrackByStep, setActiveTrackByStep] = useState<
-    Record<string, ProgramMaterialTrack>
-  >({});
   const [saving, setSaving] = useState(false);
 
   async function changeArchiveStatus(formData: FormData) {
@@ -92,9 +80,6 @@ export function ProgramManager({
     const next = program ? cloneProgram(program) : emptyProgram();
     setEditing(next);
     setExpandedStepId(next.lessonTopics[0]?.id ?? null);
-    setActiveTrackByStep(
-      Object.fromEntries(next.lessonTopics.map((step) => [step.id, "H"])),
-    );
   }
 
   async function saveProgram(formData: FormData) {
@@ -105,7 +90,7 @@ export function ProgramManager({
       const preparedSteps = cloneSteps(editing.lessonTopics);
       for (const step of preparedSteps) {
         for (const material of step.materials) {
-          const inputName = programMaterialImageInputName(step.id, material.track);
+          const inputName = programMaterialImageInputName(step.id, material.id);
           const imageFile = formData.get(inputName);
           formData.delete(inputName);
           if (!(imageFile instanceof File) || imageFile.size === 0) continue;
@@ -113,7 +98,7 @@ export function ProgramManager({
           const uploadData = new FormData();
           uploadData.set("file", imageFile);
           uploadData.set("topicId", step.id);
-          uploadData.set("track", material.track);
+          
           const response = await fetch("/api/programs/journey-images", {
             method: "POST",
             body: uploadData,
@@ -137,7 +122,7 @@ export function ProgramManager({
       setEditing(null);
       notifySuccess(
         editing.id ? "Proqram yeniləndi" : "Proqram yaradıldı",
-        "Journey addımları mobil tətbiq üçün hazırdır.",
+        "Dərslər və addımlar mobil tətbiq üçün hazırdır.",
       );
     } catch (error) {
       await Promise.allSettled(
@@ -176,7 +161,6 @@ export function ProgramManager({
       lessonTopics: [...current.lessonTopics, step],
     } : current);
     setExpandedStepId(step.id);
-    setActiveTrackByStep((current) => ({ ...current, [step.id]: "H" }));
   }
 
   function updateStepTitle(stepId: string, title: string) {
@@ -218,14 +202,14 @@ export function ProgramManager({
     if (expandedStepId === stepId) setExpandedStepId(null);
   }
 
-  function addMaterial(stepId: string, track: ProgramMaterialTrack) {
+  function addMaterial(stepId: string) {
     setEditing((current) => current ? {
       ...current,
       lessonTopics: current.lessonTopics.map((step) =>
-        step.id === stepId && !step.materials.some((item) => item.track === track)
+        step.id === stepId
           ? {
               ...step,
-              materials: [...step.materials, emptyMaterial(track)],
+              materials: [...step.materials, emptyMaterial()],
             }
           : step
       ),
@@ -234,7 +218,7 @@ export function ProgramManager({
 
   function updateMaterial(
     stepId: string,
-    track: ProgramMaterialTrack,
+    materialId: string,
     patch: Partial<ProgramJourneyMaterial>,
   ) {
     setEditing((current) => current ? {
@@ -243,20 +227,20 @@ export function ProgramManager({
         step.id === stepId ? {
           ...step,
           materials: step.materials.map((material) =>
-            material.track === track ? { ...material, ...patch } : material
+            material.id === materialId ? { ...material, ...patch } : material
           ),
         } : step
       ),
     } : current);
   }
 
-  function removeMaterial(stepId: string, track: ProgramMaterialTrack) {
+  function removeMaterial(stepId: string, materialId: string) {
     setEditing((current) => current ? {
       ...current,
       lessonTopics: current.lessonTopics.map((step) =>
         step.id === stepId ? {
           ...step,
-          materials: step.materials.filter((material) => material.track !== track),
+          materials: step.materials.filter((material) => material.id !== materialId),
         } : step
       ),
     } : current);
@@ -267,7 +251,7 @@ export function ProgramManager({
       <div className="program-manager-head">
         <div>
           <h2>Proqramlar</h2>
-          <p>Paket qiymətləri, dərs sayı və Journey addımları</p>
+          <p>Paket qiymətləri, dərs sayı və Dərslər və addımlar</p>
         </div>
         <Button onClick={() => openEditor()} disabled={!canManage}>
           <Plus data-icon="inline-start" />
@@ -362,7 +346,7 @@ export function ProgramManager({
               {editing?.id ? "Proqramı redaktə et" : "Yeni proqram"}
             </DialogTitle>
             <DialogDescription>
-              Proqram məlumatlarını və mobil Journey addımlarını idarə edin.
+              Proqram məlumatlarını və mobil Dərslər və addımlarnı idarə edin.
             </DialogDescription>
           </DialogHeader>
           {editing ? (
@@ -416,14 +400,14 @@ export function ProgramManager({
               <section className="journey-editor">
                 <div className="journey-editor-head">
                   <div>
-                    <strong>Journey addımları</strong>
+                    <strong>Dərslər və addımlar</strong>
                     <small>
-                      Tələbə “Gəldi” olduqda cari addım tamamlanır və növbəti açılır.
+                      Bir dərs bir addımdır. Dərs sayı qədər addım mobil tətbiqdə görünür.
                     </small>
                   </div>
                   <Button type="button" variant="outline" onClick={addStep}>
                     <Plus data-icon="inline-start" />
-                    Addım əlavə et
+                    Dərs əlavə et
                   </Button>
                 </div>
 
@@ -431,10 +415,6 @@ export function ProgramManager({
                   <div className="journey-step-list">
                     {editing.lessonTopics.map((step, index) => {
                       const expanded = expandedStepId === step.id;
-                      const activeTrack = activeTrackByStep[step.id] ?? "H";
-                      const material = step.materials.find(
-                        (item) => item.track === activeTrack,
-                      );
                       return (
                         <article
                           className="journey-step-card"
@@ -502,54 +482,13 @@ export function ProgramManager({
 
                           {expanded ? (
                             <div className="journey-step-body">
-                              <div className="journey-track-tabs" role="tablist">
-                                {PROGRAM_MATERIAL_TRACKS.map((track) => (
-                                  <button
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={track === activeTrack}
-                                    data-filled={step.materials.some(
-                                      (item) => item.track === track,
-                                    )}
-                                    key={track}
-                                    onClick={() =>
-                                      setActiveTrackByStep((current) => ({
-                                        ...current,
-                                        [step.id]: track,
-                                      }))}
-                                  >
-                                    {TRACK_LABELS[track]}
-                                  </button>
-                                ))}
-                              </div>
-                              {material ? (
-                                <JourneyMaterialEditor
-                                  stepId={step.id}
-                                  material={material}
-                                  onChange={(nextPatch) =>
-                                    updateMaterial(step.id, activeTrack, nextPatch)}
-                                  onRemove={() =>
-                                    removeMaterial(step.id, activeTrack)}
-                                />
-                              ) : (
-                                <div className="journey-material-empty">
-                                  <ImagePlus aria-hidden="true" />
-                                  <div>
-                                    <strong>{activeTrack} materialı əlavə edilməyib</strong>
-                                    <small>
-                                      Mövzu, məqsəd, tapşırıq və şəkli ayrıca daxil edin.
-                                    </small>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => addMaterial(step.id, activeTrack)}
-                                  >
-                                    <Plus data-icon="inline-start" />
-                                    Material əlavə et
-                                  </Button>
-                                </div>
-                              )}
+                              {step.materials.map((material) => <JourneyMaterialEditor
+                                key={material.id} stepId={step.id} material={material}
+                                onChange={(patch) => updateMaterial(step.id, material.id, patch)}
+                                onRemove={() => removeMaterial(step.id, material.id)}
+                              />)}
+                              <Button type="button" variant="outline" disabled={step.materials.length >= 20}
+                                onClick={() => addMaterial(step.id)}><Plus /> Material əlavə et</Button>
                             </div>
                           ) : null}
                         </article>
@@ -720,7 +659,7 @@ function JourneyMaterialEditor({
           {visibleImageUrl ? (
             <Image
               src={visibleImageUrl}
-              alt={material.track + " material şəkli"}
+              alt={material.id + " material şəkli"}
               fill
               sizes="180px"
               unoptimized={visibleImageUrl.startsWith("blob:")}
@@ -731,7 +670,7 @@ function JourneyMaterialEditor({
         </div>
         <input
           ref={inputRef}
-          name={programMaterialImageInputName(stepId, material.track)}
+          name={programMaterialImageInputName(stepId, material.id)}
           type="file"
           accept="image/jpeg,image/png,image/webp"
           onChange={(event) => selectImage(event.target.files?.[0])}
@@ -752,7 +691,7 @@ function JourneyMaterialEditor({
         onClick={onRemove}
       >
         <Trash2 data-icon="inline-start" />
-        {material.track} materialını sil
+        {material.id} materialını sil
       </Button>
     </div>
   );
@@ -771,10 +710,9 @@ function emptyProgram(): Program {
   };
 }
 
-function emptyMaterial(track: ProgramMaterialTrack): ProgramJourneyMaterial {
+function emptyMaterial(): ProgramJourneyMaterial {
   return {
     id: crypto.randomUUID(),
-    track,
     subject: "",
     objective: "",
     homework: "",
@@ -803,7 +741,7 @@ function serializeJourneySteps(steps: ProgramJourneyStep[]) {
       id: step.id,
       title: step.title,
       materials: step.materials.map((material) => ({
-        track: material.track,
+        id: material.id,
         subject: material.subject,
         objective: material.objective,
         homework: material.homework,

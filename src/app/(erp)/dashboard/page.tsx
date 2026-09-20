@@ -8,6 +8,7 @@ import { requireErpActor } from "@/server/auth/actor";
 import { RoleDashboard } from "@/modules/dashboard/role-dashboard";
 import { getRoleDashboardData } from "@/modules/dashboard/role-dashboard-query";
 import { getCompanyKpiData } from "@/modules/hr/company-kpi-data";
+import { getDailyReportData } from "@/modules/dashboard/daily-report-query";
 
 export const dynamic = "force-dynamic";
 
@@ -29,15 +30,17 @@ export default async function DashboardPage({
   const showTaskProgress =
     !actor.roles.includes(AppRole.SUPER_ADMIN) && actor.permissions.has("task.read");
   const showCompanyKpi = actor.permissions.has("hr.company_kpi.read");
-  const [data, taskData, companyKpiData] = await Promise.all([
+  const [data, taskData, companyKpiData, dailyReport] = await Promise.all([
     getOwnerDashboardData(filters),
     showTaskProgress ? getTaskData() : Promise.resolve(null),
     showCompanyKpi ? getCompanyKpiData() : Promise.resolve(null),
+    getDailyReportData(),
   ]);
 
   return (
     <OwnerDashboard
       data={data}
+      dailyReport={dailyReport}
       actorName={actor.fullName}
       companyKpiData={companyKpiData}
       taskData={taskData}

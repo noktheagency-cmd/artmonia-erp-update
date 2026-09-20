@@ -7,6 +7,8 @@ import { getNotificationCenterData } from "@/modules/notifications/queries";
 import { updateOwnProfilePhotoAction } from "@/modules/profile/actions";
 import { ProfilePhotoEditor } from "@/modules/profile/profile-photo-editor";
 import { requireErpActor } from "@/server/auth/actor";
+import Link from "next/link";
+import { can } from "@/server/rbac/permissions";
 import "@/modules/profile/profile.css";
 import { canPublishMobilePush } from "@/modules/mobile-push/access";
 import { getPushPanelData } from "@/modules/mobile-push/service";
@@ -29,6 +31,7 @@ export default async function OwnProfilePage() {
         action={updateOwnProfilePhotoAction}
       />
       {pushData ? <MobilePushPanel data={pushData} /> : null}
+      {can(actor.permissions,"attendance.manage") ? <Link href="/firca" className="ui-button">Fırça · Tapşırıqlar və aylıq yarış</Link> : null}
       <NotificationCenter
         data={data}
         markReadAction={markNotificationReadAction}

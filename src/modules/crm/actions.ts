@@ -9,6 +9,7 @@ import { requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import {
   assertCanAccessLead,
+  assertCanEditLead,
   resolveLeadManagerId,
 } from "@/modules/crm/access";
 import {
@@ -254,7 +255,6 @@ async function updateLeadActionImpl(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.update");
   const input = updateLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
-  const managerId = resolveLeadManagerId(actor, input.managerId);
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
   const nextActionType =
@@ -292,7 +292,8 @@ async function updateLeadActionImpl(formData: FormData) {
       throw new Error("Müraciət tapılmadı");
     }
 
-    assertCanAccessLead(actor, current, "crm.lead.update");
+    assertCanEditLead(actor, current);
+    const managerId = resolveLeadManagerId(actor, input.managerId, current.managerId);
 
     if (input.programId && input.programId !== current.programInterestId && !await tx.program.findUnique({ where: { id: input.programId, isActive: true }, select: { id: true } })) {
       throw new Error("Proqram tapılmadı və ya arxivdədir.");
@@ -685,7 +686,7 @@ async function updateLeadStageActionImpl(formData: FormData) {
       },
     });
 
-    assertCanAccessLead(actor, current, "crm.lead.update");
+    assertCanEditLead(actor, current);
 
     if (current.stage === input.stage) {
       return;

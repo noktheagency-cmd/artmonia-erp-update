@@ -3,26 +3,21 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { z } from "zod";
-import { ProgramLessonTrack } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
-import {
-  PROGRAM_MATERIAL_TRACKS,
-  type ProgramMaterialTrack,
-} from "@/modules/students/program-journey";
 import { deleteProgramJourneyImage } from "@/server/storage/erp-files";
 
 const optionalText = (max: number) =>
   z.preprocess(optionalFormString, z.string().max(max).optional());
 
 const imageObjectPathSchema = z.string().max(500).regex(
-  /^program-journey\/[0-9a-f-]{36}\/(?:H|HB|B|2B)\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i,
+  /^program-journey\/[0-9a-f-]{36}\/(?:lesson|H|HB|B|2B)\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i,
 );
 const journeyMaterialSchema = z.object({
-  track: z.enum(PROGRAM_MATERIAL_TRACKS),
+  id: z.string().uuid(),
   subject: z.string().trim().min(2).max(200),
   objective: z.string().trim().min(2).max(1_000),
   homework: z.string().trim().min(2).max(2_000),
@@ -31,9 +26,9 @@ const journeyMaterialSchema = z.object({
 const journeyStepSchema = z.object({
   id: z.string().uuid(),
   title: z.string().trim().min(2).max(200),
-  materials: z.array(journeyMaterialSchema).max(PROGRAM_MATERIAL_TRACKS.length),
+  materials: z.array(journeyMaterialSchema).max(20),
 }).superRefine((step, context) => {
-  const uniqueTracks = new Set(step.materials.map((material) => material.track));
+  const uniqueTracks = new Set(step.materials.map((material) => material.id));
   if (uniqueTracks.size !== step.materials.length) {
     context.addIssue({
       code: "custom",
@@ -45,7 +40,7 @@ const journeyStepSchema = z.object({
     if (
       material.imageObjectPath
       && !material.imageObjectPath.startsWith(
-        "program-journey/" + step.id + "/" + material.track + "/",
+        "program-journey/" + step.id + "/",
       )
     ) {
       context.addIssue({
@@ -83,7 +78,7 @@ const deleteProgramSchema = z.object({
 });
 
 async function saveProgramActionImpl(formData: FormData) {
-  await requireMutationActor("settings.manage");
+  const actor = await requireMutationActor("settings.manage");
   const input = programSchema.parse(Object.fromEntries(formData));
   const journeySteps = journeyStepsSchema.parse(parseJson(input.journeySteps));
   const prisma = getPrisma();
@@ -128,6 +123,7 @@ async function saveProgramActionImpl(formData: FormData) {
     const program = input.id
       ? await tx.program.update({ where: { id: input.id }, data, select: { id: true } })
       : await tx.program.create({ data, select: { id: true } });
+    await tx.$executeRawUnsafe('set constraints "program_lesson_materials_topic_sequence_key" deferred');
     const incomingTopicIds = journeySteps.map((step) => step.id);
     const foreignTopic = incomingTopicIds.length
       ? await tx.programLessonTopic.findFirst({
@@ -170,30 +166,30 @@ async function saveProgramActionImpl(formData: FormData) {
         },
         select: { id: true },
       });
-      const tracks = step.materials.map((material) =>
-        toProgramLessonTrack(material.track),
-      );
+      const materialIds = step.materials.map((material) => material.id);
       await tx.programLessonMaterial.deleteMany({
         where: {
           topicId: topic.id,
-          ...(tracks.length ? { track: { notIn: tracks } } : {}),
+          ...(materialIds.length ? { id: { notIn: materialIds } } : {}),
         },
       });
-      for (const material of step.materials) {
-        const track = toProgramLessonTrack(material.track);
+      for (const [materialIndex, material] of step.materials.entries()) {
+        const existingMaterial = await tx.programLessonMaterial.findUnique({ where: { id: material.id }, select: { topicId: true } });
+        if (existingMaterial && existingMaterial.topicId !== topic.id) throw new PublicActionError("Material başqa dərsə aiddir.", "CONFLICT");
         await tx.programLessonMaterial.upsert({
-          where: {
-            topicId_track: { topicId: topic.id, track },
-          },
+          where: { id: material.id },
           create: {
+            id: material.id,
             topicId: topic.id,
-            track,
+            sequence: materialIndex + 1,
             subject: material.subject,
             objective: material.objective,
             homework: material.homework,
             imageObjectPath: material.imageObjectPath,
           },
           update: {
+            sequence: materialIndex + 1,
+            track: null,
             subject: material.subject,
             objective: material.objective,
             homework: material.homework,
@@ -202,7 +198,8 @@ async function saveProgramActionImpl(formData: FormData) {
         });
       }
     }
-  });
+    await writeAuditLog(tx, { actorUserId: actor.id, action: "program.save", entityType: "program", entityId: program.id, after: { title: input.name, steps: journeySteps.length } });
+  }, { timeout: 30000 });
 
   await Promise.all(
     previousImagePaths
@@ -219,10 +216,6 @@ function parseJson(value: string) {
   } catch {
     throw new PublicActionError("Journey addımları düzgün formatda deyil", "VALIDATION");
   }
-}
-
-function toProgramLessonTrack(track: ProgramMaterialTrack) {
-  return track === "2B" ? ProgramLessonTrack.TWO_B : ProgramLessonTrack[track];
 }
 
 async function deleteProgramActionImpl(formData: FormData) {

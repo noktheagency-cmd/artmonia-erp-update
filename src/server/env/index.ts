@@ -37,6 +37,7 @@ const envSchema = z.object({
   CLOUDFLARE_R2_HR_BUCKET: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   MOBILE_ATTENDANCE_SERVER_TOKENS: commaSeparatedSecrets.optional(),
+  FIRCA_COMMUNITY_SERVER_TOKEN: z.string().min(32).optional(),
   ATTENDANCE_CRON_SECRET: z.string().min(32).optional(),
   ATTENDANCE_QR_TTL_SECONDS: z.coerce.number().int().min(30).max(120).default(60),
   ATTENDANCE_QR_REFRESH_SECONDS: z.coerce.number().int().min(15).max(60).default(30),

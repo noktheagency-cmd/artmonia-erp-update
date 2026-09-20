@@ -4,10 +4,10 @@ import {
   AttendanceMark,
   EnrollmentStatus,
   Prisma,
-  ProgramLessonTrack,
   SlotSessionStatus,
 } from "@/generated/prisma/client";
 import { calculateMobileJourneyAndGamification } from "@/modules/mobile/mobile-gamification";
+import { getFircaSummary } from "@/modules/firca/service";
 import type { MobileStudentIdentity } from "@/modules/mobile/mobile-api";
 import type {
   MobileNotificationQuery,
@@ -100,7 +100,7 @@ export async function getMobilePackage(identity: MobileStudentIdentity) {
 export async function getMobileJourney(identity: MobileStudentIdentity) {
   const prisma = getPrisma();
   const enrollment = await loadActiveEnrollment(identity.studentId);
-  const [attendance, homeworkCompletions] = await Promise.all([
+  const [attendance, firca] = await Promise.all([
     prisma.attendanceRecord.findMany({
       where: {
         enrollmentId: enrollment.id,
@@ -115,12 +115,8 @@ export async function getMobileJourney(identity: MobileStudentIdentity) {
         },
       },
     }),
-    prisma.homeworkCompletion.findMany({
-      where: { enrollmentId: enrollment.id },
-      select: { completedAt: true, updatedAt: true },
-    }),
+    getFircaSummary(identity.studentId),
   ]);
-  const weekStartsAt = dateFromInput(startOfBakuWeek(todayInBaku()));
   const calculated = calculateMobileJourneyAndGamification({
     programId: enrollment.program.id,
     courseCode: enrollment.program.code,
@@ -129,7 +125,7 @@ export async function getMobileJourney(identity: MobileStudentIdentity) {
       sequence: topic.sequence,
       title: topic.title,
       materials: topic.materials.map((material) => ({
-        track: material.track === ProgramLessonTrack.TWO_B ? "2B" : material.track,
+        id: material.id,
         subject: material.subject,
         objective: material.objective,
         homework: material.homework,
@@ -142,8 +138,6 @@ export async function getMobileJourney(identity: MobileStudentIdentity) {
       sessionDate: item.session.sessionDate,
       startTime: item.session.startTime,
     })),
-    homeworkCompletions,
-    weekStartsAt,
   });
   const updatedAt = latestDate([
     enrollment.updatedAt,
@@ -153,7 +147,6 @@ export async function getMobileJourney(identity: MobileStudentIdentity) {
       topic.materials.map((material) => material.updatedAt),
     ),
     ...attendance.map((item) => item.updatedAt),
-    ...homeworkCompletions.map((item) => item.updatedAt),
   ]);
 
   return {
@@ -162,6 +155,8 @@ export async function getMobileJourney(identity: MobileStudentIdentity) {
       name: enrollment.program.name,
     },
     ...calculated,
+    contractVersion: 2,
+    firca,
     updatedAt: updatedAt.toISOString(),
   };
 }
@@ -461,9 +456,9 @@ async function loadActiveEnrollment(studentId: string) {
               title: true,
               updatedAt: true,
               materials: {
-                orderBy: { track: "asc" },
+                orderBy: { sequence: "asc" },
                 select: {
-                  track: true,
+                  id: true,
                   subject: true,
                   objective: true,
                   homework: true,

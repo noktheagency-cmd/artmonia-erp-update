@@ -47,6 +47,15 @@ Initial roles:
 
 Use action-level permissions instead of hardcoding role checks everywhere.
 
+CRM follow-up detail and status edits require `crm.lead.update` and access to the
+record under `crm.lead.read`. Editors with read scope `ALL` can update another
+manager's follow-up even when their update scope is `ASSIGNED`. Read scope
+`ASSIGNED` still limits editing to their own records. Creation assigns the lead
+to its creator; editing preserves the current manager unless an editor with
+update scope `ALL` explicitly selects a new manager. Deletion and conversion
+retain their existing action scope checks. Changes remain attributed to the
+acting user in audit and stage history.
+
 Examples:
 
 - `crm.lead.create`

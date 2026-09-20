@@ -11,6 +11,10 @@
   display: none;
 }
 
+.global-search-dismiss {
+  display: none;
+}
+
 .ui-table-container {
   max-width: 100%;
   overflow-x: auto;
@@ -31,7 +35,7 @@
   }
 
   .global-search-control input {
-    font-size: 11.5px;
+    font-size: 16px;
   }
 
   .global-search-shortcut {
@@ -39,16 +43,7 @@
   }
 
   .global-search-panel {
-    position: fixed;
-    top: calc(126px + env(safe-area-inset-top));
-    right: var(--mobile-page-gutter);
-    left: var(--mobile-page-gutter);
-    max-height: calc(100dvh - 218px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     border-radius: 18px;
-  }
-
-  .global-search-results {
-    max-height: calc(100dvh - 302px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 
   .global-search-result {
@@ -213,19 +208,74 @@
     z-index: auto;
   }
 
-  .erp-command-header {
+  .erp-frame .erp-command-header {
+    top: calc(64px + env(safe-area-inset-top));
     z-index: 980;
+    display: flex;
+    flex-wrap: wrap;
     width: 100%;
-    max-width: 680px;
+    max-width: none;
     margin-bottom: 16px;
+    padding-block: 8px;
+    background: var(--background, #f2f5fa);
   }
 
-  .global-search {
-    width: auto;
-  }
-
-  .global-search.is-open {
+  .erp-frame .erp-command-header .global-search {
+    flex: 1 0 100%;
     width: 100%;
+  }
+
+  .erp-command-header :is(.students-header-slot, .crm-header-slot, .finance-header-slot) {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+
+  .global-search-panel {
+    position: absolute;
+    top: calc(100% + 9px);
+    right: 0;
+    left: 0;
+    max-height: min(var(--search-available-height, 60dvh), calc(100dvh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 600px);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .global-search-results {
+    min-height: 0;
+    max-height: none;
+  }
+
+  .global-search-control input {
+    font-size: 16px;
+  }
+
+  .global-search-shortcut,
+  .global-search-footer,
+  .global-search-panel-head small {
+    display: none;
+  }
+
+  .global-search-panel-head {
+    padding-right: 52px;
+  }
+
+  .global-search-dismiss {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .global-search-dismiss svg {
+    width: 18px;
+    height: 18px;
   }
 
   .global-search-control {
@@ -589,8 +639,8 @@
     padding-top: calc(74px + env(safe-area-inset-top));
   }
 
-  .erp-command-header {
-    top: calc(70px + env(safe-area-inset-top));
+  .erp-frame .erp-command-header {
+    top: calc(62px + env(safe-area-inset-top));
   }
 
   .erp-frame :is(

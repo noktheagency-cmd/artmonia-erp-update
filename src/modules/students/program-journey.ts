@@ -1,10 +1,5 @@
-export const PROGRAM_MATERIAL_TRACKS = ["H", "HB", "B", "2B"] as const;
-
-export type ProgramMaterialTrack = (typeof PROGRAM_MATERIAL_TRACKS)[number];
-
 export type ProgramJourneyMaterial = {
   id: string;
-  track: ProgramMaterialTrack;
   subject: string;
   objective: string;
   homework: string;
@@ -21,7 +16,7 @@ export type ProgramJourneyStep = {
 
 export function programMaterialImageInputName(
   topicId: string,
-  track: ProgramMaterialTrack,
+  materialId: string,
 ) {
-  return "programMaterialImage:" + topicId + ":" + track;
+  return "programMaterialImage:" + topicId + ":" + materialId;
 }

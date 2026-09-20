@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import { DailyReport } from "./daily-report";
+import type { DailyReportData } from "./daily-report-query";
 import Link from "next/link";
 import type { Route } from "next";
 import type { LucideIcon } from "lucide-react";
@@ -37,6 +39,7 @@ const kpiPresentation: readonly KpiPresentation[] = [
 
 export function OwnerDashboard({
   data,
+  dailyReport,
   actorName,
   companyKpiData,
   taskData,
@@ -44,6 +47,7 @@ export function OwnerDashboard({
   updateTaskStatusAction,
 }: {
   data: DashboardData;
+  dailyReport: DailyReportData | null;
   actorName: string;
   companyKpiData: CompanyKpiData | null;
   taskData: TaskData | null;
@@ -104,6 +108,7 @@ export function OwnerDashboard({
         </div>
       ) : null}
 
+      {dailyReport ? <DailyReport data={dailyReport} /> : null}
     </section>
   );
 }
