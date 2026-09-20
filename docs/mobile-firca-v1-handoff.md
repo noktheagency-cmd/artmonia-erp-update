@@ -46,6 +46,20 @@ Yeni mükafatlandırma ilkin olaraq **bağlıdır**, `startsAt: null`. Köhnə X
 
 ## İcma dispatcher-in təhlükəsizlik müqaviləsi
 
+### Published və approved qərarı — 20 sentyabr 2026
+
+Əlavə insan təsdiqi tələb edilmir. `approved` burada rəydən istifadə üçün serverin təsdiqlədiyi dərc vəziyyətidir:
+
+| İcma statusu | approved | deleted |
+| --- | --- | --- |
+| published / görünən | true | false |
+| hidden / gizlədilmiş | false | false |
+| deleted / silinmiş | false | true |
+
+Mənbə yalnız icma bazasının commit edilmiş sətridir; client-dən gələn booleana etibar edilməməlidir. Status dəyişəndə `revision` artırılır, eyni revision dəyişmiş payload üçün təkrar istifadə edilmir. Gizlədilən və ya silinən mükafatlandırılmış rəyin xalı geri alınır. Yenidən dərc əvvəlki mükafatı bərpa edə bilər, yeni həftəlik limit yeri yaratmır. ERP-də müəllimin/administratorun `moderated=true` qərarı isə `approved=true` ilə ləğv edilmir.
+
+Bildiriş müqaviləsi portal OpenAPI `2.0.1`-də `homework.submitted`, `homework.accepted`, `homework.rejected` event-lərini ehtiva edir. `entity.id` homeworkId-dir, dərsə keçid üçün `event.metadata.lessonId` istifadə olunur. `homework.completed` yalnız köhnə müştəri/history uyğunluğu üçün enum-da saxlanılıb.
+
 `Authorization: Bearer <FIRCA_COMMUNITY_SERVER_TOKEN>` yalnız etibarlı server worker/Edge Function-da saxlanmalıdır. Adi mobil gateway bu credential-ı istifadə etməməlidir. İstifadəçi sorğusundakı `approved`, müəllif və post sahibi məlumatını birbaşa ötürməyin: onları icma bazasının commit edilmiş sətrindən götürün. Post müəllifi həqiqi digər tələbə olmalıdır; ERP həmin müəllifin aktiv tələbə mapping-ini də yoxlayır. Event payload-da Student.id yoxdur, müəllifin Supabase auth UUID-si ERP-də mapping olunur.
 
 Create/edit/delete üçün bütün snapshot və monoton `revision` göndərin. `commentId`, `postId`, müəllif, post sahibi, `parentId`, ilkin `createdAt` dəyişməzdir. Soft-delete/tombstone saxlayın ki, gecikmiş create hadisəsi silinmiş rəyi bərpa etməsin. Etibarlı outbox/retry tələb olunur. Eyni revision və fərqli payload 409; eyni payload 200 duplicate; köhnə revision 200 stale. Request body maksimum 16,000 baytdır.

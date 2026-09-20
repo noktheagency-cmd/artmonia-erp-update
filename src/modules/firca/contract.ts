@@ -36,7 +36,8 @@ export const commentEventSchema = z
     body: z.string().max(10000),
     revision: z.number().int().positive(),
     deleted: z.boolean(),
-    approved: z.boolean(),
+    // Authoritative publication state, not a separate human approval queue.
+    approved: z.boolean().describe("Published and visible; hidden/deleted must be false. Derived by the trusted dispatcher, never the client."),
     createdAt: z.iso.datetime({ offset: true }),
   })
   .strict();

@@ -58,3 +58,12 @@ test("settings cannot enable scoring without a start or accept client point over
     false,
   );
 });
+
+test("published does not require human approval; hidden and deleted do not qualify", () => {
+  const comment = {body:"Rənglərin uyğunluğu çox maraqlı alınıb",parentId:null,isOwn:false};
+  for (const [state, approved, deleted, expected] of [
+    ["published",true,false,true], ["hidden",false,false,false], ["deleted",false,true,false],
+  ] as const) {
+    assert.equal(qualifiesComment({...comment,approved,deleted},20), expected, state);
+  }
+});

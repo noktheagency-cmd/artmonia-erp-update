@@ -372,6 +372,8 @@ try {
     0,
     "same post limit",
   );
+  check((await transact(() => applyCommentEvent(db,{...first,revision:2,approved:false}))).delta,-5,'hidden reverses a published award');
+  check((await transact(() => applyCommentEvent(db,{...first,revision:3,approved:true}))).delta,5,'republishing restores the same award');
   check(
     (
       await transact(() =>
@@ -400,14 +402,14 @@ try {
   check(
     (
       await transact(() =>
-        applyCommentEvent(db, { ...first, revision: 2, deleted: true }),
+        applyCommentEvent(db, { ...first, revision: 4, approved: false, deleted: true }),
       )
     ).delta,
     -5,
     "deletion reverses",
   );
   check(
-    (await transact(() => applyCommentEvent(db, { ...first, revision: 3 })))
+    (await transact(() => applyCommentEvent(db, { ...first, revision: 5 })))
       .delta,
     5,
     "restore does not use another slot",
@@ -427,7 +429,7 @@ try {
     first.commentId,
   ]);
   check(
-    (await transact(() => applyCommentEvent(db, { ...first, revision: 4 })))
+    (await transact(() => applyCommentEvent(db, { ...first, revision: 6 })))
       .delta,
     -5,
     "moderated comment cannot earn",

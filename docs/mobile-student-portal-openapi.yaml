@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Mobile Student Portal API
-  version: 2.0.0
+  version: 2.0.1
 servers:
   - url: https://erp.artmoniya.com
 paths:
@@ -596,8 +596,27 @@ components:
             version: { type: integer, const: 1 }
             name:
               type: string
-              enum: [announcement.published, attendance.updated, homework.assigned, homework.completed, lesson.cancelled, lesson.rescheduled, package.updated, erp.push.published]
+              description: homework.completed is a legacy value; new submission/review events use submitted, accepted, rejected.
+              enum: [announcement.published, attendance.updated, homework.assigned, homework.submitted, homework.accepted, homework.rejected, homework.completed, lesson.cancelled, lesson.rescheduled, package.updated, erp.push.published]
             metadata: { type: object, additionalProperties: true }
+      examples:
+        - id: 'homework:11111111-1111-4111-8111-111111111111:2:1789988400'
+          type: homework
+          title: Ev tapşırığı qəbul edildi
+          body: Kürə və kölgə
+          readAt: null
+          occurredAt: '2026-09-21T11:00:00Z'
+          entity:
+            type: homework
+            id: '11111111-1111-4111-8111-111111111111'
+          event:
+            version: 1
+            name: homework.accepted
+            metadata:
+              status: accepted
+              lessonId: '22222222-2222-4222-8222-222222222222'
+              feedback: Yaxşı iş
+              dueAt: null
     NotificationList:
       type: object
       required: [items, unreadCount, hasMore, nextCursor, serverTime]

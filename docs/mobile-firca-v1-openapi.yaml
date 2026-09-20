@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Fırça V1 — coordinated mobile rollout
-  version: 1.0.0
+  version: 1.0.1
   description: >
     Implementation contract; not a claim of live deployment.
-    Read together with mobile-student-portal-openapi.yaml version 2.0.0.
+    Read together with mobile-student-portal-openapi.yaml version 2.0.1.
 servers:
   - url: https://erp.artmoniya.com
 security:
@@ -147,6 +147,9 @@ paths:
         Deliver create/edit/delete/moderation with monotonically increasing
         revision; retry unchanged payload with the same revision.
         The normal student gateway credential cannot authorize this route.
+        approved=true means published and visible, not pre-approved by a human.
+        hidden sends approved=false and deleted=false; deleted sends both
+        approved=false and deleted=true. Republishing uses a higher revision.
       requestBody:
         required: true
         content:
@@ -163,8 +166,13 @@ paths:
                 parentId: { type: [string, 'null'], format: uuid }
                 body: { type: string, maxLength: 10000 }
                 revision: { type: integer, minimum: 1 }
-                deleted: { type: boolean }
-                approved: { type: boolean }
+                deleted: { type: boolean, description: True for a deleted comment tombstone }
+                approved:
+                  type: boolean
+                  description: >
+                    True only when the committed comment is published and visible.
+                    False when hidden or deleted. No separate human approval required.
+                    ERP moderation can independently prevent awarding.
                 createdAt: { type: string, format: date-time }
       responses:
         '200':
