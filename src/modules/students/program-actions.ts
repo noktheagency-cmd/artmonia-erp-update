@@ -28,12 +28,12 @@ const journeyStepSchema = z.object({
   title: z.string().trim().min(2).max(200),
   materials: z.array(journeyMaterialSchema).max(20),
 }).superRefine((step, context) => {
-  const uniqueTracks = new Set(step.materials.map((material) => material.id));
-  if (uniqueTracks.size !== step.materials.length) {
+  const uniqueMaterials = new Set(step.materials.map((material) => material.id));
+  if (uniqueMaterials.size !== step.materials.length) {
     context.addIssue({
       code: "custom",
       path: ["materials"],
-      message: "Eyni material növü bir addımda yalnız bir dəfə ola bilər.",
+      message: "Eyni material bir dərsdə yalnız bir dəfə ola bilər.",
     });
   }
   for (const [index, material] of step.materials.entries()) {

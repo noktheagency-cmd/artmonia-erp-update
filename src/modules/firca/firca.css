@@ -1,9 +1,233 @@
-.firca-page{display:grid;gap:22px;max-width:1200px;margin:0 auto;width:100%;color:var(--foreground,#10131a)}
-.firca-heading{display:flex;align-items:center;gap:16px}.firca-heading h1{margin:0;font-size:30px}.firca-heading p{margin:6px 0;color:#6f7787}.firca-heading>button{margin-left:auto}.firca-mark{display:grid;place-items:center;background:#fff0da;color:#bd620c;width:54px;height:54px;border-radius:16px}
-.firca-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.firca-metrics article{display:grid;grid-template-columns:30px 1fr;gap:6px 10px;padding:22px;background:var(--card,#fff);border:1px solid var(--border,#e4e9f2);border-radius:16px}.firca-metrics svg{color:#6d48ff;grid-row:span 2}.firca-metrics strong{font-size:26px}.firca-metrics span{color:#6f7787;font-size:12px}
-.firca-tabs{display:flex;flex-wrap:wrap;gap:8px}.firca-tabs a{padding:8px 12px;border-radius:8px;color:#6f7787}.firca-tabs a[aria-current]{background:#eef0ff;color:#3158ff}
-.firca-surface{padding:26px;background:var(--card,#fff);border:1px solid var(--border,#e4e9f2);border-radius:18px}.firca-surface h2{display:flex;align-items:center;gap:9px;font-size:19px}.firca-surface h2 svg{width:20px;color:#6d48ff}.firca-surface>p,.firca-surface small{color:#6f7787;font-size:12px;line-height:1.6}.firca-empty{padding:40px 12px;text-align:center;color:#8791a4}
-.firca-record{display:flex;align-items:center;flex-wrap:wrap;gap:14px;padding:20px 0;border-bottom:1px solid var(--border,#e4e9f2);font-size:13px}.firca-record>div:first-child{flex:1;min-width:180px}.firca-record p{margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere}.firca-record a{color:#3158ff}.firca-record small{display:block}.firca-buttons{display:flex;gap:8px}.firca-review{flex-basis:100%;display:flex;flex-wrap:wrap;gap:10px;align-items:end}.firca-review label{flex:1;min-width:180px}
-.firca-page label{display:grid;gap:8px;font-size:13px}.firca-page input:not([type=checkbox]),.firca-page textarea,.firca-page select{width:100%;min-height:40px;border:1px solid #d8dfeb;background:var(--card,#fff);color:inherit;border-radius:8px;padding:10px;font:inherit}.firca-page input:focus-visible,.firca-page textarea:focus-visible,.firca-page select:focus-visible{outline:2px solid #6d48ff;outline-offset:2px}.firca-page input[readonly]{background:#f2f5fa}.firca-settings{display:grid;gap:16px;max-width:550px;margin:20px 0 30px}.firca-settings>button{justify-self:start}.firca-page .firca-check{display:flex;align-items:center;gap:8px}.firca-check input{accent-color:#6d48ff}
-.firca-ranking{list-style:none;padding:0}.firca-ranking li{display:flex;gap:14px;align-items:center;padding:17px 0;border-bottom:1px solid #e4e9f2;font-size:14px}.firca-ranking li>span{display:grid;place-items:center;width:34px;height:34px;background:#f0edff;border-radius:50%;color:#6d48ff}.firca-ranking b{margin-left:auto;color:#ad640b}
-@media(max-width:700px){.firca-metrics{grid-template-columns:1fr;gap:8px}.firca-metrics article{padding:15px}.firca-heading{flex-wrap:wrap}.firca-heading p{font-size:12px}.firca-surface{padding:16px}.firca-record{align-items:start}.firca-buttons{width:100%}.firca-tabs button{font-size:12px}}
+.firca-page {
+  display: grid;
+  gap: 22px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  color: var(--foreground, #10131a);
+}
+.firca-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.firca-heading h1 {
+  margin: 0;
+  font-size: 30px;
+}
+.firca-heading p {
+  margin: 6px 0;
+  color: #6f7787;
+}
+.firca-heading > button {
+  margin-left: auto;
+}
+.firca-mark {
+  display: grid;
+  place-items: center;
+  background: #fff0da;
+  color: #bd620c;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+}
+.firca-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.firca-metrics article {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 6px 10px;
+  padding: 22px;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e4e9f2);
+  border-radius: 16px;
+}
+.firca-metrics svg {
+  color: #6d48ff;
+  grid-row: span 2;
+}
+.firca-metrics strong {
+  font-size: 26px;
+}
+.firca-metrics span {
+  color: #6f7787;
+  font-size: 12px;
+}
+.firca-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.firca-tabs a {
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #6f7787;
+}
+.firca-tabs a[aria-current] {
+  background: #eef0ff;
+  color: #3158ff;
+}
+.firca-surface {
+  padding: 26px;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e4e9f2);
+  border-radius: 18px;
+}
+.firca-surface h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 19px;
+}
+.firca-surface h2 svg {
+  width: 20px;
+  color: #6d48ff;
+}
+.firca-surface > p,
+.firca-surface small {
+  color: #6f7787;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.firca-empty {
+  padding: 40px 12px;
+  text-align: center;
+  color: #8791a4;
+}
+.firca-record {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border, #e4e9f2);
+  font-size: 13px;
+}
+.firca-record > div:first-child {
+  flex: 1;
+  min-width: 180px;
+}
+.firca-record p {
+  margin: 5px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.firca-record a {
+  color: #3158ff;
+}
+.firca-record small {
+  display: block;
+}
+.firca-buttons {
+  display: flex;
+  gap: 8px;
+}
+.firca-review {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.firca-review label {
+  flex: 1;
+  min-width: 180px;
+}
+.firca-page label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.firca-page input:not([type="checkbox"]),
+.firca-page textarea,
+.firca-page select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #d8dfeb;
+  background: var(--card, #fff);
+  color: inherit;
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+}
+.firca-page input:focus-visible,
+.firca-page textarea:focus-visible,
+.firca-page select:focus-visible {
+  outline: 2px solid #6d48ff;
+  outline-offset: 2px;
+}
+.firca-page input[readonly] {
+  background: #f2f5fa;
+}
+.firca-settings {
+  display: grid;
+  gap: 16px;
+  max-width: 550px;
+  margin: 20px 0 30px;
+}
+.firca-settings > button {
+  justify-self: start;
+}
+.firca-page .firca-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.firca-check input {
+  accent-color: #6d48ff;
+}
+.firca-ranking {
+  list-style: none;
+  padding: 0;
+}
+.firca-ranking li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 17px 0;
+  border-bottom: 1px solid #e4e9f2;
+  font-size: 14px;
+}
+.firca-ranking li > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  background: #f0edff;
+  border-radius: 50%;
+  color: #6d48ff;
+}
+.firca-ranking b {
+  margin-left: auto;
+  color: #ad640b;
+}
+@media (max-width: 700px) {
+  .firca-metrics {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .firca-metrics article {
+    padding: 15px;
+  }
+  .firca-heading {
+    flex-wrap: wrap;
+  }
+  .firca-heading p {
+    font-size: 12px;
+  }
+  .firca-surface {
+    padding: 16px;
+  }
+  .firca-record {
+    align-items: start;
+  }
+  .firca-buttons {
+    width: 100%;
+  }
+  .firca-tabs button {
+    font-size: 12px;
+  }
+}

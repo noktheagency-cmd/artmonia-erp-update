@@ -1,5 +1,7 @@
 # Artmonia Mobile ↔ ERP P1 təhvil sənədi
 
+> Tarixi P1 müqaviləsidir. Yeni Journey/Fırça və fayllı ev tapşırığı keçidi üçün [Fırça V1 təhvil sənədini](mobile-firca-v1-handoff.md) və OpenAPI v2-ni istifadə edin. Aşağıdakı köhnə XP, track və manual completion qaydaları yeni keçidə aid deyil.
+
 **Status:** production üçün hazırdır
 
 **API versiyası:** `v1`

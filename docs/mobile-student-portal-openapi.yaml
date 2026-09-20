@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Mobile Student Portal API
-  version: 1.2.0
+  version: 2.0.0
 servers:
   - url: https://erp.artmoniya.com
 paths:
@@ -154,7 +154,8 @@ paths:
   /api/mobile/v1/me/homeworks/{homeworkId}/completion:
     put:
       operationId: setMobileHomeworkCompletion
-      summary: Idempotently complete or reopen a student-owned homework
+      summary: Removed — use photo/file submission and teacher review
+      deprecated: true
       security: [{ serverToken: [], studentToken: [] }]
       parameters:
         - { $ref: '#/components/parameters/RequestId' }
@@ -173,11 +174,11 @@ paths:
               properties:
                 completed: { type: boolean }
       responses:
-        '200':
-          description: Current homework completion state
+        '410':
+          description: HOMEWORK_SUBMISSION_REQUIRED — manual completion has been removed
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/HomeworkCompletion' }
+              schema: { $ref: '#/components/schemas/Error' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -224,12 +225,12 @@ paths:
   /api/mobile/v1/me/journey:
     get:
       operationId: getMobileJourney
-      summary: Get ERP-calculated program journey and gamification
+      summary: Get ERP-calculated dynamic program Journey and Fırça
       security: [{ serverToken: [], studentToken: [] }]
       parameters: [{ $ref: '#/components/parameters/RequestId' }]
       responses:
         '200':
-          description: Journey and gamification summary
+          description: Dynamic program Journey and Fırça summary
           content:
             application/json:
               schema: { $ref: '#/components/schemas/JourneyResponse' }
@@ -337,6 +338,7 @@ components:
       type: object
       required: [displayName, email, phone, avatarUrl, avatarObjectPath, accountStatus, academy, editableFields, updatedAt]
       properties:
+        firca: { $ref: './mobile-firca-v1-openapi.yaml#/components/schemas/Firca' }
         displayName: { type: string }
         email: { type: string, format: email }
         phone: { type: [string, 'null'] }
@@ -366,8 +368,9 @@ components:
         status: { type: string, enum: [scheduled, completed, cancelled, rescheduled] }
     Home:
       type: object
-      required: [profile, attendance, nextLesson, nextAction, academyNotice, updatedAt]
+      required: [profile, attendance, nextLesson, nextAction, academyNotice, firca, updatedAt]
       properties:
+        firca: { $ref: './mobile-firca-v1-openapi.yaml#/components/schemas/Firca' }
         profile:
           type: object
           required: [displayName, avatarUrl, programCode, programName, lessonsPerMonth]
@@ -395,6 +398,7 @@ components:
           properties:
             type: { type: string, enum: [homework, teacher_note] }
             entityId: { type: string, format: uuid }
+            lessonId: { type: string, format: uuid, description: Present for homework actions }
             title: { type: string }
             body: { type: string }
         academyNotice:
@@ -414,9 +418,12 @@ components:
         source: { type: [string, 'null'], enum: [manual, mobile_qr, automatic, null] }
     Homework:
       type: object
-      required: [id, title, description, status, dueAt, completedAt]
+      required: [id, lessonId, title, description, status, submissionStatus, feedback, dueAt, completedAt]
       properties:
         id: { type: string, format: uuid }
+        lessonId: { type: string, format: uuid }
+        submissionStatus: { type: [string, 'null'], enum: [submitted, accepted, rejected, null] }
+        feedback: { type: [string, 'null'] }
         title: { type: string }
         description: { type: [string, 'null'] }
         status: { type: string, enum: [pending, completed, overdue] }
@@ -515,52 +522,32 @@ components:
         updatedAt: { type: string, format: date-time }
     JourneyMaterial:
       type: object
-      required: [track, subject, objective, homework, imageUrl]
+      required: [id, subject, objective, homework, imageUrl]
       properties:
-        track: { type: string, enum: [H, HB, B, 2B] }
+        id: { type: string, format: uuid }
         subject: { type: string }
         objective: { type: string }
         homework: { type: string }
         imageUrl: { type: [string, 'null'], format: uri }
     JourneyTopic:
       type: object
-      required: [identifier, number, title, courseCode, status, completedAt, materials]
+      required: [identifier, number, title, courseCode, status, access, canViewMaterials, completedAt, materials]
       properties:
         identifier: { type: string, pattern: '^program:[0-9a-f-]{36}:topic:[0-9a-f-]{36}$' }
         number: { type: integer, minimum: 1 }
         title: { type: string }
         courseCode: { type: [string, 'null'] }
         status: { type: string, enum: [completed, current, locked] }
+        access: { type: string, enum: [completed, current, preview, locked] }
+        canViewMaterials: { type: boolean }
         completedAt: { type: [string, 'null'], format: date-time }
         materials:
           type: array
-          maxItems: 4
+          maxItems: 20
           items: { $ref: '#/components/schemas/JourneyMaterial' }
-    Achievement:
-      type: object
-      required: [id, title, description, iconKey, status, earnedAt]
-      properties:
-        id: { type: string }
-        title: { type: string }
-        description: { type: string }
-        iconKey: { type: string }
-        status: { type: string, enum: [earned, locked] }
-        earnedAt: { type: [string, 'null'], format: date-time }
-    Reward:
-      type: object
-      required: [id, title, description, iconKey, requiredXp, remainingXp, status, unlockedAt]
-      properties:
-        id: { type: string }
-        title: { type: string }
-        description: { type: string }
-        iconKey: { type: string }
-        requiredXp: { type: integer, minimum: 0 }
-        remainingXp: { type: integer, minimum: 0 }
-        status: { type: string, enum: [unlocked, locked] }
-        unlockedAt: { type: [string, 'null'], format: date-time }
     JourneyResponse:
       type: object
-      required: [program, journey, gamification, rules, updatedAt]
+      required: [program, journey, contractVersion, firca, updatedAt]
       properties:
         program:
           type: object
@@ -582,56 +569,8 @@ components:
             completedTopicCount: { type: integer, minimum: 0 }
             totalTopicCount: { type: integer, minimum: 0 }
             progressPercent: { type: integer, minimum: 0, maximum: 100 }
-        gamification:
-          type: object
-          required: [xp, level, streak, achievements, rewards, latestAchievement, nextReward]
-          properties:
-            xp:
-              type: object
-              required: [total, earnedThisWeek]
-              properties:
-                total: { type: integer, minimum: 0 }
-                earnedThisWeek: { type: integer, minimum: 0 }
-            level:
-              type: object
-              required: [number, title, currentXp, nextLevelXp, progressPercent]
-              properties:
-                number: { type: integer, minimum: 1 }
-                title: { type: string }
-                currentXp: { type: integer, minimum: 0 }
-                nextLevelXp: { type: integer, minimum: 1 }
-                progressPercent: { type: integer, minimum: 0, maximum: 100 }
-            streak:
-              type: object
-              required: [current, best, unit]
-              properties:
-                current: { type: integer, minimum: 0 }
-                best: { type: integer, minimum: 0 }
-                unit: { type: string, enum: [lesson] }
-            achievements:
-              type: array
-              items: { $ref: '#/components/schemas/Achievement' }
-            rewards:
-              type: array
-              items: { $ref: '#/components/schemas/Reward' }
-            latestAchievement:
-              anyOf:
-                - { $ref: '#/components/schemas/Achievement' }
-                - { type: 'null' }
-            nextReward:
-              anyOf:
-                - { $ref: '#/components/schemas/Reward' }
-                - { type: 'null' }
-        rules:
-          type: object
-          required: [presentXp, homeworkXp, levelStepXp, streakUnit, absentBreaksStreak, excusedBreaksStreak]
-          properties:
-            presentXp: { type: integer, const: 100 }
-            homeworkXp: { type: integer, const: 25 }
-            levelStepXp: { type: integer, const: 500 }
-            streakUnit: { type: string, const: lesson }
-            absentBreaksStreak: { type: boolean, const: true }
-            excusedBreaksStreak: { type: boolean, const: false }
+        contractVersion: { type: integer, const: 2 }
+        firca: { $ref: './mobile-firca-v1-openapi.yaml#/components/schemas/Firca' }
         updatedAt: { type: string, format: date-time }
     AcademicNotification:
       type: object

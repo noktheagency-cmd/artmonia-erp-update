@@ -1,0 +1,252 @@
+openapi: 3.1.0
+info:
+  title: Artmonia ERP Fırça V1 — coordinated mobile rollout
+  version: 1.0.0
+  description: >
+    Implementation contract; not a claim of live deployment.
+    Read together with mobile-student-portal-openapi.yaml version 2.0.0.
+servers:
+  - url: https://erp.artmoniya.com
+security:
+  - serverToken: []
+    studentToken: []
+paths:
+  /api/mobile/v1/me/firca:
+    get:
+      operationId: getMobileFirca
+      responses:
+        '200':
+          description: Current Baku month and lifetime net Fırça
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Firca' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/mobile/v1/me/firca/history:
+    get:
+      operationId: getMobileFircaHistory
+      parameters:
+        - name: before
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Up to 50 own ledger entries, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 50
+                    items:
+                      type: object
+                      required: [id, delta, source, sourceId, reason, occurredAt]
+                      properties:
+                        id: { type: string, format: uuid }
+                        delta: { type: integer, description: Signed award or reversal }
+                        source: { type: string, enum: [attendance, homework, comment] }
+                        sourceId: { type: string, format: uuid }
+                        reason: { type: string }
+                        occurredAt: { type: string, format: date-time }
+                  nextCursor: { type: [string, 'null'], format: uuid }
+        default: { $ref: '#/components/responses/Error' }
+  /api/mobile/v1/me/leaderboard:
+    get:
+      operationId: getMobileLeaderboard
+      parameters:
+        - name: month
+          in: query
+          description: Baku calendar month; defaults to current month
+          schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+      responses:
+        '200':
+          description: Academy-wide raw monthly points, top 10 and own rank
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [title, month, timezone, scope, metric, top, me, updatedAt]
+                properties:
+                  title: { type: string }
+                  month: { type: string }
+                  timezone: { const: Asia/Baku }
+                  scope: { const: academy }
+                  metric: { const: firca }
+                  top:
+                    type: array
+                    maxItems: 10
+                    items: { $ref: '#/components/schemas/LeaderboardEntry' }
+                  me:
+                    anyOf:
+                      - { $ref: '#/components/schemas/LeaderboardEntry' }
+                      - { type: 'null' }
+                  updatedAt: { type: string, format: date-time }
+        default: { $ref: '#/components/responses/Error' }
+  /api/mobile/v1/me/homeworks/{homeworkId}/submission:
+    parameters:
+      - name: homeworkId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getMobileHomeworkSubmission
+      responses:
+        '200':
+          description: Latest submission or null; student access checked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [submission]
+                properties:
+                  submission:
+                    anyOf:
+                      - { $ref: '#/components/schemas/Submission' }
+                      - { type: 'null' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: submitMobileHomework
+      description: >
+        JPEG/PNG/WebP/PDF with verified signature, maximum 8 MiB.
+        requestKey is an idempotency UUID scoped to the signed-in student.
+        Same key and identical bytes replays the current submission;
+        different bytes or homework with that key returns 409.
+        Accepted work must be rejected by a teacher before resubmission.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, requestKey]
+              properties:
+                file: { type: string, format: binary }
+                requestKey: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Uploaded or replayed submission; no points yet
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [submission, repeated]
+                properties:
+                  submission: { $ref: '#/components/schemas/Submission' }
+                  repeated: { type: boolean }
+        default: { $ref: '#/components/responses/Error' }
+  /api/mobile/v1/firca/community-events:
+    post:
+      operationId: dispatchFircaCommunityEvent
+      security: [{ communityToken: [] }]
+      description: >
+        Trusted server dispatcher only. Never forward arbitrary mobile JSON.
+        Read author, post owner, parent, body, approval, revision and original
+        creation timestamp from the committed community database row.
+        Deliver create/edit/delete/moderation with monotonically increasing
+        revision; retry unchanged payload with the same revision.
+        The normal student gateway credential cannot authorize this route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [commentId, postId, authorAuthUserId, postAuthorAuthUserId, parentId, body, revision, deleted, approved, createdAt]
+              properties:
+                commentId: { type: string, format: uuid }
+                postId: { type: string, format: uuid }
+                authorAuthUserId: { type: string, format: uuid }
+                postAuthorAuthUserId: { type: string, format: uuid }
+                parentId: { type: [string, 'null'], format: uuid }
+                body: { type: string, maxLength: 10000 }
+                revision: { type: integer, minimum: 1 }
+                deleted: { type: boolean }
+                approved: { type: boolean }
+                createdAt: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Duplicate and stale deliveries are successful no-ops
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, delta]
+                properties:
+                  status: { type: string, enum: [recorded, duplicate, stale, ineligible, post_already_evaluated] }
+                  delta: { type: integer }
+        default: { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    serverToken:
+      type: http
+      scheme: bearer
+      description: ERP_ATTENDANCE_SERVER_TOKEN, Edge Function secret only
+    studentToken:
+      type: apiKey
+      in: header
+      name: X-Student-Authorization
+      description: 'Bearer <Supabase access token>'
+    communityToken:
+      type: http
+      scheme: bearer
+      description: FIRCA_COMMUNITY_SERVER_TOKEN, distinct trusted dispatcher secret
+  responses:
+    Error:
+      description: >
+        400 INVALID_REQUEST; 401/403 auth/mapping; 404 HOMEWORK_NOT_FOUND or
+        STUDENT_MAPPING_NOT_FOUND; 409 IDEMPOTENCY_CONFLICT, EVENT_CONFLICT,
+        HOMEWORK_ALREADY_ACCEPTED; 413 FILE_TOO_LARGE/PAYLOAD_TOO_LARGE;
+        415 INVALID_FILE; 429 UPLOAD_LIMIT; 503 UPLOAD_FAILED/FILE_UNAVAILABLE;
+        500 INTERNAL_ERROR. Request ID is returned for support.
+      content:
+        application/json:
+          schema: { $ref: './mobile-student-portal-openapi.yaml#/components/schemas/Error' }
+  schemas:
+    Firca:
+      type: object
+      required: [currency, monthly, lifetime, month, enabled, startsAt, excludedFromLeaderboard, rules, updatedAt]
+      properties:
+        currency: { type: string, const: firca }
+        monthly: { type: integer, description: Net entries booked this month; cross-month reversals may make this negative }
+        lifetime: { type: integer, minimum: 0 }
+        month: { type: string }
+        enabled: { type: boolean, description: Global switch; awards also require startsAt reached and student eligibility }
+        startsAt: { type: [string, 'null'], format: date-time }
+        excludedFromLeaderboard: { type: boolean }
+        rules:
+          type: object
+          required: [attendance, homework, comment, weeklyCommentLimit, minCommentLength]
+          properties:
+            attendance: { type: integer, const: 20 }
+            homework: { type: integer, const: 20 }
+            comment: { type: integer, const: 5 }
+            weeklyCommentLimit: { type: integer, const: 4 }
+            minCommentLength: { type: integer, minimum: 1, maximum: 1000 }
+        updatedAt: { type: string, format: date-time }
+    LeaderboardEntry:
+      type: object
+      required: [identifier, displayName, points, rank, isMe]
+      properties:
+        identifier: { type: string, description: Opaque participant identifier; never submit as Student.id }
+        displayName: { type: string }
+        points: { type: integer }
+        rank: { type: integer, minimum: 1, description: Competition ranking; equal points share rank }
+        isMe: { type: boolean }
+    Submission:
+      type: object
+      required: [id, homeworkId, lessonId, fileName, fileUrl, fileUrlExpiresIn, status, feedback, revision, submittedAt, reviewedAt]
+      properties:
+        id: { type: string, format: uuid }
+        homeworkId: { type: string, format: uuid }
+        lessonId: { type: string, format: uuid }
+        fileName: { type: string }
+        fileUrl: { type: string, format: uri, description: Private signed URL; refresh GET after expiry }
+        fileUrlExpiresIn: { type: integer, const: 300 }
+        status: { type: string, enum: [submitted, accepted, rejected] }
+        feedback: { type: [string, 'null'] }
+        revision: { type: integer, minimum: 1 }
+        submittedAt: { type: string, format: date-time }
+        reviewedAt: { type: [string, 'null'], format: date-time }

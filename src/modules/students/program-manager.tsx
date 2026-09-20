@@ -251,7 +251,7 @@ export function ProgramManager({
       <div className="program-manager-head">
         <div>
           <h2>Proqramlar</h2>
-          <p>Paket qiymətləri, dərs sayı və Dərslər və addımlar</p>
+          <p>Paket qiymətləri, proqram dərsləri və materialları</p>
         </div>
         <Button onClick={() => openEditor()} disabled={!canManage}>
           <Plus data-icon="inline-start" />
@@ -346,7 +346,7 @@ export function ProgramManager({
               {editing?.id ? "Proqramı redaktə et" : "Yeni proqram"}
             </DialogTitle>
             <DialogDescription>
-              Proqram məlumatlarını və mobil Dərslər və addımlarnı idarə edin.
+              Proqram məlumatlarını, dərsləri və mobil materialları idarə edin.
             </DialogDescription>
           </DialogHeader>
           {editing ? (
@@ -691,7 +691,7 @@ function JourneyMaterialEditor({
         onClick={onRemove}
       >
         <Trash2 data-icon="inline-start" />
-        {material.id} materialını sil
+        Materialı sil
       </Button>
     </div>
   );

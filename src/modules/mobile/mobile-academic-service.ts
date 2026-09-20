@@ -277,17 +277,19 @@ export async function loadNotificationCandidates(studentId: string, db: Prisma.T
     ),
     homework_rows as (
       select distinct on (h.id)
-        ('homework:' || h.id::text || ':' || extract(epoch from coalesce(hc.updated_at, h.updated_at))::bigint::text) as id,
+        ('homework:' || h.id::text || ':' || coalesce(hc.revision::text,'assigned') || ':' || extract(epoch from coalesce(hc.reviewed_at,hc.submitted_at, h.updated_at))::bigint::text) as id,
         'homework'::text as type,
-        case when hc.id is null then 'Yeni ev tapşırığı' else 'Ev tapşırığı tamamlandı' end as title,
+        case when hc.id is null then 'Yeni ev tapşırığı' when hc.status='accepted' then 'Ev tapşırığı qəbul edildi' when hc.status='rejected' then 'Ev tapşırığı düzəlişə qaytarıldı' else 'Ev tapşırığı yoxlanılır' end as title,
         h.title as body,
-        coalesce(hc.completed_at, h.updated_at) as occurred_at,
+        coalesce(hc.reviewed_at,hc.submitted_at, h.updated_at) as occurred_at,
         'homework'::text as entity_type,
         h.id::text as entity_id,
-        case when hc.id is null then 'homework.assigned' else 'homework.completed' end as event_name,
+        case when hc.id is null then 'homework.assigned' else 'homework.'||hc.status end as event_name,
         jsonb_build_object(
-          'status', case when hc.id is null then 'pending' else 'completed' end,
-          'dueAt', h.due_at
+          'status', coalesce(hc.status,'pending'),
+          'dueAt', h.due_at,
+          'lessonId', ss.id,
+          'feedback', hc.feedback
         ) as metadata
       from active_enrollments ae
       join erp.student_schedule_assignments sa on sa.enrollment_id = ae.id
@@ -295,9 +297,9 @@ export async function loadNotificationCandidates(studentId: string, db: Prisma.T
         and ss.session_date >= sa.valid_from
         and (sa.valid_to is null or ss.session_date <= sa.valid_to)
       join erp.lesson_homeworks h on h.session_id = ss.id
-      left join erp.homework_completions hc
-        on hc.homework_id = h.id and hc.enrollment_id = ae.id
-      order by h.id, coalesce(hc.completed_at, h.updated_at) desc
+      left join erp.homework_submissions hc
+        on hc.homework_id = h.id and hc.student_id = ${studentId}::uuid
+      order by h.id, coalesce(hc.reviewed_at,hc.submitted_at, h.updated_at) desc
     ),
     lesson_rows as (
       select distinct on (ss.id)
@@ -492,12 +494,6 @@ function calendarMonthPeriod(today: string) {
   const nextMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 1));
   const to = toDateInput(new Date(nextMonth.getTime() - DAY_MS));
   return { from, to, source: "calendar_month" as const };
-}
-
-function startOfBakuWeek(today: string) {
-  const date = dateFromInput(today);
-  const day = date.getUTCDay() || 7;
-  return toDateInput(new Date(date.getTime() - (day - 1) * DAY_MS));
 }
 
 function latestDate(values: Array<Date | null | undefined>) {
