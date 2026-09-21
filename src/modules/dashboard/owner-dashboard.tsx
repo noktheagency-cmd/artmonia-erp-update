@@ -94,7 +94,8 @@ export function OwnerDashboard({
           conversionHelper={data.conversionHelper}
           salesCount={data.salesCount}
           churnRate={data.churnRate}
-          churnCounts={data.churnCounts}
+          from={data.filters.from}
+          to={data.filters.to}
         />
       </div>
 

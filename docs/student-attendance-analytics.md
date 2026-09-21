@@ -1,6 +1,18 @@
 # Student attendance overview
 
-The Students overview includes an attendance card and dialog, loaded through `src/modules/students/attendance-analytics-action.ts`. It is read-only and does not finalize sessions or write attendance.
+The Students overview includes the **Retention and Churn Rate** card and an Azerbaijani dialog, loaded through `src/modules/students/attendance-analytics-action.ts`. It is read-only and does not finalize sessions or write attendance. Program and teacher distribution cards display all returned categories, with scrolling for long lists.
+
+## Retention and churn
+
+- The dashboard churn card links to `/students?tab=overview&attendance=1` with `attendanceFrom` and `attendanceTo`, opening this same dialog. The dashboard defaults to the current Baku calendar month through today and passes its selected date filter; future endpoints are capped at today.
+- Both dashboard and dialog use `retention-analytics-sql.ts`. Churn counts distinct students who entered **FROZEN** or **STOPPED** during the inclusive selected period. DECLINED is excluded. Explicit freeze-period starts also count; duplicate history and freeze-period records count once per student/status, and students in both categories count once in the combined total. Later reactivation does not erase an event from the selected period.
+- The denominator is non-test students registered on or before the period end, within the same access and teacher/group filters. This is a period event share of the registered student base, not an opening-active-cohort churn rate. Retention is its complement. An empty base displays 0% churn. Existing frozen/stopped statuses without a dated event in the period do not count as a new loss.
+- Clicking frozen/stopped cards opens a detail table in the same dialog: student profile, latest matching date, reason/note and responsible manager. Detail rows paginate at 20, while totals aggregate the entire filtered set.
+- Student and attendance scopes intersect for both summary and details; dashboard cache keys include actor and both scopes. Teacher/group membership uses date-overlapping schedule assignments (including the day before the start, to retain students paused on the first day); enrollments without any schedule assignment use their assigned teacher. Teacher/group options also include students without attendance records. Historical slot teacher edits can affect this reconstruction.
+- Retention date ranges are independent of the 93-day attendance limit. Longer dashboard ranges still show retention details; the attendance section asks for a narrower range. Weekday enum labels and date-picker controls are Azerbaijani. User-authored group names, reasons and notes are preserved.
+- Regression checks: `retention-analytics.test.ts`. The optional `RETENTION_TEST_DATABASE_URL` check runs SELECT-only synthetic CTE fixtures, without reading or writing application records.
+
+## Attendance
 
 - Both `student.read` and `attendance.read` are required. ASSIGNED student access restricts records to the student's manager; ASSIGNED attendance access restricts records to the teacher linked to the actor. These restrictions intersect. No shared cache is used.
 - Default period: the current Baku calendar month through today. Custom periods are inclusive, at most 93 days, with no future dates. Comparison uses the immediately preceding equal number of calendar days.

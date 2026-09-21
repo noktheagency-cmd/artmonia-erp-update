@@ -13,7 +13,10 @@ import {
 } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { requireErpActor } from "@/server/auth/actor";
-import type { PermissionCode } from "@/server/rbac/permissions";
+import { scopeFor, type PermissionCode } from "@/server/rbac/permissions";
+import { retentionCtes, retentionScope, retentionSummarySql } from "@/modules/students/retention-analytics-sql";
+import { retentionRate } from "@/modules/students/retention-analytics";
+import { todayInBaku } from "@/modules/groups/shared";
 import { TASK_WORKSPACE_EXCLUDED_TYPES } from "@/modules/tasks/task-scope";
 import { canAdministerTasks } from "@/modules/tasks/task-permissions";
 
@@ -93,7 +96,6 @@ export type DashboardData = {
   churnCounts: {
     frozen: number;
     stopped: number;
-    declined: number;
     total: number;
     population: number;
   };
@@ -141,6 +143,7 @@ type DashboardRawRow = {
   convertedLeadsThisMonth: unknown;
   companySalesCount: unknown;
   studentStatusCounts: unknown;
+  retention: { population: number; frozen: number; stopped: number; total: number };
   teamPerformance: unknown;
 };
 
@@ -218,6 +221,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const fetchDashboardRawData = async () =>
     prisma.$queryRaw<DashboardRawRow[]>(Prisma.sql`
     select
+      (${retentionCtes(dateRange.from, dateRange.to, retentionScope(actor))}
+        select jsonb_build_object('population', r.population, 'frozen', r.frozen, 'stopped', r.stopped, 'total', r.total)
+        from (select ${retentionSummarySql}) r
+      ) as retention,
       coalesce((
         select count(*)::int
         from erp.students s
@@ -592,6 +599,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     fetchDashboardRawData,
     [
       "owner-dashboard-data",
+      "period-retention-v1",
+      actor.id,
+      scopeFor(actor.permissions, "student.read") ?? "none",
+      scopeFor(actor.permissions, "attendance.read") ?? "none",
       firstRevenueMonth.toISOString(),
       nextRevenueMonth.toISOString(),
       periodStart.toISOString(),
@@ -700,13 +711,8 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const conversionRate = totalLeadsThisMonth > 0 
     ? `${Math.round((convertedLeadsThisMonth / totalLeadsThisMonth) * 100)}%`
     : "0%";
-  const churnByStatus = new Map(rawStatusCounts.map((item) => [item.status, toNumber(item.count)]));
-  const frozenStudents = churnByStatus.get("FROZEN") ?? 0;
-  const stoppedStudents = churnByStatus.get("STOPPED") ?? 0;
-  const declinedStudents = churnByStatus.get("DECLINED") ?? 0;
-  const totalStudents = rawStatusCounts.reduce((sum, item) => sum + toNumber(item.count), 0);
-  const totalChurn = frozenStudents + stoppedStudents + declinedStudents;
-  const churnRate = totalStudents > 0 ? `${Math.round((totalChurn / totalStudents) * 100)}%` : "0%";
+  const churnCounts = row?.retention ?? { population: 0, frozen: 0, stopped: 0, total: 0 };
+  const churnRate = `${retentionRate(churnCounts.total, churnCounts.population)}%`;
 
   const recentPayments = recentPaymentRows.map((item) => ({
     id: item.id,
@@ -853,13 +859,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     salesCount: toNumber(row?.companySalesCount),
     totalLeadCount: totalLeadsThisMonth,
     churnRate,
-    churnCounts: {
-      frozen: frozenStudents,
-      stopped: stoppedStudents,
-      declined: declinedStudents,
-      total: totalChurn,
-      population: totalStudents,
-    },
+    churnCounts,
     studentStatusCounts,
   };
 }
@@ -931,10 +931,12 @@ function formatPercentage(value: number) {
 }
 
 function resolveDashboardDateRange(filters: DashboardFilters) {
-  const today = startOfUtcDay(new Date());
+  const today = new Date(`${todayInBaku()}T00:00:00Z`);
   const defaultFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-  const parsedFrom = parseDateInput(filters.from) ?? defaultFrom;
-  const parsedTo = parseDateInput(filters.to) ?? today;
+  const requestedFrom = parseDateInput(filters.from) ?? defaultFrom;
+  const requestedTo = parseDateInput(filters.to) ?? today;
+  const parsedFrom = requestedFrom > today ? today : requestedFrom;
+  const parsedTo = requestedTo > today ? today : requestedTo;
   const fromDate = parsedFrom <= parsedTo ? parsedFrom : parsedTo;
   const toDate = parsedFrom <= parsedTo ? parsedTo : parsedFrom;
   const from = toDateInput(fromDate);
@@ -997,10 +999,6 @@ function buildDateRangeLabel(from: Date, to: Date, today: Date) {
   }
 
   return `${formatDateLabel(from)} - ${formatDateLabel(to)}`;
-}
-
-function startOfUtcDay(value: Date) {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
 
 function addUtcDays(value: Date, days: number) {

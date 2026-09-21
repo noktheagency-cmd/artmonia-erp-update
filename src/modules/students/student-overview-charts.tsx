@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AttendanceAnalyticsCard } from "./attendance-analytics-card";
 import {
   Bar,
@@ -56,11 +57,12 @@ export function StudentOverviewCharts({
   teachers: DistributionItem[];
 }) {
   const canAnimate = useChartAnimation();
-  const programData = programs.slice(0, 5).map((item, index) => ({
+  const searchParams = useSearchParams();
+  const programData = programs.map((item, index) => ({
     ...item,
     fill: distributionColors[index % distributionColors.length],
   }));
-  const teacherData = teachers.slice(0, 5).map((item, index) => ({
+  const teacherData = teachers.map((item, index) => ({
     ...item,
     fill: distributionColors[(index + 3) % distributionColors.length],
   }));
@@ -76,59 +78,62 @@ export function StudentOverviewCharts({
           tone="blue"
         />
         {programData.length > 0 ? (
-          <ChartContainer config={programChartConfig} className="students-chart students-program-chart">
-            <BarChart
-              accessibilityLayer
-              data={programData}
-              layout="vertical"
-              margin={{ top: 5, right: 38, bottom: 0, left: 0 }}
-            >
-              <CartesianGrid horizontal={false} strokeDasharray="3 7" />
-              <XAxis type="number" allowDecimals={false} hide domain={[0, "dataMax + 1"]} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                axisLine={false}
-                tickLine={false}
-                tickMargin={9}
-                width={94}
-                tickFormatter={shortenLabel}
-              />
-              <ChartTooltip
-                cursor={{ fill: "var(--students-chart-hover)", radius: 8 }}
-                content={
-                  <ChartTooltipContent
-                    hideLabel
-                    indicator="line"
-                    formatter={(value, _name, item) => (
-                      <div className="students-tooltip-value">
-                        <span>{String(item.payload?.name ?? "Proqram")}</span>
-                        <strong>{Number(value)} tələbə</strong>
-                      </div>
-                    )}
-                  />
-                }
-              />
-              <Bar
-                dataKey="count"
-                radius={[0, 8, 8, 0]}
-                barSize={13}
-                isAnimationActive={canAnimate}
-                animationDuration={850}
-                animationEasing="ease-out"
+          <div className="students-program-scroll" tabIndex={0} aria-label="Bütün təhsil proqramları">
+            <ChartContainer config={programChartConfig} className="students-chart students-program-chart" style={{ height: Math.max(178, programData.length * 36) }}>
+              <BarChart
+                accessibilityLayer
+                data={programData}
+                layout="vertical"
+                margin={{ top: 5, right: 38, bottom: 0, left: 0 }}
               >
-                {programData.map((item) => (
-                  <Cell key={item.name} fill={item.fill} />
-                ))}
-                <LabelList
-                  dataKey="count"
-                  position="right"
-                  formatter={(value) => String(Number(value ?? 0))}
-                  className="students-chart-value-label"
+                <CartesianGrid horizontal={false} strokeDasharray="3 7" />
+                <XAxis type="number" allowDecimals={false} hide domain={[0, "dataMax + 1"]} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={9}
+                  width={94}
+                  tickFormatter={shortenLabel}
+                  interval={0}
                 />
-              </Bar>
-            </BarChart>
-          </ChartContainer>
+                <ChartTooltip
+                  cursor={{ fill: "var(--students-chart-hover)", radius: 8 }}
+                  content={
+                    <ChartTooltipContent
+                      hideLabel
+                      indicator="line"
+                      formatter={(value, _name, item) => (
+                        <div className="students-tooltip-value">
+                          <span>{String(item.payload?.name ?? "Proqram")}</span>
+                          <strong>{Number(value)} tələbə</strong>
+                        </div>
+                      )}
+                    />
+                  }
+                />
+                <Bar
+                  dataKey="count"
+                  radius={[0, 8, 8, 0]}
+                  barSize={13}
+                  isAnimationActive={canAnimate}
+                  animationDuration={850}
+                  animationEasing="ease-out"
+                >
+                  {programData.map((item) => (
+                    <Cell key={item.name} fill={item.fill} />
+                  ))}
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    formatter={(value) => String(Number(value ?? 0))}
+                    className="students-chart-value-label"
+                  />
+                </Bar>
+              </BarChart>
+            </ChartContainer>
+          </div>
         ) : (
           <ChartEmptyState text="Proqram məlumatı yoxdur" />
         )}
@@ -185,7 +190,7 @@ export function StudentOverviewCharts({
                 <span>tələbə</span>
               </div>
             </div>
-            <div className="students-analytics-list">
+            <div className="students-analytics-list" tabIndex={0} aria-label="Bütün müəllimlər">
               {teacherData.map((item) => (
                 <div className="students-analytics-row" key={item.name}>
                   <span className="students-analytics-dot" style={{ backgroundColor: item.fill }} aria-hidden="true" />
@@ -199,7 +204,7 @@ export function StudentOverviewCharts({
           <ChartEmptyState text="Müəllim məlumatı yoxdur" />
         )}
       </article>
-      {canReadAttendance && <AttendanceAnalyticsCard />}
+      {canReadAttendance && <AttendanceAnalyticsCard key={`${searchParams.get("attendance")}:${searchParams.get("attendanceFrom")}:${searchParams.get("attendanceTo")}`} />}
     </section>
   );
 }
