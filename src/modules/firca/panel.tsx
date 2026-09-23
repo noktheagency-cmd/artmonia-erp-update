@@ -424,12 +424,13 @@ export function FircaPanel({
                       data.students.find((s) => s.id === studentId)?.excluded
                     }
                   />{" "}
-                  Test hesabıdır / yarışda iştirak etmir
+                  Fırça xalı və yarışdan kənar
                 </label>
                 <label>
                   Səbəb
                   <input name="reason" minLength={3} maxLength={500} required />
                 </label>
+                <small>Test hesabı işarəsi dəyişmir. Seçimi söndürəndə yalnız Fırça sınağına açılır.</small>
                 <Button type="submit" disabled={pending}>Yadda saxla</Button>
               </form>
             )}

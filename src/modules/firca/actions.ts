@@ -79,19 +79,47 @@ export const excludeFircaStudentAction = safeServerAction(
       .parse(raw);
     await getPrisma().$transaction(async (tx) => {
       await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca:" + input.studentId},0))`;
-      if (input.excluded)
+      const [student] = await tx.$queryRaw<{ isTestData: boolean }[]>`select is_test_data as "isTestData" from erp.students where id=${input.studentId}::uuid for update`;
+      if (!student) throw new PublicActionError("Tələbə tapılmadı.", "NOT_FOUND");
+      if (input.excluded) {
         await tx.$executeRaw`insert into erp.firca_exclusions(student_id,reason) values(${input.studentId}::uuid,${input.reason}) on conflict(student_id) do update set reason=excluded.reason`;
-      else
+        await tx.$executeRaw`delete from erp.firca_test_opt_ins where student_id=${input.studentId}::uuid`;
+      } else {
         await tx.$executeRaw`delete from erp.firca_exclusions where student_id=${input.studentId}::uuid`;
+        if (student.isTestData) {
+          await tx.$executeRaw`insert into erp.firca_test_opt_ins(student_id) values(${input.studentId}::uuid) on conflict(student_id) do nothing`;
+          const cfg = await settings(tx);
+          if (cfg.enabled && cfg.startsAt && cfg.startsAt.getTime() <= Date.now()) {
+            const attendance = await tx.$queryRaw<{ id: string }[]>`select distinct r.session_id::text as id
+              from erp.attendance_records r join erp.enrollments e on e.id=r.enrollment_id
+              join erp.slot_sessions s on s.id=r.session_id
+              where e.student_id=${input.studentId}::uuid and r.status::text='PRESENT'
+                and s.status::text<>'CANCELLED'
+                and s.session_date>=(${cfg.startsAt}::timestamptz at time zone 'Asia/Baku')::date
+              limit 501`;
+            const homework = await tx.$queryRaw<{ sessionId: string }[]>`select h.session_id::text as "sessionId"
+              from erp.homework_submissions h join erp.slot_sessions s on s.id=h.session_id
+              where h.student_id=${input.studentId}::uuid and h.status='accepted'
+                and h.submitted_at>=${cfg.startsAt} and s.status::text<>'CANCELLED'
+              limit 501`;
+            if (attendance.length > 500 || homework.length > 500)
+              throw new PublicActionError("Xal tarixçəsi çoxdur; dəstəyə müraciət edin.", "CONFLICT");
+            for (const row of attendance)
+              await tx.$executeRaw`select erp.firca_sync_attendance(${input.studentId}::uuid,${row.id}::uuid)`;
+            for (const row of homework)
+              await setBalance(tx, input.studentId, "homework", row.sessionId, cfg.homeworkPoints, "Test hesabı Fırça üçün aktiv edildi", actor.id);
+          }
+        }
+      }
       await writeAuditLog(tx, {
         actorUserId: actor.id,
         action: "firca.exclusion",
         entityType: "student",
         entityId: input.studentId,
-        after: { excluded: input.excluded },
+        after: { excluded: input.excluded, testOptIn: student.isTestData && !input.excluded },
         reason: input.reason,
       });
-    });
+    }, { timeout: 30000 });
     revalidatePath("/firca");
   },
   "Tələbə ayarı saxlanmadı.",

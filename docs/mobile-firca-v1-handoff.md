@@ -24,7 +24,7 @@ Fayllar: [əsas portal OpenAPI v2](mobile-student-portal-openapi.yaml), [Fırça
 
 **Profil → Fırça · Tapşırıqlar və aylıq yarış** (`/firca`): tapşırıqların yoxlanması, aylıq top 10, rəy moderasiyası. `attendance.manage` tələb olunur. `ASSIGNED` müəllim yalnız öz slotunun tapşırıqlarını və öz aktiv tələbələrinin rəylərini idarə edir; `ALL` ümumi girişi açır. Sənəd açılması da serverdə eyni scope ilə yoxlanır.
 
-`settings.manage` olan istifadəçi başlanğıc, aktivlik, minimum rəy uzunluğu və test istisnalarını idarə edir, seçilmiş tələbənin xal tarixçəsini görür. Mövcud ERP `isTestData` flag-i ayrıca da qüvvədədir; həmin flag aktivdirsə Fırça istisnasını söndürmək tələbəni yarışa daxil etmir.
+`settings.manage` olan istifadəçi başlanğıc, aktivlik, minimum rəy uzunluğu və test istisnalarını idarə edir, seçilmiş tələbənin xal tarixçəsini görür. Test tələbəsi standart olaraq Fırça xalı və yarışdan kənardır. Fırça ayarında bu istisna səlahiyyətli istifadəçi tərəfindən söndürüldükdə yalnız həmin hesab üçün ayrıca opt-in yaranır; ERP `isTestData` flag-i dəyişmir. Yenidən istisna ediləndə opt-in silinir. Aktiv Fırça başlanğıcından sonrakı etibarlı PRESENT və qəbul edilmiş tapşırıq qeydləri idempotent qaydada bərpa edilir; başlanğıcdan əvvəlki test məlumatı xal qazanmır.
 
 ## Biznes qaydaları
 
@@ -42,7 +42,7 @@ Müəllim tapşırığı geri qaytaranda -20, PRESENT ləğv ediləndə -20, mü
 
 Ay sərhədi `Asia/Baku`, ayın 1-i 00:00-dır. Sıralama akademiya üzrə xalis aylıq Fırçadır, bərabər xal bərabər rank alır (1, 1, 3). İlk 10 sıra və tələbənin öz sırası gəlir; istisna/inaktiv hesab üçün `me: null`. Başqa ayda geri alınan xal geri-alma ayına mənfi yazılır; aylıq nəticə mənfi ola bilər, lifetime mənfi olmur. Mobil rəqəmi sıfıra sıxışdırmamalıdır. Aylıq tarixçə silinmir; seçim verilən ay üzrə hesablanır, iştirakçı uyğunluğu cari ERP statusuna əsaslanır.
 
-Yeni mükafatlandırma ilkin olaraq **bağlıdır**, `startsAt: null`. Köhnə XP çevrilmir, test məlumatı silinmir, davamiyyət backfill-i yoxdur. Aktivləşdirmə üçün gələcək/indiki başlanğıc seçilməlidir; tarix ilk saxlamadan sonra sabitdir. Davamiyyətdə dərs tarixi başlanğıcın Bakı tarixindən əvvəl ola bilməz; tapşırıq göndərişi və rəyin yaradılma vaxtı isə başlanğıcdan sonra olmalıdır. Başlanğıc anı çatmayıbsa xal verilmir. Söndürmək mövcud düzgün xalı silmir, yeni xal yazılmasını dayandırır; etibarsız olmuş mənbələr yenə geri alınır.
+Yeni mükafatlandırma ilkin olaraq **bağlıdır**, `startsAt: null`. Köhnə XP çevrilmir, test məlumatı silinmir, ümumi davamiyyət backfill-i yoxdur. Yalnız səlahiyyətli test opt-in əməliyyatı həmin tələbənin başlanğıcdan sonrakı etibarlı hadisələrini bərpa edir. Aktivləşdirmə üçün gələcək/indiki başlanğıc seçilməlidir; tarix ilk saxlamadan sonra sabitdir. Davamiyyətdə dərs tarixi başlanğıcın Bakı tarixindən əvvəl ola bilməz; tapşırıq göndərişi və rəyin yaradılma vaxtı isə başlanğıcdan sonra olmalıdır. Başlanğıc anı çatmayıbsa xal verilmir. Söndürmək mövcud düzgün xalı silmir, yeni xal yazılmasını dayandırır; etibarsız olmuş mənbələr yenə geri alınır.
 
 ## İcma dispatcher-in təhlükəsizlik müqaviləsi
 
@@ -72,10 +72,11 @@ Migration sahibi Prisma-dır, Supabase SQL-ləri eyni migration-un güzgüsüdü
 
 1. `20260920121102_firca_v1_dynamic_journey`.
 2. `20260920124825_firca_test_eligibility`.
-3. Prisma generate və ERP build/deploy; target və migration tarixçəsi təsdiqlənməlidir.
-4. İcma üçün yeni server secret-i təhlükəsiz kanalla qurmaq; source-of-truth outbox-ı mobil/backend developer qurur.
-5. Yeni mobil schema, upload və gateway keçidi ilə koordinasiya; əvvəlki completion endpoint-i ilə uyğunsuz dəyişiklikdir.
-6. Başlanğıc/test istisnaları təsdiqlənəndən sonra Fırça aktivləşdirməsi.
+3. `20260923230213_firca_test_opt_in` — test hesabı üçün ayrıca Fırça icazəsi; production-da Supabase migration tarixçəsinə tətbiq olunub, Prisma tarixçəsində də tətbiq edilmiş kimi işarələnib. İki SQL güzgüsünü təkrar icra etməyin.
+4. Prisma generate və ERP build/deploy; target və migration tarixçəsi təsdiqlənməlidir.
+5. İcma üçün yeni server secret-i təhlükəsiz kanalla qurmaq; source-of-truth outbox-ı mobil/backend developer qurur.
+6. Yeni mobil schema, upload və gateway keçidi ilə koordinasiya; əvvəlki completion endpoint-i ilə uyğunsuz dəyişiklikdir.
+7. Başlanğıc/test istisnaları təsdiqlənəndən sonra Fırça aktivləşdirməsi.
 
 Lokal yoxlama: `node --import tsx scripts/verify-firca-local.mjs` yalnız in-memory PGlite və sintetik məlumat istifadə edir; xarici DB-yə bağlanmır. Bu yoxlama real cihaz/Supabase upload testinin və çox bağlantılı yük testinin əvəzi deyil.
 

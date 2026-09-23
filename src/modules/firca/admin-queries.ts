@@ -41,7 +41,12 @@ export async function getFircaAdminData(
       admin
         ? db.$queryRaw<
             { id: string; name: string; code: string; excluded: boolean }[]
-          >`select s.id::text,c.full_name as name,s.code,exists(select 1 from erp.firca_exclusions x where x.student_id=s.id) as excluded from erp.students s join erp.contacts c on c.id=s.contact_id join erp.student_mobile_accounts m on m.student_id=s.id order by c.full_name,s.id limit 500`
+          >`select s.id::text,c.full_name as name,s.code,
+            (exists(select 1 from erp.firca_exclusions x where x.student_id=s.id)
+              or (s.is_test_data and not exists(select 1 from erp.firca_test_opt_ins i where i.student_id=s.id))) as excluded
+            from erp.students s join erp.contacts c on c.id=s.contact_id
+            join erp.student_mobile_accounts m on m.student_id=s.id
+            order by c.full_name,s.id limit 500`
         : [],
       getFircaLeaderboard("00000000-0000-4000-8000-000000000000"),
       admin && studentId ? getFircaHistory(studentId) : null,

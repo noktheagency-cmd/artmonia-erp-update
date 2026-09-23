@@ -115,6 +115,9 @@ try {
   const followup = await readFile(new URL('../prisma/migrations/20260920124825_firca_test_eligibility/migration.sql', import.meta.url), 'utf8');
   check(followup, await readFile(new URL('../supabase/migrations/20260920124825_firca_test_eligibility.sql', import.meta.url), 'utf8'), 'follow-up mirror');
   await pg.exec(followup);
+  const testOptInMigration = await readFile(new URL('../prisma/migrations/20260923230213_firca_test_opt_in/migration.sql', import.meta.url), 'utf8');
+  check(testOptInMigration, await readFile(new URL('../supabase/migrations/20260923230213_firca_test_opt_in.sql', import.meta.url), 'utf8'), 'test opt-in mirror');
+  await pg.exec(testOptInMigration);
   check(
     (
       await pg.query(
@@ -465,6 +468,15 @@ try {
   );
   await pg.query('update erp.students set is_test_data=true where id=$1', [otherStudent]);
   check((await getFircaLeaderboard(otherStudent)).me, null, 'ERP test flag excludes even newly flagged students');
+  await pg.query('insert into erp.firca_test_opt_ins(student_id) values($1)', [otherStudent]);
+  check((await query`select erp.firca_student_eligible(${otherStudent}::uuid) as eligible`)[0].eligible, true, 'explicit test opt-in enables only that student');
+  await pg.query("insert into erp.firca_exclusions(student_id,reason) values($1,'Synthetic exclusion')", [otherStudent]);
+  check((await query`select erp.firca_student_eligible(${otherStudent}::uuid) as eligible`)[0].eligible, false, 'explicit exclusion still overrides test opt-in');
+  await pg.query('delete from erp.firca_exclusions where student_id=$1', [otherStudent]);
+  check((await query`select erp.firca_student_eligible(${otherStudent}::uuid) as eligible`)[0].eligible, true, 'removing exclusion restores test opt-in');
+  await pg.query('delete from erp.firca_test_opt_ins where student_id=$1', [otherStudent]);
+  check((await query`select erp.firca_student_eligible(${otherStudent}::uuid) as eligible`)[0].eligible, false, 'removing test opt-in restores default block');
+  check((await query`select is_test_data as "isTestData" from erp.students where id=${otherStudent}::uuid`)[0].isTestData, true, 'opt-in never changes ERP test flag');
   check(
     (await getFircaSummary(student)).lifetime,
     35,
@@ -475,6 +487,8 @@ try {
     pg.exec("select * from erp.firca_ledger"),
     /permission denied/,
   );
+  assertions++;
+  await assert.rejects(pg.exec('select * from erp.firca_test_opt_ins'), /permission denied/);
   assertions++;
   await pg.exec("reset role");
   console.log(
