@@ -211,7 +211,7 @@ export function FircaPanel({
                           }
                         />
                       </label>
-                      <Button disabled={pending}>Təsdiqlə</Button>
+                      <Button type="submit" disabled={pending}>Təsdiqlə</Button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -301,7 +301,7 @@ export function FircaPanel({
                           required
                         />
                       </label>
-                      <Button disabled={pending}>Təsdiqlə</Button>
+                      <Button type="submit" disabled={pending}>Təsdiqlə</Button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -383,7 +383,7 @@ export function FircaPanel({
                 />
                 <small>Boşluqlar sayılmır.</small>
               </label>
-              <Button disabled={pending}>Ayarları saxla</Button>
+              <Button type="submit" disabled={pending}>Ayarları saxla</Button>
             </form>
             <h2>Test hesabları və xal tarixçəsi</h2>
             <form method="get" className="firca-settings">
@@ -399,7 +399,7 @@ export function FircaPanel({
                   ))}
                 </select>
               </label>
-              <Button>Tarixçəni göstər</Button>
+              <Button type="submit">Tarixçəni göstər</Button>
             </form>
             {studentId && data.students.some((s) => s.id === studentId) && (
               <form
@@ -430,7 +430,7 @@ export function FircaPanel({
                   Səbəb
                   <input name="reason" minLength={3} maxLength={500} required />
                 </label>
-                <Button disabled={pending}>Yadda saxla</Button>
+                <Button type="submit" disabled={pending}>Yadda saxla</Button>
               </form>
             )}
             {data.history && (
