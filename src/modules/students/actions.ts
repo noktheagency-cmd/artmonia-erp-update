@@ -922,17 +922,18 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       toNumber(currentEnrollment.monthlyFee) !== effectiveMonthlyFee
       || currentEnrollment.lessonsPerMonth !== requestedLessonsPerMonth
       || currentEnrollment.discountType !== requestedDiscountType;
-    const billingChangeMode = billingTermsChanged ? input.billingChangeMode : undefined;
-    const billingEffectiveMonth = billingTermsChanged && input.billingEffectiveMonth
+    const billingChangeRequested = billingTermsChanged || Boolean(input.billingChangeReason);
+    const billingChangeMode = billingChangeRequested ? input.billingChangeMode : undefined;
+    const billingEffectiveMonth = billingChangeRequested && input.billingEffectiveMonth
       ? parseEnrollmentBillingMonth(input.billingEffectiveMonth)
       : null;
 
-    if (billingTermsChanged && (!billingChangeMode || !billingEffectiveMonth)) {
+    if (billingChangeRequested && (!billingChangeMode || !billingEffectiveMonth)) {
       throw new PublicActionError(
-        "Aylıq məbləğ və ya dərs sayı dəyişdikdə tətbiq rejimi və qüvvəyə minən ay seçilməlidir.",
+        "Qiymət və dərs planını tətbiq etmək üçün rejim və qüvvəyə minən ay seçilməlidir.",
       );
     }
-    if (billingTermsChanged && !input.billingChangeReason) {
+    if (billingChangeRequested && !input.billingChangeReason) {
       throw new PublicActionError(
         "Qiymət və dərs planı dəyişikliyinin səbəbi yazılmalıdır.",
       );
@@ -986,7 +987,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       },
     });
 
-    const billingChangeResult = billingTermsChanged && billingChangeMode && billingEffectiveMonth
+    const billingChangeResult = billingChangeRequested && billingChangeMode && billingEffectiveMonth
       ? await applyEnrollmentBillingChange(tx, {
           actorUserId: actor.id,
           studentId: current.id,

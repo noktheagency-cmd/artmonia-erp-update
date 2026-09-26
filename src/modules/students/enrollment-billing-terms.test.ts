@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { InvoiceStatus } from "@/generated/prisma/client";
+import { InvoiceStatus, type Prisma } from "@/generated/prisma/client";
 import {
+  applyEnrollmentBillingChange,
   parseEnrollmentBillingMonth,
   resolveRepricedInvoice,
 } from "./enrollment-billing-terms";
@@ -40,6 +41,59 @@ test("an unpaid past invoice becomes overdue after repricing", () => {
     }),
     { amount: 100, balanceDue: 100, status: InvoiceStatus.OVERDUE },
   );
+});
+
+test("a paid 100 AZN invoice becomes 130 AZN due when its monthly fee rises to 230 AZN", async () => {
+  const periodMonth = new Date("2026-09-01T00:00:00.000Z");
+  const dueDate = new Date("2026-09-15T00:00:00.000Z");
+  const invoiceUpdates: Array<{ where: { id: string }; data: unknown }> = [];
+  let termQueryCount = 0;
+  const tx = {
+    $queryRaw: async () => {
+      termQueryCount += 1;
+      return termQueryCount === 2
+        ? [{ id: "term-1" }]
+        : [{ monthlyFee: termQueryCount === 1 ? 100 : 230, lessonsPerMonth: 12, discountType: null }];
+    },
+    invoice: {
+      findMany: async () => [{
+        id: "invoice-1",
+        periodMonth,
+        dueDate,
+        amount: 100,
+        balanceDue: 0,
+        status: InvoiceStatus.PAID,
+        paymentAllocations: [{ amountAllocated: 100 }],
+      }],
+      update: async (args: { where: { id: string }; data: unknown }) => {
+        invoiceUpdates.push(args);
+      },
+    },
+    auditLog: { create: async () => undefined },
+  } as unknown as Prisma.TransactionClient;
+
+  const result = await applyEnrollmentBillingChange(tx, {
+    actorUserId: "actor-1",
+    studentId: "student-1",
+    studentCode: "ST-1",
+    enrollmentId: "enrollment-1",
+    effectiveMonth: periodMonth,
+    mode: "FROM_MONTH",
+    previousMonthlyFee: 100,
+    previousLessonsPerMonth: 8,
+    previousDiscountType: null,
+    monthlyFee: 230,
+    lessonsPerMonth: 12,
+    discountType: null,
+    reason: "Həftəlik dərs sayı artırıldı",
+    today: new Date("2026-09-10T00:00:00.000Z"),
+  });
+
+  assert.deepEqual(result.repricedInvoiceIds, ["invoice-1"]);
+  assert.deepEqual(invoiceUpdates, [{
+    where: { id: "invoice-1" },
+    data: { amount: 230, balanceDue: 130, status: InvoiceStatus.PARTIAL },
+  }]);
 });
 
 test("a term cannot silently turn an already allocated amount into overpayment", () => {

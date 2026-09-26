@@ -208,7 +208,6 @@ export async function applyEnrollmentBillingChange(
 
   const repricedInvoiceIds: string[] = [];
   for (const invoice of invoices) {
-    if (invoice.status === InvoiceStatus.PAID) continue;
     const invoiceTerms = await resolveEnrollmentBillingTerms(tx, {
       enrollmentId: input.enrollmentId,
       periodMonth: invoice.periodMonth,
