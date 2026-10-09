@@ -9,5 +9,5 @@ function testsIn(directory) {
   });
 }
 
-const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...testsIn("src")], { stdio: "inherit" });
+const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...testsIn("src"), "scripts/backup/core.test.mjs"], { stdio: "inherit" });
 process.exit(result.status ?? 1);
