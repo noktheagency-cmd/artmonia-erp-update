@@ -50,7 +50,7 @@ the owner, outside GitHub and outside the R2 bucket.
 | --- | --- |
 | `BACKUP_DB_URL` | This project's session pooler URL on port **5432**, including the database password |
 | `BACKUP_DB_CA_CERT` | Full PEM contents of the downloaded Supabase CA certificate |
-| `BACKUP_SUPABASE_SERVICE_KEY` | This project's server-only Supabase service role key for private-file reads |
+| `BACKUP_SUPABASE_SERVICE_KEY` | This project's server-only `sb_secret_...` key (recommended), or legacy `service_role` JWT, for private-file reads |
 | `BACKUP_R2_ACCOUNT_ID` | Cloudflare account ID |
 | `BACKUP_R2_ACCESS_KEY_ID` | Dedicated backup bucket's S3 Access Key ID |
 | `BACKUP_R2_SECRET_ACCESS_KEY` | Dedicated backup bucket's S3 Secret Access Key |
@@ -59,6 +59,12 @@ the owner, outside GitHub and outside the R2 bucket.
 | --- | --- |
 | `BACKUP_AGE_RECIPIENT` | Public `age1...` recipient; **never the private identity** |
 | `BACKUP_R2_BUCKET` | `artmonia-backups` by default; set this if a different bucket is used |
+
+Create a dedicated `nightly-backup` secret key in Supabase **Settings → API Keys**.
+The backup rejects public/publishable and `anon` keys even if a local environment
+variable labels one as a service key. A legacy JWT must carry this project's
+`service_role` claims. Modern secret keys are sent only in the `apikey` header;
+Supabase authenticates them on every private-file request.
 
 The database URL is checked against `azhriwieowdeuvbqjqvl`. Transaction pooler
 port 6543 and another project's username are rejected. Prisma-specific query

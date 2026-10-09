@@ -34,6 +34,7 @@ export function readConfig(env) {
     throw new Error("BACKUP_DB_CA_CERT must contain the downloaded Supabase CA certificate");
   }
   const db = databaseConfig(required(env, "BACKUP_DB_URL"), projectRef);
+  const storageHeaders = supabaseStorageHeaders(required(env, "BACKUP_SUPABASE_SERVICE_KEY"), projectRef);
   const sourceBuckets = [...new Set((env.BACKUP_SOURCE_R2_BUCKETS ?? "").split(",").map(x => x.trim()).filter(Boolean))];
   let sourceR2;
   const sourceNames = ["BACKUP_SOURCE_R2_ACCOUNT_ID", "BACKUP_SOURCE_R2_ACCESS_KEY_ID", "BACKUP_SOURCE_R2_SECRET_ACCESS_KEY"];
@@ -50,10 +51,25 @@ export function readConfig(env) {
   }
   return {
     projectRef, supabaseUrl: supabaseUrl.origin, db, ca, recipient, bucket, accountId,
-    serviceKey: required(env, "BACKUP_SUPABASE_SERVICE_KEY"),
+    storageHeaders,
     accessKeyId: required(env, "BACKUP_R2_ACCESS_KEY_ID"),
     secretAccessKey: required(env, "BACKUP_R2_SECRET_ACCESS_KEY"), sourceR2,
   };
+}
+
+// This is a configuration check; Supabase still authenticates every request.
+// A variable named SERVICE_KEY can contain an anon JWT, so inspect its role/ref.
+// Modern secret keys belong only in apikey, not in a JWT Authorization header.
+export function supabaseStorageHeaders(key, projectRef) {
+  const invalid = () => new Error("Invalid BACKUP_SUPABASE_SERVICE_KEY: requires a Supabase secret or service_role key for this project");
+  if (/^sb_secret_[A-Za-z0-9_-]{16,}$/.test(key)) return { apikey: key };
+  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(key)) throw invalid();
+  let claims;
+  try { claims = JSON.parse(Buffer.from(key.split(".")[1], "base64url").toString("utf8")); }
+  catch { throw invalid(); }
+  if (claims?.role !== "service_role" || claims.ref !== projectRef ||
+      (typeof claims.exp === "number" && claims.exp <= Math.floor(Date.now() / 1000))) throw invalid();
+  return { apikey: key, Authorization: `Bearer ${key}` };
 }
 
 function validateBucket(bucket) {

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import {
   databaseConfig, readConfig, snapshotPrefix, snapshotKeyTime, retentionKeys,
-  hashStream, publishSnapshot, objectDownloadUrl, hashFile, verifyPayload,
+  hashStream, publishSnapshot, objectDownloadUrl, hashFile, verifyPayload, supabaseStorageHeaders,
 } from "./core.mjs";
 
 const ref = "azhriwieowdeuvbqjqvl";
@@ -17,11 +17,23 @@ const config = {
   BACKUP_PROJECT_REF: ref, BACKUP_SUPABASE_URL: `https://${ref}.supabase.co`,
   BACKUP_DB_URL: `postgresql://postgres.${ref}:synthetic%23password@aws-1-eu-central-1.pooler.supabase.com:5432/postgres?schema=erp&options=-c%20search_path%3Derp`,
   BACKUP_DB_CA_CERT: "-----BEGIN CERTIFICATE-----\nsynthetic\n-----END CERTIFICATE-----",
-  BACKUP_SUPABASE_SERVICE_KEY: "synthetic-service-key",
+  BACKUP_SUPABASE_SERVICE_KEY: "sb_secret_synthetic_backup_key_1234",
   BACKUP_R2_ACCOUNT_ID: "b".repeat(32), BACKUP_R2_BUCKET: "artmonia-backups",
   BACKUP_R2_ACCESS_KEY_ID: "synthetic-access", BACKUP_R2_SECRET_ACCESS_KEY: "synthetic-secret",
   BACKUP_AGE_RECIPIENT: `age1${"q".repeat(58)}`,
 };
+
+test("Storage backup requires an elevated project key and supports modern API headers", () => {
+  const token = claims => `synthetic.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
+  const elevated = token({ role: "service_role", ref });
+  assert.deepEqual(supabaseStorageHeaders(elevated, ref), { apikey: elevated, Authorization: `Bearer ${elevated}` });
+  assert.deepEqual(readConfig(config).storageHeaders, { apikey: config.BACKUP_SUPABASE_SERVICE_KEY });
+  for (const key of [token({ role: "anon", ref }), token({ role: "authenticated", ref }),
+    token({ role: "service_role", ref: "z".repeat(20) }), token({ role: "service_role", ref, exp: 1 }),
+    "sb_publishable_synthetic_public_1234", "synthetic.e30.signature", "invalid-key"]) {
+    assert.throws(() => readConfig({ ...config, BACKUP_SUPABASE_SERVICE_KEY: key }), /Invalid BACKUP_SUPABASE_SERVICE_KEY/);
+  }
+});
 
 test("backup URL removes Prisma parameters and verifies the project/session port", () => {
   const db = databaseConfig(config.BACKUP_DB_URL, ref);

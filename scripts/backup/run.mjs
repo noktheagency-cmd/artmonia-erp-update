@@ -99,7 +99,7 @@ async function copyStream(stream, destination) {
 
 async function downloadSupabase(object, destination) {
   const response = await fetch(objectDownloadUrl(config.supabaseUrl, object.bucket_id, object.name), {
-    headers: { apikey: config.serviceKey, Authorization: `Bearer ${config.serviceKey}` },
+    headers: config.storageHeaders,
     redirect: "error", signal: AbortSignal.timeout(120_000),
   });
   if (!response.ok || !response.body) throw new Error(`Storage download failed with HTTP ${response.status}`);

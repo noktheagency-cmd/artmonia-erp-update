@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { X509Certificate } from "node:crypto";
 import dotenv from "dotenv";
-import { databaseConfig } from "./core.mjs";
+import { databaseConfig, supabaseStorageHeaders } from "./core.mjs";
 
 const repository = "noktheagency-cmd/artmonia-erp";
 const [keygen, identity, certificate, envFile = ".env.local"] = process.argv.slice(2);
@@ -26,6 +26,7 @@ try {
   const ca = readFileSync(certificate, "utf8");
   if (!new X509Certificate(ca).ca) throw new Error("The supplied certificate is not a CA certificate");
   if (!source.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing local Supabase service role key");
+  supabaseStorageHeaders(source.SUPABASE_SERVICE_ROLE_KEY, projectRef);
   const publicKey = spawnSync(keygen, ["-y", identity], { encoding: "utf8", timeout: 10_000 });
   const recipient = publicKey.stdout?.trim();
   if (publicKey.status !== 0 || !/^age1[0-9a-z]{58}$/.test(recipient)) throw new Error("Unable to read the public age recipient");
