@@ -1,0 +1,54 @@
+"use server";
+import { z } from "zod";
+import { revalidatePath, updateTag } from "next/cache";
+import { Prisma } from "@/generated/prisma/client";
+import { requireErpActor, requireMutationActor } from "@/server/auth/actor";
+import { scopeFor } from "@/server/rbac/permissions";
+import { getPrisma } from "@/server/db/prisma";
+import { safeServerAction, PublicActionError } from "@/server/actions/safe-action";
+import { writeAuditLog } from "@/modules/audit/audit-service";
+import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { dailyReportWindow } from "@/modules/dashboard/daily-report-policy";
+import { assertDepositCancellation } from "./course-sale-policy";
+import { pauseStudentLifecycleRelations, buildStudentStatusUpdateData } from "./lifecycle-service";
+import { clearStudentPaymentSchedules } from "./payment-schedule-service";
+import { getLeadReadScope } from "@/modules/crm/access";
+export const listAdmissionLeads = safeServerAction(async(studentId:string)=>{
+ const actor=await requireErpActor("crm.lead.read"),id=z.string().uuid().parse(studentId),db=getPrisma();
+ const student=await db.student.findUnique({where:{id},select:{managerId:true,contact:{select:{id:true,phoneNormalized:true}},statusHistory:{where:{eventType:"REACTIVATED",oldStatus:"STOPPED"},orderBy:{effectiveAt:"desc"},take:1}}});
+ if(!student || !actor.permissions.has("billing.payment.create") || !actor.permissions.has("crm.lead.convert") || (scopeFor(actor.permissions,"billing.payment.create")!=="ALL"&&student.managerId!==actor.id))throw new PublicActionError("Bu tələbəyə giriş icazəniz yoxdur.","FORBIDDEN");
+ const rows=await db.lead.findMany({where:{AND:[getLeadReadScope(actor),{managerId:student.managerId,stage:{notIn:["REGISTERED","LOST"]},createdAt:student.statusHistory[0]?{gte:student.statusHistory[0].effectiveAt}:undefined,OR:[{contactId:student.contact.id},...(student.contact.phoneNormalized?[{contact:{phoneNormalized:student.contact.phoneNormalized}}]:[])]}]},take:30,orderBy:{createdAt:"desc"},select:{id:true,createdAt:true,contact:{select:{fullName:true}}}});
+ return rows.map(r=>({id:r.id,name:r.contact.fullName+" · "+r.createdAt.toISOString().slice(0,10)}));
+},"Müraciətlər yüklənmədi.");
+export const listCourseSales = safeServerAction(async(studentId:string)=>{
+ const actor=await requireErpActor("billing.payment.read"),id=z.string().uuid().parse(studentId),db=getPrisma();
+ const student=await db.student.findUnique({where:{id},select:{managerId:true}});
+ if(!student || (scopeFor(actor.permissions,"billing.payment.read")!=="ALL"&&student.managerId!==actor.id)) throw new PublicActionError("Bu tələbəyə giriş icazəniz yoxdur.","FORBIDDEN");
+ const rows=await db.courseSale.findMany({where:{studentId:id},orderBy:{qualifiedAt:"desc"},take:10});
+ const canCancel=actor.permissions.has("student.status.change") && (scopeFor(actor.permissions,"student.status.change")==="ALL"||student.managerId===actor.id);
+ return {canCancel,rows:rows.map(r=>({id:r.id,kind:r.kind,status:r.status,date:r.qualifiedAt.toISOString().slice(0,10),reason:r.cancellationReason}))};
+},"Satışlar yüklənmədi.");
+export const cancelCourseSale=safeServerAction(async(form:FormData)=>{
+ const actor=await requireMutationActor("student.status.change");
+ const id=z.string().uuid().parse(form.get("saleId")),reason=z.string().trim().min(3).max(500).parse(form.get("reason"));
+ await getPrisma().$transaction(async(tx)=>{
+  const sale=await tx.courseSale.findUniqueOrThrow({where:{id}});
+  await tx.$queryRaw`select id from erp.students where id=${sale.studentId}::uuid for update`;
+  const fresh=await tx.courseSale.findUniqueOrThrow({where:{id}});
+  const student=await tx.student.findUniqueOrThrow({where:{id:sale.studentId},include:{enrollments:{where:{status:{in:["ACTIVE","PAUSED"]}},orderBy:{createdAt:"desc"},take:1,select:{id:true}}}});
+  if(scopeFor(actor.permissions,"student.status.change")!=="ALL"&&student.managerId!==actor.id)throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur.","FORBIDDEN");
+  if(fresh.status==="CANCELLED") return;
+  const latest=await tx.courseSale.findFirst({where:{studentId:student.id},orderBy:{createdAt:"desc"}});
+  if(latest?.id!==id || student.enrollments[0]?.id!==sale.enrollmentId || !["SLOT_WAITING","ACTIVE"].includes(student.lifecycleStatus))throw new PublicActionError("Yalnız cari qəbulun açıq beh satışı ləğv edilə bilər.");
+  const total=await tx.payment.aggregate({where:{courseSaleId:id},_sum:{amount:true}});
+  assertDepositCancellation(total._sum.amount??new Prisma.Decimal(0),fresh.initialFee,fresh.status);
+  const now=new Date(),effectiveAt=new Date(dailyReportWindow(now).date+"T00:00:00Z");
+  await tx.courseSale.update({where:{id},data:{status:"CANCELLED",cancelledAt:now,cancellationReason:reason}});
+  await tx.student.update({where:{id:student.id},data:buildStudentStatusUpdateData("DECLINED",effectiveAt)});
+  await clearStudentPaymentSchedules(tx,[student.id]);
+  await pauseStudentLifecycleRelations(tx,{studentId:student.id,effectiveAt,changedById:actor.id,clearTeacherAssignment:false});
+  await tx.studentStatusHistory.create({data:{studentId:student.id,oldStatus:student.lifecycleStatus,newStatus:"DECLINED",effectiveAt,changedById:actor.id,reason:"Beh satışı ləğv edildi",note:reason}});
+  await writeAuditLog(tx,{actorUserId:actor.id,action:"student.sale.cancel",entityType:"student",entityId:student.id,before:{saleId:id,status:fresh.status},after:{status:"CANCELLED",moneyRetained:total._sum.amount?.toString()??"0"},reason});
+ });
+ revalidatePath("/students");revalidatePath("/dashboard");revalidatePath("/finance");updateTag(erpCacheTags.students);updateTag(erpCacheTags.finance);
+},"Satış ləğv edilmədi.");

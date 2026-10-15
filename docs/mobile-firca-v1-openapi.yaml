@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Fırça V1 — coordinated mobile rollout
-  version: 1.0.1
+  version: 1.1.0
   description: >
     Implementation contract; not a claim of live deployment.
     Read together with mobile-student-portal-openapi.yaml version 2.0.1.
@@ -183,7 +183,10 @@ paths:
                 type: object
                 required: [status, delta]
                 properties:
-                  status: { type: string, enum: [recorded, duplicate, stale, ineligible, post_already_evaluated] }
+                  status:
+                    type: string
+                    enum: [recorded, duplicate, stale, ineligible, post_already_evaluated]
+                    description: A comment author without an ERP student mapping returns ineligible with delta 0 and creates no reward/event record, including retries.
                   delta: { type: integer }
         default: { $ref: '#/components/responses/Error' }
 components:

@@ -522,6 +522,11 @@ enum HrNotificationStatus {
 }
 
 model User {
+  factualLeadContacts LeadContactEvent[] @relation("LeadContactActor")
+  ownedLeadWork LeadWorkItem[] @relation("LeadWorkOwner")
+  completedLeadWork LeadWorkItem[] @relation("LeadWorkCompleter")
+  ownedAppointments CrmAppointment[] @relation("AppointmentOwner")
+  ownedCourseSales CourseSale[] @relation("CourseSaleOwner")
   fircaLedgerEntries FircaLedger[]
   reviewedHomeworkSubmissions HomeworkSubmission[]
   mobilePushCampaigns MobilePushCampaign[]
@@ -1528,6 +1533,7 @@ model RolePermission {
 }
 
 model Contact {
+  factualLeadContacts LeadContactEvent[]
   id              String   @id @default(uuid()) @db.Uuid
   fullName        String   @map("full_name")
   phoneDisplay    String?  @map("phone_display")
@@ -1550,6 +1556,10 @@ model Contact {
 }
 
 model Lead {
+  courseSales CourseSale[]
+  contactEvents LeadContactEvent[]
+  workItems LeadWorkItem[]
+  appointments CrmAppointment[]
   id                 String              @id @default(uuid()) @db.Uuid
   contactId          String              @map("contact_id") @db.Uuid
   stage              LeadStage           @default(NEW)
@@ -1702,6 +1712,7 @@ model ProgramPricingVersion {
 }
 
 model Teacher {
+  crmAppointments CrmAppointment[]
   id        String   @id @default(uuid()) @db.Uuid
   userId    String?  @unique @map("user_id") @db.Uuid
   contactId String?  @unique @map("contact_id") @db.Uuid
@@ -1731,6 +1742,8 @@ model Teacher {
 }
 
 model Student {
+  admissionTracking Boolean @default(false) @map("admission_tracking")
+  courseSales CourseSale[]
   fircaExclusion FircaExclusion?
   fircaTestOptIn FircaTestOptIn?
   fircaAwards FircaAward[]
@@ -1957,6 +1970,7 @@ model StudentStatusHistory {
 }
 
 model Enrollment {
+  courseSales CourseSale[]
   id              String           @id @default(uuid()) @db.Uuid
   studentId       String           @map("student_id") @db.Uuid
   programId       String           @map("program_id") @db.Uuid
@@ -2521,6 +2535,9 @@ model Invoice {
 }
 
 model Payment {
+  receiptPurpose String @default("UNCLASSIFIED") @map("receipt_purpose")
+  courseSaleId String? @map("course_sale_id") @db.Uuid
+  courseSale CourseSale? @relation(fields: [courseSaleId], references: [id], onDelete: Restrict)
   id               String              @id @default(uuid()) @db.Uuid
   studentId        String              @map("student_id") @db.Uuid
   amount           Decimal             @db.Decimal(12, 2)
@@ -2550,6 +2567,106 @@ model Payment {
   @@index([nextPaymentAt])
   @@index([createdById])
   @@map("payments")
+  @@schema("erp")
+}
+
+// Facts entered explicitly by an authorized CRM editor; stage history is not contact evidence.
+model LeadContactEvent {
+  actor User @relation("LeadContactActor", fields: [actorId], references: [id], onDelete: Restrict)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  id String @id @default(uuid()) @db.Uuid
+  leadId String @map("lead_id") @db.Uuid
+  contactId String @map("contact_id") @db.Uuid
+  actorId String @map("actor_id") @db.Uuid
+  channel String
+  outcome String
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  note String?
+  idempotencyKey String @unique @map("idempotency_key") @db.Uuid
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  @@index([occurredAt, actorId])
+  @@index([leadId, occurredAt])
+  @@map("lead_contact_events")
+  @@schema("erp")
+}
+
+// Replanning closes the old row and creates a new one; due dates are never overwritten.
+model LeadWorkItem {
+  owner User @relation("LeadWorkOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  completer User? @relation("LeadWorkCompleter", fields: [completedById], references: [id], onDelete: Restrict)
+  appointments CrmAppointment[]
+  id String @id @default(uuid()) @db.Uuid
+  leadId String @map("lead_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  kind String
+  source String @default("PRIMARY")
+  plannedAt DateTime @map("planned_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  completedById String? @map("completed_by_id") @db.Uuid
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  result String?
+  isLegacy Boolean @default(false) @map("is_legacy")
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  @@index([ownerId, plannedAt])
+  @@index([leadId, completedAt, cancelledAt])
+  @@map("lead_work_items")
+  @@schema("erp")
+}
+
+model CrmAppointment {
+  owner User @relation("AppointmentOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  teacher Teacher? @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  previous CrmAppointment? @relation("AppointmentReschedule", fields: [previousId], references: [id], onDelete: Restrict)
+  next CrmAppointment? @relation("AppointmentReschedule")
+  reminderWork LeadWorkItem? @relation(fields: [reminderWorkId], references: [id], onDelete: Restrict)
+  id String @id @default(uuid()) @db.Uuid
+  leadId String @map("lead_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  teacherId String? @map("teacher_id") @db.Uuid
+  kind String
+  outcome String @default("SCHEDULED")
+  plannedAt DateTime @map("planned_at") @db.Timestamptz(3)
+  occurredAt DateTime? @map("occurred_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  reason String?
+  previousId String? @unique @map("previous_id") @db.Uuid
+  reminderWorkId String? @map("reminder_work_id") @db.Uuid
+  idempotencyKey String @unique @map("idempotency_key")
+  isLegacy Boolean @default(false) @map("is_legacy")
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  @@index([plannedAt, ownerId])
+  @@index([occurredAt])
+  @@map("crm_appointments")
+  @@schema("erp")
+}
+
+// One eligible course admission per actual admission/STOPPED return cycle.
+model CourseSale {
+  owner User @relation("CourseSaleOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  id String @id @default(uuid()) @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  leadId String? @map("lead_id") @db.Uuid
+  cycleKey String @unique @map("cycle_key")
+  kind String
+  route String
+  qualifiedAt DateTime @map("qualified_at") @db.Date
+  contractConfirmedAt DateTime @map("contract_confirmed_at") @db.Timestamptz(3)
+  initialFee Decimal @map("initial_fee") @db.Decimal(12, 2)
+  status String @default("DEPOSIT")
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  cancellationReason String? @map("cancellation_reason")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  payments Payment[]
+  @@index([qualifiedAt, ownerId])
+  @@map("course_sales")
   @@schema("erp")
 }
 

@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "artmonia-erp-preview",
+  "account_id": "58058e8a481f4ce9495a2a3773ab3a36",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "minify": true,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "artmonia-erp-preview"
+    }
+  ],
+  "vars": {
+    "CLOUDFLARE_PREVIEW": "true",
+    "NEXT_PUBLIC_APP_URL": "https://erp.artmoniya.com",
+    "MCP_PUBLIC_URL": "https://erp.artmoniya.com/mcp",
+    "ALLOW_DEMO_SEED": "false"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.01
+  }
+}

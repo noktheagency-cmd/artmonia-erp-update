@@ -25,6 +25,7 @@ import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
+import { ReceiptFields } from "./receipt-fields";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -162,6 +163,8 @@ export function StudentPaymentDialogClient({
               <span>Qeyd</span>
               <Input name="note" maxLength={240} placeholder="Məsələn: iyul ayı ödənişi" />
             </label>
+
+            <ReceiptFields key={selectedStudent.id} studentId={selectedStudent.id} />
 
             <p className="payment-policy-note">
               <CalendarDays /> Birdəfəlik ödənişdə növbəti aylıq ödəniş tarixi yaradılmır.

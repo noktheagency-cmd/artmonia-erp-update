@@ -33,6 +33,8 @@ import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-sc
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
+import { ReceiptFields } from "./receipt-fields";
+import { CourseSalesPanel } from "./course-sales-panel";
 
 type StudentRow = StudentListData["students"][number];
 
@@ -107,6 +109,7 @@ export function StudentDetailDialogClient({
         </div>
 
         <section className="student-detail-section student-slot-section">
+          {open ? <CourseSalesPanel studentId={student.id} /> : null}
           <div className="student-detail-section-title">
             <CalendarDays />
             <span>Tədris slotları</span>
@@ -234,6 +237,7 @@ export function StudentDetailDialogClient({
                 />
               </label>
 
+              <ReceiptFields studentId={student.id} />
               <p className="payment-policy-note">
                 {paymentClosed
                   ? "Tədris tamamlanıb: maliyyə öhdəliyi bağlıdır və yeni ödəniş tələb olunmur."

@@ -1,5 +1,7 @@
 "use client";
 
+import { ReceiptFields } from "@/modules/students/receipt-fields";
+
 import type { FormEvent, ReactNode } from "react";
 import { useContext, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
@@ -837,6 +839,7 @@ function PaymentDialog({
                 required
               />
             </label>
+            <ReceiptFields key={selectedStudentId} studentId={selectedStudentId} />
             <div className="field-grid">
               <label className="form-field">
                 <span>Ödəyən şəxs</span>

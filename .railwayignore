@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+tmp/
+output/
+.next/
+.open-next/
+.wrangler/
+.vercel/
+node_modules/
+src/generated/
+public/uploads/

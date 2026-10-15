@@ -1,10 +1,35 @@
 openapi: 3.1.0
 info:
   title: Artmonia ERP Mobile Student Portal API
-  version: 2.0.1
+  version: 2.1.0
 servers:
   - url: https://erp.artmoniya.com
 paths:
+  /api/mobile/v1/me/access:
+    post:
+      operationId: resolveMobileAccess
+      summary: Resolve member access and securely match a verified Auth account to an existing ERP student
+      description: |
+        Send no body and no query parameters. Identity is taken only from the verified user JWT
+        and live Auth session. An unmatched user is a normal member, not an error.
+        Matching never creates a student or ERP staff account. Existing mappings remain authoritative.
+        This endpoint must be called before student-only routes and again after a user's enrollment changes.
+      security: [{ serverToken: [], studentToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      responses:
+        '200':
+          description: Access decision; disabled accounts are returned here but cannot use academic routes
+          headers:
+            X-Request-Id: { schema: { type: string, format: uuid } }
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MobileAccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: UNAUTHORIZED, STUDENT_AUTH_REQUIRED, STUDENT_AUTH_INVALID or EMAIL_NOT_VERIFIED
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/mobile/v1/me:
     get:
       operationId: getMobileMe
@@ -306,6 +331,21 @@ components:
       required: false
       schema: { type: string, format: uuid }
   schemas:
+    MobileAccess:
+      type: object
+      additionalProperties: false
+      required: [contractVersion, authUserId, role, accountStatus, matchStatus, displayName, email, phone, avatarUrl, checkedAt]
+      properties:
+        contractVersion: { type: integer, const: 1 }
+        authUserId: { type: string, format: uuid }
+        role: { type: string, enum: [member, student] }
+        accountStatus: { type: string, enum: [active, disabled] }
+        matchStatus: { type: string, enum: [not_found, matched, review_required] }
+        displayName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        checkedAt: { type: string, format: date-time }
     AccountStatus:
       type: string
       enum: [invited, active, disabled]

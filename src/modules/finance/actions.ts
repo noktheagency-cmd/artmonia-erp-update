@@ -1,5 +1,9 @@
 "use server";
 
+import { contractConfirmationSchema, receiptPurposeSchema } from "@/modules/students/course-sale-policy";
+import { assertSalePaymentEditable, recordCourseSalePayment } from "@/modules/students/course-sale-service";
+import { lockPaymentStudent, replayPayment, assertAdmissionLeadActor } from "@/modules/students/payment-entry-guard";
+
 import { revalidatePath, updateTag } from "next/cache";
 import type { Route } from "next";
 import { z } from "zod";
@@ -209,6 +213,9 @@ const requiredAmount = z.preprocess(
 );
 
 const recordFinancePaymentSchema = z.object({
+  admissionLeadId: z.preprocess(optionalFormString, z.string().uuid().optional()),
+  receiptPurpose: receiptPurposeSchema,
+  contractConfirmed: contractConfirmationSchema,
   idempotencyKey: z.string().uuid(),
   studentId: z.string().uuid(),
   amount: requiredAmount,
@@ -291,6 +298,10 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
   const prisma = getPrisma();
 
   const effectivePaymentMonth = await prisma.$transaction(async (tx) => {
+    await lockPaymentStudent(tx, actor, input.studentId);
+    await assertAdmissionLeadActor(tx,actor,input.admissionLeadId);
+    const replay = await replayPayment(tx, { ...input, paidAt, actorId: actor.id });
+    if (replay) return replay.paymentMonth;
     const paymentResult = await createPaymentAndAllocate(tx, {
       studentId: input.studentId,
       amount: input.amount,
@@ -306,6 +317,9 @@ async function recordFinancePaymentActionImpl(formData: FormData) {
       actorId: actor.id,
       idempotencyKey: input.idempotencyKey,
     });
+
+    if (input.admissionLeadId && !actor.permissions.has("crm.lead.convert")) throw new PublicActionError("Müraciətdən qəbul yaratmaq icazəniz yoxdur.","FORBIDDEN");
+    await recordCourseSalePayment(tx, { studentId: input.studentId, paymentId: paymentResult.payment.id, purpose: input.receiptPurpose, contractConfirmed: input.contractConfirmed, actorId: actor.id, admissionLeadId: input.admissionLeadId });
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -464,6 +478,8 @@ async function updateFinancePaymentActionImpl(formData: FormData) {
       throw new Error("Ödəniş tapılmadı");
     }
 
+    await lockPaymentStudent(tx, actor, existing.studentId);
+    await assertSalePaymentEditable(tx, existing.id);
     await reversePaymentAllocations(tx, existing.id);
     await clearStudentPaymentSchedules(tx, [existing.studentId]);
 
@@ -600,6 +616,8 @@ async function deleteFinancePaymentActionImpl(formData: FormData) {
       throw new Error("Ödəniş tapılmadı");
     }
 
+    await lockPaymentStudent(tx, actor, payment.studentId);
+    await assertSalePaymentEditable(tx, payment.id);
     await reversePaymentAllocations(tx, payment.id);
     await tx.payment.delete({ where: { id: payment.id } });
 

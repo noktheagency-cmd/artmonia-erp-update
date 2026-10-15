@@ -224,6 +224,7 @@ export function NewLeadDialogClient({
                     <InputGroupInput
                       id="new-lead-phone"
                       name="phone"
+                      required
                       type="tel"
                       inputMode="tel"
                       autoComplete="tel"
@@ -299,6 +300,7 @@ export function NewLeadDialogClient({
                   <FormSelect
                     aria-label="Proqram"
                     name="programId"
+                    required
                     defaultValue=""
                     emptyLabel="Seçilməyib"
                     searchable
@@ -336,7 +338,7 @@ export function NewLeadDialogClient({
                     name="stage"
                     value={stage}
                     onValueChange={handleStageChange}
-                    options={leadStageSelectOptions}
+                    options={leadStageSelectOptions.filter((option) => option.value !== "REGISTERED")}
                   />
                 </Field>
                 {stage === "TRIAL_LESSON" ? (
@@ -391,6 +393,7 @@ export function NewLeadDialogClient({
                   <DatePicker
                     aria-label="Növbəti addım tarixi"
                     name="nextFollowUpDate"
+                    required
                     compact
                     popoverPlacement="floating"
                   />

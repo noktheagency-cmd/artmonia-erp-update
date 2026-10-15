@@ -26,10 +26,15 @@ export function recentDailyReportDates(now = new Date()) {
   return [0, 1, 2].map((offset) => dailyReportWindow(new Date(start.getTime() - offset * 86_400_000)).date);
 }
 
-export function filteredDailyReportWindow(requestedDate?: string, now = new Date()) {
+export type DailyReportFilter = { from?: string; to?: string; managerId?: string };
+export function filteredDailyReportWindow(requestedDate?: string | DailyReportFilter, now = new Date()) {
   const availableDates = recentDailyReportDates(now);
-  const date = z.string().refine((value) => availableDates.includes(value), {
-    message: "Yalnız bu gün və əvvəlki 2 günün hesabatını seçə bilərsiniz.",
-  }).parse(requestedDate ?? availableDates[0]);
-  return { ...dailyReportWindow(new Date(`${date}T12:00:00+04:00`)), availableDates };
+  const input = typeof requestedDate === "string" ? { from: requestedDate, to: requestedDate } : requestedDate ?? {};
+  const from = z.iso.date().parse(input.from ?? availableDates[0]);
+  const to = z.iso.date().parse(input.to ?? from);
+  const first = dailyReportWindow(new Date(`${from}T12:00:00+04:00`));
+  const last = dailyReportWindow(new Date(`${to}T12:00:00+04:00`));
+  if (from > to || to > availableDates[0] || last.end.getTime() - first.start.getTime() > 31 * 86_400_000) throw new Error("Keçmişdən bu günədək ən çox 31 günlük aralıq seçin.");
+  const managerId = input.managerId ? z.string().uuid().parse(input.managerId) : undefined;
+  return { ...last, date: from, from, to, start: first.start, availableDates, managerId };
 }

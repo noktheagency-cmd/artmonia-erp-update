@@ -14,7 +14,6 @@ import { StudentMobileAccountCard } from "@/modules/students/student-mobile-acco
 import {
   disableStudentMobileAccountAction,
   enableStudentMobileAccountAction,
-  inviteStudentMobileAccountAction,
   resendStudentMobileInviteAction,
   resetStudentMobileDeviceAction,
 } from "@/modules/students/mobile-account-actions";
@@ -76,7 +75,6 @@ export default async function StudentDetailPage({
           contactEmail={student.detail.email}
           account={student.detail.mobileAccount}
           canManage={permissions.canUpdateStudent}
-          inviteAction={inviteStudentMobileAccountAction}
           resendAction={resendStudentMobileInviteAction}
           disableAction={disableStudentMobileAccountAction}
           enableAction={enableStudentMobileAccountAction}

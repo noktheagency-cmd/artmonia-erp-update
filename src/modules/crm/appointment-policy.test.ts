@@ -1,24 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appointmentKey, appointmentSchema, isFutureAppointmentResult } from "./appointment-policy";
-
-const input = { leadId: "00000000-0000-4000-8000-000000000001", date: "2026-09-20", kind: "TRIAL", outcome: "SCHEDULED" } as const;
-test("appointment validation rejects invalid dates, IDs and outcomes", () => {
-  for (const invalid of [{ date: "2026-02-30" }, { leadId: "invalid" }, { outcome: "DONE" }, { kind: "CALL" }]) {
-    assert.equal(appointmentSchema.safeParse({ ...input, ...invalid }).success, false);
-  }
+import { appointmentSchema, appointmentInstant } from "./appointment-policy";
+const input={leadId:"00000000-0000-4000-8000-000000000001",idempotencyKey:"00000000-0000-4000-8000-000000000002",date:"2026-09-20",time:"12:00",kind:"TRIAL",outcome:"SCHEDULED"} as const;
+test("appointment requires a real date, time and stable request identity",()=>{
+ assert.equal(appointmentSchema.safeParse(input).success,true);
+ for(const extra of [{date:"2026-02-30"},{time:"24:00"},{leadId:"bad"},{outcome:"DONE"},{idempotencyKey:""}])assert.equal(appointmentSchema.safeParse({...input,...extra}).success,false);
+ assert.equal(appointmentInstant("2026-09-20","12:00").toISOString(),"2026-09-20T08:00:00.000Z");
 });
-test("outcome corrections and retries address the same appointment", () => {
-  assert.equal(appointmentKey(input), appointmentKey({ ...input, outcome: "ATTENDED" }));
-  assert.notEqual(appointmentKey(input), appointmentKey({ ...input, date: "2026-09-21" }));
-  assert.notEqual(appointmentKey(input), appointmentKey({ ...input, kind: "CONSULTATION" }));
+test("actual trial requires actual time and teacher; stage is not attendance",()=>{
+ assert.equal(appointmentSchema.safeParse({...input,outcome:"ATTENDED"}).success,false);
+ assert.equal(appointmentSchema.safeParse({...input,outcome:"ATTENDED",occurredDate:input.date,occurredTime:"12:30"}).success,false);
+ assert.equal(appointmentSchema.safeParse({...input,outcome:"ATTENDED",occurredDate:input.date,occurredTime:"12:30",teacherId:input.leadId}).success,true);
 });
-test("future appointments can be scheduled or cancelled but cannot have attendance results", () => {
-  assert.equal(isFutureAppointmentResult(input, "2026-09-19"), false);
-  assert.equal(isFutureAppointmentResult({ ...input, outcome: "CANCELLED" }, "2026-09-19"), false);
-  for (const outcome of ["ATTENDED", "NO_SHOW"] as const) {
-    assert.equal(isFutureAppointmentResult({ ...input, outcome }, "2026-09-19"), true);
-    assert.equal(isFutureAppointmentResult({ ...input, outcome }, "2026-09-20"), false);
-    assert.equal(isFutureAppointmentResult({ ...input, outcome }, "2026-09-21"), false);
-  }
+test("cancellation and rescheduling need a reason",()=>{
+ for(const outcome of ["CANCELLED","RESCHEDULED"]) {
+  assert.equal(appointmentSchema.safeParse({...input,outcome}).success,false);
+  assert.equal(appointmentSchema.safeParse({...input,outcome,reason:"Owner requested"}).success,true);
+ }
 });

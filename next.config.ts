@@ -24,12 +24,24 @@ const nextConfig: NextConfig = {
   // Bake the same public identifier into the browser AND version endpoint.
   // A commit hash alone would miss rebuilds/redeploys of the same commit.
   env: {
-    NEXT_PUBLIC_APP_BUILD_ID: process.env.RAILWAY_DEPLOYMENT_ID || randomUUID(),
+    NEXT_PUBLIC_APP_BUILD_ID:
+      process.env.RAILWAY_DEPLOYMENT_ID || process.env.NEXT_PUBLIC_APP_BUILD_ID || randomUUID(),
   },
   devIndicators: false,
   poweredByHeader: false,
   typedRoutes: true,
+  ...(process.env.CLOUDFLARE_PREVIEW === "true"
+    ? {
+        turbopack: {
+          resolveAlias: {
+            "@/generated/prisma/client": "./src/generated/prisma-cloudflare/client.ts",
+          },
+        },
+      }
+    : {}),
   images: {
+    // Keep the free Cloudflare preview independent of paid Image bindings.
+    unoptimized: process.env.CLOUDFLARE_PREVIEW === "true",
     remotePatterns: [
       {
         protocol: "https",

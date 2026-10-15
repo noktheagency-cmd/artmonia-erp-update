@@ -29,6 +29,8 @@ import {
 import { optionalFormString } from "@/modules/shared/form-values";
 import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { assertLeadPlan } from "./lead-validation";
+import { syncLeadWorkPlan } from "./work-service";
 import {
   enrollmentStatusForStudentLifecycle,
   isBillingPausedStatus,
@@ -182,6 +184,9 @@ async function createLead(formData: FormData) {
   const managerId = actor.id;
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
+  if (input.stage === LeadStage.REGISTERED) throw new Error("Ödənişli qəbul olmadan Qeydiyyata alınıb seçilə bilməz.");
+  assertLeadPlan({ stage: input.stage, phone: phoneNormalized, programId: input.programId,
+    nextActionType: input.nextActionType, nextDate: followUpAt, reason: input.note });
   const nextActionType =
     input.nextActionType ??
     (input.stage === LeadStage.TRIAL_LESSON
@@ -237,6 +242,8 @@ async function createLead(formData: FormData) {
       },
     });
     createdLeadId = lead.id;
+    await syncLeadWorkPlan(tx, { leadId: lead.id, ownerId: managerId, kind: nextActionType ?? null, plannedAt: followUpAt,
+      closed: input.stage === LeadStage.LOST });
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -257,6 +264,8 @@ async function updateLeadActionImpl(formData: FormData) {
   const prisma = getPrisma();
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
+  assertLeadPlan({ stage: input.stage, phone: phoneNormalized, programId: input.programId,
+    nextActionType: input.nextActionType, nextDate: followUpAt, reason: input.note });
   const nextActionType =
     input.nextActionType ??
     (input.stage === LeadStage.TRIAL_LESSON
@@ -264,6 +273,7 @@ async function updateLeadActionImpl(formData: FormData) {
       : undefined);
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`select id from erp.leads where id = ${input.leadId}::uuid for update`;
     const current = await tx.lead.findUnique({
       where: { id: input.leadId },
       select: {
@@ -293,7 +303,13 @@ async function updateLeadActionImpl(formData: FormData) {
     }
 
     assertCanEditLead(actor, current);
+    if (input.stage === LeadStage.REGISTERED && current.stage !== LeadStage.REGISTERED) {
+      throw new Error("Qeydiyyata alınıb mərhələsi yalnız uyğun ödənişli qəbuldan yaranır.");
+    }
     const managerId = resolveLeadManagerId(actor, input.managerId, current.managerId);
+    if (!managerId) throw new Error("Müraciətin məsulu seçilməlidir.");
+    await syncLeadWorkPlan(tx, { leadId: current.id, ownerId: managerId, kind: nextActionType ?? null, plannedAt: followUpAt,
+      closed: input.stage === LeadStage.REGISTERED || input.stage === LeadStage.LOST });
 
     if (input.programId && input.programId !== current.programInterestId && !await tx.program.findUnique({ where: { id: input.programId, isActive: true }, select: { id: true } })) {
       throw new Error("Proqram tapılmadı və ya arxivdədir.");
@@ -414,6 +430,9 @@ async function deleteLeadActionImpl(formData: FormData) {
     });
 
     assertCanAccessLead(actor, lead, "crm.lead.update");
+
+    const facts = await tx.lead.findUniqueOrThrow({ where: { id: lead.id }, select: { _count: { select: { contactEvents: true, workItems: true, appointments: true, courseSales: true } } } });
+    if (Object.values(facts._count).some((count) => count > 0)) throw new Error("Əməliyyat tarixçəsi olan müraciət silinə bilməz. Səbəbi yazaraq İtirilib seçin.");
 
     await tx.task.deleteMany({
       where: { entityType: "lead", entityId: lead.id },
@@ -564,8 +583,9 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       data: {
         code: studentCode,
         contactId: lead.contactId,
-        managerId: actor.id,
+        managerId: lead.managerId ?? actor.id,
         campaignId: lead.campaignId,
+        admissionTracking: true,
         lifecycleStatus: StudentLifecycleStatus.SLOT_WAITING,
         educationLevel,
         billingPaused: isBillingPausedStatus(StudentLifecycleStatus.SLOT_WAITING),
@@ -604,7 +624,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
     const updatedLead = await tx.lead.update({
       where: { id: lead.id },
       data: {
-        stage: LeadStage.REGISTERED,
+        stage: LeadStage.TRIAL_CONSULTATION,
         convertedStudentId: student.id,
         source: input.source ?? "Manual",
         educationLevel,
@@ -622,7 +642,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       data: {
         leadId: lead.id,
         oldStage: lead.stage,
-        newStage: LeadStage.REGISTERED,
+        newStage: LeadStage.TRIAL_CONSULTATION,
         reason: `Tələbəyə çevrildi: ${student.code}`,
         changedById: actor.id,
       },
@@ -671,9 +691,12 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
 async function updateLeadStageActionImpl(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.update");
   const input = updateLeadStageSchema.parse(Object.fromEntries(formData));
+  if (input.stage === LeadStage.REGISTERED) throw new Error("Qeydiyyat uyğun qəbul ödənişi ilə tamamlanır.");
+  if (input.stage === LeadStage.LOST && !input.reason?.trim()) throw new Error("İtki səbəbi yazılmalıdır.");
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`select id from erp.leads where id = ${input.leadId}::uuid for update`;
     const current = await tx.lead.findUnique({
       where: { id: input.leadId },
       select: {
@@ -683,10 +706,17 @@ async function updateLeadStageActionImpl(formData: FormData) {
         convertedStudentId: true,
         nextActionType: true,
         trialLessonCount: true,
+        nextFollowUpAt: true,
+        programInterestId: true,
+        contact: { select: { phoneNormalized: true } },
       },
     });
 
     assertCanEditLead(actor, current);
+
+    assertLeadPlan({ stage: input.stage, phone: current.contact.phoneNormalized, programId: current.programInterestId, nextActionType: current.nextActionType, nextDate: current.nextFollowUpAt, reason: input.reason });
+    if (!current.managerId) throw new Error("Müraciətin sahibi seçilməlidir.");
+    await syncLeadWorkPlan(tx, { leadId: current.id, ownerId: current.managerId, kind: resolveTrialLessonNextAction({ stage: input.stage, currentNextAction: current.nextActionType }), plannedAt: current.nextFollowUpAt, closed: input.stage === LeadStage.LOST });
 
     if (current.stage === input.stage) {
       return;

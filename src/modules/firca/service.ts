@@ -137,12 +137,7 @@ export async function applyCommentEvent(db: FircaDb, input: CommentEvent) {
     where: { authUserId: input.authorAuthUserId },
     select: { studentId: true },
   });
-  if (!mapping)
-    throw new MobilePortalError(
-      "STUDENT_MAPPING_NOT_FOUND",
-      404,
-      "Tələbə tapılmadı.",
-    );
+  if (!mapping) return { status: "ineligible", delta: 0 };
   const student = mapping.studentId;
   // These functions return void; execute without Prisma result deserialization.
   await db.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"firca-comment:" + input.commentId},0))`;

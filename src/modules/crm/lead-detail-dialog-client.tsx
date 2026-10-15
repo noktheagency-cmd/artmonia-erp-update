@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LeadAppointments } from "./lead-appointments";
+import { LeadContactPanel } from "./lead-contact-panel";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
@@ -182,6 +183,7 @@ export function LeadDetailDialogClient({
           <div><Clock3 aria-hidden="true" /><span>Növbəti addım</span><strong>{lead.nextActionTypeLabel}</strong></div>
         </div>
 
+        {open ? <LeadContactPanel leadId={lead.id} /> : null}
         {open ? <LeadAppointments leadId={lead.id} /> : null}
         <form action={updateLead} className="crm-dialog-form">
           <input name="leadId" type="hidden" value={lead.id} />
@@ -271,7 +273,7 @@ export function LeadDetailDialogClient({
                     name="stage"
                     value={stage}
                     onValueChange={handleStageChange}
-                    options={leadStageSelectOptions}
+                    options={leadStageSelectOptions.map((option) => ({ ...option, disabled: option.value === "REGISTERED" && lead.stage !== "REGISTERED" }))}
                   />
                 </Field>
                 {stage === "TRIAL_LESSON" ? (

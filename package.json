@@ -10,6 +10,9 @@
     "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
+    "build:cloudflare": "node scripts/cloudflare-build.mjs",
+    "preview:cloudflare": "opennextjs-cloudflare preview",
+    "deploy:cloudflare": "opennextjs-cloudflare deploy --secrets-file tmp/cloudflare-preview/secrets.json",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -48,7 +51,7 @@
     "dotenv": "17.2.3",
     "fflate": "^0.8.3",
     "lucide-react": "1.17.0",
-    "next": "16.3.4",
+    "next": "16.3.8",
     "pg": "8.16.3",
     "qrcode": "1.5.4",
     "react": "19.2.7",
@@ -62,6 +65,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "1.20.11",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "25.9.3",
     "@types/qrcode": "1.5.6",
@@ -75,12 +79,13 @@
     "shadcn": "^4.15.0",
     "tailwindcss": "^4.3.2",
     "tsx": "4.21.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "wrangler": "4.151.0"
   },
   "overrides": {
     "@hono/node-server": "2.0.12",
     "esbuild": "0.28.1",
-    "fast-uri": "4.1.3",
+    "fast-uri": "4.1.5",
     "hono": "4.13.5",
     "js-yaml": "5.2.2",
     "minimatch@3.1.5": {
@@ -90,7 +95,8 @@
       "brace-expansion": "5.0.9"
     },
     "postcss": "8.5.23",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2",
     "deepmerge-ts": "8.0.2",
     "mysql2": "3.24.4",
     "brace-expansion@>=1 <2": "1.1.18",

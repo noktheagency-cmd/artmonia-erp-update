@@ -1547,19 +1547,23 @@
 
 /* Wide weekly planning surface */
 @media(min-width:861px) {
+  /* cssmodules-pure-ignore -- section shell intentionally sits outside this module. */
   :global(.erp-frame[data-section="groups"]) {
     padding: 12px;
   }
 
+  /* cssmodules-pure-ignore -- section shell intentionally sits outside this module. */
   :global(.erp-frame[data-section="groups"] .route-content-shell) {
     max-width: none;
   }
 
+  /* cssmodules-pure-ignore -- section shell intentionally sits outside this module. */
   :global(.erp-frame[data-section="groups"] .global-search) {
     width: min(100%, 760px);
     margin-bottom: 8px;
   }
 
+  /* cssmodules-pure-ignore -- section shell intentionally sits outside this module. */
   :global(.erp-frame[data-section="groups"] .global-search-control) {
     height: 40px;
   }
@@ -1661,6 +1665,7 @@
 }
 
 @media(min-width:1600px) {
+  /* cssmodules-pure-ignore -- section shell intentionally sits outside this module. */
   :global(.erp-frame[data-section="groups"]) {
     padding: 12px;
   }

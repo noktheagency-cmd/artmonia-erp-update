@@ -67,9 +67,11 @@ import { changeReservedFreeze } from "@/modules/students/reserved-freeze-service
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { updatePersonalStudentProfile } from "@/modules/students/personal-profile-service";
 import { planNewStudentPackage } from "@/modules/students/package-return-policy";
+import { contractConfirmationSchema, receiptPurposeSchema } from "./course-sale-policy";
+import { recordCourseSalePayment } from "./course-sale-service";
+import { lockPaymentStudent, replayPayment, assertAdmissionLeadActor } from "./payment-entry-guard";
 import {
   deleteStudentMobileAuthUser,
-  inviteStudentMobileAccount,
 } from "@/modules/students/mobile-account-service";
 
 const optionalText = (max: number) =>
@@ -109,6 +111,7 @@ const studentLifecycleStatusValues = [
 ] as const;
 
 const createStudentSchema = z.object({
+  contractConfirmed: contractConfirmationSchema,
   idempotencyKey: z.string().uuid(),
   mode: z.literal("lead").default("lead"),
   leadId: optionalUuid("Müraciət"),
@@ -117,10 +120,6 @@ const createStudentSchema = z.object({
   email: z.preprocess(
     optionalFormString,
     z.string().email("E-poçt ünvanı düzgün deyil.").max(320).optional(),
-  ),
-  sendMobileInvite: z.preprocess(
-    (value) => value === "on" || value === "true",
-    z.boolean(),
   ),
   source: optionalText(60),
   educationLevel: optionalText(80),
@@ -175,6 +174,9 @@ const createStudentSchema = z.object({
 });
 
 const recordPaymentSchema = z.object({
+  admissionLeadId: optionalUuid("Cari qəbul müraciəti"),
+  contractConfirmed: contractConfirmationSchema,
+  receiptPurpose: receiptPurposeSchema,
   idempotencyKey: z.string().uuid(),
   studentId: z.string().uuid(),
   amount: z.preprocess(parseAmountInput, z.number().positive().max(100_000)),
@@ -297,6 +299,7 @@ async function createStudentActionImpl(formData: FormData) {
     mode: input.firstLessonMode,
     requestedFirstLessonAt,
   });
+  if (input.acceptPayment && !firstLessonAt) throw new PublicActionError("İlkin ödəniş üçün təsdiqlənmiş ilk dərs tarixini Manual rejimdə seçin.");
   const enrollmentStartDate = firstLessonAt ?? registeredAt;
   const billingStartAt: Date | null = null;
   const paymentDate = input.acceptPayment
@@ -318,10 +321,8 @@ async function createStudentActionImpl(formData: FormData) {
     where: { creationIdempotencyKey: input.idempotencyKey },
     select: { id: true },
   });
-  let studentId = existingStudent?.id ?? null;
-
   if (!existingStudent) try {
-    studentId = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const [program, discountType] = await Promise.all([
         tx.program.findUnique({
           where: { id: input.programId, isActive: true },
@@ -366,6 +367,8 @@ async function createStudentActionImpl(formData: FormData) {
       throw new Error("Təhsil səviyyəsi tapılmadı");
     }
 
+    if (input.leadId) await tx.$queryRaw`select id from erp.leads where id = ${input.leadId}::uuid for update`;
+    await assertAdmissionLeadActor(tx,actor,input.leadId);
     const lead = await resolveLeadForStudentCreation(tx, input.leadId);
     const contactId = lead
       ? await updateLeadContact(tx, {
@@ -385,7 +388,7 @@ async function createStudentActionImpl(formData: FormData) {
           source: input.source ?? "Manual",
         });
     const studentCode = await generateStudentCode(tx);
-    const managerId = actor.id;
+    const managerId = lead?.managerId ?? actor.id;
 
     const campaignId = input.campaignId ?? lead?.campaignId ?? null;
     if (campaignId) {
@@ -396,6 +399,7 @@ async function createStudentActionImpl(formData: FormData) {
       data: {
         code: studentCode,
         creationIdempotencyKey: input.idempotencyKey,
+        admissionTracking: true,
         contactId,
         managerId,
         campaignId,
@@ -477,7 +481,7 @@ async function createStudentActionImpl(formData: FormData) {
       await tx.lead.update({
         where: { id: lead.id },
         data: {
-          stage: LeadStage.REGISTERED,
+          stage: lead.stage === LeadStage.REGISTERED ? LeadStage.REGISTERED : LeadStage.TRIAL_CONSULTATION,
           contactId,
           convertedStudentId: student.id,
           programInterestId: input.programId,
@@ -489,12 +493,14 @@ async function createStudentActionImpl(formData: FormData) {
         data: {
           leadId: lead.id,
           oldStage: lead.stage,
-          newStage: LeadStage.REGISTERED,
+          newStage: lead.stage === LeadStage.REGISTERED ? LeadStage.REGISTERED : LeadStage.TRIAL_CONSULTATION,
           reason: `Tələbəyə çevrildi: ${student.code}`,
           changedById: actor.id,
         },
       });
     }
+
+    if (paymentResult) await recordCourseSalePayment(tx, { studentId: student.id, paymentId: paymentResult.payment.id, purpose: "ADMISSION", contractConfirmed: input.contractConfirmed, actorId: actor.id });
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -534,22 +540,6 @@ async function createStudentActionImpl(formData: FormData) {
       select: { id: true },
     });
     if (!recoveredStudent) throw error;
-    studentId = recoveredStudent.id;
-  }
-
-  let mobileInviteSent = false;
-  let mobileInviteFailed = false;
-  if (input.sendMobileInvite && studentId) {
-    try {
-      await inviteStudentMobileAccount({ studentId, actorId: actor.id });
-      mobileInviteSent = true;
-    } catch (error) {
-      mobileInviteFailed = true;
-      console.error("Student created but mobile invitation failed", {
-        studentId,
-        message: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
   }
 
   revalidatePath("/students");
@@ -560,8 +550,8 @@ async function createStudentActionImpl(formData: FormData) {
   invalidateStudentCaches();
   return {
     redirectTo: safeStudentsRedirect(input.returnTo),
-    mobileInviteSent,
-    mobileInviteFailed,
+    mobileInviteSent: false,
+    mobileInviteFailed: false,
   };
 }
 
@@ -578,6 +568,9 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
   const prisma = getPrisma();
 
   await prisma.$transaction(async (tx) => {
+    await lockPaymentStudent(tx, actor, input.studentId);
+    await assertAdmissionLeadActor(tx,actor,input.admissionLeadId);
+    if (await replayPayment(tx, { ...input, paidAt, actorId: actor.id })) return;
     const paymentResult = await createPaymentAndAllocate(tx, {
       studentId: input.studentId,
       amount: input.amount,
@@ -589,6 +582,9 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
       actorId: actor.id,
       idempotencyKey: input.idempotencyKey,
     });
+
+    if (input.admissionLeadId && !actor.permissions.has("crm.lead.convert")) throw new PublicActionError("Müraciətdən qəbul yaratmaq icazəniz yoxdur.","FORBIDDEN");
+    await recordCourseSalePayment(tx, { studentId: input.studentId, paymentId: paymentResult.payment.id, purpose: input.receiptPurpose, contractConfirmed: input.contractConfirmed, actorId: actor.id, admissionLeadId: input.admissionLeadId });
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -644,6 +640,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       throw new PublicActionError("Rezervli dondurma statusunu bu gün üçün dəyişin");
 
     assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
+    if (input.lifecycleStatus === "DECLINED" && await tx.courseSale.count({ where: { studentId: current.id } })) throw new PublicActionError("Satışı ləğv etmək üçün Qəbul satışları bölməsindən istifadə edin.");
     if (current.lifecycleStatus === input.lifecycleStatus && !current.freezeReserved) return;
 
     const { historicalOnly } = await planLifecycleHistoryChange(tx, {
@@ -824,6 +821,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     }
     if (statusChanged) {
       assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
+      if (input.lifecycleStatus === "DECLINED" && await tx.courseSale.count({ where: { studentId: current.id } })) throw new PublicActionError("Satışı ləğv etmək üçün Qəbul satışları bölməsindən istifadə edin.");
     }
 
     const { historicalOnly } = statusChanged
@@ -1344,6 +1342,7 @@ async function deleteStudentActionImpl(formData: FormData) {
       throw new Error("Tələbə tapılmadı");
     }
     mobileAuthUserId = student.mobileAccount?.authUserId ?? null;
+    if (await tx.courseSale.count({ where: { studentId: student.id } })) throw new PublicActionError("Satış və pul tarixçəsi olan tələbə silinə bilməz.");
 
     const enrollmentIds = (
       await tx.enrollment.findMany({

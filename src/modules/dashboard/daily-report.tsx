@@ -1,83 +1,67 @@
 "use client";
-
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { ArrowUpRight, CalendarDays, ChartNoAxesCombined, CheckCheck, ChevronRight, CirclePause, LoaderCircle, UsersRound, Wallet } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { filterDailyReport } from "./daily-report-actions";
-import type { DailyReportData } from "./daily-report-query";
+import { DatePicker } from "@/components/ui/date-picker";
+import { FormSelect } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { filterDailyReport, loadDailyReportDetails } from "./daily-report-actions";
+import type { DailyReportData, DailyReportDetail } from "./daily-report-query";
+import type { DetailKind } from "./daily-report-sql";
+import { formFilterString } from "@/modules/shared/form-values";
 import "./daily-report.css";
 
-const dayLabels = ["Bu gün", "Dünən", "2 gün əvvəl"];
-const dateLabel = (date: string) => date.split("-").reverse().join(".");
-
-export function DailyReport({ data }: { data: DailyReportData }) {
-  const [report, setReport] = useState(data);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [error, setError] = useState("");
-  const [pending, startTransition] = useTransition();
-
-  function selectDate(date: string) {
-    if (pending || date === report.date) return;
-    setSelected(null);
-    setError("");
-    startTransition(async () => {
-      try {
-        const result = await filterDailyReport(date);
-        if (result.ok) setReport(result.data);
-        else setError(result.message);
-      } catch {
-        setError("Hesabat yüklənmədi. Tarixi yenidən seçərək cəhd edin.");
-      }
-    });
-  }
-
-  const groups = [
-    { title: "Lead və əlaqə", icon: UsersRound, tone: "blue", value: report.leads, unit: "yeni lead", detail: `${report.contacted} əlaqə quruldu`, badge: `${report.leads - report.contacted} cavabsız`, description: "Seçilən gün daxil olan lead-lər. Əlaqə həmin günün sonunadək CRM-də əlaqə və ya sonrakı satış mərhələsinə keçidlə müəyyən edilir. Cavabsız: əlaqəsi qeydə alınmayan yeni lead-lər.", metrics: [["Yeni lead", report.leads], ["Əlaqə", report.contacted], ["Cavabsız / əlaqə qeydi yoxdur", report.leads - report.contacted]] },
-    { title: "Konsultasiya və sınaq", icon: CalendarDays, tone: "violet", value: report.scheduled, unit: "görüş təyin edilib", detail: `${report.attended} baş tutdu`, badge: `${report.noShow} gəlmədi`, description: "CRM profilində seçilən gün üçün qeydə alınmış konsultasiya və sınaqların hazırkı nəticələri. Ləğv edilənlər daxil deyil. Əvvəlki xatırlatmalar avtomatik görüş nəticəsi sayılmır.", metrics: [["Təyin edildi", report.scheduled], ["Baş tutdu", report.attended], ["Gəlmədi", report.noShow], ["Nəticə gözlənilir", report.pending]] },
-    { title: "Satış və ödəniş", icon: Wallet, tone: "green", value: report.sales, unit: "satış bağlanıb", detail: `${report.payments} AZN`, badge: "toplanan ödəniş", description: "Seçilən günün qeydiyyatları və mövcud satış qaydasına uyğun ödənişli aktiv qayıdışlar. Ödəniş: həmin gün faktiki ödənilmiş bütün tələbə ödənişləri; yalnız yeni satışlarla məhdudlaşmır. Test tələbələri daxil deyil.", metrics: [["Satış", report.sales], ["Toplanan ödəniş", `${report.payments} AZN`]] },
-    { title: "Follow-up", icon: CheckCheck, tone: "amber", value: report.completed, unit: "əlaqə tamamlanıb", detail: `${report.overdue} gecikmiş`, badge: `${report.tomorrow} növbəti günə`, description: "Edildi: seçilən gün tamamlanmış CRM follow-up tapşırıqları. Gecikmiş və növbəti gün göstəriciləri hazırda açıq olan, seçilən günün sonunadək yaradılmış lead-lərin cari əlaqə planını göstərir; tarixi vəziyyətin surəti deyil. Tarixi olmayan lead-lər sayılmır.", metrics: [["Edildi", report.completed], ["Seçilən gündən əvvəl / hazırda açıq", report.overdue], ["Növbəti gün üçün / cari plan", report.tomorrow]] },
-    { title: "Tələbə statusları", icon: CirclePause, tone: "rose", value: report.frozen + report.stopped, unit: "status keçidi", detail: `${report.frozen} donduran`, badge: `${report.stopped} dayandıran`, description: "Status tarixçəsinə əsasən seçilən gün qüvvəyə minən dəyişikliklər. Hər tələbə hər göstəricidə bir dəfə sayılır; eyni gün hər iki keçidi edən tələbə hər ikisində görünür. Test tələbələri daxil deyil.", metrics: [["Donduran", report.frozen], ["Dayandıran", report.stopped]] },
-  ];
-  const active = selected === null ? null : groups[selected];
-  const ActiveIcon = active?.icon;
-
-  return (
-    <section className="owner-dashboard-panel daily-report" aria-labelledby="daily-report-title">
-      <header className="daily-report-header">
-        <div className="daily-report-heading">
-          <span className="daily-report-mark" aria-hidden="true"><ChartNoAxesCombined size={23} /></span>
-          <div><span className="daily-report-eyebrow">KOMANDANIN GÜNLÜK NƏTİCƏLƏRİ</span><h2 id="daily-report-title">Gün sonu satış hesabatı</h2><p>Bütün komanda <span aria-hidden="true">·</span> Bakı vaxtı</p></div>
-        </div>
-        <div className="daily-report-filter" role="group" aria-label="Hesabat günü — son 3 gün">
-          {report.availableDates.map((date, index) => <button type="button" key={date} aria-pressed={date === report.date} disabled={pending} onClick={() => selectDate(date)}>
-            <span>{dayLabels[index]}</span><small>{dateLabel(date).slice(0, 5)}</small>
-          </button>)}
-        </div>
-      </header>
-      <div className="daily-report-period"><span><CalendarDays size={14} aria-hidden="true" />{dateLabel(report.date)}</span><span role="status">{pending ? <><LoaderCircle className="daily-report-spinner" size={14} aria-hidden="true" />Yüklənir…</> : "Yalnız son 3 gün"}</span></div>
-      {error ? <p className="daily-report-error" role="alert">{error}</p> : null}
-      <div className="daily-report-grid" aria-busy={pending}>
-        {groups.map((group, index) => {
-          const Icon = group.icon;
-          return <button type="button" className={`daily-report-card daily-report-${group.tone}`} key={group.title} disabled={pending} onClick={() => setSelected(index)} aria-haspopup="dialog" aria-label={`${group.title} — ${dateLabel(report.date)}: detalları aç`}>
-            <span className="daily-report-card-top"><span className="daily-report-icon"><Icon size={19} strokeWidth={1.8} aria-hidden="true" /></span><ArrowUpRight className="daily-report-arrow" size={17} aria-hidden="true" /></span>
-            <span className="daily-report-card-title">{group.title}</span>
-            <span className="daily-report-main"><strong>{group.value}</strong><span>{group.unit}</span></span>
-            <span className="daily-report-card-bottom"><strong>{group.detail}</strong><span>{group.badge}</span></span>
-          </button>;
-        })}
-      </div>
-      <footer className="daily-report-footer">Göstəriciyə klikləyərək detallara baxın <ChevronRight size={14} aria-hidden="true" /></footer>
-      <Dialog open={active !== null} onOpenChange={(open) => { if (!open) setSelected(null); }}>
-        <DialogContent className={`daily-report-dialog daily-report-${active?.tone ?? "blue"}`} onEscapeKeyDown={() => setSelected(null)}>
-          <DialogHeader>
-            <span className="daily-report-dialog-icon" aria-hidden="true">{ActiveIcon ? <ActiveIcon size={24} /> : null}</span>
-            <span className="daily-report-eyebrow">{dateLabel(report.date)} · GÜNLÜK HESABAT</span>
-            <DialogTitle>{active?.title}</DialogTitle><DialogDescription>{active?.description}</DialogDescription>
-          </DialogHeader>
-          <dl className="daily-report-metrics">{active?.metrics.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-        </DialogContent>
-      </Dialog>
-    </section>
-  );
+const dayLabels = ["Bu gün","Dünən","2 gün əvvəl"];
+const dateLabel=(date:string)=>date.split("-").reverse().join(".");
+const translations: Record<string,string> = { TALKED:"Danışıldı",UNANSWERED:"Cavabsız",PHONE:"Telefon",WHATSAPP:"WhatsApp",IN_PERSON:"Üzbəüz",OTHER:"Digər",CONSULTATION:"Konsultasiya",TRIAL:"Sınaq",SCHEDULED:"Təyin edilib",ATTENDED:"Baş tutdu",NO_SHOW:"Gəlmədi",CANCELLED:"Ləğv edilib",RESCHEDULED:"Təxirə salınıb",NEW:"Yeni qəbul",RETURN:"Qayıdış",DIRECT:"Birbaşa",DEPOSIT:"Beh",COMPLETE:"Tamamlanıb",ADMISSION:"Qəbul ödənişi",INITIAL_BALANCE:"İlk dövrün qalığı",RENEWAL:"Davam ödənişi",ONE_OFF:"Birdəfəlik dərs",UNCLASSIFIED:"Bölgüsü təsdiqlənməyib",REPLANNED:"Yenidən planlandı",FROZEN:"Dondurulub",STOPPED:"Dayandırılıb",ACTIVE:"Aktiv",SLOT_WAITING:"Slot gözləyir",CALL:"Zəng",APPOINTMENT:"Görüş" };
+const detailLabel=(text:string)=>text.replace(/\b[A-Z][A-Z_]+\b/g, code=>translations[code]??code);
+type Group = {title:string;icon:typeof UsersRound;tone:string;value:number;unit:string;detail:string;badge:string;description:string;metrics:[string,string|number][];kinds:DetailKind[]};
+export function DailyReport({data}:{data:DailyReportData}) {
+ const [report,setReport]=useState(data), [from,setFrom]=useState(data.from), [to,setTo]=useState(data.to), [manager,setManager]=useState(data.managerId??"");
+ const [selected,setSelected]=useState<number|null>(null), [error,setError]=useState(""), [pending,startTransition]=useTransition();
+ const [details,setDetails]=useState<DailyReportDetail[]>([]),[kind,setKind]=useState<DetailKind>("leads"),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false),[detailBusy,setDetailBusy]=useState(false),[detailError,setDetailError]=useState("");
+ const request = useRef(0);
+ async function fetchDetails(nextKind:DetailKind,nextPage=0) {
+  const current = ++request.current;
+  setDetailBusy(true);setDetailError("");setDetails([]);
+  try { const result=await loadDailyReportDetails({from:report.from,to:report.to,managerId:report.managerId},nextKind,nextPage);
+   if(current!==request.current)return;
+   if(result.ok){setDetails(result.data.rows);setPage(nextPage);setHasMore(result.data.hasMore);setKind(nextKind);}else setDetailError(result.message);
+  }catch{if(current===request.current)setDetailError("Detallar yüklənmədi.");}finally{if(current===request.current)setDetailBusy(false);}
+ }
+ function apply(nextFrom=from,nextTo=to) {
+  ++request.current;setSelected(null);setError("");startTransition(async()=>{
+   try{const result=await filterDailyReport({from:nextFrom,to:nextTo,managerId:manager||undefined});
+    if(result.ok){setReport(result.data);setFrom(result.data.from);setTo(result.data.to);}else setError(result.message);
+   }catch{setError("Hesabat yüklənmədi.");}
+  });
+ }
+ const groups:Group[]=[
+ {title:"Lead və əlaqə",icon:UsersRound,tone:"blue",value:report.leads,unit:"yeni şəxs",detail:report.contacted+" nəfərlə danışıldı",badge:report.unanswered+" cavabsız · "+report.unworked+" işlənməyib",description:"Əlaqə yalnız faktiki danışıq qeydinə əsaslanır. Cavabsız: cəhd olub, dövr ərzində danışıq olmayıb. İşlənməyib: yeni şəxs üzrə həmin dövrdə heç bir cəhd yoxdur. Əlaqə meneceri faktiki işi edən şəxsdir.",metrics:[["Yeni şəxslər",report.leads],["Danışılan şəxslər",report.contacted],["Yeni lead üzrə danışıq",report.newContacted],["Əvvəlki lead üzrə danışıq",report.oldContacted],["Əlaqə əməliyyatları",report.contactOps],["Cavabsız şəxslər",report.unanswered],["İşlənməmiş yeni şəxslər",report.unworked]],kinds:["leads","contacts"]},
+ {title:"Konsultasiya və sınaq",icon:CalendarDays,tone:"violet",value:report.scheduled,unit:"bu dövrə planlı görüş",detail:report.attended+" baş tutdu",badge:report.noShow+" gəlmədi · "+report.rescheduled+" təxirə salındı",description:"Yaradılma, plan və faktiki nəticə tarixləri ayrıdır. Baş tutdu / gəlmədi faktiki tarix üzrə, ləğv və təxirə salınma ilkin plan tarixi üzrə göstərilir. Köhnə qeydlərdə faktiki vaxt təxmin edilmir.",metrics:[["Bu dövrdə yeni təyin edildi",report.appointmentCreated],["Bu dövrə planlı görüşlər",report.scheduled],["Planlı şəxslər",report.appointmentPeople],["Faktiki konsultasiya",report.consultations],["Faktiki sınaq",report.trials],["Gəlmədi",report.noShow],["Təxirə salındı",report.rescheduled],["Ləğv edildi",report.appointmentCancelled],["Faktiki vaxtı bilinməyən köhnə nəticə",report.legacyAppointments]],kinds:["appointments"]},
+ {title:"Satış və ödəniş",icon:Wallet,tone:"green",value:report.sales,unit:"uyğun satış",detail:report.payments+" AZN",badge:"faktiki daxil olan pul",description:"Satış: imzalanmış müqavilə və bir qəbul ödənişində ən azı 20 AZN. Yeni qəbul və Dayandırılıb statusundan qayıdış sayılır. Qalıq, davam, dondurmanın bərpası və paket keçidi satış yaratmır. Say dövrün sonundakı ləğv vəziyyətinə görədir; ilk satış və ləğv ayrıca göstərilir. Pul satış sahibinə, workshop pulu qəbul edən əməkdaşa görə süzülür.",metrics:[["Uyğun satış",report.sales],["İlkin satış qeydləri",report.originalSales],["Dövrün sonunadək ləğv olunan",report.cancelledSales],["Bu dövrdə ləğv hadisəsi",report.cancellationEvents],["Yeni qəbul",report.newSales],["Qayıdış",report.returnSales],["CRM",report.crmSales],["Birbaşa",report.directSales],["Qəbul ödənişi",report.deposit+" AZN"],["İlk dövrün qalığı",report.balance+" AZN"],["Davam ödənişi",report.renewal+" AZN"],["Birdəfəlik dərs",report.oneOff+" AZN"],["Digər / workshop",report.other+" AZN"],["Bölgüsü təsdiqlənməmiş pul",report.unclassified+" AZN"]],kinds:["sales","payments"]},
+ {title:"Follow-up",icon:CheckCheck,tone:"amber",value:report.completed,unit:"iş yerinə yetirilib",detail:report.overdue+" gecikmiş",badge:report.tomorrow+" növbəti günə",description:"Edildi danışıq demək deyil: cavabsız cəhd də görülmüş işdir. Gecikmə dövrün sonundakı açıq planlardan hesablanır. Yenidən planlanan gecikmiş işlər tarixçədə ayrıca qalır. Köhnə planların keçmiş vəziyyəti təxmin edilmir.",metrics:[["Yerinə yetirilmiş işlər",report.completed],["Dövrün sonunda gecikmiş",report.overdue],["Gecikib yenidən planlanan",report.overdueReplanned],["Növbəti günə",report.tomorrow]],kinds:["work"]},
+ {title:"Tələbə statusları",icon:CirclePause,tone:"rose",value:report.frozen+report.stopped,unit:"status göstəricisi",detail:report.frozen+" donduran",badge:report.stopped+" dayandıran",description:"Qüvvəyə minmə tarixi üzrə status tarixçəsi. Hər tələbə hər göstəricidə bir dəfə sayılır. Eyni tələbə hər iki keçidi edibsə, hər ikisində görünür. Test tələbələri hesablanmır.",metrics:[["Donduran",report.frozen],["Dayandıran",report.stopped]],kinds:["statuses"]}
+ ];
+ const active=selected===null?null:groups[selected],ActiveIcon=active?.icon;
+ const kindLabels:Record<DetailKind,string>={leads:"Yeni lead-lər",contacts:"Əlaqə əməliyyatları",appointments:"Görüşlər",sales:"Satışlar",payments:"Ödənişlər",work:"İş tarixçəsi",statuses:"Status keçidləri"};
+ return <section className="owner-dashboard-panel daily-report" aria-labelledby="daily-report-title">
+  <header className="daily-report-header"><div className="daily-report-heading"><span className="daily-report-mark" aria-hidden="true"><ChartNoAxesCombined size={23}/></span><div><span className="daily-report-eyebrow">KOMANDANIN GÜNLÜK NƏTİCƏLƏRİ</span><h2 id="daily-report-title">Gün sonu satış hesabatı</h2><p>Bakı vaxtı · {report.managers.find(m=>m.id===report.managerId)?.name??"Bütün komanda"}</p></div></div>
+  <div className="daily-report-filter" role="group" aria-label="Sürətli tarix seçimi">{report.availableDates.map((date,index)=><button type="button" key={date} aria-pressed={date===report.from&&date===report.to} disabled={pending} onClick={()=>apply(date,date)}><span>{dayLabels[index]}</span><small>{dateLabel(date).slice(0,5)}</small></button>)}</div></header>
+  <form className="daily-report-range" onSubmit={e=>{e.preventDefault();apply();}}>
+   <label><span>Başlanğıc</span><DatePicker name="reportFrom" aria-label="Hesabatın başlanğıcı" value={from} onValueChange={setFrom} required/></label>
+   <label><span>Son tarix</span><DatePicker name="reportTo" aria-label="Hesabatın son tarixi" value={to} onValueChange={setTo} maxValue={report.availableDates[0]} required/></label>
+   <label><span>Menecer</span><FormSelect name="reportManager" aria-label="Hesabat meneceri" value={manager} onValueChange={value=>setManager(formFilterString(value))} emptyLabel="Bütün komanda" options={report.managers.map(m=>({value:m.id,label:m.name}))}/></label><Button type="submit" disabled={pending}>Göstər</Button>
+  </form>
+  <div className="daily-report-period"><span><CalendarDays size={14}/>{dateLabel(report.from)}{report.from!==report.to?" — "+dateLabel(report.to):""}</span><span role="status">{pending?<><LoaderCircle size={14}/>Yüklənir…</>:"Ən çox 31 günlük aralıq"}</span></div>
+  <p className="daily-report-history-note">Faktiki əlaqə və satış tarixçəsi yeni qeydlərdən başlayır. Köhnə qeydiyyatlar avtomatik satış sayılmır.</p>
+  {error?<p className="daily-report-error" role="alert">{error}</p>:null}
+  <div className="daily-report-grid" aria-busy={pending}>{groups.map((group,index)=>{const Icon=group.icon;return <button type="button" className={"daily-report-card daily-report-"+group.tone} key={group.title} disabled={pending} onClick={()=>{setSelected(index);void fetchDetails(group.kinds[0]);}} aria-haspopup="dialog" aria-label={group.title+" — detalları aç"}><span className="daily-report-card-top"><span className="daily-report-icon"><Icon size={19}/></span><ArrowUpRight size={17}/></span><span className="daily-report-card-title">{group.title}</span><span className="daily-report-main"><strong>{group.value}</strong><span>{group.unit}</span></span><span className="daily-report-card-bottom"><strong>{group.detail}</strong><span>{group.badge}</span></span></button>;})}</div>
+  <footer className="daily-report-footer">Rəqəmə klikləyərək əməliyyatlara baxın <ChevronRight size={14}/></footer>
+  <Dialog open={active!==null} onOpenChange={open=>{if(!open)setSelected(null);}}><DialogContent className={"daily-report-dialog daily-report-"+(active?.tone??"blue")}><DialogHeader><span className="daily-report-dialog-icon">{ActiveIcon?<ActiveIcon size={24}/>:null}</span><DialogTitle>{active?.title}</DialogTitle><DialogDescription>{active?.description}</DialogDescription></DialogHeader>
+   <dl className="daily-report-metrics">{active?.metrics.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+   <div className="daily-report-detail-tabs">{active?.kinds.map(k=><Button key={k} type="button" variant={kind===k?"default":"secondary"} disabled={detailBusy} onClick={()=>void fetchDetails(k)}>{kindLabels[k]}</Button>)}</div>
+   {detailError?<p role="alert">{detailError}</p>:null}{detailBusy?<p role="status">Yüklənir…</p>:<><div className="daily-report-detail-list">{details.length===0?<p>Əməliyyat qeydi yoxdur.</p>:details.map(row=><article key={row.id}><strong>{row.name}</strong><small>{new Intl.DateTimeFormat("az-AZ",{timeZone:"Asia/Baku",dateStyle:"short",timeStyle:"short"}).format(new Date(row.at))}</small><p>{detailLabel(row.description)}</p></article>)}</div><div className="daily-report-detail-tabs"><Button type="button" variant="secondary" disabled={page===0} onClick={()=>void fetchDetails(kind,page-1)}>Əvvəlki</Button><span>{page+1}</span><Button type="button" variant="secondary" disabled={!hasMore||page>=199} onClick={()=>void fetchDetails(kind,page+1)}>Növbəti</Button></div></>}
+  </DialogContent></Dialog>
+ </section>;
 }

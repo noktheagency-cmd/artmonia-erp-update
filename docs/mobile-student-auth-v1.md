@@ -2,18 +2,23 @@
 
 ## Identity rule
 
-`1 Supabase Auth user = 1 ERP student`.
+An Auth user can be an ordinary community member without an ERP student.
+For linked student accounts: `1 Supabase Auth user = 1 ERP student`.
 
 The authoritative mapping is stored server-side in `erp.student_mobile_accounts`. The mobile client must never choose or trust an ERP `Student.id`. Authorization uses the Supabase access token (`auth.users.id`) and the ERP mapping.
 
 ## Account provisioning
 
-1. ERP creates or updates a student with a unique email.
-2. An authorized ERP user selects **Mobil hesab yarat**.
-3. ERP calls Supabase Admin Auth on the server and sends the invitation.
-4. The student opens the email link at `/mobile-auth/setup` and creates an 8+ character password.
-5. The student signs in from mobile with email and password.
-6. The first authenticated ERP request changes the mapping from `INVITED` to `ACTIVE`.
+The invitation-based creation flow is superseded by [mobile access v1](mobile-access-v1-handoff.md).
+
+1. The user registers in the mobile application with their own password; Supabase Auth owns signup and email verification.
+2. After email verification, the trusted gateway calls `POST /api/mobile/v1/me/access` with no body.
+3. ERP retains an existing mapping or checks the authoritative verified Auth email against ERP student contact emails.
+4. Exactly one unclaimed student and compatible phone information produce an `ACTIVE` mapping; conflicts stay `member / review_required`.
+5. No match stays `member / not_found`. No ERP student or staff record is created.
+6. A later ERP student record is discovered by the next access request.
+
+ERP's old account-creation action now returns `FORBIDDEN` with a self-registration explanation and cannot invite or create Auth users. Existing passwords, mappings, setup links and authorized password-recovery/device-reset/disable controls remain supported.
 
 ERP never stores, displays, or sends a plaintext password.
 
@@ -51,3 +56,5 @@ ERP verifies both credentials, resolves the student from the JWT, and ignores cl
 - `DISABLED`: ERP blocks access even if an older Supabase JWT has not expired yet.
 
 ERP supports sending a new setup/reset link, disabling access, and enabling access from the student's profile.
+
+`INVITED` is a legacy state only; new automatic mappings start `ACTIVE`. Academic APIs require a mapping, verified email, a live Auth session, an unbanned user, and the existing student lifecycle checks. Editable Auth metadata never grants ERP employee/admin permissions.

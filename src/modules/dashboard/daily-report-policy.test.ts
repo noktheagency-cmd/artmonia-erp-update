@@ -28,7 +28,7 @@ test("daily report crosses midnight in Baku, including year rollover", () => {
   assert.equal(after.end.toISOString(), "2027-01-01T20:00:00.000Z");
 });
 
-test("filter permits exactly today and the previous two Baku dates", () => {
+test("filter keeps quick dates and accepts bounded historical ranges", () => {
   const now = new Date("2026-09-20T10:00:00Z");
   assert.deepEqual(recentDailyReportDates(now), ["2026-09-20", "2026-09-19", "2026-09-18"]);
   assert.equal(filteredDailyReportWindow(undefined, now).date, "2026-09-20");
@@ -38,8 +38,8 @@ test("filter permits exactly today and the previous two Baku dates", () => {
     assert.equal(window.end.getTime() - window.start.getTime(), 86_400_000);
     assert.equal(dailyReportWindow(window.start).date, date);
   }
-  for (const date of ["2026-09-17", "2026-09-21", "2025-09-20", "2026-02-30", "20.09.2026", "2026-09-20T00:00:00Z", ""]) {
-    assert.throws(() => filteredDailyReportWindow(date, now), /Yalnız bu gün/);
+  for (const date of ["2026-09-21", "2026-02-30", "20.09.2026", "2026-09-20T00:00:00Z", ""]) {
+    assert.throws(() => filteredDailyReportWindow(date, now));
   }
 });
 
@@ -47,8 +47,16 @@ test("three-day filter handles year rollover, leap days and Baku midnight", () =
   assert.deepEqual(recentDailyReportDates(new Date("2026-12-31T20:00:00Z")), ["2027-01-01", "2026-12-31", "2026-12-30"]);
   assert.deepEqual(recentDailyReportDates(new Date("2024-03-01T10:00:00Z")), ["2024-03-01", "2024-02-29", "2024-02-28"]);
   assert.doesNotThrow(() => filteredDailyReportWindow("2026-09-18", new Date("2026-09-20T19:59:59Z")));
-  assert.throws(() => filteredDailyReportWindow("2026-09-18", new Date("2026-09-20T20:00:00Z")));
+  assert.doesNotThrow(() => filteredDailyReportWindow("2026-09-18", new Date("2026-09-20T20:00:00Z")));
   const yesterday = filteredDailyReportWindow("2026-12-31", new Date("2027-01-01T10:00:00Z"));
   assert.equal(yesterday.start.toISOString(), "2026-12-30T20:00:00.000Z");
   assert.equal(yesterday.nextDate, "2027-01-01");
+});
+
+test("range validates calendar order, future dates, 31-day limit and manager identity", () => {
+ const now=new Date("2026-10-10T10:00:00Z");
+ const w=filteredDailyReportWindow({from:"2026-09-10",to:"2026-10-10",managerId:"f74ddcf3-fed2-4d36-86e5-5e75ab94f225"},now);
+ assert.equal(w.end.getTime()-w.start.getTime(),31*86400000);
+ assert.equal(w.nextDate,"2026-10-11");
+ for(const input of [{from:"2026-09-09",to:"2026-10-10"},{from:"2026-10-10",to:"2026-10-09"},{from:"2026-10-10",to:"2026-10-11"},{managerId:"sql injection"}]) assert.throws(()=>filteredDailyReportWindow(input,now));
 });

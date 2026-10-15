@@ -10,6 +10,7 @@ import { PublicActionError } from "@/server/actions/safe-action";
 import { getPrisma } from "@/server/db/prisma";
 import { requireEnv } from "@/server/env";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
+import { loadMobileAuthUser, verifyMobileToken } from "@/server/supabase/mobile-auth";
 
 const LONG_BAN_DURATION = "876000h";
 
@@ -25,99 +26,11 @@ export async function inviteStudentMobileAccount(input: {
   studentId: string;
   actorId: string;
 }) {
-  const prisma = getPrisma();
-  const student = await prisma.student.findUnique({
-    where: { id: input.studentId },
-    select: {
-      id: true,
-      code: true,
-      contact: { select: { fullName: true, email: true } },
-      mobileAccount: { select: { id: true, status: true } },
-    },
-  });
-
-  if (!student) throw new PublicActionError("Tələbə tapılmadı.", "NOT_FOUND");
-  if (student.mobileAccount) {
-    throw new PublicActionError(
-      student.mobileAccount.status === StudentMobileAccountStatus.DISABLED
-        ? "Mobil hesab deaktivdir. Əvvəlcə hesabı aktivləşdirin."
-        : "Bu tələbənin mobil hesabı artıq mövcuddur.",
-      "DUPLICATE",
-    );
-  }
-
-  const email = student.contact.email
-    ? normalizeStudentLoginEmail(student.contact.email)
-    : "";
-  if (!email) {
-    throw new PublicActionError("Mobil hesab yaratmaq üçün tələbənin e-poçtu daxil edilməlidir.");
-  }
-
-  const duplicate = await prisma.studentMobileAccount.findUnique({
-    where: { loginEmail: email },
-    select: { id: true },
-  });
-  if (duplicate) {
-    throw new PublicActionError("Bu e-poçt başqa tələbənin mobil hesabına bağlıdır.", "DUPLICATE");
-  }
-
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
-    redirectTo: getStudentMobileSetupUrl(),
-    data: {
-      account_type: "student",
-      full_name: student.contact.fullName,
-    },
-  });
-  if (error) throw error;
-  if (!data.user?.id) throw new Error("Supabase dəvəti istifadəçi ID-si qaytarmadı.");
-
-  const authUserId = data.user.id;
-  try {
-    const { error: metadataError } = await supabase.auth.admin.updateUserById(authUserId, {
-      app_metadata: {
-        ...data.user.app_metadata,
-        account_type: "student",
-      },
-    });
-    if (metadataError) throw metadataError;
-
-    return await prisma.$transaction(async (tx) => {
-      const account = await tx.studentMobileAccount.create({
-        data: {
-          studentId: student.id,
-          authUserId,
-          loginEmail: email,
-          status: StudentMobileAccountStatus.INVITED,
-          createdById: input.actorId,
-          updatedById: input.actorId,
-        },
-        select: { id: true, loginEmail: true, status: true, invitedAt: true },
-      });
-      await writeAuditLog(tx, {
-        actorUserId: input.actorId,
-        action: "student.mobile_account.invite",
-        entityType: "student",
-        entityId: student.id,
-        after: {
-          mobileAccountId: account.id,
-          loginEmail: account.loginEmail,
-          status: account.status,
-        } satisfies Prisma.InputJsonValue,
-        reason: `${student.code} üçün mobil giriş dəvəti göndərildi`,
-      });
-      return account;
-    });
-  } catch (error) {
-    const { error: cleanupError } = await supabase.auth.admin.deleteUser(authUserId);
-    if (cleanupError) {
-      console.error("Failed to roll back invited Supabase Auth user", {
-        authUserId,
-        message: cleanupError.message,
-      });
-    }
-    throw error;
-  }
+  void input;
+  throw new PublicActionError(
+    "Yeni hesab mobil tətbiqdə yaradılır. Tələbə e-poçtunu təsdiqlədikdən sonra ERP bağlantısı yoxlanılacaq.",
+    "FORBIDDEN",
+  );
 }
 
 export async function resendStudentMobileInvite(input: {
@@ -257,12 +170,14 @@ export type StudentMobileIdentityResolution =
 export async function resolveStudentMobileIdentityDetailed(
   accessToken: string,
 ): Promise<StudentMobileIdentityResolution> {
-  const { data, error } = await getSupabaseAdminClient().auth.getUser(accessToken);
-  if (error || !data.user) return { ok: false, code: "STUDENT_AUTH_INVALID" };
-
+  const identity = await verifyMobileToken(accessToken);
+  if (!identity) return { ok: false, code: "STUDENT_AUTH_INVALID" };
   const prisma = getPrisma();
+  const user = await loadMobileAuthUser(prisma, identity);
+  if (!user?.sessionActive || !user.emailConfirmed) return { ok: false, code: "STUDENT_AUTH_INVALID" };
+  if (user.disabled) return { ok: false, code: "MOBILE_ACCOUNT_DISABLED" };
   const account = await prisma.studentMobileAccount.findUnique({
-    where: { authUserId: data.user.id },
+    where: { authUserId: user.id },
     select: {
       id: true,
       studentId: true,
@@ -293,7 +208,7 @@ export async function resolveStudentMobileIdentityDetailed(
   return {
     ok: true,
     identity: {
-      authUserId: data.user.id,
+      authUserId: user.id,
       studentId: account.studentId,
       studentCode: account.student.code,
       lifecycleStatus: account.student.lifecycleStatus,
@@ -302,7 +217,7 @@ export async function resolveStudentMobileIdentityDetailed(
   };
 }
 
-function isMobileDisabledStudentStatus(status: StudentLifecycleStatus) {
+export function isMobileDisabledStudentStatus(status: StudentLifecycleStatus) {
   return status === StudentLifecycleStatus.FROZEN
     || status === StudentLifecycleStatus.STOPPED
     || status === StudentLifecycleStatus.DECLINED

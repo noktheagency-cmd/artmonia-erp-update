@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MailCheck, RefreshCcw, ShieldCheck, ShieldOff, Smartphone, Unplug } from "lucide-react";
+import { RefreshCcw, ShieldCheck, ShieldOff, Smartphone, Unplug } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -22,7 +22,6 @@ export function StudentMobileAccountCard({
   contactEmail,
   account,
   canManage,
-  inviteAction,
   resendAction,
   disableAction,
   enableAction,
@@ -32,7 +31,6 @@ export function StudentMobileAccountCard({
   contactEmail: string;
   account: MobileAccount;
   canManage: boolean;
-  inviteAction: AccountAction;
   resendAction: AccountAction;
   disableAction: AccountAction;
   enableAction: AccountAction;
@@ -75,7 +73,7 @@ export function StudentMobileAccountCard({
               </span>
             </p>
           ) : (
-            <p>{contactEmail ? `${contactEmail} ünvanına dəvət göndərilə bilər.` : "Əvvəlcə tələbənin e-poçtunu profilə əlavə edin."}</p>
+            <p>{contactEmail ? `Tələbə mobil tətbiqdə ${contactEmail} ilə qeydiyyatdan keçib e-poçtunu təsdiqləməlidir. Telefon məlumatı da uyğun olduqda bağlantı avtomatik yaradılır.` : "Avtomatik mobil bağlantı üçün tələbənin e-poçtunu profilə əlavə edin."}</p>
           )}
           {account ? (
             <small>
@@ -86,11 +84,7 @@ export function StudentMobileAccountCard({
         </div>
       </div>
       <div className="student-mobile-account-actions">
-        {!account ? (
-          <Button type="button" disabled={!canManage || !contactEmail || pending} onClick={() => run(inviteAction, "Mobil dəvət göndərildi", "Tələbə linkdən öz parolunu yaradacaq.")}>
-            <MailCheck data-icon="inline-start" /> Hesab yarat
-          </Button>
-        ) : (
+        {account ? (
           <>
             <Button type="button" variant="outline" disabled={!canManage || pending || account.status === "DISABLED"} onClick={() => run(resendAction, "Yeni link göndərildi", "Tələbə parolunu yeniləyə bilər.")}>
               <RefreshCcw data-icon="inline-start" /> Linki yenilə
@@ -108,7 +102,7 @@ export function StudentMobileAccountCard({
               </Button>
             )}
           </>
-        )}
+        ) : null}
       </div>
     </section>
   );

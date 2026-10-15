@@ -25,6 +25,24 @@ export type MobileAuthResult =
 export async function authenticateMobileStudentRequest(
   request: Request,
 ): Promise<MobileAuthResult> {
+  const auth = authenticateMobileRequestHeaders(request);
+  if (!auth.ok) return auth;
+  const { requestId, accessToken } = auth.context;
+  try {
+    const resolution = await resolveStudentMobileIdentityDetailed(accessToken);
+    if (!resolution.ok) {
+      const error = identityErrorMeta(resolution.code);
+      return { ok: false, response: mobileError(resolution.code, error.message, error.status, requestId) };
+    }
+    return { ok: true, context: { requestId, identity: resolution.identity } };
+  } catch (error) {
+    return { ok: false, response: mobileInternalError(error, requestId) };
+  }
+}
+
+export function authenticateMobileRequestHeaders(request: Request):
+  | { ok: true; context: { requestId: string; accessToken: string } }
+  | { ok: false; response: Response } {
   const requestId = getMobileRequestId(request);
   if (!hasValidMobileAttendanceAuthorization(request.headers.get("authorization"))) {
     return {
@@ -53,18 +71,9 @@ export async function authenticateMobileStudentRequest(
     };
   }
 
-  const resolution = await resolveStudentMobileIdentityDetailed(studentAccessToken);
-  if (!resolution.ok) {
-    const error = identityErrorMeta(resolution.code);
-    return {
-      ok: false,
-      response: mobileError(resolution.code, error.message, error.status, requestId),
-    };
-  }
-
   return {
     ok: true,
-    context: { requestId, identity: resolution.identity },
+    context: { requestId, accessToken: studentAccessToken },
   };
 }
 
@@ -102,7 +111,7 @@ export function mobileError(
 export function mobileInternalError(error: unknown, requestId: string) {
   console.error("Mobile student API request failed", {
     requestId,
-    error: error instanceof Error ? error.message : "Unknown error",
+    errorType: error instanceof Error ? error.name : "UnknownError",
   });
   return mobileError(
     "INTERNAL_ERROR",
