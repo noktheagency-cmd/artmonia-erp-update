@@ -39,6 +39,8 @@ output/
 coverage/
 *.tsbuildinfo
 src/generated/
+# Historical receipt copies must never enter a public deployment.
+/public/uploads/
 
 # OS/editor
 .DS_Store
