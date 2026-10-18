@@ -93,6 +93,7 @@ export function CrmOverview({
   const reducedMotion = useReducedMotion();
   const [followUpCategory, setFollowUpCategory] = useState<"all" | "workshop_masterclass">("all");
   const total = parseValue(data.metrics[0]?.value ?? "0");
+  const stageAllTimeTotal = data.stageAllTimeTotal;
   const sales = parseValue(data.dashboardStats.salesCount);
   const conversionRate = parseValue(data.dashboardStats.conversionRate);
   const conversionData =
@@ -128,8 +129,8 @@ export function CrmOverview({
         <PanelHeading
           icon={Target}
           title="Müraciət mərhələləri"
-          description="Müraciətlərin aktiv satış axınında irəliləyişi"
-          meta={`${total.toLocaleString("az-AZ")} müraciət`}
+          description="BK-22/23: indiki mərhələ üzrə bütün dövr — ay/custom tarix filtri bu kartı və klik siyahısını daraltmır"
+          meta={`Bütün dövr · ${stageAllTimeTotal.toLocaleString("az-AZ")} müraciət (dövr filtri tətbiq olunmur)`}
           tone="blue"
         />
         <div className="crm-stage-track" role="list" aria-label="Müraciət mərhələləri">
@@ -201,16 +202,16 @@ export function CrmOverview({
           </div>
           <dl className="crm-conversion-stats">
             <div>
-              <dt>Cəmi müraciət</dt>
+              <dt>Cəmi müraciət (seçilmiş dövr)</dt>
               <dd>{data.metrics[0]?.value ?? "0"}</dd>
             </div>
             <div>
-              <dt>Qeydiyyata alınıb</dt>
+              <dt>Uyğun satış</dt>
               <dd>{data.dashboardStats.salesCount}</dd>
             </div>
             <div>
-              <dt>Sınaq dərsi</dt>
-              <dd>{data.dashboardStats.trialLessonLeads} müraciət · {data.dashboardStats.trialLessonCount} dərs</dd>
+              <dt>Görüş (konsultasiya + sınaq)</dt>
+              <dd>{data.dashboardStats.meetingAttendedCount} iştirak · {data.dashboardStats.meetingCount} təyinat</dd>
             </div>
             <div>
               <dt>Bugünkü follow-up</dt>

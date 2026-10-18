@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LeadAppointments } from "./lead-appointments";
 import { LeadContactPanel } from "./lead-contact-panel";
+import { LeadRegistrationDialog } from "./lead-registration-dialog";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
@@ -59,6 +60,7 @@ export function LeadDetailDialogClient({
   managers,
   sourceOptions,
   returnTo,
+  canConvert = true,
   updateLeadAction,
   deleteLeadAction,
   open: controlledOpen,
@@ -69,6 +71,7 @@ export function LeadDetailDialogClient({
   managers: CrmData["managers"];
   sourceOptions: CrmData["sourceOptions"];
   returnTo: string;
+  canConvert?: boolean;
   updateLeadAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteLeadAction: (formData: FormData) => unknown | Promise<unknown>;
   open?: boolean;
@@ -183,8 +186,25 @@ export function LeadDetailDialogClient({
           <div><Clock3 aria-hidden="true" /><span>Növbəti addım</span><strong>{lead.nextActionTypeLabel}</strong></div>
         </div>
 
-        {open ? <LeadContactPanel leadId={lead.id} /> : null}
-        {open ? <LeadAppointments leadId={lead.id} /> : null}
+        <section className="crm-dialog-section crm-manager-actions" aria-label="Menecer əsas əməliyyatları">
+          <header>
+            <h3>Əsas əməliyyatlar</h3>
+            <p>Əlaqə nəticəsi → Görüş → Qeydiyyatı tamamla</p>
+          </header>
+          {open ? <LeadContactPanel leadId={lead.id} /> : null}
+          {open ? <LeadAppointments leadId={lead.id} /> : null}
+          {open ? (
+            <div className="crm-manager-register">
+              <LeadRegistrationDialog
+                lead={lead}
+                programs={programs}
+                sourceOptions={sourceOptions}
+                returnTo={returnTo}
+                canConvert={canConvert}
+              />
+            </div>
+          ) : null}
+        </section>
         <form action={updateLead} className="crm-dialog-form">
           <input name="leadId" type="hidden" value={lead.id} />
           <input name="returnTo" type="hidden" value={returnTo} />

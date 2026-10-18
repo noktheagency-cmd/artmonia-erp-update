@@ -7,11 +7,15 @@ import {
   type GroupWeekdayCode,
 } from "@/modules/groups/shared";
 import { canEditAttendanceToday, recentScheduledDates } from "@/modules/groups/planner-journal";
+import { hasMissedPlannedFirstLesson } from "@/modules/students/activation-from-attendance";
 import { formatAmount } from "@/modules/shared/format";
 import { requireErpActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
 import { buildPlannerSlotScope } from "@/modules/groups/planner-scope";
 import { getPrisma } from "@/server/db/prisma";
+
+const MISSED_FIRST_LESSON_WARNING =
+  "Planlaşdırılmış ilk dərs baş tutmayıb — aylıq dövr hələ başlamayıb. Yeni plan təyin edin.";
 
 export type PlannerMember = {
   assignmentId: string;
@@ -48,6 +52,8 @@ export type PlannerEnrollment = {
   teacherName: string | null;
   lessonsPerMonth: number | null;
   slotIds: string[];
+  /** BK-08: waiting student whose planned first lesson already passed. */
+  activationWarning: string | null;
 };
 
 export type PlannerJournalMember = PlannerMember & {
@@ -68,6 +74,8 @@ export type PlannerStudentDetail = PlannerMember & {
   lessonsPerMonth: number | null;
   managerName: string | null;
   notes: string | null;
+  /** BK-08 */
+  activationWarning: string | null;
   relatedContacts: Array<{
     id: string;
     name: string;
@@ -160,8 +168,14 @@ export async function getPlannerWorkspaceData(input?: {
           where: {
             validTo: null,
             enrollment: {
-              status: EnrollmentStatus.ACTIVE,
-              student: { OR: [{ lifecycleStatus: StudentLifecycleStatus.ACTIVE }, { freezeReserved: true }] },
+              status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+              student: {
+                OR: [
+                  { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+                  { lifecycleStatus: StudentLifecycleStatus.SLOT_WAITING },
+                  { freezeReserved: true },
+                ],
+              },
             },
           },
           take: 100,
@@ -208,12 +222,14 @@ export async function getPlannerWorkspaceData(input?: {
           select: {
             id: true,
             lessonsPerMonth: true,
+            firstLessonAt: true,
             program: { select: { name: true } },
             teacher: { select: { id: true, fullName: true } },
             student: {
               select: {
                 id: true,
                 code: true,
+                lifecycleStatus: true,
                 contact: { select: { fullName: true } },
               },
             },
@@ -275,8 +291,12 @@ export async function getPlannerWorkspaceData(input?: {
           where: {
             slotId: selectedSlot.id,
             enrollment: {
-              status: EnrollmentStatus.ACTIVE,
-              student: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+              status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+              student: {
+                lifecycleStatus: {
+                  in: [StudentLifecycleStatus.ACTIVE, StudentLifecycleStatus.SLOT_WAITING],
+                },
+              },
             },
             validFrom: { lte: journalDateValue },
             OR: [{ validTo: null }, { validTo: { gte: journalDateValue } }],
@@ -323,8 +343,14 @@ export async function getPlannerWorkspaceData(input?: {
                 slotId: selectedSlot.id,
                 validTo: null,
                 enrollment: {
-                  status: EnrollmentStatus.ACTIVE,
-                  student: { OR: [{ lifecycleStatus: StudentLifecycleStatus.ACTIVE }, { freezeReserved: true }] },
+                  status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+                  student: {
+                    OR: [
+                      { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+                      { lifecycleStatus: StudentLifecycleStatus.SLOT_WAITING },
+                      { freezeReserved: true },
+                    ],
+                  },
                 },
               },
               take: 100,
@@ -339,6 +365,7 @@ export async function getPlannerWorkspaceData(input?: {
                     startDate: true,
                     monthlyFee: true,
                     lessonsPerMonth: true,
+                    firstLessonAt: true,
                     program: { select: { name: true } },
                     student: {
                       select: {
@@ -473,6 +500,12 @@ export async function getPlannerWorkspaceData(input?: {
         lessonsPerMonth: assignment.enrollment.lessonsPerMonth,
         managerName: assignment.enrollment.student.manager?.fullName ?? null,
         notes: assignment.enrollment.student.notes,
+        activationWarning: hasMissedPlannedFirstLesson({
+          lifecycleStatus: assignment.enrollment.student.lifecycleStatus,
+          plannedFirstLessonAt: assignment.enrollment.firstLessonAt,
+        })
+          ? MISSED_FIRST_LESSON_WARNING
+          : null,
         relatedContacts: assignment.enrollment.student.relationships.map((relationship) => ({
           id: relationship.id,
           name: relationship.relatedContact.fullName,
@@ -496,6 +529,7 @@ export async function getPlannerWorkspaceData(input?: {
         lessonsPerMonth: null,
         managerName: null,
         notes: null,
+        activationWarning: null,
         relatedContacts: [],
       }));
 
@@ -576,6 +610,12 @@ export async function getPlannerWorkspaceData(input?: {
       teacherName: enrollment.teacher?.fullName ?? null,
       lessonsPerMonth: enrollment.lessonsPerMonth,
       slotIds: [...new Set(enrollment.scheduleAssignments.map((assignment) => assignment.slotId))],
+      activationWarning: hasMissedPlannedFirstLesson({
+        lifecycleStatus: enrollment.student.lifecycleStatus,
+        plannedFirstLessonAt: enrollment.firstLessonAt,
+      })
+        ? MISSED_FIRST_LESSON_WARNING
+        : null,
     })),
     slotDetail: {
       slotId: selectedSlotId,

@@ -38,6 +38,9 @@ export function StudentProfileView({ student, actions, mobileAccount, freezePeri
           </div>
           {actions}
         </div>
+        {student.activationWarning ? (
+          <p className="sp-activation-warning" role="status">{student.activationWarning}</p>
+        ) : null}
         <dl className="sp-summary">
           <div><dt>Əlaqə</dt><dd>{student.phone}</dd></div>
           <div><dt>Proqram</dt><dd>{student.program}</dd></div>

@@ -33,7 +33,11 @@ export function CrmLeadsTable({
       <header className="crm-table-heading">
         <div>
           <h2>Müraciət siyahısı</h2>
-          <p>{data.leads.length} müraciət seçilmiş görünüşə uyğundur</p>
+          <p>
+            {data.listTotalCount > data.leads.length
+              ? `${data.leads.length} / ${data.listTotalCount} müraciət göstərilir (seçilmiş filtr)`
+              : `${data.listTotalCount} müraciət seçilmiş görünüşə uyğundur`}
+          </p>
         </div>
         {preview && data.leads.length > 0 ? (
           <Button type="button" variant="outline" size="sm" onClick={onShowAll}>
@@ -70,6 +74,7 @@ export function CrmLeadsTable({
                         programs={data.programs}
                         sourceOptions={data.sourceOptions}
                         returnTo={data.returnTo}
+                        canConvert={data.access.canConvertLead}
                       />
                       <span>
                         <Phone aria-hidden="true" />

@@ -87,6 +87,8 @@ test("a paid 100 AZN invoice becomes 130 AZN due when its monthly fee rises to 2
     discountType: null,
     reason: "Həftəlik dərs sayı artırıldı",
     today: new Date("2026-09-10T00:00:00.000Z"),
+    // BK-15: September is the second period after August activation.
+    billingAnchorDate: new Date("2026-08-15T00:00:00.000Z"),
   });
 
   assert.deepEqual(result.repricedInvoiceIds, ["invoice-1"]);

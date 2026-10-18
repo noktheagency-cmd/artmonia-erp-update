@@ -21,7 +21,12 @@
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:backfill-course-sales": "node --import tsx scripts/backfill-course-sales.mjs",
+    "db:backfill-course-sales:apply": "node --import tsx scripts/backfill-course-sales.mjs --apply",
+    "env:prepare-staging": "node scripts/prepare-staging-env.mjs",
+    "env:assert-staging": "node scripts/assert-staging-env.mjs",
+    "deploy:staging:vercel": "npm run env:assert-staging && npx vercel"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.91",

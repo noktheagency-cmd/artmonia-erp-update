@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Snowflake, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Snowflake, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -158,9 +158,18 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                         {p.createdBy} · {date(p.createdAt)}
                       </small>
                       <small>
-                        Ləğv edilmiş balans: {money(Number(p.voidAmount))} ·
-                        Maliyyə baxışına ayrılmış: {p.reviewCount} faktura
+                        BK-10: yer saxlanılır, aylıq haqq və ödəniş günü davam
+                        edir (faktura ləğv edilmir).
                       </small>
+                      {Number(p.voidAmount) > 0 ? (
+                        <small>
+                          Köhnə qeyd — ləğv edilmiş balans:{" "}
+                          {money(Number(p.voidAmount))}
+                          {p.reviewCount
+                            ? ` · baxış: ${p.reviewCount} faktura`
+                            : ""}
+                        </small>
+                      ) : null}
                     </article>
                   ))
                 ) : (
@@ -213,9 +222,9 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                   </div>
                   <p className="freeze-hint">
                     Hələ qayıtmayıbsa bərpa tarixini boş saxlayın. Bu halda
-                    tələbə hazırda dondurulacaq və bugündən gələcək slotları
-                    bağlanacaq. Bərpa mövcud “Slot gözləyir” prosesi ilə qeydə
-                    alınır.
+                    tələbə FROZEN olur, yer/slot saxlanılır, aylıq haqq və
+                    ödəniş günü davam edir (BK-10). Dayandırma (STOPPED) yerı
+                    azad edir — o ayrıca əməliyyatdır.
                   </p>
                   <label className="form-field">
                     <span>Səbəb / qeyd *</span>
@@ -240,23 +249,16 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                       <ShieldCheck />
                       <div>
                         <strong>
-                          Ləğv ediləcək açıq balans: {money(preview.voidAmount)}
+                          Aylıq haqq davam edir (BK-10)
                         </strong>
                         <p>
                           {preview.freezesNow
-                            ? "Cari status FROZEN olacaq; gələcək slotlar bağlanacaq."
-                            : "Cari status və slotlar dəyişməyəcək."}{" "}
-                          İlk dərs / billing tarixi qorunur.
+                            ? "Status FROZEN olacaq; yer/slot saxlanılır, ödəniş günü dəyişmir."
+                            : "Keçmiş dövr qeydi — cari status və slotlar dəyişməyəcək."}{" "}
+                          Fakturalar ləğv edilmir; borc yaranarsa ödəniş gözlənilir.
                         </p>
                       </div>
                     </div>
-                    {preview.reviewCount ? (
-                      <p className="freeze-warning">
-                        <AlertTriangle size={18} />
-                        {preview.reviewCount} faktura maliyyə baxışı tələb edir
-                        — məbləği dəyişməyəcək.
-                      </p>
-                    ) : null}
                     <div className="freeze-table-wrap">
                       <table>
                         <thead>
@@ -277,11 +279,7 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                                 {money(i.amount)} / {money(i.balance)}
                               </td>
                               <td>
-                                <strong>
-                                  {i.decision === "VOID"
-                                    ? "Ləğv ediləcək"
-                                    : "Baxış tələb edir"}
-                                </strong>
+                                <strong>Haqq davam edir</strong>
                                 <small>{i.reason}</small>
                               </td>
                             </tr>
@@ -312,8 +310,8 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                   </div>
                 ) : (
                   <p className="freeze-hint">
-                    Yalnız tam əhatə olunan, ödənişsiz billing dövrləri ləğv
-                    edilir. Qismən və ödənilmiş dövrlər avtomatik silinmir.
+                    Dondurma yalnız yeri saxlayır. Aylıq haqq və ödəniş günü
+                    davam edir; fakturalar avtomatik ləğv edilmir.
                   </p>
                 )}
                 <div className="freeze-buttons">

@@ -5,6 +5,7 @@ import {
   EnrollmentStatus,
   Prisma,
   SlotSessionStatus,
+  StudentLifecycleStatus,
 } from "@/generated/prisma/client";
 import { attendanceQrTokenFingerprint, hashAttendanceQrToken } from "@/modules/attendance/attendance-qr-service";
 import { attendanceWindowState, buildAttendanceWindow, formatBakuIso } from "@/modules/attendance/attendance-time";
@@ -15,7 +16,9 @@ import type {
   MobileCheckInInput,
 } from "@/modules/attendance/mobile-attendance-contract";
 import { dateFromInput, weekdayFromDate } from "@/modules/groups/shared";
+import { activateStudentFromFirstPresent } from "@/modules/students/activation-from-attendance";
 import { recalculateTeacherPayoutsForMonthInTransaction } from "@/modules/hr/teacher-payroll";
+import { PublicActionError } from "@/server/actions/public-action-error";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
 
@@ -211,7 +214,33 @@ export async function processMobileAttendanceSiteCheckIn(
       where: { sessionId_enrollmentId: { sessionId: session.id, enrollmentId: enrollment.id } },
       select: { id: true, status: true, markedAt: true },
     });
-    const attendance = existingAttendance?.status === AttendanceMark.PRESENT
+    const alreadyCheckedIn = existingAttendance?.status === AttendanceMark.PRESENT;
+    if (!alreadyCheckedIn) {
+      try {
+        await activateStudentFromFirstPresent(tx, {
+          actorId: null,
+          studentId: student.id,
+          enrollmentId: enrollment.id,
+          lessonDate: session.sessionDate,
+        });
+      } catch (error) {
+        if (error instanceof PublicActionError) {
+          return finish(errorResult(
+            "ADMISSION_INCOMPLETE",
+            422,
+            error.message,
+            metadata.requestId,
+          ), {
+            studentId: student.id,
+            enrollmentId: enrollment.id,
+            sessionId: session.id,
+            attendanceSiteId: site.id,
+          });
+        }
+        throw error;
+      }
+    }
+    const attendance = alreadyCheckedIn
       ? existingAttendance
       : await tx.attendanceRecord.upsert({
           where: { sessionId_enrollmentId: { sessionId: session.id, enrollmentId: enrollment.id } },
@@ -233,7 +262,6 @@ export async function processMobileAttendanceSiteCheckIn(
           select: { id: true, status: true, markedAt: true },
         });
 
-    const alreadyCheckedIn = existingAttendance?.status === AttendanceMark.PRESENT;
     if (!alreadyCheckedIn) {
       await recalculateTeacherPayoutsForMonthInTransaction(
         tx,
@@ -290,7 +318,16 @@ async function resolveCurrentStudentLesson(
   const sessionDate = dateFromInput(date);
   const assignments = await tx.studentScheduleAssignment.findMany({
     where: {
-      enrollment: { studentId, status: EnrollmentStatus.ACTIVE, student: { freezeReserved: false } },
+      enrollment: {
+        studentId,
+        status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+        student: {
+          freezeReserved: false,
+          lifecycleStatus: {
+            in: [StudentLifecycleStatus.ACTIVE, StudentLifecycleStatus.SLOT_WAITING],
+          },
+        },
+      },
       validFrom: { lte: sessionDate },
       OR: [{ validTo: null }, { validTo: { gte: sessionDate } }],
       slot: { weekday: weekdayFromDate(date) },

@@ -851,8 +851,10 @@ function AssignmentDialog({
   const enrollmentOptions = useMemo(
     () => data.enrollments.map((item) => ({
       value: item.id,
-      label: `${item.studentName} · ${item.studentCode} · ${item.program}`,
-      searchText: `${item.studentName} ${item.studentCode} ${item.program} ${item.teacherName ?? ""}`,
+      label: item.activationWarning
+        ? `${item.studentName} · ${item.studentCode} · ${item.program} · ilk dərs buraxılıb`
+        : `${item.studentName} · ${item.studentCode} · ${item.program}`,
+      searchText: `${item.studentName} ${item.studentCode} ${item.program} ${item.teacherName ?? ""} ${item.activationWarning ?? ""}`,
     })),
     [data.enrollments],
   );

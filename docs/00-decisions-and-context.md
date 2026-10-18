@@ -2,11 +2,12 @@
 
 ## Source
 
-Primary product source:
+Primary product sources:
 
-- `Artmonia_ERP_Final_Technical_PRD_v2.0.pdf`
+- `Artmonia_ERP_Final_Technical_PRD_v2.0.pdf` (initial MVP)
+- `Artmonia-ERP-Biznes-Mentiqi-2026-10-18.pdf` (confirmed business rules BK-01…BK-25; overrides older conflicting notes below)
 
-The PRD defines Artmonia as an education ERP, not a simple CRM. The MVP must cover CRM, students, enrollments, payments/debt, teacher HR/payroll basics, dashboards, targets, audit log, and Excel migration.
+The product is an education ERP, not a simple CRM. Core coverage: CRM, students, enrollments, payments/debt, teacher HR/payroll basics, dashboards, targets, audit log, and Excel migration.
 
 ## Confirmed Decisions
 
@@ -15,8 +16,12 @@ The PRD defines Artmonia as an education ERP, not a simple CRM. The MVP must cov
 - Database/backend platform: Supabase Postgres, Supabase Auth, Supabase Storage
 - ORM: Prisma for domain transactions; raw SQL/views for reporting performance
 - Initial data: seed/demo data first, real Excel import later
-- Due date rule: monthly payment due date follows student registration date
-- Frozen status billing rule: billing stops while the student is frozen
+- Sales journal: qualified admissions and STOPPED returns are counted from `erp.course_sales` (not registration date alone)
+- Due date / billing anchor: monthly due day follows the billing anchor set at first actual monthly lesson (not slot plan or payment date alone)
+- Activation (BK-05…08): full first-period fee before first monthly PRESENT; slot assignment does not activate; billing starts on that first PRESENT
+- Frozen status billing (BK-10): seat is kept; **monthly billing continues** while frozen; payment day does not move; FROZEN return is not a new sale
+- Package upgrade (BK-15): fee/lesson increase blocked during the first billing period; allowed from the second period (`effectiveMonth` ≥ month after `billingAnchorDate`); downgrades allowed anytime; pre-activation edits are initial setup
+- CRM stage cards (BK-22/23): “Müraciət mərhələləri” is always all-time within manager scope; click opens the same all-time stage list
 - Teacher payout basis: payment month
 - Advance handling: finance can choose how advance is allocated according to the case
 - Refund/adjustment approval: Owner and Finance both participate
@@ -39,7 +44,7 @@ Student lifecycle status and payment state must never be stored as one mixed tex
 
 Correct separation:
 
-- Student lifecycle: group waiting, active, debt, frozen, stopped, completed
+- Student lifecycle: slot waiting, active, frozen, stopped, declined, completed (debt is payment state, not a lifecycle status)
 - Payment state: unpaid, partial, paid, overdue, advance, refunded, adjusted
 - Balance/debt: calculated from invoices and payment allocations
 
@@ -57,8 +62,16 @@ This keeps the data model ready for reminders, portal access, and multi-student 
 
 ## Open Decisions For Later
 
-- Exact refund workflow steps and approval ordering
-- Whether Finance approval is required before Owner approval or either role can approve
+These map to AQ-01…AQ-07 in `Artmonia-ERP-Biznes-Mentiqi-2026-10-18.pdf` and must not be invented in code:
+
+- AQ-01: billing day when first lesson falls on 29/30/31
+- AQ-02: mid-cycle STOPPED prorata / future invoices
+- AQ-03: package downgrade and mid-period switches after month one
+- AQ-04: school/teacher-caused compensation policy
+- AQ-05: refund / sale refusal / KPI reversal
+- AQ-06: one-off lesson KPI placement
+- AQ-07: historical import / journal coverage plan
 - Exact advance allocation choices in the UI
 - Whether overdue reminders are internal tasks only in MVP or also email/SMS
-- Final UI navigation and visual system
+
+See also `docs/business-workflow-decisions.md` and `docs/sales-metrics-audit-notes.md`.

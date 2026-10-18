@@ -39,6 +39,16 @@ import {
   leadStageTones,
 } from "@/modules/crm/stage";
 import {
+  leadHadMeetingAttendedSql,
+  leadHadMeetingScheduledSql,
+  leadHadRealContactSql,
+} from "@/modules/crm/contact-metrics-sql";
+import { leadNeedsMeetingAttendanceConfirmSql } from "@/modules/crm/registration-attend-policy";
+import {
+  leadHasQualifiedSaleSql,
+  ownerSalesCountSql,
+} from "@/modules/students/sales-metrics-sql";
+import {
   crmTeamVisibleHrStatuses,
   getCrmTeamPerformanceAccess,
 } from "@/modules/crm/team-performance-rules";
@@ -105,6 +115,10 @@ export type CrmData = {
     value: string;
     tone: "success" | "warning" | "danger" | "neutral" | "info";
   }>;
+  /** BK-22: sum of all-time stage card counts (scope only, no period). */
+  stageAllTimeTotal: number;
+  /** BK-23: full filtered list size; table may return a page of leads. */
+  listTotalCount: number;
   attentionFocus: CrmLeadFocusRow[];
   createdTodayFocus: CrmLeadFocusRow[];
   dashboardStats: {
@@ -112,6 +126,12 @@ export type CrmData = {
     conversionRate: string;
     contactedCount: string;
     contactRate: string;
+    /** BK-16: combined consultation+trial meeting scheduled/reached. */
+    meetingCount: string;
+    meetingAttendedCount: string;
+    contactToMeetingRate: string;
+    meetingToSaleRate: string;
+    /** @deprecated alias of meetingCount for older UI bindings */
     consultationCount: string;
     contactToConsultationRate: string;
     consultationToSaleRate: string;
@@ -119,6 +139,7 @@ export type CrmData = {
     trialLessonCount: string;
     directSales: string;
     consultationSales: string;
+    meetingSales: string;
     lossRate: string;
     teamPerformance: Array<{
       manager: string;
@@ -154,6 +175,8 @@ export type CrmData = {
     latestNote: string;
     canConvert: boolean;
     conversionLabel: string;
+    /** BK-18: open SCHEDULED meeting without ATTENDED yet. */
+    needsMeetingAttendanceConfirm: boolean;
     detail: {
       contactId: string;
       fullName: string;
@@ -224,6 +247,7 @@ type CrmCacheInput = {
 type CrmRawRow = {
   stageCounts: unknown;
   totalLeads: unknown;
+  listTotalCount: unknown;
   createdThisMonth: unknown;
   openFollowUps: unknown;
   qualifiedCount: unknown;
@@ -270,17 +294,19 @@ type CrmLeadRawRow = {
   managerName: string | null;
   programName: string | null;
   convertedStudentCode: string | null;
+  needsMeetingAttendanceConfirm: boolean | null;
   timeline: unknown;
 };
 
 type CrmConversionStatsRaw = {
   salesCount: unknown;
   contactedCount: unknown;
-  consultationCount: unknown;
+  meetingCount: unknown;
+  meetingAttendedCount: unknown;
+  meetingSales: unknown;
   trialLessonLeads: unknown;
   trialLessonCount: unknown;
   directSales: unknown;
-  consultationSales: unknown;
   lostCount: unknown;
 };
 
@@ -351,6 +377,11 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   });
   const stageCounts = asJsonRecord(row?.stageCounts);
   const totalLeads = toNumber(row?.totalLeads);
+  const listTotalCount = toNumber(row?.listTotalCount);
+  const stageAllTimeTotal = leadStageOptions.reduce(
+    (sum, stage) => sum + toNumber(stageCounts[stage] ?? 0),
+    0,
+  );
   const createdThisMonth = toNumber(row?.createdThisMonth);
   const openFollowUps = toNumber(row?.openFollowUps);
   const leadRows = asJsonArray<CrmLeadRawRow>(row?.leads);
@@ -366,11 +397,12 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const formattedLeads = leadRows.map((lead) => formatLeadRow(lead));
   const salesCount = toNumber(conversionStats?.salesCount);
   const contactedCount = toNumber(conversionStats?.contactedCount);
-  const consultationCount = toNumber(conversionStats?.consultationCount);
+  const meetingCount = toNumber(conversionStats?.meetingCount);
+  const meetingAttendedCount = toNumber(conversionStats?.meetingAttendedCount);
+  const meetingSales = toNumber(conversionStats?.meetingSales);
   const trialLessonLeads = toNumber(conversionStats?.trialLessonLeads);
   const trialLessonCount = toNumber(conversionStats?.trialLessonCount);
   const directSales = toNumber(conversionStats?.directSales);
-  const consultationSales = toNumber(conversionStats?.consultationSales);
   const lostCount = toNumber(conversionStats?.lostCount);
   const activeCount = [
     stageFilter,
@@ -455,6 +487,8 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       value: formatCount(stageCounts[stage] ?? 0),
       tone: leadStageTones[stage],
     })),
+    stageAllTimeTotal,
+    listTotalCount,
     attentionFocus: attentionRows.map((lead) => formatAttentionRow(lead, todayStart)),
     createdTodayFocus: asJsonArray<CrmAttentionRawRow>(row?.createdTodayLeads).map(
       (lead) => ({
@@ -473,13 +507,18 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       conversionRate: formatPercent(salesCount, totalLeads),
       contactedCount: formatCount(contactedCount),
       contactRate: formatPercent(contactedCount, totalLeads),
-      consultationCount: formatCount(consultationCount),
-      contactToConsultationRate: formatPercent(consultationCount, contactedCount),
-      consultationToSaleRate: formatPercent(consultationSales, consultationCount),
+      meetingCount: formatCount(meetingCount),
+      meetingAttendedCount: formatCount(meetingAttendedCount),
+      contactToMeetingRate: formatPercent(meetingCount, contactedCount),
+      meetingToSaleRate: formatPercent(meetingSales, meetingAttendedCount),
+      consultationCount: formatCount(meetingCount),
+      contactToConsultationRate: formatPercent(meetingCount, contactedCount),
+      consultationToSaleRate: formatPercent(meetingSales, meetingAttendedCount),
       trialLessonLeads: formatCount(trialLessonLeads),
       trialLessonCount: formatCount(trialLessonCount),
       directSales: formatCount(directSales),
-      consultationSales: formatCount(consultationSales),
+      consultationSales: formatCount(meetingSales),
+      meetingSales: formatCount(meetingSales),
       lossRate: formatPercent(lostCount, totalLeads),
       teamPerformance: teamPerformanceRows.map((item) => {
         const leads = toNumber(item.leads);
@@ -567,11 +606,17 @@ function getCrmRawData(
   const listWhereSql = buildCrmListWhereSql(input);
   const managerScopeSql = buildManagerScopeSql(input.actor);
   const teamMemberScopeSql = buildTeamMemberScopeSql(input.actor, input.ownerFilter);
-  const teamSalesWhereSql = buildCrmListWhereSql({
-    ...input,
-    periodRange: null,
-  });
-  const teamConversionPeriodSql = buildLeadConversionPeriodSql(input.periodRange);
+  const teamSaleFromSql = input.periodRange?.gte
+    ? Prisma.sql`${input.periodRange.gte}`
+    : null;
+  const teamSaleUntilSql = input.periodRange?.lt
+    ? Prisma.sql`${input.periodRange.lt}`
+    : null;
+  const leadSaleSql = leadHasQualifiedSaleSql();
+  const leadContactSql = leadHadRealContactSql();
+  const leadMeetingSql = leadHadMeetingScheduledSql();
+  const leadMeetingAttendedSql = leadHadMeetingAttendedSql();
+  const leadNeedsAttendSql = leadNeedsMeetingAttendanceConfirmSql();
   const teamHrStatusSql = Prisma.join(
     crmTeamVisibleHrStatuses.map(
       (status) => Prisma.sql`${status}::"erp"."HrEmployeeStatus"`,
@@ -581,11 +626,12 @@ function getCrmRawData(
   return prisma.$queryRaw<CrmRawRow[]>(Prisma.sql`
     select
       coalesce((
+        -- BK-22: mərhələ kartı period filtrindən asılı olmayaraq bütün dövrü göstərir.
         select jsonb_object_agg(summary.stage, summary.total_count)
         from (
           select l.stage::text as stage, count(*)::int as total_count
           from erp.leads l
-          where ${summarySql}
+          where ${scopeSql}
           group by l.stage
         ) summary
       ), '{}'::jsonb) as "stageCounts",
@@ -594,6 +640,13 @@ function getCrmRawData(
         from erp.leads l
         where ${summarySql}
       ), 0) as "totalLeads",
+      coalesce((
+        select count(*)::int
+        from erp.leads l
+        join erp.contacts c on c.id = l.contact_id
+        left join erp.programs p on p.id = l.program_interest_id
+        where ${listWhereSql}
+      ), 0) as "listTotalCount",
       coalesce((
         select count(*)::int
         from erp.leads l
@@ -627,19 +680,16 @@ function getCrmRawData(
       coalesce((
         select jsonb_build_object(
           'salesCount', count(*) filter (
-            where stat_leads.converted_student_id is not null
-              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
+            where stat_leads.has_sale
           ),
           'contactedCount', count(*) filter (
             where stat_leads.had_contact
           ),
-          'consultationCount', count(*) filter (
-            where stat_leads.had_consultation
-              or stat_leads.stage in (
-                'QUALIFIED'::"erp"."LeadStage",
-                'TRIAL_LESSON'::"erp"."LeadStage",
-                'TRIAL_CONSULTATION'::"erp"."LeadStage"
-              )
+          'meetingCount', count(*) filter (
+            where stat_leads.had_meeting
+          ),
+          'meetingAttendedCount', count(*) filter (
+            where stat_leads.had_meeting_attended
           ),
           'trialLessonLeads', count(*) filter (
             where stat_leads.trial_lesson_count is not null
@@ -647,18 +697,16 @@ function getCrmRawData(
           ),
           'trialLessonCount', coalesce(sum(stat_leads.trial_lesson_count), 0),
           'directSales', count(*) filter (
-            where (
-              stat_leads.converted_student_id is not null
-              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
-            )
-              and not stat_leads.had_consultation
+            where stat_leads.has_sale
+              and (
+                stat_leads.sale_route = 'DIRECT'
+                or not stat_leads.had_meeting_attended
+              )
           ),
-          'consultationSales', count(*) filter (
-            where (
-              stat_leads.converted_student_id is not null
-              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
-            )
-              and stat_leads.had_consultation
+          'meetingSales', count(*) filter (
+            where stat_leads.has_sale
+              and stat_leads.had_meeting_attended
+              and coalesce(stat_leads.sale_route, 'CRM') <> 'DIRECT'
           ),
           'lostCount', count(*) filter (
             where stat_leads.stage = 'LOST'::"erp"."LeadStage"
@@ -670,41 +718,26 @@ function getCrmRawData(
             l.stage,
             l.converted_student_id,
             l.trial_lesson_count,
-            exists (
-              select 1
-              from erp.lead_stage_history h
-              where h.lead_id = l.id
-                and h.new_stage in (
-                  'QUALIFIED'::"erp"."LeadStage",
-                  'TRIAL_LESSON'::"erp"."LeadStage",
-                  'TRIAL_CONSULTATION'::"erp"."LeadStage"
-                )
-            ) as had_consultation,
+            ${leadSaleSql} as has_sale,
             (
-              l.stage in (
-                'CONTACTED'::"erp"."LeadStage",
-                'QUALIFIED'::"erp"."LeadStage",
-                'TRIAL_LESSON'::"erp"."LeadStage",
-                'TRIAL_CONSULTATION'::"erp"."LeadStage",
-                'REGISTERED'::"erp"."LeadStage",
-                'LOST'::"erp"."LeadStage",
-                'NURTURE'::"erp"."LeadStage"
-              )
-              or exists (
-                select 1
-                from erp.lead_stage_history contact_history
-                where contact_history.lead_id = l.id
-                  and contact_history.new_stage in (
-                    'CONTACTED'::"erp"."LeadStage",
-                    'QUALIFIED'::"erp"."LeadStage",
-                    'TRIAL_LESSON'::"erp"."LeadStage",
-                    'TRIAL_CONSULTATION'::"erp"."LeadStage",
-                    'REGISTERED'::"erp"."LeadStage",
-                    'LOST'::"erp"."LeadStage",
-                    'NURTURE'::"erp"."LeadStage"
+              select cs.route
+              from erp.course_sales cs
+              join erp.students sale_student on sale_student.id = cs.student_id
+              where sale_student.is_test_data = false
+                and cs.cancelled_at is null
+                and (
+                  cs.lead_id = l.id
+                  or (
+                    l.converted_student_id is not null
+                    and cs.student_id = l.converted_student_id
                   )
-              )
-            ) as had_contact
+                )
+              order by cs.qualified_at desc, cs.created_at desc
+              limit 1
+            ) as sale_route,
+            ${leadMeetingSql} as had_meeting,
+            ${leadMeetingAttendedSql} as had_meeting_attended,
+            ${leadContactSql} as had_contact
           from erp.leads l
           where ${summarySql}
         ) stat_leads
@@ -727,26 +760,16 @@ function getCrmRawData(
           left join erp.hr_employees he on he.user_id = u.id
           left join lateral (
             select
-              count(*) filter (where ${listWhereSql})::int as total_count,
-              count(*) filter (
-                where ${teamSalesWhereSql}
-                  and (
-                    l.converted_student_id is not null
-                    or l.stage = 'REGISTERED'::"erp"."LeadStage"
-                  )
-                  and ${teamConversionPeriodSql}
-              )::int as sales_count
-            from erp.leads l
-            join erp.contacts c on c.id = l.contact_id
-            left join erp.programs p on p.id = l.program_interest_id
-            left join erp.students converted_student on converted_student.id = l.converted_student_id
-            left join lateral (
-              select min(conversion_history.created_at) as registered_at
-              from erp.lead_stage_history conversion_history
-              where conversion_history.lead_id = l.id
-                and conversion_history.new_stage = 'REGISTERED'::"erp"."LeadStage"
-            ) conversion on true
-            where l.manager_id = u.id
+              coalesce((
+                select count(*)::int
+                from erp.leads l
+                join erp.contacts c on c.id = l.contact_id
+                left join erp.programs p on p.id = l.program_interest_id
+                left join erp.students converted_student on converted_student.id = l.converted_student_id
+                where l.manager_id = u.id
+                  and ${listWhereSql}
+              ), 0)::int as total_count,
+              ${ownerSalesCountSql(Prisma.raw("u.id"), teamSaleFromSql, teamSaleUntilSql)}::int as sales_count
           ) team_stats on true
           where ${teamMemberScopeSql}
             and (
@@ -885,6 +908,7 @@ function getCrmRawData(
             'managerName', lead_rows.manager_name,
             'programName', lead_rows.program_name,
             'convertedStudentCode', lead_rows.converted_student_code,
+            'needsMeetingAttendanceConfirm', lead_rows.needs_meeting_attendance_confirm,
             'timeline', coalesce(history.timeline, '[]'::jsonb)
           )
           order by lead_rows.next_follow_up_at asc nulls last, lead_rows.created_at desc
@@ -907,7 +931,8 @@ function getCrmRawData(
             c.phone_display,
             m.full_name as manager_name,
             p.name as program_name,
-            s.code as converted_student_code
+            s.code as converted_student_code,
+            ${leadNeedsAttendSql} as needs_meeting_attendance_confirm
           from erp.leads l
           join erp.contacts c on c.id = l.contact_id
           left join erp.users m on m.id = l.manager_id
@@ -1067,23 +1092,6 @@ function buildLeadPeriodSql(periodRange: CrmPeriodRange) {
   return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
 }
 
-function buildLeadConversionPeriodSql(periodRange: CrmPeriodRange) {
-  const conversionDateSql = Prisma.sql`
-    coalesce(conversion.registered_at, converted_student.registered_at, l.updated_at)
-  `;
-  const conditions: Prisma.Sql[] = [Prisma.sql`true`];
-
-  if (periodRange?.gte) {
-    conditions.push(Prisma.sql`${conversionDateSql} >= ${periodRange.gte}`);
-  }
-
-  if (periodRange?.lt) {
-    conditions.push(Prisma.sql`${conversionDateSql} < ${periodRange.lt}`);
-  }
-
-  return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
-}
-
 function buildCrmListWhereSql(input: {
   actor: CrmCacheActor;
   search: string;
@@ -1199,6 +1207,26 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
     },
   });
   if (!lead) return null;
+
+  const [openScheduled, attendedMeeting] = await Promise.all([
+    getPrisma().crmAppointment.findFirst({
+      where: {
+        leadId: lead.id,
+        kind: { in: ["CONSULTATION", "TRIAL"] },
+        outcome: "SCHEDULED",
+      },
+      select: { id: true },
+    }),
+    getPrisma().crmAppointment.findFirst({
+      where: {
+        leadId: lead.id,
+        kind: { in: ["CONSULTATION", "TRIAL"] },
+        outcome: "ATTENDED",
+      },
+      select: { id: true },
+    }),
+  ]);
+
   return formatLeadRow({
     ...lead,
     createdAt: lead.createdAt.toISOString(),
@@ -1209,6 +1237,7 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
     managerName: lead.manager?.fullName ?? null,
     programName: lead.programInterest?.name ?? null,
     convertedStudentCode: lead.convertedStudent?.code ?? null,
+    needsMeetingAttendanceConfirm: Boolean(openScheduled) && !attendedMeeting,
     timeline: lead.stageHistory.map((entry) => ({
       id: entry.id,
       newStage: entry.newStage,
@@ -1265,6 +1294,7 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
       : programId
         ? "Qeydiyyata al"
         : "Proqram seçilməyib",
+    needsMeetingAttendanceConfirm: Boolean(lead.needsMeetingAttendanceConfirm),
     detail: {
       contactId: lead.contactId,
       fullName: lead.fullName,

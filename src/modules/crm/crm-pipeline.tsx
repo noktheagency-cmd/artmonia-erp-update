@@ -277,7 +277,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
           >
             <List aria-hidden="true" />
             <span>Müraciət Siyahısı</span>
-            <small>{data.leads.length}</small>
+            <small>{data.listTotalCount}</small>
           </button>
         </div>
         {data.filters.activeCount > 0 ? (
@@ -292,7 +292,16 @@ export function CrmPipeline({ data }: { data: CrmData }) {
         <>
           <CrmOverview
             data={data}
-            onStageSelect={(stage) => handleQuickFilter("stage", stage)}
+            onStageSelect={(stage) => {
+              // BK-22/23: kart bütün dövrdür; klik eyni əhatəli siyahı açır.
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("stage", stage);
+              params.set("period", "all");
+              params.delete("from");
+              params.delete("to");
+              params.set("tab", "list");
+              navigate(params);
+            }}
             onLeadSelect={(id) => {
               leadTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
               setSelectedLeadId(id);

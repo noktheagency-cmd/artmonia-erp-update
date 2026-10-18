@@ -32,6 +32,17 @@ test("slot gözləyən tələbənin yeni enrollment-i aktiv açılmır", () => {
   assert.equal(enrollmentStatusForStudentLifecycle("ACTIVE"), "ACTIVE");
 });
 
+test("BK-10: FROZEN keeps enrollment active and does not pause billing", async () => {
+  const { isBillingPausedStatus, buildStudentStatusUpdateData } = await import(
+    "./lifecycle-service"
+  );
+  assert.equal(isBillingPausedStatus("FROZEN"), false);
+  assert.equal(enrollmentStatusForStudentLifecycle("FROZEN"), "ACTIVE");
+  const data = buildStudentStatusUpdateData("FROZEN", new Date("2026-09-01T00:00:00Z"));
+  assert.equal(data.billingPaused, false);
+  assert.equal(data.freezeReserved, true);
+});
+
 function activationTx(enrollment: {
   startDate: Date;
   firstLessonAt: Date | null;

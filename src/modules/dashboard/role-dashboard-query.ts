@@ -5,6 +5,7 @@ import {
   Prisma,
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
+import { leadHasQualifiedSaleSql } from "@/modules/students/sales-metrics-sql";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 
@@ -50,15 +51,16 @@ export async function getRoleDashboardData(): Promise<RoleDashboardData> {
 }
 
 async function salesDashboard(actorId: string, actorName: string): Promise<RoleDashboardData> {
+  const leadSaleSql = leadHasQualifiedSaleSql();
   const [row] = await getPrisma().$queryRaw<SalesDashboardRow[]>(Prisma.sql`
     select
       count(*)::int as "leadCount",
       (select count(*)::int from erp.students student where student.manager_id = ${actorId}::uuid) as "studentCount",
       count(*) filter (
-        where lead.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_LESSON', 'TRIAL_CONSULTATION', 'NURTURE')
-          and (lead.next_follow_up_at is null or lead.next_follow_up_at <= now() + interval '1 day')
+        where l.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_LESSON', 'TRIAL_CONSULTATION', 'NURTURE')
+          and (l.next_follow_up_at is null or l.next_follow_up_at <= now() + interval '1 day')
       )::int as "followUps",
-      count(*) filter (where lead.converted_student_id is not null or lead.stage = 'REGISTERED')::int as converted,
+      count(*) filter (where ${leadSaleSql})::int as converted,
       coalesce((
         select jsonb_agg(jsonb_build_object('stage', grouped.stage::text, 'count', grouped.count) order by grouped.stage)
         from (select stage, count(*)::int as count from erp.leads where manager_id = ${actorId}::uuid group by stage) grouped
@@ -74,8 +76,8 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
           limit 5
         ) recent
       ), '[]'::jsonb) as recent
-    from erp.leads lead
-    where lead.manager_id = ${actorId}::uuid
+    from erp.leads l
+    where l.manager_id = ${actorId}::uuid
   `);
   const leadCount = row?.leadCount ?? 0;
   const studentCount = row?.studentCount ?? 0;
@@ -89,7 +91,7 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
     kpis: [
       { label: "Mənim lead-lərim", value: String(leadCount), helper: "Sizə assign olunan bütün müraciətlər", tone: "blue" },
       { label: "Bugünkü follow-up", value: String(followUps), helper: "Əlaqə gözləyən prioritetlər", tone: "orange" },
-      { label: "Konvertasiya", value: leadCount ? `${Math.round(converted / leadCount * 100)}%` : "0%", helper: `${converted} uğurlu qeydiyyat`, tone: "green" },
+      { label: "Konvertasiya", value: leadCount ? `${Math.round(converted / leadCount * 100)}%` : "0%", helper: `${converted} uyğun satış (course_sales)`, tone: "green" },
       { label: "Mənim tələbələrim", value: String(studentCount), helper: "Satışdan tələbəyə çevrilən portfel", tone: "violet" },
     ],
     breakdown: stages.map((item) => ({ label: stageLabel(item.stage), value: item.count, total: maxStage })),

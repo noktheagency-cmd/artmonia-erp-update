@@ -4,6 +4,7 @@ import {
 } from "@/generated/prisma/client";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { toNumber } from "@/modules/shared/format";
+import { assertPackageUpgradeAllowed } from "@/modules/students/package-upgrade-policy";
 import { PublicActionError } from "@/server/actions/public-action-error";
 
 export const enrollmentBillingChangeModeValues = ["FROM_MONTH", "ONLY_MONTH"] as const;
@@ -114,8 +115,19 @@ export async function applyEnrollmentBillingChange(
     discountType: string | null;
     reason: string;
     today: Date;
+    /** BK-15: first billing period from activation anchor; null = not yet activated. */
+    billingAnchorDate?: Date | null;
   },
 ) {
+  assertPackageUpgradeAllowed({
+    previousMonthlyFee: input.previousMonthlyFee,
+    previousLessonsPerMonth: input.previousLessonsPerMonth,
+    monthlyFee: input.monthlyFee,
+    lessonsPerMonth: input.lessonsPerMonth,
+    effectiveMonth: input.effectiveMonth,
+    billingAnchorDate: input.billingAnchorDate,
+  });
+
   const previousTerms = await resolveEnrollmentBillingTerms(tx, {
     enrollmentId: input.enrollmentId,
     periodMonth: input.effectiveMonth,

@@ -32,7 +32,7 @@ export type NotificationCenterData = {
 
 export async function getNotificationCenterData(): Promise<NotificationCenterData> {
   const actor = await requireErpActor();
-  await generateTaskDeadlineNotifications({ recipientUserId: actor.id });
+  await generateTaskDeadlineNotifications({ recipientUserId: actor.id, force: true });
 
   const [notifications, employee, counts] = await Promise.all([
     getPrisma().personalNotification.findMany({
@@ -132,7 +132,8 @@ function hrCategoryLabel(category: string) {
 }
 
 export async function getNotificationShellCounts(recipientUserId: string) {
-  await generateTaskDeadlineNotifications({ recipientUserId });
+  // Layout is on every ERP navigation — only count unread badges here.
+  // Deadline generation runs via /api/notifications/refresh + cron, not SSR.
   return getUnreadNotificationCounts(recipientUserId);
 }
 

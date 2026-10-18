@@ -47,6 +47,8 @@ import {
   studentReminderMeta,
   type StudentReminderKind,
 } from "@/modules/students/student-reminders";
+import { hasMissedPlannedFirstLesson } from "@/modules/students/activation-from-attendance";
+import { earliestPackageUpgradeMonth } from "@/modules/students/package-upgrade-policy";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 import { programJourneyImageUrl } from "@/server/storage/erp-files";
 
@@ -239,6 +241,8 @@ export type StudentListData = {
       paymentDefaultAmount: string;
       paymentDefaultDate: string;
       paymentDefaultMonth: string;
+      /** BK-15: earliest YYYY-MM for package upgrade; null before activation. */
+      earliestUpgradeMonth: string | null;
       monthlyFee: string;
       invoices: Array<{
         id: string;
@@ -391,7 +395,7 @@ const summaryMeta: Record<
   [StudentLifecycleStatus.SLOT_WAITING]: {
     label: "Slot gözləyir",
     tone: "yellow",
-    delta: "Slot təyinatı",
+    delta: "İlk faktiki dərs gözlənilir",
   },
   [StudentLifecycleStatus.FROZEN]: {
     label: "Dondurulmuş",
@@ -766,6 +770,7 @@ export async function getStudentListData(
           paymentDefaultMonth: formatDateInput(
             student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
           ).slice(0, 7),
+          earliestUpgradeMonth: null,
           monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
           invoices: student.invoices.map((invoice) => {
             const status = invoiceStatusMeta[invoice.status];
@@ -3024,6 +3029,14 @@ export async function getStudentDetailData(studentId: string) {
       freezeReserved: student.freezeReserved,
       lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
       lifecycleTone: lifecycleStatus.tone,
+      activationWarning: hasMissedPlannedFirstLesson({
+        lifecycleStatus: student.lifecycleStatus,
+        plannedFirstLessonAt: student.firstLessonAt
+          ? new Date(student.firstLessonAt)
+          : null,
+      })
+        ? "Planlaşdırılmış ilk dərs baş tutmayıb — aylıq dövr hələ başlamayıb. Yeni plan təyin edin."
+        : null,
       paymentStatus: paymentStatus.label,
       paymentTone: paymentStatus.tone,
       paidThisMonth: formatAmount(currentMonthPaid),
@@ -3081,6 +3094,9 @@ export async function getStudentDetailData(studentId: string) {
         paymentDefaultMonth: formatDateInput(
           student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
         ).slice(0, 7),
+        earliestUpgradeMonth: student.billingAnchorDate
+          ? formatDateInput(earliestPackageUpgradeMonth(new Date(student.billingAnchorDate))).slice(0, 7)
+          : null,
         monthlyFee: formatNonNegativeDecimalInput(student.monthlyFee),
         monthlyFeeLabel: student.monthlyFee === null || student.monthlyFee === undefined
           ? "Təyin edilməyib"

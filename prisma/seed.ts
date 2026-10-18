@@ -23,6 +23,15 @@ import {
 } from "../src/generated/prisma/client";
 import { permissionCatalog } from "../src/server/rbac/permissions";
 import { financeCategoryCatalog } from "./finance-category-catalog";
+import {
+  resetExtraModules,
+  seedCourseSalesAndCrm,
+  seedHrAndKnowledge,
+  seedMarketing,
+  seedProgramsLessonsHomework,
+  seedTargetsAndNotifications,
+  seedWorkshops,
+} from "./seed-extra-modules";
 
 dotenv.config({ path: ".env.local" });
 dotenv.config();
@@ -808,6 +817,7 @@ async function seedTasksTargetsAndAudit(input: {
 }
 
 async function main() {
+  await resetExtraModules(prisma);
   await resetDemoData();
   const users = await seedRolesAndUsers();
   const catalog = await seedTeachersAndPrograms(users.owner.id, users.teacher.id);
@@ -835,6 +845,42 @@ async function main() {
     salesId: users.sales.id,
     financeId: users.finance.id,
     firstStudentId: students[0].student.id,
+  });
+
+  // Module-by-module demo coverage (CRM/sales, HR, marketing, lessons, workshops, KPI).
+  await seedCourseSalesAndCrm(prisma, {
+    ownerId: users.owner.id,
+    salesId: users.sales.id,
+    adminId: users.admin.id,
+    students,
+    teachers: catalog.teachers,
+  });
+  await seedHrAndKnowledge(prisma, {
+    ownerId: users.owner.id,
+    adminId: users.admin.id,
+    salesId: users.sales.id,
+    financeId: users.finance.id,
+    teacherUserId: users.teacher.id,
+    teachers: catalog.teachers,
+  });
+  await seedMarketing(prisma, {
+    ownerId: users.owner.id,
+    salesId: users.sales.id,
+  });
+  await seedProgramsLessonsHomework(prisma, {
+    ownerId: users.owner.id,
+    students,
+    programs: catalog.programs,
+  });
+  await seedWorkshops(prisma, {
+    ownerId: users.owner.id,
+    salesId: users.sales.id,
+    students,
+  });
+  await seedTargetsAndNotifications(prisma, {
+    ownerId: users.owner.id,
+    adminId: users.admin.id,
+    salesId: users.sales.id,
   });
 }
 

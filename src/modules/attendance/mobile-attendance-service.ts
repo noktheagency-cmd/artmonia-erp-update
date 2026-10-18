@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { AttendanceCaptureSource, AttendanceMark, EnrollmentStatus, Prisma, SlotSessionStatus } from "@/generated/prisma/client";
+import { AttendanceCaptureSource, AttendanceMark, EnrollmentStatus, Prisma, SlotSessionStatus, StudentLifecycleStatus } from "@/generated/prisma/client";
 import { attendanceQrTokenFingerprint, hashAttendanceQrToken } from "@/modules/attendance/attendance-qr-service";
 import { processMobileAttendanceSiteCheckIn } from "@/modules/attendance/attendance-site-check-in-service";
 import { attendanceWindowState, buildAttendanceWindow, formatBakuIso } from "@/modules/attendance/attendance-time";
@@ -9,7 +9,9 @@ import type {
   MobileAttendanceResult,
   MobileCheckInInput,
 } from "@/modules/attendance/mobile-attendance-contract";
+import { activateStudentFromFirstPresent } from "@/modules/students/activation-from-attendance";
 import { recalculateTeacherPayoutsForMonthInTransaction } from "@/modules/hr/teacher-payroll";
+import { PublicActionError } from "@/server/actions/public-action-error";
 import { getPrisma } from "@/server/db/prisma";
 import { getEnv } from "@/server/env";
 
@@ -216,7 +218,12 @@ export async function processMobileAttendanceCheckIn(
     const enrollment = await tx.enrollment.findFirst({
       where: {
         studentId: student.id,
-        status: EnrollmentStatus.ACTIVE,
+        status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+        student: {
+          lifecycleStatus: {
+            in: [StudentLifecycleStatus.ACTIVE, StudentLifecycleStatus.SLOT_WAITING],
+          },
+        },
         scheduleAssignments: {
           some: {
             slotId: session.slot.id,
@@ -248,7 +255,33 @@ export async function processMobileAttendanceCheckIn(
       where: { sessionId_enrollmentId: { sessionId: session.id, enrollmentId: enrollment.id } },
       select: { id: true, status: true, markedAt: true },
     });
-    const attendance = existingAttendance?.status === AttendanceMark.PRESENT
+    const alreadyCheckedIn = existingAttendance?.status === AttendanceMark.PRESENT;
+    if (!alreadyCheckedIn) {
+      try {
+        await activateStudentFromFirstPresent(tx, {
+          actorId: null,
+          studentId: student.id,
+          enrollmentId: enrollment.id,
+          lessonDate: session.sessionDate,
+        });
+      } catch (error) {
+        if (error instanceof PublicActionError) {
+          return finish(errorResult(
+            "ADMISSION_INCOMPLETE",
+            422,
+            error.message,
+            metadata.requestId,
+          ), {
+            studentId: student.id,
+            sessionId: session.id,
+            challengeId: challenge.id,
+            enrollmentId: enrollment.id,
+          });
+        }
+        throw error;
+      }
+    }
+    const attendance = alreadyCheckedIn
       ? existingAttendance
       : await tx.attendanceRecord.upsert({
           where: { sessionId_enrollmentId: { sessionId: session.id, enrollmentId: enrollment.id } },
@@ -270,7 +303,6 @@ export async function processMobileAttendanceCheckIn(
           select: { id: true, status: true, markedAt: true },
         });
 
-    const alreadyCheckedIn = existingAttendance?.status === AttendanceMark.PRESENT;
     if (!alreadyCheckedIn) {
       await recalculateTeacherPayoutsForMonthInTransaction(
         tx,

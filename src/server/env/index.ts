@@ -68,7 +68,14 @@ const envSchema = z.object({
 type AppEnv = z.infer<typeof envSchema>;
 
 export function getEnv() {
-  return envSchema.parse(process.env);
+  // Empty strings from .env.local (KEY=) must not fail optional validators.
+  const cleaned = Object.fromEntries(
+    Object.entries(process.env).map(([key, value]) => [
+      key,
+      value === "" ? undefined : value,
+    ]),
+  );
+  return envSchema.parse(cleaned);
 }
 
 export function requireEnv<K extends keyof AppEnv>(name: K): NonNullable<AppEnv[K]> {

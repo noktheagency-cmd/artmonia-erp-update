@@ -26,6 +26,7 @@ export type FreezeInvoiceRow = {
   status: string;
   cycleStart: string;
   cycleEnd: string;
+  overlaps?: boolean;
   decision: "VOID" | "REVIEW" | "KEEP";
   reason: string;
 };
@@ -33,6 +34,7 @@ export type FreezePreview = {
   fingerprint: string;
   currentStatus: string;
   freezesNow: boolean;
+  /** Always 0 under BK-10 — freeze never voids invoices. */
   voidAmount: number;
   reviewCount: number;
   invoices: FreezeInvoiceRow[];
@@ -144,22 +146,23 @@ export async function buildFreezePreview(
         balance: Number(r.balance),
         allocated: allocated.get(r.id) || 0,
       };
+      const assessment = assessFrozenInvoice({
+        ...input,
+        ...values,
+        periodMonth: r.period,
+        anchorDate: student.anchor!,
+        status: r.status,
+        today,
+      });
       return {
         id: r.id,
         period: r.period,
         status: r.status,
         ...values,
-        ...assessFrozenInvoice({
-          ...input,
-          ...values,
-          periodMonth: r.period,
-          anchorDate: student.anchor!,
-          status: r.status,
-          today,
-        }),
+        ...assessment,
       };
     })
-    .filter((r) => r.decision !== "KEEP");
+    .filter((r) => r.overlaps);
   const fingerprint = createHash("sha256")
     .update(
       JSON.stringify({
@@ -169,6 +172,7 @@ export async function buildFreezePreview(
         allocations: allocations.sort((a, b) => a.id.localeCompare(b.id)),
         periods,
         today,
+        policy: "BK-10",
       }),
     )
     .digest("hex");
@@ -176,10 +180,8 @@ export async function buildFreezePreview(
     fingerprint,
     currentStatus: student.status,
     freezesNow: !input.endDate && student.status !== "FROZEN",
-    voidAmount: invoices
-      .filter((r) => r.decision === "VOID")
-      .reduce((sum, r) => sum + r.balance, 0),
-    reviewCount: invoices.filter((r) => r.decision === "REVIEW").length,
+    voidAmount: 0,
+    reviewCount: 0,
     invoices,
   };
 }

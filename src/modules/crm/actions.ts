@@ -30,6 +30,7 @@ import { optionalFormString } from "@/modules/shared/form-values";
 import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { assertLeadPlan } from "./lead-validation";
+import { resolveRegistrationMeetingAttendance } from "./registration-attend-policy";
 import { syncLeadWorkPlan } from "./work-service";
 import {
   enrollmentStatusForStudentLifecycle,
@@ -110,6 +111,10 @@ const convertLeadSchema = z.object({
   source: optionalText(60),
   educationLevel: optionalText(80),
   programId: z.string().uuid(),
+  confirmMeetingAttended: z.preprocess(
+    (value) => value === "on" || value === "true" || value === true,
+    z.boolean(),
+  ).default(false),
   returnTo: optionalText(260),
 });
 
@@ -559,6 +564,13 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
     if (!program) {
       throw new Error("Seçilən proqram aktiv deyil və ya tapılmadı");
     }
+
+    // BK-18: confirm meeting attendance in the same registration window when required.
+    await resolveRegistrationMeetingAttendance(tx, {
+      leadId: lead.id,
+      confirmMeetingAttended: input.confirmMeetingAttended,
+      actorId: actor.id,
+    });
 
     const educationLevel = await resolveEducationLevelName(tx, input.educationLevel);
     await tx.contact.update({

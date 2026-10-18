@@ -200,7 +200,8 @@ export function AppShell({
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") void refreshNotificationCounts();
     };
-    const interval = window.setInterval(() => void refreshNotificationCounts(), 30_000);
+    // Deadline generation is throttled server-side; poll less often to cut auth+DB load.
+    const interval = window.setInterval(() => void refreshNotificationCounts(), 120_000);
     window.addEventListener("focus", refreshWhenVisible);
     window.addEventListener("app-notifications:changed", refreshWhenVisible);
     document.addEventListener("visibilitychange", refreshWhenVisible);

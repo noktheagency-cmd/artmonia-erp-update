@@ -8,12 +8,14 @@ export function LeadDetailDialog({
   managers,
   sourceOptions,
   returnTo,
+  canConvert = true,
 }: {
   lead: CrmData["leads"][number];
   programs: CrmData["programs"];
   managers: CrmData["managers"];
   sourceOptions: CrmData["sourceOptions"];
   returnTo: string;
+  canConvert?: boolean;
 }) {
   return (
     <LeadDetailDialogClient
@@ -22,6 +24,7 @@ export function LeadDetailDialog({
       programs={programs}
       sourceOptions={sourceOptions}
       returnTo={returnTo}
+      canConvert={canConvert}
       updateLeadAction={updateLeadAction}
       deleteLeadAction={deleteLeadAction}
     />

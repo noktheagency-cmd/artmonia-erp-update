@@ -18,8 +18,16 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
   const db = getPrisma();
   assertCanAccessLead(actor, await db.lead.findUnique({ where: { id } }), "crm.lead.read");
   const rows = await db.leadContactEvent.findMany({ where: { leadId: id }, orderBy: { occurredAt: "desc" }, take: 30 });
-  const lastTalk = await db.leadContactEvent.findFirst({ where: { leadId: id, outcome: "TALKED" }, orderBy: { occurredAt: "desc" } });
-  const unanswered = { leadId: id, outcome: "UNANSWERED", ...(lastTalk ? { occurredAt: { gt: lastTalk.occurredAt } } : {}) };
+  const lastTalk = await db.leadContactEvent.findFirst({
+    where: { leadId: id, channel: "PHONE", outcome: "TALKED" },
+    orderBy: { occurredAt: "desc" },
+  });
+  const unanswered = {
+    leadId: id,
+    channel: "PHONE",
+    outcome: "UNANSWERED",
+    ...(lastTalk ? { occurredAt: { gt: lastTalk.occurredAt } } : {}),
+  };
   const [firstAttempt, attempts] = await Promise.all([db.leadContactEvent.findFirst({ where: unanswered, orderBy: { occurredAt: "asc" } }), db.leadContactEvent.count({ where: unanswered })]);
   return { rows: rows.map((row) => ({ id: row.id, channel: row.channel, outcome: row.outcome, occurredAt: row.occurredAt.toISOString(), note: row.note })),
     suggestedDate: nextUnansweredDate(firstAttempt?.occurredAt ?? new Date(), new Date(), attempts) };

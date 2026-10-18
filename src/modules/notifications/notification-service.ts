@@ -5,7 +5,6 @@ import {
   Prisma,
   TaskStatus,
 } from "@/generated/prisma/client";
-import { taskNotificationTypes } from "@/modules/notifications/notification-types";
 import {
   buildTaskDeadlineDedupeKey,
   getTaskDeadlineStage,
@@ -56,13 +55,27 @@ export async function createAssignedTaskNotification(
   });
 }
 
+/** Avoid re-scanning tasks on every 30s shell poll / page focus. Cron still passes no userId. */
+const DEADLINE_GEN_COOLDOWN_MS = 5 * 60_000;
+const deadlineGenLastRun = new Map<string, number>();
+
 export async function generateTaskDeadlineNotifications({
   recipientUserId,
   now = new Date(),
+  force = false,
 }: {
   recipientUserId?: string;
   now?: Date;
+  force?: boolean;
 } = {}) {
+  if (recipientUserId && !force) {
+    const last = deadlineGenLastRun.get(recipientUserId) ?? 0;
+    if (now.getTime() - last < DEADLINE_GEN_COOLDOWN_MS) {
+      return { created: 0, recipientUserIds: [] as string[], skipped: true as const };
+    }
+    deadlineGenLastRun.set(recipientUserId, now.getTime());
+  }
+
   const prisma = getPrisma();
   const soonThreshold = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
   const tasks = await prisma.task.findMany({
@@ -138,32 +151,41 @@ export async function generateTaskDeadlineNotifications({
 }
 
 export async function getUnreadNotificationCounts(recipientUserId: string) {
-  const [personalCounts, hr] = await Promise.all([
-    Promise.all([
-      getPrisma().personalNotification.count({
-        where: { recipientUserId, readAt: null },
-      }),
-      getPrisma().personalNotification.count({
-        where: {
-          recipientUserId,
-          readAt: null,
-          type: { in: [...taskNotificationTypes] },
-        },
-      }),
-    ]).catch((error: unknown) => {
-      if (isPersonalNotificationSchemaMissing(error)) return [0, 0] as const;
-      throw error;
-    }),
-    getPrisma().hrStaffNotification.count({
-      where: {
-        employee: { userId: recipientUserId },
-        status: "SENT",
-      },
-    }),
-  ]);
-
-  const [personal, tasks] = personalCounts;
-  return { all: personal + hr, tasks };
+  try {
+    const [row] = await getPrisma().$queryRaw<Array<{ personal: number; tasks: number; hr: number }>>(
+      Prisma.sql`
+        select
+          (
+            select count(*)::int
+            from erp.personal_notifications pn
+            where pn.recipient_user_id = ${recipientUserId}::uuid
+              and pn.read_at is null
+          ) as personal,
+          (
+            select count(*)::int
+            from erp.personal_notifications pn
+            where pn.recipient_user_id = ${recipientUserId}::uuid
+              and pn.read_at is null
+              and pn.type in (
+                'TASK_ASSIGNED'::erp."PersonalNotificationType",
+                'TASK_DUE_SOON'::erp."PersonalNotificationType",
+                'TASK_OVERDUE'::erp."PersonalNotificationType"
+              )
+          ) as tasks,
+          (
+            select count(*)::int
+            from erp.hr_staff_notifications n
+            join erp.hr_employees e on e.id = n.employee_id
+            where e.user_id = ${recipientUserId}::uuid
+              and n.status = 'SENT'
+          ) as hr
+      `,
+    );
+    return { all: (row?.personal ?? 0) + (row?.hr ?? 0), tasks: row?.tasks ?? 0 };
+  } catch (error: unknown) {
+    if (isPersonalNotificationSchemaMissing(error)) return { all: 0, tasks: 0 };
+    throw error;
+  }
 }
 
 export function isPersonalNotificationSchemaMissing(error: unknown) {

@@ -19,6 +19,8 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.staging
+.vercel
 
 # Logs
 *.log
@@ -41,6 +43,9 @@ coverage/
 src/generated/
 # Historical receipt copies must never enter a public deployment.
 /public/uploads/
+
+# Local docs / exports (keep out of the repo)
+*.pdf
 
 # OS/editor
 .DS_Store

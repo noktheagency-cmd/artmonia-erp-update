@@ -375,6 +375,8 @@ html.dark .crm-conversion-call-rate > div > small { color: #a99578; }
 .crm-dialog-scroll { flex: 1 1 auto; min-height: 0; padding: 8px 24px 2px; overflow-y: auto; overscroll-behavior: contain; }
 .crm-dialog-section { padding: 14px 0; border-bottom: 1px solid #dce4ed; }
 .crm-dialog-section:last-child { border-bottom: 0; }
+.crm-dialog-hint { margin: 0 0 10px; color: #5b677a; font-size: 12px; line-height: 1.4; }
+.crm-manager-register { margin-top: 10px; }
 .crm-dialog-section > header { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; color: #3158f5; }
 .crm-dialog-section > header svg { width: 17px; height: 17px; }
 .crm-dialog-section > header h3 { margin: 0; color: #172033; font-size: 12px; font-weight: 680; letter-spacing: -.015em; }

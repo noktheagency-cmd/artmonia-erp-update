@@ -15,4 +15,11 @@ export const appointmentSchema = z.object({
   if (["CANCELLED", "RESCHEDULED"].includes(input.outcome) && !input.reason) ctx.addIssue({ code: "custom", message: "Ləğv və ya təxirə salınma səbəbini yazın." });
 });
 export const appointmentOutcomeLabels = { SCHEDULED: "Təyin edildi", ATTENDED: "Baş tutdu", NO_SHOW: "Gəlmədi", CANCELLED: "Ləğv edildi", RESCHEDULED: "Təxirə salındı" };
+
+/** BK-16: main reports treat consultation+trial as one meeting flow; kind is a detail subtype. */
+export const appointmentKindLabels = {
+  CONSULTATION: "Görüş · konsultasiya",
+  TRIAL: "Görüş · sınaq",
+} as const;
+
 export function appointmentInstant(date: string, time: string) { return new Date(date + "T" + time + ":00+04:00"); }

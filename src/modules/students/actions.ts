@@ -408,7 +408,8 @@ async function createStudentActionImpl(formData: FormData) {
         registeredAt,
         originalFirstLessonAt: firstLessonAt,
         billingPaused: isSharedBillingPausedStatus(input.lifecycleStatus),
-        billingAnchorDate: firstLessonAt,
+        // BK-07: billing starts on first actual PRESENT, not the planned lesson date.
+        billingAnchorDate: null,
         notes: input.notes ?? null,
         statusHistory: {
           create: {
@@ -632,8 +633,17 @@ async function updateStudentStatusActionImpl(formData: FormData) {
 
     if (scopeFor(actor.permissions,"student.status.change")!=="ALL" && current.managerId!==actor.id)
       throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur", "FORBIDDEN");
-    if (input.lifecycleStatus==="FROZEN_RESERVED" || (current.freezeReserved && input.lifecycleStatus==="ACTIVE")) {
-      await changeReservedFreeze(tx,{studentId:current.id,actorId:actor.id,reserve:input.lifecycleStatus==="FROZEN_RESERVED",effectiveAt,note:input.note});
+    if (
+      input.lifecycleStatus === "FROZEN_RESERVED"
+      || (current.freezeReserved && input.lifecycleStatus === "ACTIVE")
+    ) {
+      await changeReservedFreeze(tx, {
+        studentId: current.id,
+        actorId: actor.id,
+        reserve: input.lifecycleStatus === "FROZEN_RESERVED",
+        effectiveAt,
+        note: input.note,
+      });
       return;
     }
     if (current.freezeReserved && effectiveAt.toISOString().slice(0,10)!==currentBakuDateValue())
@@ -666,6 +676,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
         studentId: current.id,
         oldStatus: current.lifecycleStatus,
         newStatus: input.lifecycleStatus,
+        freezeReserved: input.lifecycleStatus === StudentLifecycleStatus.FROZEN,
         eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
         reason: statusReason,
         note: input.note ?? null,
@@ -677,6 +688,7 @@ async function updateStudentStatusActionImpl(formData: FormData) {
     let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
     let relationResult: Awaited<ReturnType<typeof pauseStudentLifecycleRelations>> | null = null;
 
+    // BK-10: FROZEN is not a billing-paused status — do not close slots or clear schedules.
     if (!historicalOnly && isSharedBillingPausedStatus(input.lifecycleStatus)) {
       await clearStudentPaymentSchedules(tx, [current.id]);
       if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
@@ -1001,6 +1013,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           discountType: requestedDiscountType,
           reason: input.billingChangeReason ?? "Billing şərtləri yeniləndi",
           today: startOfToday(),
+          billingAnchorDate: current.billingAnchorDate,
         })
       : null;
 
@@ -1027,6 +1040,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
           studentId: current.id,
           oldStatus: current.lifecycleStatus,
           newStatus: input.lifecycleStatus,
+          freezeReserved: input.lifecycleStatus === StudentLifecycleStatus.FROZEN,
           eventType: getStudentLifecycleEventType(current.lifecycleStatus, input.lifecycleStatus),
           reason: statusReason,
           note: input.statusNote ?? null,
@@ -1038,6 +1052,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       let completionResult: Awaited<ReturnType<typeof closeCompletedStudentBilling>> | null = null;
       let relationResult: Awaited<ReturnType<typeof pauseStudentLifecycleRelations>> | null = null;
 
+      // BK-10: FROZEN keeps seat and billing — skip pause/schedule clear.
       if (!historicalOnly && isSharedBillingPausedStatus(input.lifecycleStatus)) {
         await clearStudentPaymentSchedules(tx, [current.id]);
         if (input.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
@@ -1275,13 +1290,10 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
       },
     });
 
-    if (!student.billingAnchorDate || !student.originalFirstLessonAt) {
+    if (!student.originalFirstLessonAt) {
       await tx.student.update({
         where: { id: student.id },
-        data: {
-          ...(!student.billingAnchorDate ? { billingAnchorDate: firstLessonAt } : {}),
-          ...(!student.originalFirstLessonAt ? { originalFirstLessonAt: firstLessonAt } : {}),
-        },
+        data: { originalFirstLessonAt: firstLessonAt },
       });
     }
 
@@ -1304,7 +1316,7 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
         teacherId: input.teacherId ?? null,
         firstLessonAt: firstLessonAt.toISOString(),
         originalFirstLessonAt: (student.originalFirstLessonAt ?? firstLessonAt).toISOString(),
-        billingAnchorDate: (student.billingAnchorDate ?? firstLessonAt).toISOString(),
+        billingAnchorDate: student.billingAnchorDate?.toISOString() ?? null,
         monthlyFee,
         discountType: discountType?.value ?? null,
         lessonsPerMonth: input.lessonsPerMonth ?? null,

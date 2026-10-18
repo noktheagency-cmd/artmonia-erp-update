@@ -2,7 +2,6 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
-import { planLifecycleHistoryChange } from "@/modules/students/lifecycle-history-policy";
 import {
   AttendanceCaptureSource,
   AttendanceMark,
@@ -30,15 +29,12 @@ import {
 } from "@/modules/groups/shared";
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
-import {
-  buildStudentStatusUpdateData,
-  isBillingPausedStatus,
-  syncActivationBilling,
-} from "@/modules/students/lifecycle-service";
+import { activateStudentFromFirstPresent } from "@/modules/students/activation-from-attendance";
 import {
   clearStudentPaymentSchedules,
   restartStudentPaymentScheduleForActiveSlot,
 } from "@/modules/students/payment-schedule-service";
+import { isBillingPausedStatus } from "@/modules/students/lifecycle-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -287,6 +283,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
         status: true,
         teacherId: true,
         studentId: true,
+        firstLessonAt: true,
         student: {
           select: {
             id: true,
@@ -405,6 +402,17 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       });
     }
 
+    // BK-08: replan updates planned first lesson for waiting students; does not activate.
+    if (
+      slots.length
+      && enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
+    ) {
+      await tx.enrollment.update({
+        where: { id: enrollment.id },
+        data: { firstLessonAt: scheduleStartedAt },
+      });
+    }
+
     if (slots.length) {
       await syncStudentActivationAndPayment(tx, {
         actorId: actor.id,
@@ -490,17 +498,32 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
         slotId: slot.id,
         enrollmentId: { in: input.items.map((item) => item.enrollmentId) },
         enrollment: {
-          status: EnrollmentStatus.ACTIVE,
-          student: { lifecycleStatus: StudentLifecycleStatus.ACTIVE },
+          status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+          student: {
+            lifecycleStatus: {
+              in: [StudentLifecycleStatus.ACTIVE, StudentLifecycleStatus.SLOT_WAITING],
+            },
+          },
         },
         validFrom: { lte: date },
         OR: [{ validTo: null }, { validTo: { gte: date } }],
       },
-      select: { enrollmentId: true },
+      select: {
+        enrollmentId: true,
+        enrollment: {
+          select: {
+            studentId: true,
+            student: { select: { lifecycleStatus: true } },
+          },
+        },
+      },
     });
     if (assignments.length !== input.items.length) {
       throw new Error("Davamiyyət siyahısında etibarsız tələbə var");
     }
+    const assignmentByEnrollment = new Map(
+      assignments.map((item) => [item.enrollmentId, item]),
+    );
 
     const hasMarkedItem = input.items.some((item) => item.status !== null);
     let session = await tx.slotSession.findUnique({
@@ -551,6 +574,15 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       if (!session) throw new Error("Davamiyyət sessiyası yaradıla bilmədi");
       const status = mapAttendanceInput(item.status);
       const previous = previousByEnrollment.get(item.enrollmentId);
+      const assignment = assignmentByEnrollment.get(item.enrollmentId);
+      if (status === AttendanceMark.PRESENT && assignment) {
+        await activateStudentFromFirstPresent(tx, {
+          actorId: actor.id,
+          studentId: assignment.enrollment.studentId,
+          enrollmentId: item.enrollmentId,
+          lessonDate: date,
+        });
+      }
       await tx.attendanceRecord.upsert({
         where: {
           sessionId_enrollmentId: {
@@ -605,6 +637,7 @@ function mapAttendanceInput(status: "present" | "absent" | "excused") {
   return AttendanceMark.ABSENT;
 }
 
+/** BK-05…08: slot assign plans the seat only — activation is first PRESENT. */
 async function syncStudentActivationAndPayment(
   tx: Prisma.TransactionClient,
   input: {
@@ -621,61 +654,19 @@ async function syncStudentActivationAndPayment(
     };
   },
 ) {
+  void input.actorId;
+  void input.slotStartedAt;
   const student = input.enrollment.student;
-  if (student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING) {
-    await planLifecycleHistoryChange(tx, {
-      studentId: student.id,
-      currentStatus: student.lifecycleStatus,
-      requestedStatus: StudentLifecycleStatus.ACTIVE,
-      effectiveAt: input.slotStartedAt,
-    });
-    const isReactivation = student.statusHistory[0]?.eventType === "REACTIVATED";
-    await tx.student.update({
-      where: { id: student.id },
-      data: buildStudentStatusUpdateData(StudentLifecycleStatus.ACTIVE, input.slotStartedAt),
-    });
-    await tx.studentStatusHistory.create({
-      data: {
-        studentId: student.id,
-        oldStatus: student.lifecycleStatus,
-        newStatus: StudentLifecycleStatus.ACTIVE,
-        reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
-        effectiveAt: input.slotStartedAt,
-        changedById: input.actorId,
-      },
-    });
-    await syncActivationBilling(tx, {
-      studentId: student.id,
-      studentCode: student.code,
-      effectiveAt: input.slotStartedAt,
-      isReactivation,
-    });
-    await writeAuditLog(tx, {
-      actorUserId: input.actorId,
-      action: isReactivation ? "student.reactivation.complete" : "student.status.change",
-      entityType: "student",
-      entityId: student.id,
-      before: { lifecycleStatus: student.lifecycleStatus, billingPaused: student.billingPaused },
-      after: {
-        lifecycleStatus: StudentLifecycleStatus.ACTIVE,
-        billingPaused: false,
-        reactivated: isReactivation,
-        createsNewSale: false,
-      },
-      reason: "Dərs slotuna əlavə edildiyi üçün tələbə aktiv edildi",
-    });
-  }
-
   if (
     student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
-    || !isBillingPausedStatus(student.lifecycleStatus)
+    || isBillingPausedStatus(student.lifecycleStatus)
   ) {
-    await restartStudentPaymentScheduleForActiveSlot(tx, {
-      studentId: student.id,
-    });
-  } else {
     await clearStudentPaymentSchedules(tx, [student.id]);
+    return;
   }
+  await restartStudentPaymentScheduleForActiveSlot(tx, {
+    studentId: student.id,
+  });
 }
 
 async function assertActiveTeacher(tx: Prisma.TransactionClient, teacherId: string) {

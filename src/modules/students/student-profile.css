@@ -13,6 +13,15 @@
 .sp-avatar { display: grid; place-items: center; flex: 0 0 56px; width: 56px; height: 56px; border-radius: 50%; background: #edf2ff; color: #415c9c; font-size: 19px; font-weight: 550; }
 .student-profile-page h1 { margin: 0 0 9px; color: var(--sp-text); font-size: 25px; font-weight: 650; line-height: 1.2; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .sp-identity-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.sp-activation-warning {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fff5dc;
+  color: #93651b;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .sp-identity-meta > span:last-child:not(.status-chip) { padding-left: 5px; color: var(--sp-muted); font-size: 11px; }
 .student-profile-page .status-chip { min-height: 23px; padding: 3px 7px; border: 0; border-radius: 5px; font-size: 11px; line-height: 1.4; font-weight: 550; box-shadow: none; white-space: normal; }
 .student-profile-page .status-success { background: #eaf6ef; color: #23734e; }

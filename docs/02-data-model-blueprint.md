@@ -74,14 +74,14 @@
 
 | Status | Meaning | Required Data |
 | --- | --- | --- |
-| `GROUP_WAITING` | Registered, no active group/lesson yet | program, manager, expected start |
-| `ACTIVE` | Learning process is active | enrollment, teacher, monthly fee |
+| `SLOT_WAITING` | Registered / returned; waiting for first actual lesson | program, manager, planned first lesson |
+| `ACTIVE` | First actual monthly PRESENT after full first-period fee | enrollment, teacher, monthly fee, billing anchor |
 | `DEBT` | Active or service-related debt exists | balance due, due date |
-| `FROZEN` | Temporary pause | reason, return date, billing pause rule |
-| `STOPPED` | Churn/left | reason, stopped date, balance resolution |
+| `FROZEN` | Temporary pause; seat kept | reason, return date; billing continues (BK-10) |
+| `STOPPED` | Churn/left; seat released | reason, stopped date, balance resolution |
 | `COMPLETED` | Program completed | completion date |
 
-Confirmed rule: billing stops while status is `FROZEN`.
+Confirmed rule (BK-10): **billing continues** while status is `FROZEN`; the seat is reserved. Older “billing stops on freeze” notes are obsolete.
 
 ## Payment State
 

@@ -73,6 +73,7 @@ interface StudentDetail {
     paymentDefaultAmount: string;
     paymentDefaultDate: string;
     paymentDefaultMonth: string;
+    earliestUpgradeMonth: string | null;
     monthlyFee: string;
     reminderDefaultDate: string;
   };
@@ -197,7 +198,7 @@ export function StudentDetailActions({
     try {
       unwrapActionResult(await createStudentEnrollmentAction(formData));
       setPackageOpen(false);
-      notifySuccess("Paket əlavə edildi", "Yeni proqram ayrıca yaradıldı. Əvvəlki paket tarixçəsi saxlanıldı; dərsə başlamaq üçün müəllim və slot təyin edin.");
+      notifySuccess("Paket əlavə edildi", "Yeni proqram ayrıca yaradıldı. Əvvəlki paket tarixçəsi saxlanıldı; dərs planı üçün müəllim və slot təyin edin — aktivləşmə ilk faktiki iştirakla olur.");
       router.refresh();
     } catch (error) {
       notifyCaughtError(error, "Paket əlavə edilmədi.");
@@ -227,7 +228,7 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Yeni tədris paketi</DialogTitle>
             <DialogDescription>
-              Əvvəlki paket və ödəniş tarixçəsi dəyişmir. Yeni paket ayrıca yaradılır. Tamamlamış tələbə “Slot gözləyir” mərhələsinə keçir; aktivləşmə müəllim və slot təyin ediləndə baş verir. Qorunan billing tarixi dəyişmir.
+              Əvvəlki paket və ödəniş tarixçəsi dəyişmir. Yeni paket ayrıca yaradılır. Tamamlamış tələbə “Slot gözləyir” mərhələsinə keçir; aktivləşmə ilk faktiki aylıq dərs iştirakı ilə baş verir. Qorunan billing tarixi dəyişmir.
             </DialogDescription>
           </DialogHeader>
           <form action={addPackage} className="student-payment-form">
@@ -748,7 +749,13 @@ export function StudentDetailActions({
                   <Input
                     name="billingEffectiveMonth"
                     type="month"
-                    defaultValue={student.detail.paymentDefaultMonth}
+                    min={student.detail.earliestUpgradeMonth ?? undefined}
+                    defaultValue={
+                      student.detail.earliestUpgradeMonth
+                      && student.detail.paymentDefaultMonth < student.detail.earliestUpgradeMonth
+                        ? student.detail.earliestUpgradeMonth
+                        : student.detail.paymentDefaultMonth
+                    }
                   />
                 </label>
                 <label className="form-field">
@@ -758,6 +765,13 @@ export function StudentDetailActions({
                     maxLength={240}
                     placeholder="Məsələn: 4 dərslik paket və ya yarımay"
                   />
+                  <small>
+                    Paket yüksəltmə yalnız ikinci dərs dövründən etibarən mümkündür (BK-15).
+                    İlk ayda məbləğ və ya dərs sayı artırıla bilməz.
+                    {student.detail.earliestUpgradeMonth
+                      ? ` Ən tez yüksəltmə ayı: ${student.detail.earliestUpgradeMonth}.`
+                      : " Aktivləşmədən əvvəl paket düzəlişi yüksəltmə sayılmır."}
+                  </small>
                 </label>
                 {permissions.canChangeStatus ? (
                   <label className="form-field">

@@ -2,6 +2,7 @@ import {
   EnrollmentStatus,
   InvoiceStatus,
   Prisma,
+  StudentLifecycleStatus,
 } from "@/generated/prisma/client";
 import { toNumber } from "@/modules/shared/format";
 import {
@@ -40,6 +41,8 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
     where: { id: input.studentId },
     select: {
       code: true,
+      lifecycleStatus: true,
+      billingPaused: true,
       billingAnchorDate: true,
       originalFirstLessonAt: true,
       enrollments: {
@@ -62,6 +65,17 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
   let billingAnchorDate = student.billingAnchorDate;
 
   if (!billingAnchorDate) {
+    // BK-07/08: never invent billing anchor from a planned first lesson while
+    // still waiting for the first actual PRESENT (activation sets the anchor).
+    if (
+      student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
+      || student.billingPaused
+    ) {
+      throw new Error(
+        "Aylıq dövr hələ başlamayıb. Billing yalnız ilk faktiki aylıq dərs iştirakından sonra açılır.",
+      );
+    }
+
     const confirmedFirstLessonAt = student.originalFirstLessonAt
       ?? student.enrollments.find((enrollment) => enrollment.firstLessonAt)?.firstLessonAt
       ?? null;
@@ -200,7 +214,10 @@ export async function ensureMissingStudentMonthlyInvoices(
         and e.status in (
           'ACTIVE'::"erp"."EnrollmentStatus"
         )
-        and (s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus" or s.freeze_reserved)
+        and s.lifecycle_status in (
+          'ACTIVE'::"erp"."StudentLifecycleStatus",
+          'FROZEN'::"erp"."StudentLifecycleStatus"
+        )
         and s.billing_paused = false
         and s.is_test_data = false
         and s.billing_anchor_date is not null

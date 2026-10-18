@@ -34,8 +34,8 @@ export function CrmConversionDialog({
   const funnel = [
     { label: "Müraciət", value: totalLeads, icon: UsersRound },
     { label: "Əlaqə quruldu", value: stats.contactedCount, icon: PhoneCall },
-    { label: "Konsultasiya", value: stats.consultationCount, icon: Presentation },
-    { label: "Qeydiyyat", value: stats.salesCount, icon: CheckCircle2 },
+    { label: "Görüş", value: stats.meetingCount, icon: Presentation },
+    { label: "Satış", value: stats.salesCount, icon: CheckCircle2 },
   ];
 
   return (
@@ -48,7 +48,7 @@ export function CrmConversionDialog({
           <div>
             <DialogTitle>Konversiya detalları</DialogTitle>
             <DialogDescription>
-              Müraciətdən əlaqəyə, konsultasiyaya və qeydiyyata qədər satış axınının nəticələri.
+              Müraciətdən əlaqəyə, görüşə və uyğun satışa qədər axının nəticələri.
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -58,14 +58,14 @@ export function CrmConversionDialog({
             <div className="crm-conversion-main-rate">
               <span>Ümumi konversiya</span>
               <strong>{stats.conversionRate}</strong>
-              <small>{stats.salesCount} qeydiyyat · {totalLeads} müraciət</small>
+              <small>{stats.salesCount} satış · {totalLeads} müraciət</small>
             </div>
             <div className="crm-conversion-call-rate">
               <span className="crm-conversion-call-icon" aria-hidden="true"><PhoneCall /></span>
               <div>
-                <span>Zəngdən konsultasiyaya keçid</span>
-                <strong>{stats.contactToConsultationRate}</strong>
-                <small>{stats.consultationCount} konsultasiya · {stats.contactedCount} əlaqə</small>
+                <span>Əlaqədən görüşə keçid</span>
+                <strong>{stats.contactToMeetingRate}</strong>
+                <small>{stats.meetingCount} görüş · {stats.contactedCount} əlaqə</small>
               </div>
             </div>
           </section>
@@ -99,14 +99,14 @@ export function CrmConversionDialog({
             <header>
               <div>
                 <h3 id="crm-conversion-results-title">Nəticə detalları</h3>
-                <p>Satış kanalı, sınaq dərsi və itki göstəriciləri</p>
+                <p>Satış yolu, görüş iştirakı və itki göstəriciləri</p>
               </div>
-              <span>{stats.consultationToSaleRate} konsultasiya → satış</span>
+              <span>{stats.meetingToSaleRate} görüş iştirakı → satış</span>
             </header>
             <div className="crm-conversion-result-grid">
               <ConversionResult icon={Target} label="Birbaşa satış" value={stats.directSales} tone="blue" />
-              <ConversionResult icon={CircleDollarSign} label="Konsultasiya ilə satış" value={stats.consultationSales} tone="green" />
-              <ConversionResult icon={Presentation} label="Sınaq dərsi" value={stats.trialLessonLeads} helper={`${stats.trialLessonCount} dərs`} tone="amber" />
+              <ConversionResult icon={CircleDollarSign} label="Görüşdən sonra satış" value={stats.meetingSales} tone="green" />
+              <ConversionResult icon={Presentation} label="Görüşdə iştirak" value={stats.meetingAttendedCount} helper={`${stats.meetingCount} təyinat`} tone="amber" />
               <ConversionResult icon={TrendingDown} label="İtki faizi" value={stats.lossRate} tone="coral" />
             </div>
           </section>

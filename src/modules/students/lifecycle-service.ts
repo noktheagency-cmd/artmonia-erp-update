@@ -9,10 +9,13 @@ import { toNumber } from "@/modules/shared/format";
 import { billingDateForMonth } from "@/modules/students/payment-billing-period";
 import { resolveEnrollmentBillingTerms } from "@/modules/students/enrollment-billing-terms";
 
+/**
+ * BK-10: FROZEN keeps the seat and continues monthly billing.
+ * Only STOPPED / DECLINED / COMPLETED / SLOT_WAITING pause billing.
+ */
 export function isBillingPausedStatus(status: StudentLifecycleStatus) {
   switch (status) {
     case StudentLifecycleStatus.SLOT_WAITING:
-    case StudentLifecycleStatus.FROZEN:
     case StudentLifecycleStatus.STOPPED:
     case StudentLifecycleStatus.DECLINED:
     case StudentLifecycleStatus.COMPLETED:
@@ -23,7 +26,9 @@ export function isBillingPausedStatus(status: StudentLifecycleStatus) {
 }
 
 export function enrollmentStatusForStudentLifecycle(status: StudentLifecycleStatus) {
-  return status === StudentLifecycleStatus.ACTIVE
+  // BK-10: frozen students keep their enrollment/slot assignment.
+  return status === StudentLifecycleStatus.ACTIVE ||
+    status === StudentLifecycleStatus.FROZEN
     ? EnrollmentStatus.ACTIVE
     : EnrollmentStatus.PAUSED;
 }
@@ -37,18 +42,30 @@ export function buildStudentStatusUpdateData(
     billingPaused: isBillingPausedStatus(status),
   };
 
+  if (status === StudentLifecycleStatus.FROZEN) {
+    // Seat-preserving freeze (same financial semantics as FROZEN_RESERVED).
+    data.freezeReserved = true;
+  }
+
   if (status === StudentLifecycleStatus.ACTIVE) {
     data.stoppedAt = null;
     data.completedAt = null;
     data.freezeReturnAt = null;
+    data.freezeReserved = false;
   }
 
   if (status === StudentLifecycleStatus.STOPPED || status === StudentLifecycleStatus.DECLINED) {
     data.stoppedAt = effectiveAt;
+    data.freezeReserved = false;
   }
 
   if (status === StudentLifecycleStatus.COMPLETED) {
     data.completedAt = effectiveAt;
+    data.freezeReserved = false;
+  }
+
+  if (status === StudentLifecycleStatus.SLOT_WAITING) {
+    data.freezeReserved = false;
   }
 
   return data;
@@ -120,7 +137,7 @@ export function assertManualStudentStatusTransition(
 ) {
   if (previousStatus !== nextStatus && nextStatus === StudentLifecycleStatus.ACTIVE) {
     throw new Error(
-      "Tələbə birbaşa aktiv edilə bilməz. Əvvəl Slot gözləyir statusuna keçirin, sonra müəllim və slot seçin.",
+      "Tələbə birbaşa aktiv edilə bilməz. Əvvəl Slot gözləyir statusuna keçirin; aktivləşmə ilk faktiki aylıq dərs iştirakı ilə olur.",
     );
   }
 }
@@ -250,6 +267,8 @@ export async function syncActivationBilling(
     studentCode: string;
     effectiveAt: Date;
     isReactivation?: boolean;
+    /** BK-06/07: billing and first lesson follow the actual PRESENT date, not the plan. */
+    useActualLessonDate?: boolean;
   }
 ) {
   const enrollment = await tx.enrollment.findFirst({
@@ -284,14 +303,17 @@ export async function syncActivationBilling(
     throw new Error("Aktiv etmək üçün tələbənin enrollment məlumatı tapılmadı");
   }
 
+  const useActualLessonDate = Boolean(input.useActualLessonDate);
   const originalFirstLessonAt =
     enrollment.student.originalFirstLessonAt
     ?? enrollment.firstLessonAt
     ?? input.effectiveAt;
-  const currentFirstLessonAt = input.isReactivation
+  const currentFirstLessonAt = input.isReactivation || useActualLessonDate
     ? input.effectiveAt
     : enrollment.firstLessonAt ?? input.effectiveAt;
-  const billingAnchorDate = enrollment.student.billingAnchorDate ?? originalFirstLessonAt;
+  const billingAnchorDate = useActualLessonDate
+    ? input.effectiveAt
+    : enrollment.student.billingAnchorDate ?? originalFirstLessonAt;
 
   if (!enrollment.student.originalFirstLessonAt) {
     await tx.student.updateMany({
@@ -300,7 +322,12 @@ export async function syncActivationBilling(
     });
   }
 
-  if (!enrollment.student.billingAnchorDate) {
+  if (useActualLessonDate) {
+    await tx.student.update({
+      where: { id: input.studentId },
+      data: { billingAnchorDate },
+    });
+  } else if (!enrollment.student.billingAnchorDate) {
     await tx.student.updateMany({
       where: { id: input.studentId, billingAnchorDate: null },
       data: { billingAnchorDate },
@@ -311,7 +338,7 @@ export async function syncActivationBilling(
     where: { id: enrollment.id },
     data: {
       status: EnrollmentStatus.ACTIVE,
-      startDate: input.isReactivation
+      startDate: input.isReactivation || useActualLessonDate
         ? input.effectiveAt
         : enrollment.firstLessonAt
           ? enrollment.startDate

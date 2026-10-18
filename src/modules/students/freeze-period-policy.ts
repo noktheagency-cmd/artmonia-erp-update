@@ -35,7 +35,10 @@ export const freezePeriodSchema = z
 export type FreezePeriodInput = z.infer<typeof freezePeriodSchema>;
 export type FreezeInvoiceDecision = "VOID" | "REVIEW" | "KEEP";
 
-/** Half-open ranges: the return date is the first teaching day, not a frozen day. */
+/**
+ * BK-10: Freeze only reserves the seat. Monthly fee continues and the payment
+ * day does not move, so overlapping invoices are never voided by freeze.
+ */
 export function assessFrozenInvoice(input: {
   periodMonth: string;
   anchorDate: string;
@@ -61,31 +64,33 @@ export function assessFrozenInvoice(input: {
   const overlaps =
     input.startDate < cycleEnd &&
     (!input.endDate || input.endDate > cycleStart);
-  // An open freeze confirms only elapsed cycles; a later early return must not undo future write-offs.
-  const fullyCovered =
-    input.startDate <= cycleStart && (input.endDate || input.today) >= cycleEnd;
-  let decision: FreezeInvoiceDecision = "KEEP";
-  let reason = "Dövr dondurulmaya düşmür";
-  if (input.status === "VOID") reason = "Əvvəldən ləğv olunub";
-  else if (overlaps) {
-    if (
-      fullyCovered &&
-      input.allocated === 0 &&
-      input.balance === input.amount &&
-      input.amount > 0 &&
-      input.status !== "PAID"
-    ) {
-      decision = "VOID";
-      reason = "Tam dövr dondurulub, ödəniş yoxdur";
-    } else {
-      decision = "REVIEW";
-      reason =
-        input.allocated > 0 ||
-        input.status === "PAID" ||
-        input.balance !== input.amount
-          ? "Ödəniş/balans mövcuddur — maliyyə baxışı tələb olunur"
-          : "Dövr qismən əhatə olunur və ya hələ başa çatmayıb";
-    }
+
+  if (input.status === "VOID") {
+    return {
+      cycleStart,
+      cycleEnd,
+      overlaps,
+      decision: "KEEP" as const,
+      reason: "Əvvəldən ləğv olunub",
+    };
   }
-  return { cycleStart, cycleEnd, decision, reason };
+
+  if (overlaps) {
+    return {
+      cycleStart,
+      cycleEnd,
+      overlaps: true,
+      decision: "KEEP" as const,
+      reason:
+        "Dondurma yalnız yeri saxlayır; aylıq haqq və ödəniş günü davam edir (BK-10)",
+    };
+  }
+
+  return {
+    cycleStart,
+    cycleEnd,
+    overlaps: false,
+    decision: "KEEP" as const,
+    reason: "Dövr dondurulmaya düşmür",
+  };
 }

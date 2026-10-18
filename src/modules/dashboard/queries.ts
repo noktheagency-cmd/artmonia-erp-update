@@ -1,4 +1,8 @@
-import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
+import {
+  companySalesCountSql,
+  leadHasQualifiedSaleSql,
+  ownerSalesCountSql,
+} from "@/modules/students/sales-metrics-sql";
 import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
@@ -546,7 +550,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         from erp.leads l
         where l.created_at >= ${periodStart}
           and l.created_at < ${periodEndExclusive}
-          and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
+          and ${leadHasQualifiedSaleSql()}
       ), 0) as "convertedLeadsThisMonth",
       ${companySalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${periodEndExclusive}`)} as "companySalesCount",
       coalesce((
@@ -577,10 +581,11 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           select
             coalesce(u.full_name, 'Menecer təyin edilməyib') as name,
             count(distinct l.id)::int as leads,
-            count(distinct l.id) filter (
-              where l.converted_student_id is not null
-                or l.stage = 'REGISTERED'::"erp"."LeadStage"
-            )::int as sales,
+            ${ownerSalesCountSql(
+              Prisma.raw("u.id"),
+              Prisma.sql`${periodStart}`,
+              Prisma.sql`${periodEndExclusive}`,
+            )}::int as sales,
             coalesce(sum(p.amount), 0) as revenue
           from erp.leads l
           join erp.users u on u.id = l.manager_id and u.is_active = true
@@ -590,7 +595,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             and p.paid_at < ${periodEndExclusive}
           where l.created_at >= ${periodStart}
             and l.created_at < ${periodEndExclusive}
-          group by coalesce(u.full_name, 'Menecer təyin edilməyib')
+          group by u.id, coalesce(u.full_name, 'Menecer təyin edilməyib')
           limit 5
         ) team_rows
       ), '[]'::jsonb) as "teamPerformance"

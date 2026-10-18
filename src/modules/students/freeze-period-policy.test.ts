@@ -15,22 +15,25 @@ const base = {
   allocated: 0,
   status: "OVERDUE",
 };
-test("only a fully covered unpaid anchored cycle is voided", () => {
-  assert.equal(assessFrozenInvoice(base).decision, "VOID");
+test("BK-10: overlapping unpaid cycles are kept — never voided", () => {
+  const result = assessFrozenInvoice(base);
+  assert.equal(result.decision, "KEEP");
+  assert.equal(result.overlaps, true);
+  assert.match(result.reason, /BK-10/);
   assert.equal(
     assessFrozenInvoice({
       ...base,
       startDate: "2026-08-01",
       endDate: "2026-09-01",
     }).decision,
-    "REVIEW",
+    "KEEP",
   );
   assert.equal(
     assessFrozenInvoice({ ...base, startDate: "2026-08-05" }).decision,
-    "REVIEW",
+    "KEEP",
   );
 });
-test("paid, partial and inconsistent invoices require review", () => {
+test("BK-10: paid and partial invoices also keep billing", () => {
   for (const change of [
     { allocated: 100, balance: 100 },
     { allocated: 200, balance: 0, status: "PAID" },
@@ -38,7 +41,7 @@ test("paid, partial and inconsistent invoices require review", () => {
   ]) {
     assert.equal(
       assessFrozenInvoice({ ...base, ...change }).decision,
-      "REVIEW",
+      "KEEP",
     );
   }
   assert.equal(
@@ -55,21 +58,21 @@ test("return day is exclusive and January 31 anchor does not drift", () => {
     endDate: "2026-03-31",
   });
   assert.equal(result.cycleEnd, "2026-03-31");
-  assert.equal(result.decision, "VOID");
+  assert.equal(result.decision, "KEEP");
   assert.equal(
     assessFrozenInvoice({
       ...base,
       endDate: "2026-08-04",
       startDate: "2026-07-04",
-    }).decision,
-    "KEEP",
+    }).overlaps,
+    false,
   );
 });
-test("open freeze does not write off cycles not yet completed", () => {
-  assert.equal(assessFrozenInvoice({ ...base, endDate: "" }).decision, "VOID");
+test("open freeze still keeps cycles — billing continues", () => {
+  assert.equal(assessFrozenInvoice({ ...base, endDate: "" }).decision, "KEEP");
   assert.equal(
     assessFrozenInvoice({ ...base, endDate: "", today: "2026-08-20" }).decision,
-    "REVIEW",
+    "KEEP",
   );
 });
 test("reject invalid, reversed, future dates and empty reason", () => {

@@ -186,9 +186,24 @@ export function LeadRegistrationDialog({
               </FieldGroup>
             </section>
 
+            {lead.needsMeetingAttendanceConfirm ? (
+              <section className="crm-dialog-section">
+                <header><CheckCircle2 aria-hidden="true" /><h3>Görüş iştirakı</h3></header>
+                <label className="crm-register-attend">
+                  <input
+                    type="checkbox"
+                    name="confirmMeetingAttended"
+                    value="true"
+                    required
+                  />
+                  <span>Görüşdə iştirak etdi — qeydiyyat bu təsdiqdən sonra davam edir.</span>
+                </label>
+              </section>
+            ) : null}
+
             <div className="crm-register-note">
               <GraduationCap aria-hidden="true" />
-              <p><strong>Təsdiqdən sonra:</strong> müraciət “Qeydiyyata alınıb”, tələbə isə “Slot gözləyir” statusuna keçəcək.</p>
+              <p><strong>Təsdiqdən sonra:</strong> müraciət “Qeydiyyata alınıb”, tələbə isə “Slot gözləyir” statusuna keçəcək. Satış yalnız uyğun müqavilə və ödənişlə yaranır.</p>
             </div>
           </div>
 

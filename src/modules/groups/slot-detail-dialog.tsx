@@ -378,6 +378,13 @@ function StudentCard({
               </div>
             ) : null}
 
+            {member.activationWarning ? (
+              <div className={styles.studentNotes} role="status">
+                <strong>İlk dərs xəbərdarlığı</strong>
+                <p>{member.activationWarning}</p>
+              </div>
+            ) : null}
+
             <div className={styles.studentNotes}>
               <strong>Qeyd</strong>
               <p>{member.notes ?? "Tələbə haqqında əlavə qeyd yoxdur."}</p>

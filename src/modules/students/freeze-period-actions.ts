@@ -20,8 +20,6 @@ import {
   type FreezeStudent,
 } from "./freeze-period-service";
 import { currentBakuDateValue } from "./payment-date-policy";
-import { pauseStudentLifecycleRelations } from "./lifecycle-service";
-import { clearStudentPaymentSchedules } from "./payment-schedule-service";
 
 function authorize(
   actor: MutationActor,
@@ -120,18 +118,11 @@ export const createStudentFreezePeriodAction = safeServerAction(
           );
         await tx.$executeRaw(Prisma.sql`insert into erp.student_freeze_periods(id,student_id,start_date,end_date,note,created_by_id)
       values(${input.requestId}::uuid,${input.studentId}::uuid,${input.startDate}::date,${input.endDate || null}::date,${input.note},${actor.id}::uuid)`);
+        // BK-10: freeze never voids invoices or pauses billing.
         for (const invoice of preview.invoices) {
-          if (invoice.decision === "VOID")
-            await tx.invoice.update({
-              where: { id: invoice.id },
-              data: { status: "VOID", balanceDue: 0 },
-            });
           await writeAuditLog(tx, {
             actorUserId: actor.id,
-            action:
-              invoice.decision === "VOID"
-                ? "billing.invoice.void_freeze_interval"
-                : "billing.freeze_interval.review_required",
+            action: "billing.freeze_interval.billing_continues",
             entityType: "invoice",
             entityId: invoice.id,
             before: {
@@ -144,8 +135,9 @@ export const createStudentFreezePeriodAction = safeServerAction(
               freezePeriodId: input.requestId,
               cycleStart: invoice.cycleStart,
               cycleEnd: invoice.cycleEnd,
-              decision: invoice.decision,
-              status: invoice.decision === "VOID" ? "VOID" : invoice.status,
+              decision: "KEEP",
+              status: invoice.status,
+              billingContinues: true,
             },
             reason: input.note,
           });
@@ -154,26 +146,24 @@ export const createStudentFreezePeriodAction = safeServerAction(
           const today = new Date(currentBakuDateValue() + "T00:00:00Z");
           await tx.student.update({
             where: { id: input.studentId },
-            data: { lifecycleStatus: "FROZEN", billingPaused: true },
+            data: {
+              lifecycleStatus: "FROZEN",
+              billingPaused: false,
+              freezeReserved: true,
+            },
           });
           await tx.studentStatusHistory.create({
             data: {
               studentId: input.studentId,
               oldStatus: student.status as "ACTIVE" | "SLOT_WAITING",
               newStatus: "FROZEN",
+              freezeReserved: true,
               effectiveAt: today,
-              reason: "Dondurulma dövrü əlavə edildi",
+              reason: "Dondurulma dövrü əlavə edildi — yer saxlanılır, aylıq haqq davam edir",
               note: input.note,
               changedById: actor.id,
             },
           });
-          await pauseStudentLifecycleRelations(tx, {
-            studentId: input.studentId,
-            effectiveAt: today,
-            changedById: actor.id,
-            clearTeacherAssignment: false,
-          });
-          await clearStudentPaymentSchedules(tx, [input.studentId]);
         }
         await writeAuditLog(tx, {
           actorUserId: actor.id,
@@ -186,9 +176,12 @@ export const createStudentFreezePeriodAction = safeServerAction(
             startDate: input.startDate,
             endDate: input.endDate || null,
             status: preview.freezesNow ? "FROZEN" : student.status,
-            voidAmount: preview.voidAmount,
-            reviewCount: preview.reviewCount,
+            billingPaused: false,
+            freezeReserved: preview.freezesNow,
+            voidAmount: 0,
+            reviewCount: 0,
             anchorPreserved: true,
+            seatPreserved: true,
           },
           reason: input.note,
         });
