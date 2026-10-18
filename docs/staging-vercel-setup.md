@@ -2,6 +2,8 @@
 
 Goal: run the current local/Academy build on Vercel **without** touching Railway production (`erp.artmoniya.com`) or the production Supabase project.
 
+Deploy tip: if Git auto-deploy is blocked for the commit author, open Vercel → Deployments → Create Deployment and pick this branch commit manually.
+
 ## Preconditions
 
 1. Railway service **artmonia-erp** → Settings → Source → **Auto deploys = Disabled**.
