@@ -3,6 +3,8 @@ import { markTaskNotificationsReadAction } from "@/modules/notifications/actions
 import { getTaskData } from "@/modules/tasks/queries";
 import { TaskWorkspace } from "@/modules/tasks/task-workspace";
 
+export const dynamic = "force-dynamic";
+
 export default async function TasksPage({ searchParams }: {
   searchParams: Promise<{
     page?: string;

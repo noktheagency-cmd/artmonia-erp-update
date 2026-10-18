@@ -23,6 +23,8 @@ import { getCompanyKpiData } from "@/modules/hr/company-kpi-data";
 import { HrWorkspace } from "@/modules/hr/hr-workspace";
 import { createSecurityAccountAction } from "@/modules/audit/account-actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function HrPage({
   searchParams,
 }: {

@@ -3,6 +3,8 @@ import { PlaybookWorkspace } from "@/modules/playbook/playbook-workspace";
 import { getPlaybookData } from "@/modules/playbook/queries";
 import { requireErpActor } from "@/server/auth/actor";
 
+export const dynamic = "force-dynamic";
+
 export default async function PlaybookPage() {
   const [actor, data] = await Promise.all([
     requireErpActor("playbook.read"),

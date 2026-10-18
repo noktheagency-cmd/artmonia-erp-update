@@ -5,6 +5,9 @@ import { signOutAction } from "@/modules/auth/actions";
 import { getNotificationShellCounts } from "@/modules/notifications/queries";
 import { requireErpActor } from "@/server/auth/actor";
 
+// Auth-bound shell: never prerender at build time (no session on Vercel/CI).
+export const dynamic = "force-dynamic";
+
 export default async function ErpLayout({
   children,
 }: Readonly<{

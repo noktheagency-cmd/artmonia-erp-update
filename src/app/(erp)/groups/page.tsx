@@ -8,6 +8,8 @@ import {
   updateClassSlotAction,
 } from "@/modules/groups/planner-actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function GroupsPage({
   searchParams,
 }: {

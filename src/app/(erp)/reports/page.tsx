@@ -1,6 +1,8 @@
 import { ModulePlaceholder } from "@/components/ui/module-placeholder";
 import { requireErpActor } from "@/server/auth/actor";
 
+export const dynamic = "force-dynamic";
+
 export default async function ReportsPage() {
   await requireErpActor("report.read");
   return (
