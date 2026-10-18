@@ -23,10 +23,11 @@ npm run env:assert-staging    # fails if production markers are present
 1. [vercel.com](https://vercel.com) → Add New Project → import `noktheagency-cmd/artmonia-erp` **or** deploy from CLI without linking Production domain.
 2. **Do not** assign `erp.artmoniya.com` to this project.
 3. Framework: Next.js. Build: `npm run build`. Install: `npm ci`.
-4. Environment variables → scope **Preview** (and Development if you want):
-   - Paste every non-empty key from `.env.staging`
+4. Environment variables → scope **Preview** / **Production** (for `*.vercel.app`):
+   - Paste every **non-empty** key from `.env.staging`
    - Required: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`
-5. After first Preview URL exists, set `NEXT_PUBLIC_APP_URL` to that `https://….vercel.app` and redeploy.
+   - **Do not set `NODE_ENV`** on Vercel. Importing `NODE_ENV=production` makes `npm ci` skip Tailwind/PostCSS and the build fails with ~50 PostCSS errors.
+5. After first Preview URL exists, set `NEXT_PUBLIC_APP_URL` to that `https://….vercel.app`, add `&sslmode=require` on `DATABASE_URL` if needed, then redeploy.
 
 ### CLI (optional)
 

@@ -2,6 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "installCommand": "npx --yes npm@10.9.4 ci --no-audit",
+  "installCommand": "NPM_CONFIG_PRODUCTION=false npx --yes npm@10.9.4 ci --include=dev --no-audit",
   "regions": ["fra1"]
 }
