@@ -39,8 +39,12 @@ export async function signInAction(
     if (!(await consumeLoginAttempt(input.data.email, metadata))) {
       return { error: "Çox sayda giriş cəhdi. 15 dəqiqə sonra yenidən yoxlayın." };
     }
-  } catch {
-    console.error("Security event", { action: "auth.login.limiter_unavailable" });
+  } catch (error) {
+    console.error("Security event", {
+      action: "auth.login.limiter_unavailable",
+      message: error instanceof Error ? error.message : String(error),
+      code: error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : undefined,
+    });
     return { error: "Giriş müvəqqəti əlçatan deyil. Bir az sonra yenidən yoxlayın." };
   }
   const supabase = await createSupabaseServerClient();

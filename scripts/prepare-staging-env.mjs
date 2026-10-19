@@ -44,21 +44,39 @@ for (const marker of prodMarkers) {
 }
 
 const appUrl = get("NEXT_PUBLIC_APP_URL") || "http://localhost:3000";
+
+/** Ensure Supabase pooler URLs work with pg 8.16+ on Vercel/Node 24. */
+function hardenDbUrl(value) {
+  if (!value) return value;
+  try {
+    const parsed = new URL(value);
+    if (!parsed.searchParams.has("sslmode")) parsed.searchParams.set("sslmode", "require");
+    if (!parsed.searchParams.has("uselibpqcompat")) parsed.searchParams.set("uselibpqcompat", "true");
+    return parsed.toString();
+  } catch {
+    return value;
+  }
+}
+
+const stagingAppUrl =
+  process.env.STAGING_APP_URL ||
+  (appUrl.includes("localhost") ? "https://artmonia-erp-test.vercel.app" : appUrl);
+
 const lines = [
   "# Auto-generated for Vercel/staging. DO NOT COMMIT. DO NOT point at production.",
   "# Regenerate: npm run env:prepare-staging",
   "APP_ENV=staging",
   "ALLOW_DEMO_SEED=true",
   "# Do NOT set NODE_ENV on Vercel — it skips Tailwind/PostCSS install during npm ci.",
-  `NEXT_PUBLIC_APP_URL=${appUrl.includes("localhost") ? "https://your-staging-app.vercel.app" : appUrl}`,
+  `NEXT_PUBLIC_APP_URL=${stagingAppUrl}`,
   "CLOUDFLARE_PREVIEW=false",
   "",
   `NEXT_PUBLIC_SUPABASE_URL=${get("NEXT_PUBLIC_SUPABASE_URL")}`,
   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")}`,
   `SUPABASE_SECRET_KEY=${get("SUPABASE_SECRET_KEY")}`,
   `SUPABASE_SERVICE_ROLE_KEY=${get("SUPABASE_SERVICE_ROLE_KEY")}`,
-  `DATABASE_URL=${get("DATABASE_URL")}`,
-  `DIRECT_URL=${get("DIRECT_URL")}`,
+  `DATABASE_URL=${hardenDbUrl(get("DATABASE_URL"))}`,
+  `DIRECT_URL=${hardenDbUrl(get("DIRECT_URL"))}`,
   "",
   `# Optional — copy from .env.local if you need these on staging`,
   `CLOUDFLARE_R2_ACCOUNT_ID=${get("CLOUDFLARE_R2_ACCOUNT_ID")}`,

@@ -7,9 +7,29 @@ const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
 
+/**
+ * pg 8.16+ treats sslmode=require as verify-full unless uselibpqcompat=true.
+ * Supabase pooler hostnames fail that verify, which surfaces as login
+ * limiter_unavailable on Vercel/Node 24.
+ */
+function normalizeDatabaseUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.searchParams.has("sslmode")) {
+      parsed.searchParams.set("sslmode", "require");
+    }
+    if (!parsed.searchParams.has("uselibpqcompat")) {
+      parsed.searchParams.set("uselibpqcompat", "true");
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 function createPrisma(cloudflare: boolean) {
   const adapter = new PrismaPg({
-    connectionString: requireEnv("DATABASE_URL"),
+    connectionString: normalizeDatabaseUrl(requireEnv("DATABASE_URL")),
     max: 5,
     connectionTimeoutMillis: 15_000,
     idleTimeoutMillis: 30_000,

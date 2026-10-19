@@ -52,3 +52,4 @@ src/generated/
 Thumbs.db
 .vscode/
 .idea/
+.env*

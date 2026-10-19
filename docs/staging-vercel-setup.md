@@ -2,7 +2,31 @@
 
 Goal: run the current local/Academy build on Vercel **without** touching Railway production (`erp.artmoniya.com`) or the production Supabase project.
 
-Deploy tip: if Git auto-deploy is blocked for the commit author, open Vercel → Deployments → Create Deployment and pick this branch commit manually.
+## Git auto-deploy blocked? (Hobby / Free)
+
+If Vercel says *“commit author doesn’t have permission to create deployments”*:
+
+- Repo is private + Vercel team is **Hobby/Free** → **only the Hobby owner** can trigger Git deployments.
+- Your commits are authored as `PashanurM <merdanovpashanur@gmail.com>`, while the Vercel login is often the company account (`noktheagency-…`). Hobby does **not** allow multi-user Git deploy collaboration.
+- `credential.*.username=noktheagency-cmd` only affects **push auth**, not commit author.
+
+**Workarounds (pick one):**
+
+1. **CLI deploy without Git metadata (recommended on Hobby)** — bypasses the author check:
+
+   ```bash
+   npx vercel login
+   npx vercel link --yes --project artmonia-erp-f5tk --scope nokthe-agencys-projects
+   npm run deploy:staging:vercel
+   ```
+
+   This runs `scripts/deploy-vercel-hobby.mjs`, which uploads a temp copy **without `.git`** so Hobby does not block `PashanurM` / Cursor co-authored commits.
+
+2. **Dashboard** → Deployments → **Create Deployment** → choose the commit (as the team owner account).
+
+3. **Pro upgrade** → add `PashanurM` as a team member and connect their GitHub under Account Settings → Login Connections.
+
+4. Match local `user.email` to the **verified GitHub email of the Hobby owner** (only if you intentionally want all commits under that identity).
 
 ## Preconditions
 
@@ -29,7 +53,7 @@ npm run env:assert-staging    # fails if production markers are present
    - Paste every **non-empty** key from `.env.staging`
    - Required: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`
    - **Do not set `NODE_ENV`** on Vercel. Importing `NODE_ENV=production` makes `npm ci` skip Tailwind/PostCSS and the build fails with ~50 PostCSS errors.
-5. After first Preview URL exists, set `NEXT_PUBLIC_APP_URL` to that `https://….vercel.app`, add `&sslmode=require` on `DATABASE_URL` if needed, then redeploy.
+5. After first Preview URL exists, set `NEXT_PUBLIC_APP_URL` to that `https://….vercel.app`. Ensure `DATABASE_URL` includes `sslmode=require` and `uselibpqcompat=true` (pg 8.16+ otherwise treats `require` as `verify-full` and login fails with `limiter_unavailable` on Vercel). Then redeploy.
 
 ### CLI (optional)
 
