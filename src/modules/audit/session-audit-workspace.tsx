@@ -411,7 +411,11 @@ export function SessionAuditWorkspace({
       )}
 
       <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSessionId(null)}>
-        <DialogContent className={styles.sessionDialog}>
+        <DialogContent
+          className={styles.sessionDialog}
+          closeOnInteractOutside
+          closeOnEscape
+        >
           {selectedSession ? (
             <>
               <DialogHeader className={styles.detailHeader}>

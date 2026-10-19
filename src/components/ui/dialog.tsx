@@ -19,10 +19,17 @@ export const DialogOverlay = React.forwardRef<
 
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+  /** When true, clicking the overlay / outside dismisses the dialog (default keeps modals locked). */
+  closeOnInteractOutside?: boolean;
+  /** When true, Escape dismisses the dialog. */
+  closeOnEscape?: boolean;
+};
+
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ children, className, onEscapeKeyDown, onInteractOutside, ...props }, ref) => (
+  DialogContentProps
+>(({ children, className, onEscapeKeyDown, onInteractOutside, closeOnInteractOutside = false, closeOnEscape = false, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -30,11 +37,11 @@ export const DialogContent = React.forwardRef<
       className={cx("ui-dialog-content", className)}
       onEscapeKeyDown={(event) => {
         onEscapeKeyDown?.(event);
-        event.preventDefault();
+        if (!closeOnEscape) event.preventDefault();
       }}
       onInteractOutside={(event) => {
         onInteractOutside?.(event);
-        event.preventDefault();
+        if (!closeOnInteractOutside) event.preventDefault();
       }}
       {...props}
     >
