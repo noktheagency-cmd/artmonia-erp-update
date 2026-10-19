@@ -26,7 +26,18 @@ If Vercel says *“commit author doesn’t have permission to create deployments
 
 3. **Pro upgrade** → add `PashanurM` as a team member and connect their GitHub under Account Settings → Login Connections.
 
-4. Match local `user.email` to the **verified GitHub email of the Hobby owner** (only if you intentionally want all commits under that identity).
+4. For a **one-off Git deploy** without changing global git config, author the commit as the Hobby/GitHub owner:
+
+   ```powershell
+   $env:GIT_AUTHOR_NAME = "noktheagency-cmd"
+   $env:GIT_AUTHOR_EMAIL = "282391128+noktheagency-cmd@users.noreply.github.com"
+   $env:GIT_COMMITTER_NAME = $env:GIT_AUTHOR_NAME
+   $env:GIT_COMMITTER_EMAIL = $env:GIT_AUTHOR_EMAIL
+   git commit --allow-empty -m "Trigger Vercel staging deploy under Hobby owner authorship."
+   git push
+   ```
+
+   Do **not** use `PashanurM <merdanovpashanur@gmail.com>` as author on Hobby — Git deploys will be Blocked.
 
 ## Preconditions
 
