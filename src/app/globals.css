@@ -21147,8 +21147,8 @@ body .erp-frame th {
 }
 
 .side-rail .brand-mark:hover {
-  /* background: #f7f9fc; */
   border-color: transparent;
+  /* background: #f7f9fc; */
   box-shadow: none;
   transform: none;
 }
