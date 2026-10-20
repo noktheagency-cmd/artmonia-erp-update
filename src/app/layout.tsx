@@ -4,7 +4,6 @@ import "./mobile-responsive.css";
 import "./responsive-controls.css";
 import "./dark-mode.css";
 import "./app-version.css";
-import "./tab-glide.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { AppNotifications } from "@/components/ui/app-notifications";
