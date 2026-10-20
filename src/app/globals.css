@@ -13335,6 +13335,10 @@ html body .ui-checkbox:disabled {
   border-top: 1px solid rgba(228, 233, 242, 0.7);
 }
 
+.session-audit-module__jMNVpW__revokeDetailButton{
+  padding-top: 0 !important;
+}
+
 .advanced-filters-grid {
   display: flex;
   flex-wrap: wrap;
