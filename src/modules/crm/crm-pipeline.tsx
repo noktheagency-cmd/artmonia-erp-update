@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/components/ui/cx";
-import { FormSelect } from "@/components/ui/select";
+import { FormSelect, type SelectOption } from "@/components/ui/select";
 import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
 import { CrmConversionDialog } from "@/modules/crm/crm-conversion-dialog";
 import { CrmOverview } from "@/modules/crm/crm-overview";
@@ -362,7 +362,7 @@ function CrmFilterPanel({
             name="stage"
             defaultValue={data.filters.stage}
             emptyLabel="Status"
-            options={leadStageSelectOptions.flatMap((option) => {
+            options={leadStageSelectOptions.flatMap((option): SelectOption[] => {
               if (option.value === "TRIAL_LESSON") return [];
               if (option.value === "QUALIFIED") return [{ value: consultationTrialStage, label: consultationTrialLabel }];
               return [option];

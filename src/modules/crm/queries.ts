@@ -496,14 +496,14 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
         tone: "yellow",
       },
     ],
-    stageSummary: leadStageOptions.flatMap((stage) => {
+    stageSummary: leadStageOptions.flatMap((stage): CrmData["stageSummary"] => {
       if (stage === "TRIAL_LESSON") return [];
       if (stage === "QUALIFIED") {
         return [{
           stage: consultationTrialStage,
           label: consultationTrialLabel,
           value: formatCount(toNumber(stageCounts.QUALIFIED) + toNumber(stageCounts.TRIAL_LESSON)),
-          tone: "warning" as const,
+          tone: "warning",
         }];
       }
       return [{
