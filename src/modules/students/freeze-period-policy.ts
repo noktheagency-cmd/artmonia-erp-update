@@ -82,7 +82,7 @@ export function assessFrozenInvoice(input: {
       overlaps: true,
       decision: "KEEP" as const,
       reason:
-        "Dondurma yalnız yeri saxlayır; aylıq haqq və ödəniş günü davam edir (BK-10)",
+        "Dondurma yalnız yeri saxlayır; aylıq haqq və ödəniş günü davam edir",
     };
   }
 

@@ -157,10 +157,6 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                       <small>
                         {p.createdBy} · {date(p.createdAt)}
                       </small>
-                      <small>
-                        BK-10: yer saxlanılır, aylıq haqq və ödəniş günü davam
-                        edir (faktura ləğv edilmir).
-                      </small>
                       {Number(p.voidAmount) > 0 ? (
                         <small>
                           Köhnə qeyd — ləğv edilmiş balans:{" "}
@@ -223,7 +219,7 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                   <p className="freeze-hint">
                     Hələ qayıtmayıbsa bərpa tarixini boş saxlayın. Bu halda
                     tələbə FROZEN olur, yer/slot saxlanılır, aylıq haqq və
-                    ödəniş günü davam edir (BK-10). Dayandırma (STOPPED) yerı
+                    ödəniş günü davam edir. Dayandırma (STOPPED) yerı
                     azad edir — o ayrıca əməliyyatdır.
                   </p>
                   <label className="form-field">
@@ -249,7 +245,7 @@ export function StudentFreezePeriods({ studentId }: { studentId: string }) {
                       <ShieldCheck />
                       <div>
                         <strong>
-                          Aylıq haqq davam edir (BK-10)
+                          Aylıq haqq davam edir
                         </strong>
                         <p>
                           {preview.freezesNow

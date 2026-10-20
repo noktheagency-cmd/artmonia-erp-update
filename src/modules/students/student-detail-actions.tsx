@@ -302,7 +302,7 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Status dəyiş</DialogTitle>
             <DialogDescription>
-              Dondurma yerini saxlayır və aylıq haqq hesablanmağa davam edir (BK-10). Ödəniş günü dəyişmir; ödənişi ayrıca “Ödəniş qəbul et”dən yazın.
+              Dondurma yerini saxlayır və aylıq haqq hesablanmağa davam edir. Ödəniş günü dəyişmir; ödənişi ayrıca “Ödəniş qəbul et”dən yazın.
               Keçmiş fasilə üçün profildəki “Dondurulma dövrləri” bölməsinə baxın.
             </DialogDescription>
           </DialogHeader>
@@ -769,7 +769,7 @@ export function StudentDetailActions({
                     placeholder="Məsələn: 4 dərslik paket və ya yarımay"
                   />
                   <small>
-                    Paket yüksəltmə yalnız ikinci dərs dövründən etibarən mümkündür (BK-15).
+                    Paket yüksəltmə yalnız ikinci dərs dövründən etibarən mümkündür.
                     İlk ayda məbləğ və ya dərs sayı artırıla bilməz.
                     {student.detail.earliestUpgradeMonth
                       ? ` Ən tez yüksəltmə ayı: ${student.detail.earliestUpgradeMonth}.`

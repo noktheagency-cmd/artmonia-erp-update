@@ -43,7 +43,7 @@ export function assertPackageUpgradeAllowed(input: {
   const earliest = earliestPackageUpgradeMonth(input.billingAnchorDate);
   if (effective < earliest) {
     throw new PublicActionError(
-      "İlk ay tamamlanmadan paket yüksəltmək olmaz. Yüksəltmə yalnız ikinci dərs dövründən etibarən mümkündür (BK-15).",
+      "İlk ay tamamlanmadan paket yüksəltmək olmaz. Yüksəltmə yalnız ikinci dərs dövründən etibarən mümkündür.",
     );
   }
 }

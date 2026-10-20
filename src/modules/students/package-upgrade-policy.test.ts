@@ -53,7 +53,7 @@ test("BK-15: mid first-month upgrade is blocked (T-37)", () => {
       effectiveMonth: new Date("2026-08-01T00:00:00.000Z"),
       billingAnchorDate: new Date("2026-08-18T00:00:00.000Z"),
     }),
-    /BK-15/,
+    /ikinci dərs dövründən/,
   );
 });
 

@@ -131,8 +131,7 @@ export function CrmOverview({
         <PanelHeading
           icon={Target}
           title="Müraciət mərhələləri"
-          description="BK-22/23: indiki mərhələ üzrə bütün dövr — ay/custom tarix filtri bu kartı və klik siyahısını daraltmır"
-          meta={`Bütün dövr · ${stageAllTimeTotal.toLocaleString("az-AZ")} müraciət (dövr filtri tətbiq olunmur)`}
+          meta={`${stageAllTimeTotal.toLocaleString("az-AZ")} müraciət`}
           tone="blue"
         />
         <div className="crm-stage-track" role="list" aria-label="Müraciət mərhələləri">
@@ -450,7 +449,7 @@ function PanelHeading({
 }: {
   icon: React.ComponentType;
   title: string;
-  description: string;
+  description?: string;
   meta?: string;
   tone: "blue" | "green" | "coral" | "amber";
 }) {
@@ -461,7 +460,7 @@ function PanelHeading({
       </span>
       <div>
         <h2>{title}</h2>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
       {meta ? <span className={cx("crm-panel-meta", `is-${tone}`)}>{meta}</span> : null}
     </header>

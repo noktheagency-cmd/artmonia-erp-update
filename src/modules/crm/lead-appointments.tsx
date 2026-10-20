@@ -109,7 +109,7 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
       {expanded ? (
         <div className="crm-action-card-body">
           <p className="crm-dialog-hint">
-            Əsas hesabatda bir görüş axınıdır (BK-16). Sınaq yalnız müəllim təyin ediləndə seçilir.
+            Sınaq yalnız müəllim təyin ediləndə seçilir.
           </p>
           <Button type="button" variant="outline" onClick={fresh} disabled={busy}>
             Yeni görüş
@@ -149,9 +149,6 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
                   label,
                 }))}
               />
-              <small className="payment-policy-note">
-                BK-16: əsas seçim “Görüş”dir. Konsultasiya/sınaq yalnız detal üçündür; hesabatda hamısı bir axındır.
-              </small>
             </label>
             <label className="form-field">
               <span>Nəticə</span>

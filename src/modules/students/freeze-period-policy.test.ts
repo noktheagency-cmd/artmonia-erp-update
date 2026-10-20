@@ -19,7 +19,7 @@ test("BK-10: overlapping unpaid cycles are kept — never voided", () => {
   const result = assessFrozenInvoice(base);
   assert.equal(result.decision, "KEEP");
   assert.equal(result.overlaps, true);
-  assert.match(result.reason, /BK-10/);
+  assert.match(result.reason, /aylıq haqq/);
   assert.equal(
     assessFrozenInvoice({
       ...base,
