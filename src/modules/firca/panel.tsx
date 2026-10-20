@@ -65,7 +65,6 @@ export function FircaPanel({
         </span>
         <div>
           <h1>Fırça</h1>
-          <p>Hər dərs bir addım, hər səy bir irəliləyiş.</p>
           {!data.settings.enabled && <small>Xal qazanılması hazırda bağlıdır.</small>}
         </div>
         <Button

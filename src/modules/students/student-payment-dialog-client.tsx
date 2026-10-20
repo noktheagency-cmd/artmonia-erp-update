@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
@@ -25,6 +26,10 @@ import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
+import {
+  ADMISSION_PAYMENT_MIN_MESSAGE,
+  isAdmissionAmountBelowMinimum,
+} from "@/modules/students/admission-payment-amount";
 import { ReceiptFields } from "./receipt-fields";
 
 type StudentRow = StudentListData["students"][number];
@@ -47,12 +52,15 @@ export function StudentPaymentDialogClient({
     [students],
   );
   const [studentId, setStudentId] = useState(paymentEligibleStudents[0]?.id ?? "");
+  const [receiptPurpose, setReceiptPurpose] = useState("RENEWAL");
+  const [amount, setAmount] = useState("");
+  const [amountError, setAmountError] = useState("");
   const effectiveStudentId = paymentEligibleStudents.some((student) => student.id === studentId)
     ? studentId
     : paymentEligibleStudents[0]?.id ?? "";
   const selectedStudent = useMemo(
     () => paymentEligibleStudents.find((student) => student.id === effectiveStudentId),
-    [effectiveStudentId, paymentEligibleStudents]
+    [effectiveStudentId, paymentEligibleStudents],
   );
   const studentOptions = useMemo(
     () =>
@@ -61,10 +69,22 @@ export function StudentPaymentDialogClient({
         label: `${student.name} · ${student.code}`,
         searchText: `${student.name} ${student.code} ${student.phone}`,
       })),
-    [paymentEligibleStudents]
+    [paymentEligibleStudents],
   );
 
+  function syncAmountError(nextAmount: string, purpose: string) {
+    setAmountError(
+      isAdmissionAmountBelowMinimum(nextAmount, purpose) ? ADMISSION_PAYMENT_MIN_MESSAGE : "",
+    );
+  }
+
   async function recordPayment(formData: FormData) {
+    const nextAmount = String(formData.get("amount") ?? amount);
+    const nextPurpose = String(formData.get("receiptPurpose") ?? receiptPurpose);
+    if (isAdmissionAmountBelowMinimum(nextAmount, nextPurpose)) {
+      setAmountError(ADMISSION_PAYMENT_MIN_MESSAGE);
+      return;
+    }
     if (!confirmPaymentMonthMismatch(formData)) return;
     try {
       const result = unwrapActionResult(await recordPaymentAction(formData)) as {
@@ -80,7 +100,16 @@ export function StudentPaymentDialogClient({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          setReceiptPurpose("RENEWAL");
+          setAmountError("");
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -101,10 +130,7 @@ export function StudentPaymentDialogClient({
         </DialogHeader>
 
         {selectedStudent ? (
-          <form
-            action={recordPayment}
-            className="student-payment-form"
-          >
+          <form action={recordPayment} className="student-payment-form">
             <input name="studentId" type="hidden" value={selectedStudent.id} />
             <input name="returnTo" type="hidden" value={returnTo} />
 
@@ -123,8 +149,14 @@ export function StudentPaymentDialogClient({
             </label>
 
             <div className="student-payment-summary" aria-label="Seçilmiş tələbə məlumatları">
-              <span><UserRound />{selectedStudent.code}</span>
-              <span><ReceiptText />{selectedStudent.program}</span>
+              <span>
+                <UserRound />
+                {selectedStudent.code}
+              </span>
+              <span>
+                <ReceiptText />
+                {selectedStudent.program}
+              </span>
               <strong>
                 <CreditCard />
                 {selectedStudent.hasDueDebt
@@ -143,6 +175,12 @@ export function StudentPaymentDialogClient({
                 selectedStudent.detail.paymentDefaultMonth,
               ].join(":")}
               student={selectedStudent}
+              amountError={amountError}
+              receiptPurpose={receiptPurpose}
+              onAmountChange={(value) => {
+                setAmount(value);
+                syncAmountError(value, receiptPurpose);
+              }}
             />
             <div className="field-grid">
               <label className="form-field">
@@ -164,7 +202,14 @@ export function StudentPaymentDialogClient({
               <Input name="note" maxLength={240} placeholder="Məsələn: iyul ayı ödənişi" />
             </label>
 
-            <ReceiptFields key={selectedStudent.id} studentId={selectedStudent.id} />
+            <ReceiptFields
+              key={selectedStudent.id}
+              studentId={selectedStudent.id}
+              onPurposeChange={(purpose) => {
+                setReceiptPurpose(purpose);
+                syncAmountError(amount || selectedStudent.detail.paymentDefaultAmount, purpose);
+              }}
+            />
 
             <p className="payment-policy-note">
               <CalendarDays /> Birdəfəlik ödənişdə növbəti aylıq ödəniş tarixi yaradılmır.
@@ -172,7 +217,9 @@ export function StudentPaymentDialogClient({
 
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Ləğv et</Button>
+                <Button type="button" variant="ghost">
+                  Ləğv et
+                </Button>
               </DialogClose>
               <Button type="submit" disabled={!canRecordPayment}>
                 <Banknote data-icon="inline-start" />
@@ -186,31 +233,55 @@ export function StudentPaymentDialogClient({
   );
 }
 
-function PaymentScheduleFields({ student }: { student: StudentRow }) {
+function PaymentScheduleFields({
+  student,
+  amountError,
+  receiptPurpose,
+  onAmountChange,
+}: {
+  student: StudentRow;
+  amountError: string;
+  receiptPurpose: string;
+  onAmountChange: (value: string) => void;
+}) {
   const [amount, setAmount] = useState(student.detail.paymentDefaultAmount);
   const [paidDate, setPaidDate] = useState(student.detail.paymentDefaultDate);
   const [billingMonth, setBillingMonth] = useState(student.detail.paymentDefaultMonth);
+  const showError =
+    amountError ||
+    (isAdmissionAmountBelowMinimum(amount, receiptPurpose) ? ADMISSION_PAYMENT_MIN_MESSAGE : "");
 
   return (
     <div className="student-payment-schedule-grid">
-      <label className="form-field">
+      <label className={`form-field${showError ? " has-error" : ""}`}>
         <span>Məbləğ</span>
         <Input
           name="amount"
           inputMode="decimal"
           placeholder="0.00"
           value={amount}
-          onChange={(event) => setAmount(event.target.value)}
+          aria-invalid={Boolean(showError)}
+          aria-describedby={showError ? "payment-amount-error" : undefined}
+          onChange={(event) => {
+            const value = event.target.value;
+            setAmount(value);
+            onAmountChange(value);
+          }}
           required
         />
+        {showError ? (
+          <small id="payment-amount-error" className="form-field-error" role="alert">
+            {showError}
+          </small>
+        ) : null}
       </label>
       <label className="form-field">
         <span>Aid olduğu ay</span>
-        <Input
+        <MonthPicker
           name="billingMonth"
-          type="month"
           value={billingMonth}
-          onChange={(event) => setBillingMonth(event.target.value)}
+          onValueChange={setBillingMonth}
+          allowClear={false}
           required
         />
       </label>

@@ -82,7 +82,6 @@ export function NotificationCenter({
           <div>
             <p>Şəxsi mərkəz</p>
             <h1>Bildirişlər</h1>
-            <small>Task, deadline, sənəd və sistem məlumatları bir yerdə.</small>
           </div>
         </div>
         <div className="notification-center-actions">

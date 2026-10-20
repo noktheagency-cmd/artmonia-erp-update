@@ -133,8 +133,7 @@ export function LeadRegistrationDialog({
                     id={`register-phone-${lead.id}`}
                     name="phone"
                     defaultValue={lead.detail.phone}
-                    maxLength={40}
-                    inputMode="tel"
+                    type="tel"
                     required
                   />
                 </Field>

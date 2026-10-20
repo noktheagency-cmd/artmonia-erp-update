@@ -184,7 +184,6 @@ export function MarketingSlidePlanner({ data }: { data: MarketingContentData }) 
           <span><CalendarDays /></span>
           <div>
             <h1>Content plan</h1>
-            <p>Slide yarat, founder təsdiqindən keçir və calendar-a sürükləyərək planla.</p>
           </div>
         </div>
         <div className="slide-top-actions">

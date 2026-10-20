@@ -380,7 +380,6 @@ export function RolePermissionsWorkspace({
       <header className={styles.pageHeader}>
         <div>
           <h1>Rol və icazələr</h1>
-          <p>Komandanızın nəyə çıxışı olduğunu sadə şəkildə idarə edin.</p>
         </div>
         {initialData.canManage || initialData.canManageUsers ? (
           <div className={styles.pageActions}>

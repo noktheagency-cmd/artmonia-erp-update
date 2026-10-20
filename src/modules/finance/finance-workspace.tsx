@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  ADMISSION_PAYMENT_MIN_MESSAGE,
+  isAdmissionAmountBelowMinimum,
+} from "@/modules/students/admission-payment-amount";
 import { ReceiptFields } from "@/modules/students/receipt-fields";
 
 import type { FormEvent, ReactNode } from "react";
@@ -49,6 +53,7 @@ import type { PieLabelRenderProps } from "recharts";
 import { createPortal, useFormStatus } from "react-dom";
 import { HeaderActionsContext } from "@/components/layout/header-actions-context";
 import { Button } from "@/components/ui/button";
+import { FileUploadControl } from "@/components/ui/file-upload-control";
 import {
   Card,
   CardAction,
@@ -75,6 +80,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -300,7 +306,6 @@ export function FinanceWorkspace({
           <div>
             <span>Məhdud maliyyə girişi</span>
             <h1>Ödəniş və xərc əlavə et</h1>
-            <p>Bu rol yalnız yeni əməliyyat daxil edə bilər. Maliyyə göstəriciləri, balanslar və əməliyyat siyahıları göstərilmir.</p>
           </div>
           {headerActionsTarget ? createPortal(
           <div className="finance-header-actions">
@@ -656,6 +661,13 @@ function PaymentDialog({
     billingMonth: data.students[0]?.defaultPaymentMonth ?? "",
     payerName: "",
   });
+  const [receiptPurpose, setReceiptPurpose] = useState("RENEWAL");
+  const [amountError, setAmountError] = useState("");
+  const amountMessage =
+    amountError ||
+    (isAdmissionAmountBelowMinimum(values.amount, receiptPurpose)
+      ? ADMISSION_PAYMENT_MIN_MESSAGE
+      : "");
   const billingMonthOptions = useMemo(
     () => buildBillingMonthOptions(values.billingMonth || values.paidDate.slice(0, 7)),
     [values.billingMonth, values.paidDate],
@@ -687,6 +699,12 @@ function PaymentDialog({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const nextAmount = String(formData.get("amount") ?? values.amount);
+    const nextPurpose = String(formData.get("receiptPurpose") ?? receiptPurpose);
+    if (isAdmissionAmountBelowMinimum(nextAmount, nextPurpose)) {
+      setAmountError(ADMISSION_PAYMENT_MIN_MESSAGE);
+      return;
+    }
     if (!confirmPaymentMonthMismatch(formData)) return;
 
     startSubmitTransition(async () => {
@@ -705,7 +723,16 @@ function PaymentDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(nextOpen) => {
+        setIsOpen(nextOpen);
+        if (!nextOpen) {
+          setReceiptPurpose("RENEWAL");
+          setAmountError("");
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <Button type="button" disabled={!data.permissions.canRecordPayment}>
           <Banknote data-icon="inline-start" />
@@ -785,15 +812,30 @@ function PaymentDialog({
               <span>Ödəniş detalları</span>
             </div>
             <div className="field-grid">
-              <label className="form-field">
+              <label className={`form-field${amountMessage ? " has-error" : ""}`}>
                 <span>Məbləğ</span>
                 <Input
                   name="amount"
                   value={values.amount}
-                  onChange={(event) => setValues((current) => ({ ...current, amount: event.target.value }))}
+                  onChange={(event) => {
+                    const amount = event.target.value;
+                    setValues((current) => ({ ...current, amount }));
+                    setAmountError(
+                      isAdmissionAmountBelowMinimum(amount, receiptPurpose)
+                        ? ADMISSION_PAYMENT_MIN_MESSAGE
+                        : "",
+                    );
+                  }}
                   inputMode="decimal"
+                  aria-invalid={Boolean(amountMessage)}
+                  aria-describedby={amountMessage ? "finance-payment-amount-error" : undefined}
                   required
                 />
+                {amountMessage ? (
+                  <small id="finance-payment-amount-error" className="form-field-error" role="alert">
+                    {amountMessage}
+                  </small>
+                ) : null}
               </label>
               <label className="form-field">
                 <span>Ödəniş növü</span>
@@ -839,7 +881,18 @@ function PaymentDialog({
                 required
               />
             </label>
-            <ReceiptFields key={selectedStudentId} studentId={selectedStudentId} />
+            <ReceiptFields
+              key={selectedStudentId}
+              studentId={selectedStudentId}
+              onPurposeChange={(purpose) => {
+                setReceiptPurpose(purpose);
+                setAmountError(
+                  isAdmissionAmountBelowMinimum(values.amount, purpose)
+                    ? ADMISSION_PAYMENT_MIN_MESSAGE
+                    : "",
+                );
+              }}
+            />
             <div className="field-grid">
               <label className="form-field">
                 <span>Ödəyən şəxs</span>
@@ -857,12 +910,7 @@ function PaymentDialog({
             </div>
             <label className="form-field">
               <span>Qəbz əlavə et</span>
-              <span className="finance-file-control">
-                <Upload size={14} />
-                <strong>Fayl seç</strong>
-                <small>PDF / şəkil</small>
-                <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
-              </span>
+              <FileUploadControl name="receiptFile" />
             </label>
             <label className="form-field">
               <span>Qeyd</span>
@@ -1169,12 +1217,7 @@ function ExpenseDialog({
               </label>
               <label className="form-field finance-receipt-upload-field">
                 <span>Qəbz əlavə et</span>
-                <span className="finance-file-control">
-                  <Upload size={14} />
-                  <strong>Fayl seç</strong>
-                  <small>PDF / şəkil</small>
-                  <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
-                </span>
+                <FileUploadControl name="receiptFile" />
               </label>
             </div>
             <label className="form-field">
@@ -1342,6 +1385,20 @@ function CategoryDistributionList({ data }: { data: FinanceData }) {
   );
 }
 
+function parseAzAmount(formatted: string): number {
+  const negative = formatted.trim().startsWith("-");
+  const digits = formatted.replace(/[^\d]/g, "");
+  const value = Number(digits) || 0;
+  return negative ? -value : value;
+}
+
+type KpiDetailRow = { label: string; amount: string; value: number };
+type KpiDetailSection = { title?: string; rows: KpiDetailRow[] };
+
+function kpiDetailRow(label: string, amount: string, value = parseAzAmount(amount)): KpiDetailRow {
+  return { label, amount, value };
+}
+
 function FinancePrimaryKpis({ data }: { data: FinanceData }) {
   const [selected, setSelected] = useState<"income" | "expense" | "profit" | "receivables" | "details" | null>(null);
   const cards = [
@@ -1350,16 +1407,59 @@ function FinancePrimaryKpis({ data }: { data: FinanceData }) {
     { key: "profit" as const, label: "Net Profit", value: data.summary.netProfit, helper: "Operating Profit − qeyri-əməliyyat P&L maddələri", tone: "neutral", icon: TrendingUp },
     { key: "receivables" as const, label: "Alacaqlar", value: data.receivableSummary.studentOutstanding.amount, helper: `${data.receivableSummary.studentOutstanding.count} tələbə · gələcək ödəniş ayrıca göstərilir`, tone: "warning", icon: BadgeDollarSign },
   ];
-  const detailRows = selected === "income"
-    ? [["Tələbə ödənişləri", data.summary.studentIncome], ["Workshop / Masterclass", data.summary.eventIncome]]
-    : selected === "expense"
-      ? [["Direct Cost", data.summary.directCost], ["OPEX", data.summary.opex], ["Tədbir xərcləri", data.summary.eventExpense], ["Əməkhaqqı", data.summary.payroll], ...data.costCenterBreakdown.map((item) => [`Xərc mərkəzi · ${item.label}`, item.amount])]
-      : selected === "profit"
-        ? [["Operating Profit", data.summary.operatingProfit], ["Net Profit", data.summary.netProfit]]
-        : selected === "receivables"
-          ? [["Real açıq tələbə borcu", data.receivableSummary.studentOutstanding.amount], ["Gecikmiş borc", data.receivableSummary.studentOverdue.amount], ["Gələcək ödəniş", data.receivableSummary.studentFuture.amount], ["Workshop", data.receivableSummary.workshop.amount], ["Masterclass", data.receivableSummary.masterclass.amount]]
-          : [];
   const selectedCard = cards.find((card) => card.key === selected);
+
+  const detailSections = useMemo((): KpiDetailSection[] => {
+    if (selected === "income") {
+      return [{
+        rows: [
+          kpiDetailRow("Tələbə ödənişləri", data.summary.studentIncome),
+          kpiDetailRow("Workshop / Masterclass", data.summary.eventIncome),
+        ],
+      }];
+    }
+    if (selected === "expense") {
+      const sections: KpiDetailSection[] = [{
+        title: "Əsas xərclər",
+        rows: [
+          kpiDetailRow("Direct Cost", data.summary.directCost),
+          kpiDetailRow("OPEX", data.summary.opex),
+          kpiDetailRow("Tədbir xərcləri", data.summary.eventExpense),
+          kpiDetailRow("Əməkhaqqı", data.summary.payroll),
+        ],
+      }];
+      if (data.costCenterBreakdown.length > 0) {
+        sections.push({
+          title: "Xərc mərkəzləri",
+          rows: data.costCenterBreakdown.map((item) => kpiDetailRow(item.label, item.amount, item.value)),
+        });
+      }
+      return sections;
+    }
+    if (selected === "profit") {
+      return [{
+        rows: [
+          kpiDetailRow("Operating Profit", data.summary.operatingProfit),
+          kpiDetailRow("Net Profit", data.summary.netProfit),
+        ],
+      }];
+    }
+    if (selected === "receivables") {
+      return [{
+        rows: [
+          kpiDetailRow("Real açıq tələbə borcu", data.receivableSummary.studentOutstanding.amount, data.receivableSummary.studentOutstanding.amountValue),
+          kpiDetailRow("Gecikmiş borc", data.receivableSummary.studentOverdue.amount, data.receivableSummary.studentOverdue.amountValue),
+          kpiDetailRow("Gələcək ödəniş", data.receivableSummary.studentFuture.amount, data.receivableSummary.studentFuture.amountValue),
+          kpiDetailRow("Workshop", data.receivableSummary.workshop.amount, data.receivableSummary.workshop.amountValue),
+          kpiDetailRow("Masterclass", data.receivableSummary.masterclass.amount, data.receivableSummary.masterclass.amountValue),
+        ],
+      }];
+    }
+    return [];
+  }, [data, selected]);
+
+  const dialogTone = selected === "details" ? "details" : selectedCard?.tone ?? "neutral";
+  const SelectedIcon = selectedCard?.icon ?? Eye;
 
   return (
     <>
@@ -1371,15 +1471,41 @@ function FinancePrimaryKpis({ data }: { data: FinanceData }) {
         <button type="button" className="finance-kpi finance-primary-kpi finance-details-kpi" onClick={() => setSelected("details")}><div className="finance-kpi-top"><span className="finance-kpi-label">Ətraflı bax</span><span className="finance-kpi-icon"><Eye size={13} /></span></div><strong>6 KPI</strong><div className="finance-kpi-footer"><small>Gəlirdən xalis pul axınına qədər bütün maliyyə kartları</small><span>Kartları aç <ArrowRight /></span></div></button>
       </div>
       <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="finance-dialog finance-kpi-detail-dialog">
-          <DialogHeader>
-            <DialogTitle>{selected === "details" ? "Ətraflı maliyyə KPI-ları" : selectedCard?.label}</DialogTitle>
-            <DialogDescription>{selected === "details" ? "Mövcud maliyyə kartlarının aydın hesablanma qaydası və nəticəsi." : selectedCard?.helper}</DialogDescription>
+        <DialogContent className={`finance-dialog finance-kpi-detail-dialog is-${dialogTone}`}>
+          <DialogHeader className="finance-kpi-detail-header">
+            <div className="finance-kpi-detail-heading">
+              <span className={`finance-dialog-heading-icon is-${dialogTone}`} aria-hidden="true">
+                <SelectedIcon size={18} />
+              </span>
+              <div>
+                <DialogTitle>{selected === "details" ? "Ətraflı maliyyə KPI-ları" : selectedCard?.label}</DialogTitle>
+                <DialogDescription>
+                  {selected === "details"
+                    ? "Kartların hesablanma qaydası və cari nəticəsi."
+                    : selected === "profit"
+                      ? selectedCard?.helper
+                      : "Bölgü və tərkib"}
+                </DialogDescription>
+              </div>
+            </div>
+            {selectedCard ? <p className="finance-kpi-detail-total">{selectedCard.value}</p> : null}
           </DialogHeader>
           {selected === "details" ? (
-            <>
+            <div className="finance-kpi-detail-body">
               <div className="finance-detailed-kpi-grid">
-                {data.kpis.filter((kpi) => kpi.label !== "Receivables").map((kpi, index) => { const Icon = financeKpiIcons[index] ?? BarChart3; return <article className={`finance-kpi is-${kpi.tone}`} key={kpi.label}><div className="finance-kpi-top"><span className="finance-kpi-label">{kpi.label}</span><span className="finance-kpi-icon"><Icon size={12} /></span></div><strong>{kpi.value}</strong><div className="finance-kpi-footer"><small>{kpi.helper}</small></div></article>; })}
+                {data.kpis.filter((kpi) => kpi.label !== "Receivables").map((kpi, index) => {
+                  const Icon = financeKpiIcons[index] ?? BarChart3;
+                  return (
+                    <article className={`finance-kpi is-${kpi.tone}`} key={kpi.label}>
+                      <div className="finance-kpi-top">
+                        <span className="finance-kpi-label">{kpi.label}</span>
+                        <span className="finance-kpi-icon"><Icon size={12} /></span>
+                      </div>
+                      <strong>{kpi.value}</strong>
+                      <div className="finance-kpi-footer"><small>{kpi.helper}</small></div>
+                    </article>
+                  );
+                })}
               </div>
               {data.previousMonthProfit ? (
                 <section className="finance-previous-profit" aria-label="Keçən ayın xalis mənfəəti">
@@ -1391,9 +1517,41 @@ function FinancePrimaryKpis({ data }: { data: FinanceData }) {
                   <strong>{data.previousMonthProfit.amount}</strong>
                 </section>
               ) : null}
-            </>
+            </div>
           ) : (
-            <dl className="finance-kpi-breakdown">{detailRows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+            <div className="finance-kpi-detail-body">
+              {detailSections.map((section, sectionIndex) => {
+                const sectionTotal = section.rows.reduce((sum, row) => sum + Math.abs(row.value), 0);
+                return (
+                  <section className="finance-kpi-breakdown-section" key={section.title ?? `section-${sectionIndex}`}>
+                    {section.title ? <h3>{section.title}</h3> : null}
+                    <dl className="finance-kpi-breakdown">
+                      {section.rows.map((row) => {
+                        const share = sectionTotal > 0
+                          ? Math.min(100, Math.round((Math.abs(row.value) / sectionTotal) * 100))
+                          : 0;
+                        return (
+                          <div key={row.label}>
+                            <div className="finance-kpi-breakdown-row">
+                              <dt>{row.label}</dt>
+                              <dd>
+                                <strong>{row.amount}</strong>
+                                {sectionTotal > 0 ? <span>{share}%</span> : null}
+                              </dd>
+                            </div>
+                            {sectionTotal > 0 ? (
+                              <div className="finance-kpi-breakdown-bar" aria-hidden="true">
+                                <span style={{ width: `${share}%` }} />
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  </section>
+                );
+              })}
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -2143,10 +2301,10 @@ function PaymentCrudActions({
             </div>
             <label className="form-field">
               <span>Aid olduğu ay</span>
-              <Input
+              <MonthPicker
                 name="billingMonth"
-                type="month"
                 defaultValue={payment.paymentMonthValue}
+                allowClear={false}
                 required
               />
             </label>
@@ -2162,12 +2320,7 @@ function PaymentCrudActions({
             </div>
             <label className="form-field">
               <span>Yeni qəbz faylı</span>
-              <span className="finance-file-control">
-                <Upload size={14} />
-                <strong>Fayl seç</strong>
-                <small>PDF / şəkil</small>
-                <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
-              </span>
+              <FileUploadControl name="receiptFile" />
             </label>
             <label className="form-field">
               <span>Qeyd</span>
@@ -2754,12 +2907,7 @@ function ExpenseCrudActions({
               </label>
               <label className="form-field">
                 <span>Yeni qəbz faylı</span>
-                <span className="finance-file-control">
-                  <Upload size={14} />
-                  <strong>Fayl seç</strong>
-                  <small>PDF / şəkil</small>
-                  <Input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
-                </span>
+                <FileUploadControl name="receiptFile" />
               </label>
             </div>
             <label className="form-field">

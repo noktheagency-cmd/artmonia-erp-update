@@ -22,7 +22,7 @@ export function RoleDashboard({ data, taskData, createTaskAction, updateTaskStat
         <div className="role-dashboard-hero-icon"><HeroIcon /></div>
         <div>
           <div className="role-dashboard-greeting"><h1>Salam, {firstName(data.actorName)}</h1><Badge variant="secondary">{roleLabel(data.kind)}</Badge></div>
-          <h2>{data.title}</h2><p>{data.description}</p>
+          <h2>{data.title}</h2>
         </div>
         <Link href={data.primaryHref}>{data.primaryLabel}<ArrowUpRight /></Link>
       </CardContent>

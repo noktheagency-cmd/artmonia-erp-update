@@ -7,6 +7,7 @@ import { dailyReportSummarySql,dailyReportDetailsSql,dailyReportDetailKinds } fr
 import { filteredDailyReportWindow } from "./daily-report-policy";
 import type { DailyReportTotals } from "./daily-report-query";
 import { recordCourseSalePayment,assertSalePaymentEditable } from "@/modules/students/course-sale-service";
+import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
 import { syncLeadWorkPlan } from "@/modules/crm/work-service";
 import { lockPaymentStudent,replayPayment,assertAdmissionLeadActor } from "@/modules/students/payment-entry-guard";
 import type { ErpActor } from "@/server/auth/actor";
@@ -23,7 +24,7 @@ async function fixture(tx:Prisma.TransactionClient) {
  const program=await tx.program.create({data:{name:"Synthetic program "+randomUUID(),defaultMonthlyFee:100}});
  const student=await tx.student.create({data:{code:"TEST-"+randomUUID(),contactId:contact.id,managerId:user.id,admissionTracking:true,lifecycleStatus:"SLOT_WAITING",registeredAt:new Date("2026-09-01T00:00:00Z")}});
  const enrollment=await tx.enrollment.create({data:{studentId:student.id,programId:program.id,monthlyFee:100,startDate:new Date("2026-10-10T00:00:00Z")}});
- const lead=await tx.lead.create({data:{contactId:contact.id,managerId:user.id,programInterestId:program.id,stage:"CONTACTED",convertedStudentId:student.id,createdAt:new Date("2026-10-10T05:00:00Z")}});
+ const lead=await tx.lead.create({data:{contactId:contact.id,managerId:user.id,programInterestId:program.id,stage:"CONTACTED",convertedStudentId:student.id,createdAt:new Date("2026-10-10T05:00:00Z"),nextFollowUpAt:new Date("2026-10-10T08:00:00Z"),nextActionType:"PAYMENT_REMINDER"}});
  return {user,other,contact,program,student,enrollment,lead};
 }
 type Fixture=Awaited<ReturnType<typeof fixture>>;
@@ -72,6 +73,16 @@ test("deposit qualifies once on paid date; balance and renewals add cash without
  const p=await payment(tx,f,20);await recordCourseSalePayment(tx,{studentId:f.student.id,paymentId:p.id,purpose:"ADMISSION",contractConfirmed:true,actorId:f.user.id});
  assert.ok((await tx.leadWorkItem.findUniqueOrThrow({where:{id:plan.id}})).cancelledAt);
  assert.equal((await tx.leadWorkItem.findUniqueOrThrow({where:{id:meeting.id}})).cancelledAt,null);
+ const closedLead=await tx.lead.findUniqueOrThrow({where:{id:f.lead.id}});
+ assert.equal(closedLead.stage,"REGISTERED");
+ assert.equal(closedLead.nextFollowUpAt,null);
+ assert.equal(closedLead.nextActionType,null);
+ const openFollowUps=await tx.$queryRaw<{count:number}[]>`
+   select count(*)::int as count from erp.leads l
+   where l.id=${f.lead.id}::uuid
+     and l.stage not in ('REGISTERED'::"erp"."LeadStage",'LOST'::"erp"."LeadStage")
+     and l.next_follow_up_at is not null`;
+ assert.equal(openFollowUps[0].count,0);
  await payment(tx,f,80,"2026-10-11","INITIAL_BALANCE");
  await payment(tx,f,100,"2026-10-11","RENEWAL");
  assert.equal(await tx.courseSale.count(),1);assert.equal((await tx.courseSale.findFirstOrThrow()).status,"COMPLETE");
@@ -84,6 +95,11 @@ test("STOPPED return can qualify in slot waiting; freeze and completion returns 
  await tx.studentStatusHistory.create({data:{studentId:f.student.id,oldStatus:"STOPPED",newStatus:"SLOT_WAITING",eventType:"REACTIVATED",effectiveAt:new Date("2026-10-10T00:00:00Z"),reason:"Synthetic return",changedById:f.user.id}});
  await payment(tx,f,20);
  assert.equal((await totals(tx)).returnSales,1);assert.equal((await totals(tx)).sales,1);
+ const sale=await tx.courseSale.findFirstOrThrow();
+ assert.equal(sale.kind,"RETURN");
+ // Company / HR KPI newSales uses the same course_sales window (includes RETURN).
+ const [kpi]=await tx.$queryRaw<{count:number}[]>`select ${companySalesCountSql(Prisma.sql`${"2026-10-01"}`,Prisma.sql`${"2026-11-01"}`)} as count`;
+ assert.equal(kpi.count,1);
  for(const oldStatus of ["FROZEN","COMPLETED"] as const) {
   await tx.studentStatusHistory.create({data:{studentId:f.student.id,oldStatus,newStatus:"SLOT_WAITING",eventType:"REACTIVATED",effectiveAt:new Date("2026-10-11T00:00:00Z"),reason:"Synthetic lifecycle",changedById:f.user.id}});
   await assert.rejects(()=>payment(tx,f,20,"2026-10-11"));
@@ -147,12 +163,16 @@ test("invalid admission payment rolls back both cash and sale; legacy facts are 
 }));
 test("return route belongs to the current CRM admission, never the original old lead",{skip:!url},()=>isolated(async(tx,f)=>{
  await tx.studentStatusHistory.create({data:{studentId:f.student.id,oldStatus:"STOPPED",newStatus:"SLOT_WAITING",eventType:"REACTIVATED",effectiveAt:new Date("2026-10-10T00:00:00Z"),changedById:f.user.id,reason:"Synthetic return"}});
- const current=await tx.lead.create({data:{contactId:f.contact.id,managerId:f.user.id,stage:"CONTACTED",createdAt:new Date("2026-10-10T09:00:00Z")}});
+ const current=await tx.lead.create({data:{contactId:f.contact.id,managerId:f.user.id,stage:"CONTACTED",createdAt:new Date("2026-10-10T09:00:00Z"),nextFollowUpAt:new Date("2026-10-10T12:00:00Z"),nextActionType:"FOLLOW_UP"}});
  const p=await tx.payment.create({data:{studentId:f.student.id,amount:20,paidAt:new Date("2026-10-10T00:00:00Z"),paymentMonth:new Date("2026-10-01T00:00:00Z"),createdById:f.user.id}});
  await recordCourseSalePayment(tx,{studentId:f.student.id,paymentId:p.id,purpose:"ADMISSION",contractConfirmed:true,actorId:f.user.id,admissionLeadId:current.id});
  const sale=await tx.courseSale.findFirstOrThrow();assert.equal(sale.kind,"RETURN");assert.equal(sale.route,"CRM");assert.equal(sale.leadId,current.id);
- assert.equal((await tx.lead.findUniqueOrThrow({where:{id:current.id}})).stage,"REGISTERED");
+ const closed=await tx.lead.findUniqueOrThrow({where:{id:current.id}});
+ assert.equal(closed.stage,"REGISTERED");
+ assert.equal(closed.nextFollowUpAt,null);
+ assert.equal(closed.nextActionType,null);
  assert.equal((await totals(tx)).crmSales,1);
+ assert.equal((await totals(tx)).returnSales,1);
 }));
 test("lifecycle uses effective date, deduplicates each status, and excludes synthetic test students",{skip:!url},()=>isolated(async(tx,f)=>{
  for(const status of ["FROZEN","FROZEN","STOPPED"] as const)await tx.studentStatusHistory.create({data:{studentId:f.student.id,oldStatus:"ACTIVE",newStatus:status,effectiveAt:new Date("2026-10-10T00:00:00Z"),changedById:f.user.id,reason:"Synthetic lifecycle",createdAt:new Date("2026-10-09T08:00:00Z")}});

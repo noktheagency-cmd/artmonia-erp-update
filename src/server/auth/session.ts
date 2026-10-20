@@ -28,7 +28,11 @@ export type CurrentErpUser = {
 };
 
 // Only the MFA setup/challenge page may use this password-authenticated identity.
-export const getErpSessionForMfa = cache(async (): Promise<(CurrentErpUser & { assuranceLevel: string; hasVerifiedFactor: boolean }) | null> => {
+export const getErpSessionForMfa = cache(async (): Promise<(CurrentErpUser & {
+  assuranceLevel: string;
+  hasVerifiedFactor: boolean;
+  sessionCreatedAt: string;
+}) | null> => {
   if (!hasSupabasePublicEnv()) {
     return null;
   }
@@ -73,6 +77,13 @@ export const getErpSessionForMfa = cache(async (): Promise<(CurrentErpUser & { a
           and (auth_session.not_after is null or auth_session.not_after > now())
           and auth_session.created_at > now() - ${ERP_SESSION_MAX_AGE_SQL}
       ) as "authSessionExists",
+      (
+        select auth_session.created_at
+        from auth.sessions auth_session
+        where auth_session.id = ${sessionId}::uuid
+          and auth_session.user_id = u.auth_user_id
+        limit 1
+      ) as "sessionCreatedAt",
       exists (select 1 from auth.mfa_factors f where f.user_id = u.auth_user_id and f.status = 'verified') as "hasVerifiedFactor"
     from erp.users u
     left join erp.hr_employees he on he.user_id = u.id
@@ -104,9 +115,15 @@ export const getErpSessionForMfa = cache(async (): Promise<(CurrentErpUser & { a
 
   const roles = normalizeRoles(user.roles);
 
+  if (!user.sessionCreatedAt) {
+    await supabase.auth.signOut({ scope: "local" });
+    return null;
+  }
+
   return {
     assuranceLevel: String(data.claims.aal ?? "aal1"),
     hasVerifiedFactor: user.hasVerifiedFactor,
+    sessionCreatedAt: new Date(user.sessionCreatedAt).toISOString(),
     id: user.id,
     authUserId: user.authUserId,
     currentSessionId: sessionId,
@@ -130,6 +147,7 @@ type CurrentErpUserRow = Omit<CurrentErpUser, "permissions" | "roles" | "current
   roles: unknown;
   authSessionExists: boolean;
   hasVerifiedFactor: boolean;
+  sessionCreatedAt: Date | string | null;
 };
 
 function normalizeRoles(value: unknown): AppRole[] {

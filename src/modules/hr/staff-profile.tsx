@@ -594,7 +594,7 @@ function StaffDetailsEditor({
           </label>
           <label>
             <span>Telefon</span>
-            <Input name="phone" defaultValue={employee.phone} />
+            <Input name="phone" type="tel" defaultValue={employee.phone} />
           </label>
           <label>
             <span>İşə başlama</span>

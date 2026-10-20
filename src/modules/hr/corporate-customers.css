@@ -46,8 +46,11 @@
   font-size: 12px;
 }
 
-.corporate-filter-band select {
+.corporate-filter-band select,
+.corporate-filter-select.ui-select-trigger,
+.corporate-filter-band .ui-select-trigger {
   height: 38px;
+  min-height: 38px;
   min-width: 172px;
   padding: 0 34px 0 11px;
   color: #4c5568;

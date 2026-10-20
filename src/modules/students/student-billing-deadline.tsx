@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { FormSelect } from "@/components/ui/select";
 import {
   Dialog,
@@ -147,11 +148,11 @@ export function StudentBillingDeadline({ studentId }: { studentId: string }) {
             <div className={styles.grid}>
               <label className="form-field">
                 <span>Qüvvəyə minən ay</span>
-                <Input
-                  type="month"
+                <MonthPicker
                   name="month"
                   value={month}
-                  onChange={(event) => setMonth(event.target.value)}
+                  onValueChange={setMonth}
+                  allowClear={false}
                   required
                 />
               </label>

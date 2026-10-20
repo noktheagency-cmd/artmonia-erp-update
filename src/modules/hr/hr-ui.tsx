@@ -20,7 +20,7 @@ export function HrPageHeader({
 }: {
   label: string;
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
 }) {
   return (
@@ -28,7 +28,6 @@ export function HrPageHeader({
       <div>
         <span className="hr-ops-kicker">{label}</span>
         <h1>{title}</h1>
-        <p>{description}</p>
       </div>
       {action ? <div className="hr-ops-header-actions">{action}</div> : null}
     </header>
@@ -105,7 +104,6 @@ export function HrPanelHeader({
         <div>
           {eyebrow ? <span className="hr-ops-eyebrow">{eyebrow}</span> : null}
           <h2>{title}</h2>
-          {description ? <p>{description}</p> : null}
         </div>
       </div>
       {meta || action ? (

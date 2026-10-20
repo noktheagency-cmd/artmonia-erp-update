@@ -8,11 +8,13 @@ import type { Route } from "next";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  type CSSProperties,
   type MouseEvent,
   type PointerEvent,
   type SyntheticEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -37,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
+import { FormInputGuards } from "@/components/ui/form-input-guards";
 import { SessionHeartbeat } from "@/components/auth/session-heartbeat";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
@@ -93,6 +96,14 @@ const dashboardNavItem: NavItem = {
   requiredPermissions: [],
 };
 
+function matchesNavPath(href: string, path: string) {
+  if (href === "/dashboard") {
+    return path === href;
+  }
+
+  return path === href || path.startsWith(`${href}/`);
+}
+
 export function AppShell({
   children,
   currentUser,
@@ -114,7 +125,9 @@ export function AppShell({
   const [isSidebarCompact, setIsSidebarCompact] = useState(false);
   const [mobileSidebarPathname, setMobileSidebarPathname] = useState<string | null>(null);
   const [notificationCounts, setNotificationCounts] = useState(initialNotificationCounts);
+  const [navIndicator, setNavIndicator] = useState({ top: 0, height: 0, ready: false });
   const prefetchedHrefs = useRef<Set<string>>(new Set());
+  const navStackRef = useRef<HTMLElement | null>(null);
   const currentParams = searchParams.toString();
   const currentHref = currentParams ? `${pathname}?${currentParams}` : pathname;
   const sectionId = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
@@ -127,6 +140,7 @@ export function AppShell({
     .toUpperCase();
   const activePendingHref = pendingHref && pendingHref !== currentHref ? pendingHref : null;
   const isNavigating = Boolean(activePendingHref);
+  const highlightPath = (activePendingHref ?? currentHref).split("?")[0] || pathname;
   const permissionSet = new Set(currentUser.permissions);
   const roleSet = new Set(currentUser.roles);
   const isVisible = (item: NavItem) =>
@@ -244,6 +258,58 @@ export function AppShell({
     };
   }, [isMobileSidebarOpen]);
 
+  const updateNavIndicator = useCallback(() => {
+    const stack = navStackRef.current;
+    if (!stack) {
+      return;
+    }
+
+    const activeEl = stack.querySelector<HTMLElement>(".nav-icon.is-active");
+    if (!activeEl) {
+      setNavIndicator((current) => (current.ready ? { ...current, ready: false } : current));
+      return;
+    }
+
+    const next = {
+      top: activeEl.offsetTop,
+      height: activeEl.offsetHeight,
+      ready: true,
+    };
+
+    setNavIndicator((current) =>
+      current.top === next.top && current.height === next.height && current.ready === next.ready
+        ? current
+        : next
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    updateNavIndicator();
+  }, [
+    highlightPath,
+    isSidebarCompact,
+    isMobileSidebarOpen,
+    updateNavIndicator,
+    visiblePrimaryNavItems.length,
+    visibleSecondaryNavItems.length,
+  ]);
+
+  useEffect(() => {
+    const stack = navStackRef.current;
+    if (!stack) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => updateNavIndicator());
+    resizeObserver.observe(stack);
+    window.addEventListener("resize", updateNavIndicator);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateNavIndicator);
+    };
+  }, [updateNavIndicator]);
+
   function markNavigation(href: string | null) {
     if (href && href !== currentHref) {
       setPendingHref(href);
@@ -348,6 +414,7 @@ export function AppShell({
       )}
     >
       {sessionGuardEnabled ? <SessionHeartbeat /> : null}
+      <FormInputGuards />
       <div className="studio-wash" aria-hidden="true" />
       <div className="route-progress" aria-hidden={!isNavigating} data-visible={isNavigating} />
       <header className="mobile-shell-bar">
@@ -456,11 +523,22 @@ export function AppShell({
           {isSidebarCompact ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
         </button>
 
-        <nav className="nav-stack">
+        <nav className="nav-stack" ref={navStackRef}>
+          <span
+            className={cx("nav-active-indicator", navIndicator.ready && "is-ready")}
+            aria-hidden="true"
+            style={
+              {
+                "--nav-indicator-y": `${navIndicator.top}px`,
+                "--nav-indicator-h": `${navIndicator.height}px`,
+              } as CSSProperties
+            }
+          />
           <p className="nav-section-label">İş axını</p>
           {(() => {
             const Icon = dashboardNavItem.icon;
-            const active = pathname === dashboardNavItem.href;
+            const current = matchesNavPath(dashboardNavItem.href, pathname);
+            const active = matchesNavPath(dashboardNavItem.href, highlightPath);
 
             return (
               <Link
@@ -471,7 +549,7 @@ export function AppShell({
                   activePendingHref === dashboardNavItem.href && "is-pending"
                 )}
                 aria-label={dashboardNavItem.label}
-                aria-current={active ? "page" : undefined}
+                aria-current={current ? "page" : undefined}
                 onClick={(event) => handleNavClick(dashboardNavItem.href, event)}
                 onPointerDown={(event) => handleNavPointerDown(dashboardNavItem.href, event)}
                 onMouseEnter={() => handleNavHover(dashboardNavItem.href)}
@@ -487,7 +565,8 @@ export function AppShell({
           })()}
           {visiblePrimaryNavItems.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const current = matchesNavPath(item.href, pathname);
+            const active = matchesNavPath(item.href, highlightPath);
 
             return (
               <Link
@@ -499,7 +578,7 @@ export function AppShell({
                   activePendingHref === item.href && "is-pending"
                 )}
                 aria-label={item.label}
-                aria-current={active ? "page" : undefined}
+                aria-current={current ? "page" : undefined}
                 onClick={(event) => handleNavClick(item.href, event)}
                 onPointerDown={(event) => handleNavPointerDown(item.href, event)}
                 onMouseEnter={() => handleNavHover(item.href)}
@@ -521,7 +600,8 @@ export function AppShell({
           <p className="nav-section-label">Resurslar</p>
           {visibleSecondaryNavItems.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const current = matchesNavPath(item.href, pathname);
+            const active = matchesNavPath(item.href, highlightPath);
 
             return (
               <Link
@@ -533,7 +613,7 @@ export function AppShell({
                   activePendingHref === item.href && "is-pending"
                 )}
                 aria-label={item.label}
-                aria-current={active ? "page" : undefined}
+                aria-current={current ? "page" : undefined}
                 onClick={(event) => handleNavClick(item.href, event)}
                 onPointerDown={(event) => handleNavPointerDown(item.href, event)}
                 onMouseEnter={() => handleNavHover(item.href)}

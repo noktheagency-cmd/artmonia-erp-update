@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { FormSelect } from "@/components/ui/select";
 import type {
   CorporateContactRow,
   CorporateCustomerData,
@@ -132,32 +133,39 @@ export function CorporateCustomerWorkspace({
             placeholder="Şirkət, VÖEN və ya əlaqəli şəxs axtar..."
           />
         </label>
-        <select
+        <FormSelect
+          name="corporateStatus"
           aria-label="Şirkət statusu"
           value={status}
-          onChange={(event) => {
-            setStatus(event.target.value);
+          onValueChange={(value) => {
+            setStatus(value);
             setPage(1);
           }}
-        >
-          <option value="all">Bütün statuslar</option>
-          {Object.entries(statusMeta).map(([value, meta]) => (
-            <option value={value} key={value}>{meta.label}</option>
-          ))}
-        </select>
-        <select
+          emptyLabel="Bütün statuslar"
+          emptyValue="all"
+          options={Object.entries(statusMeta).map(([value, meta]) => ({
+            value,
+            label: meta.label,
+          }))}
+          className="corporate-filter-select"
+        />
+        <FormSelect
+          name="corporateBudget"
           aria-label="Aylıq büdcə aralığı"
           value={budget}
-          onChange={(event) => {
-            setBudget(event.target.value);
+          onValueChange={(value) => {
+            setBudget(value);
             setPage(1);
           }}
-        >
-          <option value="all">Bütün büdcələr</option>
-          <option value="under-5000">5 000 ₼-dək</option>
-          <option value="5000-10000">5 000–10 000 ₼</option>
-          <option value="over-10000">10 000 ₼-dan çox</option>
-        </select>
+          emptyLabel="Bütün büdcələr"
+          emptyValue="all"
+          options={[
+            { value: "under-5000", label: "5 000 ₼-dək" },
+            { value: "5000-10000", label: "5 000–10 000 ₼" },
+            { value: "over-10000", label: "10 000 ₼-dan çox" },
+          ]}
+          className="corporate-filter-select"
+        />
         <Button variant="ghost" onClick={clearFilters}>
           <SlidersHorizontal data-icon="inline-start" /> Təmizlə
         </Button>
@@ -445,9 +453,14 @@ export function CorporateCustomerDialog({
             </label>
             <label>
               <span>Status</span>
-              <select name="status" defaultValue={customer?.status ?? "ACTIVE"}>
-                {Object.entries(statusMeta).map(([value, meta]) => <option value={value} key={value}>{meta.label}</option>)}
-              </select>
+              <FormSelect
+                name="status"
+                defaultValue={customer?.status ?? "ACTIVE"}
+                options={Object.entries(statusMeta).map(([value, meta]) => ({
+                  value,
+                  label: meta.label,
+                }))}
+              />
             </label>
             <div className="corporate-money-fields">
               <label>
@@ -520,7 +533,7 @@ export function CorporateCustomerDialog({
                     </label>
                     <label>
                       <span>Telefon</span>
-                      <Input value={contact.phone} onChange={(event) => updateContact(contact.key, "phone", event.target.value)} type="tel" maxLength={40} placeholder="+994 50 123 45 67" />
+                      <Input value={contact.phone} onChange={(event) => updateContact(contact.key, "phone", event.target.value)} type="tel" name="phone" placeholder="+994501234567" />
                     </label>
                     <label>
                       <span>E-poçt</span>

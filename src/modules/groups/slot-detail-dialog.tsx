@@ -105,7 +105,7 @@ export function SlotDetailDialog({
               <DialogTitle>
                 {slot.displayName ?? `${weekdayMeta[slot.weekday].label} · ${slot.startTime}–${slot.endTime}`}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription visible>
                 {shiftLabels[slot.shift]} növbəsi · {slot.teacherName} · {slot.room}
               </DialogDescription>
             </div>

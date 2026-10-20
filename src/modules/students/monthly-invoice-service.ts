@@ -10,6 +10,7 @@ import {
   resolvePaymentBillingPeriod,
 } from "@/modules/students/payment-billing-period";
 import { resolveEnrollmentBillingTerms } from "@/modules/students/enrollment-billing-terms";
+import { PublicActionError } from "@/server/actions/public-action-error";
 
 type MissingMonthlyInvoiceRow = {
   studentId: string;
@@ -61,7 +62,7 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
     },
   });
 
-  if (!student) throw new Error("Tələbə tapılmadı");
+  if (!student) throw new PublicActionError("Tələbə tapılmadı");
   let billingAnchorDate = student.billingAnchorDate;
 
   if (!billingAnchorDate) {
@@ -71,7 +72,7 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
       student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
       || student.billingPaused
     ) {
-      throw new Error(
+      throw new PublicActionError(
         "Aylıq dövr hələ başlamayıb. Billing yalnız ilk faktiki aylıq dərs iştirakından sonra açılır.",
       );
     }
@@ -81,7 +82,7 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
       ?? null;
 
     if (!confirmedFirstLessonAt) {
-      throw new Error("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
+      throw new PublicActionError("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
     }
 
     await tx.student.updateMany({
@@ -102,10 +103,10 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
   }
 
   if (!billingAnchorDate) {
-    throw new Error("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
+    throw new PublicActionError("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
   }
   if (student.enrollments.length === 0) {
-    throw new Error("Ödəniş üçün aktiv tədris paketi tapılmadı");
+    throw new PublicActionError("Ödəniş üçün aktiv tədris paketi tapılmadı");
   }
 
   const periodMonth = resolvePaymentBillingPeriod({

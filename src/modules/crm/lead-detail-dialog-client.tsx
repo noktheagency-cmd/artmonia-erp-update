@@ -8,10 +8,8 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   CalendarClock,
-  BookOpen,
   CircleUserRound,
   Clock3,
-  FileText,
   History,
   Pencil,
   Phone,
@@ -31,11 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { CrmData } from "@/modules/crm/queries";
@@ -179,65 +173,82 @@ export function LeadDetailDialogClient({
           </div>
         </DialogHeader>
 
-        <div className="crm-detail-summary">
-          <div><Phone aria-hidden="true" /><span>Telefon</span><strong>{lead.phone}</strong></div>
-          <div><UserRound aria-hidden="true" /><span>Məsul</span><strong>{lead.manager}</strong></div>
-          <div><CalendarClock aria-hidden="true" /><span>İzləmə tarixi</span><strong>{lead.nextFollowUpAt}</strong></div>
-          <div><Clock3 aria-hidden="true" /><span>Növbəti addım</span><strong>{lead.nextActionTypeLabel}</strong></div>
-        </div>
-
-        <section className="crm-dialog-section crm-manager-actions" aria-label="Menecer əsas əməliyyatları">
-          <header>
-            <h3>Əsas əməliyyatlar</h3>
-            <p>Əlaqə nəticəsi → Görüş → Qeydiyyatı tamamla</p>
-          </header>
-          {open ? <LeadContactPanel leadId={lead.id} /> : null}
-          {open ? <LeadAppointments leadId={lead.id} /> : null}
-          {open ? (
-            <div className="crm-manager-register">
-              <LeadRegistrationDialog
-                lead={lead}
-                programs={programs}
-                sourceOptions={sourceOptions}
-                returnTo={returnTo}
-                canConvert={canConvert}
-              />
+        <div className="crm-detail-body">
+          <div className="crm-detail-summary" aria-label="Qısa məlumat">
+            <div>
+              <Phone aria-hidden="true" />
+              <span>Telefon</span>
+              <strong>{lead.phone}</strong>
             </div>
-          ) : null}
-        </section>
-        <form action={updateLead} className="crm-dialog-form">
-          <input name="leadId" type="hidden" value={lead.id} />
-          <input name="returnTo" type="hidden" value={returnTo} />
+            <div>
+              <UserRound aria-hidden="true" />
+              <span>Məsul</span>
+              <strong>{lead.manager}</strong>
+            </div>
+            <div>
+              <CalendarClock aria-hidden="true" />
+              <span>İzləmə tarixi</span>
+              <strong>{lead.nextFollowUpAt}</strong>
+            </div>
+            <div>
+              <Clock3 aria-hidden="true" />
+              <span>Növbəti addım</span>
+              <strong>{lead.nextActionTypeLabel}</strong>
+            </div>
+          </div>
 
-          <div className="crm-dialog-scroll crm-detail-scroll">
+          <section className="crm-dialog-section crm-manager-actions" aria-label="Menecer əsas əməliyyatları">
+            <header>
+              <h3>Əsas əməliyyatlar</h3>
+              <ol className="crm-manager-flow">
+                <li>Əlaqə nəticəsi</li>
+                <li>Görüş</li>
+                <li>Qeydiyyatı tamamla</li>
+              </ol>
+            </header>
+            <div className="crm-manager-actions-body">
+              {open ? <LeadContactPanel leadId={lead.id} /> : null}
+              {open ? <LeadAppointments leadId={lead.id} /> : null}
+              {open ? (
+                <div className="crm-manager-register">
+                  <LeadRegistrationDialog
+                    lead={lead}
+                    programs={programs}
+                    sourceOptions={sourceOptions}
+                    returnTo={returnTo}
+                    canConvert={canConvert}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <form id={`lead-update-${lead.id}`} action={updateLead} className="crm-detail-update-form">
+            <input name="leadId" type="hidden" value={lead.id} />
+            <input name="returnTo" type="hidden" value={returnTo} />
+
             <section className="crm-dialog-section">
               <header><CircleUserRound aria-hidden="true" /><h3>Profil və maraq</h3></header>
               <FieldGroup className="crm-dialog-fields">
                 <Field>
                   <FieldLabel htmlFor={`lead-name-${lead.id}`}>Ad və soyad</FieldLabel>
-                  <InputGroup>
-                    <InputGroupAddon aria-hidden="true"><CircleUserRound /></InputGroupAddon>
-                    <InputGroupInput
-                      id={`lead-name-${lead.id}`}
-                      name="fullName"
-                      defaultValue={lead.detail.fullName}
-                      required
-                      minLength={2}
-                      maxLength={120}
-                    />
-                  </InputGroup>
+                  <Input
+                    id={`lead-name-${lead.id}`}
+                    name="fullName"
+                    defaultValue={lead.detail.fullName}
+                    required
+                    minLength={2}
+                    maxLength={120}
+                  />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor={`lead-phone-${lead.id}`}>Telefon</FieldLabel>
-                  <InputGroup>
-                    <InputGroupAddon aria-hidden="true"><Phone /></InputGroupAddon>
-                    <InputGroupInput
-                      id={`lead-phone-${lead.id}`}
-                      name="phone"
-                      defaultValue={lead.detail.phone}
-                      maxLength={40}
-                    />
-                  </InputGroup>
+                  <Input
+                    id={`lead-phone-${lead.id}`}
+                    name="phone"
+                    defaultValue={lead.detail.phone}
+                    type="tel"
+                  />
                 </Field>
                 <Field>
                   <FieldLabel>Mənbə</FieldLabel>
@@ -299,21 +310,18 @@ export function LeadDetailDialogClient({
                 {stage === "TRIAL_LESSON" ? (
                   <Field>
                     <FieldLabel htmlFor={`lead-trial-count-${lead.id}`}>Sınaq dərsi sayı</FieldLabel>
-                    <InputGroup>
-                      <InputGroupAddon aria-hidden="true"><BookOpen /></InputGroupAddon>
-                      <InputGroupInput
-                        id={`lead-trial-count-${lead.id}`}
-                        name="trialLessonCount"
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={100}
-                        step={1}
-                        value={trialLessonCount}
-                        onChange={(event) => setTrialLessonCount(event.currentTarget.value)}
-                        required
-                      />
-                    </InputGroup>
+                    <Input
+                      id={`lead-trial-count-${lead.id}`}
+                      name="trialLessonCount"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={100}
+                      step={1}
+                      value={trialLessonCount}
+                      onChange={(event) => setTrialLessonCount(event.currentTarget.value)}
+                      required
+                    />
                     <FieldDescription>Seçim zamanı 1 dərs avtomatik qeyd olunur.</FieldDescription>
                   </Field>
                 ) : null}
@@ -322,7 +330,7 @@ export function LeadDetailDialogClient({
 
             <section className="crm-dialog-section">
               <header><CalendarClock aria-hidden="true" /><h3>İzləmə planı</h3></header>
-              <FieldGroup className="crm-dialog-fields">
+              <FieldGroup className="crm-dialog-fields crm-followup-fields">
                 <Field>
                   <FieldLabel>Prioritet</FieldLabel>
                   <FormSelect
@@ -345,25 +353,24 @@ export function LeadDetailDialogClient({
                 </Field>
                 <Field>
                   <FieldLabel>Növbəti addım tarixi</FieldLabel>
-                  <DatePicker name="nextFollowUpDate" defaultValue={lead.detail.nextFollowUpDate} />
+                  <DatePicker
+                    name="nextFollowUpDate"
+                    defaultValue={lead.detail.nextFollowUpDate}
+                    compact
+                  />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor={`lead-note-${lead.id}`}>Yeniləmə qeydi *</FieldLabel>
-                  <InputGroup className="crm-update-note-group">
-                    <InputGroupAddon aria-hidden="true"><FileText /></InputGroupAddon>
-                    <textarea
-                      className="ui-input-group-input crm-update-note"
-                      id={`lead-note-${lead.id}`}
-                      name="note"
-                      value={note}
-                      onChange={(event) => setNote(event.currentTarget.value)}
-                      required
-                      placeholder="Səbəb və ya növbəti addım"
-                      rows={4}
-                      maxLength={CRM_UPDATE_NOTE_MAX_LENGTH}
-                      aria-describedby={`lead-note-limit-${lead.id}`}
-                    />
-                  </InputGroup>
+                  <Input
+                    id={`lead-note-${lead.id}`}
+                    name="note"
+                    value={note}
+                    onChange={(event) => setNote(event.currentTarget.value)}
+                    required
+                    placeholder="Səbəb və ya növbəti addım"
+                    maxLength={CRM_UPDATE_NOTE_MAX_LENGTH}
+                    aria-describedby={`lead-note-limit-${lead.id}`}
+                  />
                   <FieldDescription id={`lead-note-limit-${lead.id}`}>
                     {note.length.toLocaleString("az-AZ")} / {CRM_UPDATE_NOTE_MAX_LENGTH.toLocaleString("az-AZ")} simvol
                   </FieldDescription>
@@ -387,22 +394,29 @@ export function LeadDetailDialogClient({
                 <div className="crm-history-empty"><History aria-hidden="true" />Tarixçə yoxdur</div>
               )}
             </section>
-          </div>
+          </form>
+        </div>
 
-          <DialogFooter className="crm-dialog-actions">
-            <Button
-              className="crm-detail-delete-trigger"
-              type="button"
-              variant="ghost"
-              onClick={() => { setDeleteReason(""); setDeleteOpen(true); }}
-            >
-              <Trash2 data-icon="inline-start" />
-              Müraciəti sil
-            </Button>
-            <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
-            <Button type="submit" disabled={!note.trim() || saving}><Pencil data-icon="inline-start" />Yadda saxla</Button>
-          </DialogFooter>
-        </form>
+        <DialogFooter className="crm-dialog-actions">
+          <Button
+            className="crm-detail-delete-trigger"
+            type="button"
+            variant="ghost"
+            onClick={() => { setDeleteReason(""); setDeleteOpen(true); }}
+          >
+            <Trash2 data-icon="inline-start" />
+            Müraciəti sil
+          </Button>
+          <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
+          <Button
+            type="submit"
+            form={`lead-update-${lead.id}`}
+            disabled={!note.trim() || saving}
+          >
+            <Pencil data-icon="inline-start" />
+            Yadda saxla
+          </Button>
+        </DialogFooter>
 
         <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <DialogContent className="crm-modern-dialog crm-delete-dialog">
@@ -415,9 +429,15 @@ export function LeadDetailDialogClient({
             <form action={deleteLead}>
               <Field>
                 <FieldLabel htmlFor={`lead-delete-reason-${lead.id}`}>Silinmə açıqlaması *</FieldLabel>
-                <InputGroup>
-                  <InputGroupInput id={`lead-delete-reason-${lead.id}`} name="reason" value={deleteReason} onChange={(event) => setDeleteReason(event.currentTarget.value)} placeholder="Müraciətin silinmə səbəbini yazın" required maxLength={500} />
-                </InputGroup>
+                <Input
+                  id={`lead-delete-reason-${lead.id}`}
+                  name="reason"
+                  value={deleteReason}
+                  onChange={(event) => setDeleteReason(event.currentTarget.value)}
+                  placeholder="Müraciətin silinmə səbəbini yazın"
+                  required
+                  maxLength={500}
+                />
               </Field>
               <input name="leadId" type="hidden" value={lead.id} />
               <input name="returnTo" type="hidden" value={returnTo} />

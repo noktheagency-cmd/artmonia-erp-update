@@ -211,7 +211,7 @@ type CrmLeadFocusRow = {
   id: string;
   name: string;
   phone: string;
-  bucket: "today" | "overdue";
+  bucket: "today" | "tomorrow" | "overdue";
   priorityLabel: string;
   priorityTone: "success" | "warning" | "danger" | "neutral" | "info";
   nextActionTypeLabel: string;
@@ -242,6 +242,7 @@ type CrmCacheInput = {
   today: string;
   todayStart: string;
   tomorrowStart: string;
+  dayAfterTomorrowStart: string;
 };
 
 type CrmRawRow = {
@@ -354,6 +355,8 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const todayStart = getBakuBusinessDate(today);
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setUTCDate(todayStart.getUTCDate() + 1);
+  const dayAfterTomorrowStart = new Date(tomorrowStart);
+  dayAfterTomorrowStart.setUTCDate(tomorrowStart.getUTCDate() + 1);
 
   const [row] = await readCrmRawData({
     actor: {
@@ -374,6 +377,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     today: cachedToday.toISOString(),
     todayStart: todayStart.toISOString(),
     tomorrowStart: tomorrowStart.toISOString(),
+    dayAfterTomorrowStart: dayAfterTomorrowStart.toISOString(),
   });
   const stageCounts = asJsonRecord(row?.stageCounts);
   const totalLeads = toNumber(row?.totalLeads);
@@ -489,10 +493,12 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     })),
     stageAllTimeTotal,
     listTotalCount,
-    attentionFocus: attentionRows.map((lead) => formatAttentionRow(lead, todayStart)),
+    attentionFocus: attentionRows.map((lead) =>
+      formatAttentionRow(lead, todayStart, tomorrowStart),
+    ),
     createdTodayFocus: asJsonArray<CrmAttentionRawRow>(row?.createdTodayLeads).map(
       (lead) => ({
-        ...formatAttentionRow(lead, todayStart),
+        ...formatAttentionRow(lead, todayStart, tomorrowStart),
         createdAt: lead.createdAt ? new Intl.DateTimeFormat("az-AZ", {
           timeZone: "Asia/Baku",
           day: "2-digit",
@@ -550,7 +556,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data-v6"],
+  ["crm-pipeline-data-v7"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -578,6 +584,7 @@ function toCrmRawDataInput(input: CrmCacheInput) {
     today: new Date(input.today),
     todayStart: new Date(input.todayStart),
     tomorrowStart: new Date(input.tomorrowStart),
+    dayAfterTomorrowStart: new Date(input.dayAfterTomorrowStart),
   };
 }
 
@@ -598,6 +605,7 @@ function getCrmRawData(
     today: Date;
     todayStart: Date;
     tomorrowStart: Date;
+    dayAfterTomorrowStart: Date;
   }
 ) {
   const scopeSql = buildLeadScopeSql(input.actor);
@@ -863,7 +871,7 @@ function getCrmRawData(
               'NURTURE'::"erp"."LeadStage"
             )
             and l.next_follow_up_at is not null
-            and l.next_follow_up_at < ${input.tomorrowStart}
+            and l.next_follow_up_at < ${input.dayAfterTomorrowStart}
           order by l.next_follow_up_at asc, c.full_name asc
         ) attention_rows
       ), '[]'::jsonb) as "attentionLeads",
@@ -1165,21 +1173,33 @@ function buildCrmListWhereSql(input: {
       and (l.next_follow_up_at is null or l.next_follow_up_at <= ${input.today})
     `);
   } else if (input.followUpFilter === "workshop_masterclass") {
+    // Sold/lost leads must leave every follow-up queue, including source-based lists.
     conditions.push(Prisma.sql`
-      l.next_follow_up_at is not null
+      l.stage not in ('REGISTERED'::"erp"."LeadStage", 'LOST'::"erp"."LeadStage")
+      and l.next_follow_up_at is not null
       and lower(coalesce(l.source, '')) ~ '(workshop|masterclass|master class|masterklass|ustad)'
     `);
   } else if (input.followUpFilter === "overdue") {
-    conditions.push(Prisma.sql`l.next_follow_up_at < ${input.todayStart}`);
+    conditions.push(Prisma.sql`
+      l.stage not in ('REGISTERED'::"erp"."LeadStage", 'LOST'::"erp"."LeadStage")
+      and l.next_follow_up_at < ${input.todayStart}
+    `);
   } else if (input.followUpFilter === "today") {
     conditions.push(Prisma.sql`
-      l.next_follow_up_at >= ${input.todayStart}
+      l.stage not in ('REGISTERED'::"erp"."LeadStage", 'LOST'::"erp"."LeadStage")
+      and l.next_follow_up_at >= ${input.todayStart}
       and l.next_follow_up_at < ${input.tomorrowStart}
     `);
   } else if (input.followUpFilter === "unplanned") {
-    conditions.push(Prisma.sql`l.next_follow_up_at is null`);
+    conditions.push(Prisma.sql`
+      l.stage not in ('REGISTERED'::"erp"."LeadStage", 'LOST'::"erp"."LeadStage")
+      and l.next_follow_up_at is null
+    `);
   } else if (input.followUpFilter === "scheduled") {
-    conditions.push(Prisma.sql`l.next_follow_up_at is not null`);
+    conditions.push(Prisma.sql`
+      l.stage not in ('REGISTERED'::"erp"."LeadStage", 'LOST'::"erp"."LeadStage")
+      and l.next_follow_up_at is not null
+    `);
   }
 
   return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
@@ -1396,17 +1416,25 @@ function resolveCrmPeriodRange({
 
 function formatAttentionRow(
   lead: CrmAttentionRawRow,
-  todayStart: Date
+  todayStart: Date,
+  tomorrowStart: Date,
 ): CrmLeadFocusRow {
   const priority = normalizePriority(lead.priority ?? undefined) ?? leadPriorityOptions[0];
   const nextActionType = normalizeNextActionTypeValue(lead.nextActionType);
   const source = lead.source?.trim().toLocaleLowerCase("az-AZ") ?? "";
+  const followUpAt = lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt) : null;
+  const bucket: CrmLeadFocusRow["bucket"] =
+    followUpAt && followUpAt < todayStart
+      ? "overdue"
+      : followUpAt && followUpAt >= tomorrowStart
+        ? "tomorrow"
+        : "today";
 
   return {
     id: lead.id,
     name: lead.fullName,
     phone: lead.phone ?? "-",
-    bucket: lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < todayStart ? "overdue" : "today",
+    bucket,
     priorityLabel: formatLeadPriorityLabel(priority),
     priorityTone: leadPriorityTones[priority],
     nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),

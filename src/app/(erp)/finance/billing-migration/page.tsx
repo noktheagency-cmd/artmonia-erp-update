@@ -59,7 +59,6 @@ export default async function BillingMigrationPage() {
         <div>
           <Link href="/finance" className="back-link">← Maliyyəyə qayıt</Link>
           <h1>Billing migration müqayisə hesabatı</h1>
-          <p>Köhnə manual tarix, qorunan ilk dərs tarixi və sistemin təklif etdiyi billing tarixi.</p>
         </div>
       </div>
 

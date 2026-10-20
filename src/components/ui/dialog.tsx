@@ -66,7 +66,7 @@ export function DialogFooter({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cx("ui-dialog-footer", className)} {...props} />;
+  return <div className={cx("ui-dialog-footer", className)} data-slot="dialog-footer" {...props} />;
 }
 
 export const DialogTitle = React.forwardRef<
@@ -78,13 +78,20 @@ export const DialogTitle = React.forwardRef<
 
 DialogTitle.displayName = DialogPrimitive.Title.displayName;
 
+type DialogDescriptionProps = React.ComponentPropsWithoutRef<
+  typeof DialogPrimitive.Description
+> & {
+  /** Keep subtitle visible. Default hides instructional modal copy. */
+  visible?: boolean;
+};
+
 export const DialogDescription = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Description>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
->(({ className, ...props }, ref) => (
+  DialogDescriptionProps
+>(({ className, visible = false, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cx("ui-dialog-description", className)}
+    className={cx("ui-dialog-description", !visible && "sr-only", className)}
     {...props}
   />
 ));

@@ -136,7 +136,6 @@ export function WorkshopWorkspace({
       <header className="workshop-topbar">
         <div>
           <h1>Workshop &amp; Masterclass</h1>
-          <p>Tədbirləri, iştirakçıları və daxili maliyyəni vahid iş sahəsində idarə et.</p>
         </div>
         <div className="workshop-topbar-actions">
           {data.permissions.canManage ? (
@@ -365,7 +364,7 @@ function CreateWorkshopFollowUpDialog({ participants, events, assignees, action 
               {sourceType === "NEW_CONTACT" ? (
                 <>
                   <Field className="workshop-field-span-2"><FieldLabel htmlFor="new-follow-up-name">Ad və soyad</FieldLabel><Input id="new-follow-up-name" name="fullName" required placeholder="Məsələn, Aysel Məmmədova" /></Field>
-                  <Field><FieldLabel htmlFor="new-follow-up-phone">Telefon</FieldLabel><Input id="new-follow-up-phone" name="phone" type="tel" placeholder="+994 50 000 00 00" /></Field>
+                  <Field><FieldLabel htmlFor="new-follow-up-phone">Telefon</FieldLabel><Input id="new-follow-up-phone" name="phone" type="tel" placeholder="+994501234567" /></Field>
                   <Field><FieldLabel htmlFor="new-follow-up-email">E-poçt</FieldLabel><Input id="new-follow-up-email" name="email" type="email" placeholder="contact@example.com" /></Field>
                 </>
               ) : (

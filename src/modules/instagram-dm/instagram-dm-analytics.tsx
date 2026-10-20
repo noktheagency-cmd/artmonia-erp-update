@@ -37,7 +37,6 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
       <header className="instagram-dm-header">
         <div>
           <h1>DM Intelligence</h1>
-          <p>Customer behavior və ümumi komanda danışıq keyfiyyətinin AI analizi.</p>
           <span className="instagram-dm-connection">
             <i className={cx(data.account.connected && "is-connected")} />
             {data.account.connected ? "Instagram bağlıdır" : "Instagram bağlantısı yoxdur"}

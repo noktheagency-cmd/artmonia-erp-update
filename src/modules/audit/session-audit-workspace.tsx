@@ -210,7 +210,6 @@ export function SessionAuditWorkspace({
       <header className={styles.pageHeader}>
         <div>
           <h1>Audit və təhlükəsizlik</h1>
-          <p>Giriş hesablarını, parolları, rolları və aktiv sessiyaları vahid təhlükəsizlik mərkəzindən idarə edin.</p>
         </div>
         <span className={styles.scopeLabel}>
           <ShieldCheck /> {tab === "PAYMENT_DATES"
@@ -422,7 +421,7 @@ export function SessionAuditWorkspace({
                 <span className={styles.detailDeviceIcon}><DeviceIcon type={selectedSession.deviceType} /></span>
                 <div>
                   <DialogTitle>{selectedSession.browserName} · {selectedSession.osName}</DialogTitle>
-                  <DialogDescription>{selectedSession.deviceName}</DialogDescription>
+                  <DialogDescription visible>{selectedSession.deviceName}</DialogDescription>
                 </div>
               </DialogHeader>
               {selectedSession.isCurrent ? <span className={styles.currentDetailLabel}><Wifi /> Hazırkı cihaz</span> : null}

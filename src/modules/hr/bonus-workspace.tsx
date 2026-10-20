@@ -137,9 +137,18 @@ export function BonusWorkspace({
       <div className="hr-bonus-command-row">
         <label className="hr-bonus-campaign-select">
           <span>Kampaniya</span>
-          <select value={selected.id} onChange={(event) => setSelectedId(event.target.value)}>
-            {data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name} · {campaign.department}</option>)}
-          </select>
+          <FormSelect
+            name="bonusCampaign"
+            aria-label="Kampaniya"
+            value={selected.id}
+            onValueChange={setSelectedId}
+            searchable
+            searchPlaceholder="Kampaniya axtar..."
+            options={data.campaigns.map((campaign) => ({
+              value: campaign.id,
+              label: `${campaign.name} · ${campaign.department}`,
+            }))}
+          />
         </label>
         <div className="hr-bonus-command-actions">
           {data.permissions.canManage ? <Button variant="outline" onClick={() => run(() => actions.refresh(new FormData()), "Bonus göstəriciləri yeniləndi.")}><RefreshCw data-icon="inline-start" /> Yenilə</Button> : null}

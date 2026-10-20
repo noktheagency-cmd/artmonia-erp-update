@@ -214,7 +214,6 @@ export function CrmPipeline({ data }: { data: CrmData }) {
           {data.access.canCreateLead ? (
             <NewLeadDialog
               programs={data.programs}
-              campaigns={data.campaigns}
               sourceOptions={data.sourceOptions}
               currentManagerName={data.access.actorName}
             />

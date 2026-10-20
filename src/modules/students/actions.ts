@@ -475,6 +475,7 @@ async function createStudentActionImpl(formData: FormData) {
         note: input.paymentNote ?? input.notes ?? null,
         actorId: actor.id,
         idempotencyKey: input.idempotencyKey,
+        receiptPurpose: "ADMISSION",
       });
     }
 
@@ -582,6 +583,7 @@ async function recordStudentPaymentActionImpl(formData: FormData) {
       note: input.note ?? null,
       actorId: actor.id,
       idempotencyKey: input.idempotencyKey,
+      receiptPurpose: input.receiptPurpose,
     });
 
     if (input.admissionLeadId && !actor.permissions.has("crm.lead.convert")) throw new PublicActionError("Müraciətdən qəbul yaratmaq icazəniz yoxdur.","FORBIDDEN");
@@ -1589,15 +1591,20 @@ async function createPaymentAndAllocate(
     note: string | null;
     actorId: string;
     idempotencyKey: string;
+    receiptPurpose?: string;
   }
 ) {
   const paymentStudent = await tx.student.findUnique({
     where: { id: input.studentId },
-    select: { lifecycleStatus: true },
+    select: {
+      lifecycleStatus: true,
+      billingPaused: true,
+      billingAnchorDate: true,
+    },
   });
 
   if (!paymentStudent) {
-    throw new Error("Tələbə tapılmadı");
+    throw new PublicActionError("Tələbə tapılmadı");
   }
 
   if (paymentStudent.lifecycleStatus === StudentLifecycleStatus.COMPLETED) {
@@ -1606,15 +1613,25 @@ async function createPaymentAndAllocate(
     );
   }
 
-  const paymentMonth = input.scheduleType === "MONTHLY"
-    ? await ensureStudentMonthlyInvoicesForPeriod(tx, {
-        studentId: input.studentId,
-        requestedPeriodMonth: input.paymentMonth,
-        asOfDate: input.paidAt,
-      })
-    : input.paymentMonth;
+  // Admission / first-period deposit payments are valid before billing opens.
+  const allowPreBillingDeposit =
+    (input.receiptPurpose === "ADMISSION" || input.receiptPurpose === "INITIAL_BALANCE")
+    && (
+      paymentStudent.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
+      || paymentStudent.billingPaused
+      || !paymentStudent.billingAnchorDate
+    );
 
-  if (input.scheduleType === "ONE_TIME") {
+  const paymentMonth =
+    input.scheduleType === "MONTHLY" && !allowPreBillingDeposit
+      ? await ensureStudentMonthlyInvoicesForPeriod(tx, {
+          studentId: input.studentId,
+          requestedPeriodMonth: input.paymentMonth,
+          asOfDate: input.paidAt,
+        })
+      : input.paymentMonth;
+
+  if (input.scheduleType === "ONE_TIME" && !allowPreBillingDeposit) {
     await ensureMissingStudentMonthlyInvoices(tx, {
       studentId: input.studentId,
       throughDate: input.paidAt,
@@ -1631,7 +1648,9 @@ async function createPaymentAndAllocate(
         where: {
           status: { not: InvoiceStatus.VOID },
           balanceDue: { gt: 0 },
-          ...(input.scheduleType === "MONTHLY" ? { periodMonth: paymentMonth } : {}),
+          ...(input.scheduleType === "MONTHLY" && !allowPreBillingDeposit
+            ? { periodMonth: paymentMonth }
+            : {}),
         },
         orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
         select: {
@@ -1651,10 +1670,10 @@ async function createPaymentAndAllocate(
   });
 
   if (!student) {
-    throw new Error("Tələbə tapılmadı");
+    throw new PublicActionError("Tələbə tapılmadı");
   }
 
-  let invoices = student.invoices;
+  let invoices = allowPreBillingDeposit ? [] : student.invoices;
   const periodMonth = paymentMonth;
   const openBalance = roundMoney(
     invoices.reduce((total, invoice) => total + toNumber(invoice.balanceDue), 0),
@@ -1666,13 +1685,13 @@ async function createPaymentAndAllocate(
     );
   }
 
-  if (input.scheduleType === "MONTHLY" && openBalance <= 0) {
+  if (input.scheduleType === "MONTHLY" && openBalance <= 0 && !allowPreBillingDeposit) {
     throw new PublicActionError(
       "Seçilmiş ay üzrə açıq faktura yoxdur. Aid olduğu ayı yoxlayın.",
     );
   }
 
-  if (input.scheduleType === "MONTHLY" && input.amount > openBalance) {
+  if (input.scheduleType === "MONTHLY" && input.amount > openBalance && !allowPreBillingDeposit) {
     throw new PublicActionError(
       "Aylıq ödəniş seçilmiş ayın açıq balansından çox ola bilməz. Artıq məbləğ üçün ayrıca gələcək ay seçin.",
     );
@@ -1680,12 +1699,14 @@ async function createPaymentAndAllocate(
 
   if (input.scheduleType === "ONE_TIME" && input.amount > openBalance) {
     const oneTimeAmount = roundMoney(input.amount - openBalance);
+    // One-time invoices must not attach enrollment: sync_student_billing_cycle_from_invoice
+    // uses UNIQUE (enrollment_id, cycle_start=due_date) and same-day deposit remainders collide.
     const invoice = await tx.invoice.upsert({
       where: { idempotencyKey: `student-one-time-${input.idempotencyKey}` },
       update: {},
       create: {
         studentId: student.id,
-        enrollmentId: student.enrollments[0]?.id ?? null,
+        enrollmentId: null,
         periodMonth,
         issueDate: input.paidAt,
         dueDate: input.paidAt,

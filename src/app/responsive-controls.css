@@ -103,7 +103,8 @@ html body .date-picker-popover .date-picker-current select {
   min-height: 36px;
   font-size: 14px;
 }
-html body .date-picker-popover .date-picker-day {
+html body .date-picker-popover .date-picker-day,
+html body .date-picker-popover .month-picker-month {
   min-width: 0;
   min-height: 36px;
   font-size: 14px;

@@ -41,7 +41,12 @@ export function getAppErrorDetails(
       ? error.message
       : typeof error === "string"
         ? error
-        : fallback;
+        : error &&
+            typeof error === "object" &&
+            "message" in error &&
+            typeof (error as { message?: unknown }).message === "string"
+          ? (error as { message: string }).message
+          : fallback;
   const message = rawMessage.trim() || fallback;
 
   if (NETWORK_ERROR_PATTERN.test(message)) {

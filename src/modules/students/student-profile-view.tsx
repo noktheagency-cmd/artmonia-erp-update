@@ -8,15 +8,17 @@ import type { getStudentDetailData } from "./queries";
 
 type Student = NonNullable<Awaited<ReturnType<typeof getStudentDetailData>>>["student"];
 
-export function StudentProfileView({ student, actions, mobileAccount, freezePeriods, billingDeadline, completeReminderAction }: {
+export function StudentProfileView({ student, actions, mobileAccount, freezePeriods, billingDeadline, completeReminderAction, canReadAttendance = false }: {
   student: Student;
   actions: ReactNode;
   mobileAccount: ReactNode;
   freezePeriods: ReactNode;
   billingDeadline: ReactNode;
   completeReminderAction: (formData: FormData) => unknown | Promise<unknown>;
+  canReadAttendance?: boolean;
 }) {
   const detail = student.detail;
+  const attendance = detail.attendance;
   const profileFields = [
     ["Məsul menecer", detail.manager], ["Qeydiyyat tarixi", detail.registeredAt],
     ["Müəllim", student.teacher], ["Qrup / dərs vaxtı", student.group],
@@ -48,7 +50,11 @@ export function StudentProfileView({ student, actions, mobileAccount, freezePeri
           <div><dt>Növbəti ödəniş tarixi</dt><dd>{student.dueDate}</dd></div>
         </dl>
         <TabsList className="sp-tabs" variant="line" aria-label="Tələbə məlumatları">
-          <TabsTrigger value="overview">Ümumi</TabsTrigger><TabsTrigger value="education">Tədris</TabsTrigger><TabsTrigger value="finance">Maliyyə</TabsTrigger><TabsTrigger value="history">Tarixçə</TabsTrigger>
+          <TabsTrigger value="overview">Ümumi</TabsTrigger>
+          <TabsTrigger value="education">Tədris</TabsTrigger>
+          {canReadAttendance ? <TabsTrigger value="attendance">Davamiyyət</TabsTrigger> : null}
+          <TabsTrigger value="finance">Maliyyə</TabsTrigger>
+          <TabsTrigger value="history">Tarixçə</TabsTrigger>
         </TabsList>
       </header>
 
@@ -79,6 +85,58 @@ export function StudentProfileView({ student, actions, mobileAccount, freezePeri
         </ProfilePanel>
         <div className="sp-freeze">{freezePeriods}</div>
       </TabsContent>
+
+      {canReadAttendance ? (
+        <TabsContent value="attendance" className="sp-tab-content" keepMounted>
+          <ProfilePanel title="Davamiyyət xülasəsi">
+            <dl className="sp-financial-summary sp-attendance-summary" aria-label="Davamiyyət xülasəsi">
+              <div><dt>Ümumi qeyd</dt><dd>{attendance.total}</dd></div>
+              <div data-tone="credit"><dt>Gəldi</dt><dd>{attendance.present}</dd></div>
+              <div data-tone="debt"><dt>Gəlmədi</dt><dd>{attendance.absent}</dd></div>
+              <div><dt>Üzrlü</dt><dd>{attendance.excused}</dd></div>
+              <div><dt>Davamiyyət</dt><dd>{attendance.rate === null ? "—" : `${attendance.rate}%`}</dd></div>
+            </dl>
+          </ProfilePanel>
+          <ProfilePanel title="Dərs jurnalı" count={attendance.records.length}>
+            {attendance.records.length ? (
+              <div className="sp-table-scroll" tabIndex={0} aria-label="Davamiyyət jurnalı">
+                <table className="sp-table">
+                  <thead>
+                    <tr>
+                      <th>Tarix</th>
+                      <th>Slot</th>
+                      <th>Müəllim</th>
+                      <th>Proqram</th>
+                      <th>Status</th>
+                      <th>Qeyd</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendance.records.map((record) => (
+                      <tr key={record.id}>
+                        <td>
+                          <strong>{record.date}</strong>
+                          <small>{record.time}</small>
+                        </td>
+                        <td>
+                          {record.slot}
+                          <small>{record.room}</small>
+                        </td>
+                        <td>{record.teacher}</td>
+                        <td>{record.program}</td>
+                        <td><StatusChip tone={record.tone}>{record.status}</StatusChip></td>
+                        <td>{record.note || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyDetail text="Bu tələbə üçün hələ davamiyyət qeydi yoxdur. Qruplar jurnalından qeyd yazıldıqdan sonra burada görünəcək." />
+            )}
+          </ProfilePanel>
+        </TabsContent>
+      ) : null}
 
       <TabsContent value="finance" className="sp-tab-content" keepMounted>
         {billingDeadline && <div className="sp-finance-tools">{billingDeadline}</div>}

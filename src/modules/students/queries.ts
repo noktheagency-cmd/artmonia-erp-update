@@ -939,6 +939,39 @@ type StudentPackageUsageRaw = {
   periodSource: "BILLING_CYCLE" | "CALENDAR_MONTH";
 };
 
+type StudentAttendanceRawRow = {
+  id: string;
+  sessionDate: Date | string;
+  startTime: string;
+  endTime: string;
+  status: "PRESENT" | "ABSENT" | "EXCUSED";
+  note: string | null;
+  teacherName: string;
+  programName: string;
+  weekday: string | null;
+  slotName: string | null;
+  room: string | null;
+};
+
+const attendanceStatusMeta: Record<
+  StudentAttendanceRawRow["status"],
+  { label: string; tone: StudentTone }
+> = {
+  PRESENT: { label: "Gəldi", tone: "success" },
+  ABSENT: { label: "Gəlmədi", tone: "danger" },
+  EXCUSED: { label: "Üzrlü", tone: "warning" },
+};
+
+const weekdayLabelsAz: Record<string, string> = {
+  MONDAY: "Bazar ertəsi",
+  TUESDAY: "Çərşənbə axşamı",
+  WEDNESDAY: "Çərşənbə",
+  THURSDAY: "Cümə axşamı",
+  FRIDAY: "Cümə",
+  SATURDAY: "Şənbə",
+  SUNDAY: "Bazar",
+};
+
 type StudentReminderRawRow = {
   id: string;
   studentId: string;
@@ -2343,21 +2376,12 @@ function buildStudentSlotsJsonSql(studentId: Prisma.Sql) {
 }
 
 function mapStudentSlot(slot: StudentSlotRecord) {
-  const weekdayLabels: Record<string, string> = {
-    MONDAY: "Bazar ertəsi",
-    TUESDAY: "Çərşənbə axşamı",
-    WEDNESDAY: "Çərşənbə",
-    THURSDAY: "Cümə axşamı",
-    FRIDAY: "Cümə",
-    SATURDAY: "Şənbə",
-    SUNDAY: "Bazar",
-  };
   const shiftLabels: Record<string, string> = {
     MORNING: "Səhər",
     AFTERNOON: "Günorta",
     EVENING: "Axşam",
   };
-  const weekday = weekdayLabels[slot.weekday] ?? slot.weekday;
+  const weekday = weekdayLabelsAz[slot.weekday] ?? slot.weekday;
   const shift = shiftLabels[slot.shift] ?? slot.shift;
 
   return {
@@ -2862,7 +2886,15 @@ export async function getStudentDetailData(studentId: string) {
         : "";
 
   const canAssignStudentManager = scopeFor(actor.permissions, "student.update") === "ALL";
-  const [options, reminders, managers, packages, packageUsageRows] = await Promise.all([
+  const canReadAttendance = actor.permissions.has("attendance.read");
+  const attendanceScope = scopeFor(actor.permissions, "attendance.read");
+  const attendanceTeacherScopeSql = attendanceScope === "ALL"
+    ? Prisma.sql`true`
+    : attendanceScope === "ASSIGNED"
+      ? Prisma.sql`t.user_id = ${actor.id}::uuid`
+      : Prisma.sql`false`;
+
+  const [options, reminders, managers, packages, packageUsageRows, attendanceRows] = await Promise.all([
     getStudentCreateOptions(prisma, today),
     getStudentReminderHistory(prisma, actor, studentId),
     prisma.user.findMany({
@@ -2945,6 +2977,33 @@ export async function getStudentDetailData(studentId: string) {
           'PAUSED'::"erp"."EnrollmentStatus"
         )
     `),
+    canReadAttendance
+      ? prisma.$queryRaw<StudentAttendanceRawRow[]>(Prisma.sql`
+          select
+            ar.id::text as "id",
+            ss.session_date as "sessionDate",
+            ss.start_time as "startTime",
+            ss.end_time as "endTime",
+            ar.status::text as "status",
+            ar.note,
+            t.full_name as "teacherName",
+            p.name as "programName",
+            cs.weekday::text as "weekday",
+            cs.display_name as "slotName",
+            cs.room as "room"
+          from erp.attendance_records ar
+          join erp.enrollments e on e.id = ar.enrollment_id
+          join erp.slot_sessions ss on ss.id = ar.session_id
+          join erp.teachers t on t.id = ar.teacher_id
+          join erp.programs p on p.id = e.program_id
+          left join erp.class_slots cs on cs.id = ss.slot_id
+          where e.student_id = ${studentId}::uuid
+            and ${attendanceTeacherScopeSql}
+            and ss.status <> 'CANCELLED'::"erp"."SlotSessionStatus"
+          order by ss.session_date desc, ss.start_time desc, ar.marked_at desc
+          limit 100
+        `)
+      : Promise.resolve([] as StudentAttendanceRawRow[]),
   ]);
   const packageUsageByEnrollment = new Map(
     packageUsageRows.map((usage) => [usage.enrollmentId, usage]),
@@ -2996,6 +3055,7 @@ export async function getStudentDetailData(studentId: string) {
       canChangeStatus: actor.permissions.has("student.status.change"),
       canDeleteStudent: actor.permissions.has("student.delete"),
       canManageReminders: actor.permissions.has("task.manage"),
+      canReadAttendance,
     },
     createOptions: {
       leads: options.leads,
@@ -3170,7 +3230,42 @@ export async function getStudentDetailData(studentId: string) {
           date: formatShortDate(item.effectiveAt),
           changedBy: item.changedByName ?? "Sistem",
         })),
+        attendance: mapStudentAttendance(attendanceRows),
       },
     }
+  };
+}
+
+function mapStudentAttendance(rows: StudentAttendanceRawRow[]) {
+  const present = rows.filter((row) => row.status === "PRESENT").length;
+  const absent = rows.filter((row) => row.status === "ABSENT").length;
+  const excused = rows.filter((row) => row.status === "EXCUSED").length;
+  const marked = present + absent;
+  const rate = marked > 0 ? Math.round((present / marked) * 100) : null;
+
+  return {
+    present,
+    absent,
+    excused,
+    total: rows.length,
+    rate,
+    records: rows.map((row) => {
+      const meta = attendanceStatusMeta[row.status];
+      const weekday = row.weekday ? weekdayLabelsAz[row.weekday] ?? row.weekday : null;
+      const slotLabel = row.slotName?.trim()
+        || (weekday ? `${weekday} · ${row.startTime}–${row.endTime}` : `${row.startTime}–${row.endTime}`);
+      return {
+        id: row.id,
+        date: formatShortDate(row.sessionDate),
+        time: `${row.startTime}–${row.endTime}`,
+        slot: slotLabel,
+        room: row.room?.trim() || "—",
+        teacher: row.teacherName,
+        program: row.programName,
+        status: meta.label,
+        tone: meta.tone,
+        note: row.note?.trim() || "",
+      };
+    }),
   };
 }

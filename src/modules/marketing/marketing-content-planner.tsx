@@ -128,7 +128,6 @@ export function MarketingContentPlanner({
           <span className="content-heading-icon"><CalendarDays size={20} /></span>
           <div>
             <h1>Content plan</h1>
-            <p>Marketing paylaşımlarını planla, təsdiqə göndər və yayıma hazırla.</p>
           </div>
         </div>
         <div className="content-topbar-actions">

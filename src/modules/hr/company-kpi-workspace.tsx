@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { CalendarRange, Equal, LoaderCircle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Progress } from "@/components/ui/progress";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
@@ -79,7 +80,12 @@ export function CompanyKpiWorkspace({
         </div>
         <label>
           <span>Ay</span>
-          <Input aria-label="KPI ayı" type="month" value={data.periodMonth} onChange={(event) => changeMonth(event.target.value)} />
+          <MonthPicker
+            aria-label="KPI ayı"
+            value={data.periodMonth}
+            onValueChange={changeMonth}
+            allowClear={false}
+          />
         </label>
       </div>
 
@@ -183,7 +189,15 @@ function PlanEditor({ data, pending, onSave }: { data: CompanyKpiData; pending: 
 
       <div className="company-kpi-plan-meta">
         <label><span>Plan adı</span><Input value={name} onChange={(event) => setName(event.target.value)} minLength={3} maxLength={120} required /></label>
-        <label><span>Başlanğıc ayı</span><Input type="month" value={startMonth} onChange={(event) => changeStartMonth(event.target.value)} required /></label>
+        <label>
+          <span>Başlanğıc ayı</span>
+          <MonthPicker
+            value={startMonth}
+            onValueChange={changeStartMonth}
+            allowClear={false}
+            required
+          />
+        </label>
         <Button type="button" variant="outline" onClick={() => redistribute()}><Equal data-icon="inline-start" /> Bərabər böl</Button>
       </div>
 

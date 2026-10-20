@@ -18,6 +18,7 @@ type DatePickerProps = {
   className?: string;
   popoverPlacement?: "default" | "floating";
   compact?: boolean;
+  minValue?: string;
   maxValue?: string;
 };
 
@@ -49,6 +50,7 @@ export function DatePicker({
   className,
   popoverPlacement = "floating",
   compact = false,
+  minValue,
   maxValue,
 }: DatePickerProps) {
   const isControlled = value !== undefined;
@@ -183,6 +185,7 @@ export function DatePicker({
 
   function selectDate(date: Date) {
     const nextValue = toPickerDate(date);
+    if (minValue && nextValue < minValue) return;
     if (maxValue && nextValue > maxValue) return;
     updateValue(nextValue);
     setViewDate(date);
@@ -269,7 +272,9 @@ export function DatePicker({
           const dayValue = toPickerDate(day.date);
           const isSelected = selectedDate ? dayValue === toPickerDate(selectedDate) : false;
           const isToday = dayValue === todayValue;
-          const isDisabled = Boolean(maxValue && dayValue > maxValue);
+          const isDisabled = Boolean(
+            (minValue && dayValue < minValue) || (maxValue && dayValue > maxValue),
+          );
 
           return (
             <button
@@ -301,7 +306,13 @@ export function DatePicker({
         ) : (
           <span />
         )}
-        <button type="button" onClick={selectToday} disabled={Boolean(maxValue && todayValue > maxValue)}>
+        <button
+          type="button"
+          onClick={selectToday}
+          disabled={Boolean(
+            (minValue && todayValue < minValue) || (maxValue && todayValue > maxValue),
+          )}
+        >
           Bu gün
         </button>
       </div>

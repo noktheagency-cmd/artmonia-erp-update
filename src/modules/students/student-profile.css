@@ -98,6 +98,8 @@
 .sp-financial-summary dd { margin: 7px 0 0; font-size: 23px; font-weight: 600; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
 .sp-financial-summary [data-tone="debt"] dd { color: #c44756; }
 .sp-financial-summary [data-tone="credit"] dd { color: #207257; }
+.sp-attendance-summary { gap: 18px 28px; }
+.sp-attendance-summary dd { font-size: 20px; }
 .sp-finance-tools { display: flex; justify-content: flex-end; }
 .sp-payment-list article { padding: 12px 0; border-top: 1px solid var(--sp-line); }
 .sp-payment-list article:first-child { border: 0; padding-top: 0; }

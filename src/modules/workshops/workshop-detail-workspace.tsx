@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
+import { FileUploadControl } from "@/components/ui/file-upload-control";
 import {
   Dialog,
   DialogContent,
@@ -422,7 +423,7 @@ function PaymentDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
           <Field><FieldLabel>Ödəniş üsulu</FieldLabel><FormSelect name="paymentMethod" defaultValue="CASH" options={paymentMethodOptions} /></Field>
           <Field><FieldLabel htmlFor="payer-name">Ödəyən</FieldLabel><Input id="payer-name" name="payerName" /></Field>
           <Field><FieldLabel htmlFor="payment-receipt">Qəbz №</FieldLabel><Input id="payment-receipt" name="receiptReference" /></Field>
-          <Field><FieldLabel htmlFor="payment-file">Qəbz faylı</FieldLabel><Input id="payment-file" name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" /></Field>
+          <Field><FieldLabel htmlFor="payment-file">Qəbz faylı</FieldLabel><FileUploadControl name="receiptFile" /></Field>
         </div>
         <Field><FieldLabel htmlFor="payment-note">Qeyd</FieldLabel><textarea id="payment-note" name="note" rows={3} /></Field>
       </FieldGroup>
@@ -458,7 +459,7 @@ function ExpenseDialog({ data, action, autoOpen = false }: { data: WorkshopDetai
           <Field><FieldLabel>Ödəniş üsulu</FieldLabel><FormSelect name="method" defaultValue="CASH" options={paymentMethodOptions} /></Field>
           <Field><FieldLabel htmlFor="expense-vendor">Kimə ödənilib</FieldLabel><Input id="expense-vendor" name="vendor" maxLength={120} required /></Field>
           <Field><FieldLabel htmlFor="expense-receipt">Qəbz №</FieldLabel><Input id="expense-receipt" name="receiptReference" /></Field>
-          <Field><FieldLabel htmlFor="expense-file">Qəbz faylı</FieldLabel><Input id="expense-file" name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" /></Field>
+          <Field><FieldLabel htmlFor="expense-file">Qəbz faylı</FieldLabel><FileUploadControl name="receiptFile" /></Field>
         </div>
         <Field><FieldLabel htmlFor="expense-description">Təsvir</FieldLabel><textarea id="expense-description" name="description" minLength={3} maxLength={700} rows={3} required /></Field>
       </FieldGroup>

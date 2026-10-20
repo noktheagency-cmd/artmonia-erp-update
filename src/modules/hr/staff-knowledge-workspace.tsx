@@ -187,7 +187,6 @@ export function StaffKnowledgeWorkspace({
         <div>
           <span className="staff-knowledge-eyebrow"><ShieldCheck /> Məxfi əməkdaş məlumatı</span>
           <h2>Qeydlər və sənədlər</h2>
-          <p>{employeeName} haqqında daxili yazıları və qorunan faylları bir yerdə idarə edin.</p>
         </div>
         <nav aria-label="Qeyd və sənəd bölmələri">
           {knowledge.permissions.canReadNotes ? (

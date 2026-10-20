@@ -130,7 +130,6 @@ export function TaskWorkspace({
             <ListTodo size={20} />
           </div>
           <h1>Tasklar</h1>
-          <p>Komandanın gündəlik işlərini sadə və aydın şəkildə izləyin.</p>
         </div>
         <div className="tasks-header-actions">
           <span className="tasks-header-mascot" role="img" aria-label="Sakit rəssam maskotu" />

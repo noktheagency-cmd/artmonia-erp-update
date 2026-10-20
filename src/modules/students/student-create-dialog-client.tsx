@@ -15,8 +15,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
+import {
+  ADMISSION_PAYMENT_MIN_MESSAGE,
+  isAdmissionAmountBelowMinimum,
+} from "@/modules/students/admission-payment-amount";
 import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
@@ -249,7 +255,17 @@ export function StudentCreateDialogClient({
           <input name="paymentMethod" type="hidden" value={values.paymentMethod} />
           <input name="paymentScheduleType" type="hidden" value={values.paymentScheduleType} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
-          {acceptPayment ? <label className="form-field"><span><input type="checkbox" name="contractConfirmed" required /> Müqavilə imzalanıb</span><small>İlkin qəbul ödənişi ən azı 20 AZN olmalıdır.</small></label> : <p>Ödənişsiz yaradılan profil satış hesabatına daxil edilmir.</p>}
+          {acceptPayment ? (
+            <label className="contract-confirm-field">
+              <Checkbox name="contractConfirmed" required />
+              <span className="contract-confirm-copy">
+                <strong>Müqavilə imzalanıb</strong>
+                <small>İlkin qəbul ödənişi ən azı 20 AZN olmalıdır.</small>
+              </span>
+            </label>
+          ) : (
+            <p>Ödənişsiz yaradılan profil satış hesabatına daxil edilmir.</p>
+          )}
 
           <label className="form-field student-create-lead-field">
             <span>Müraciət</span>
@@ -297,10 +313,10 @@ export function StudentCreateDialogClient({
                 <span>Telefon</span>
                 <Input
                   name="phone"
+                  type="tel"
                   value={values.phone}
                   onChange={(event) => updateValue("phone", event.target.value)}
                   required
-                  maxLength={40}
                 />
               </label>
               <label className="form-field">
@@ -549,7 +565,18 @@ function InitialPaymentDialog({
 }) {
   const [open, setOpen] = useState(false);
 
+  const [amountError, setAmountError] = useState("");
+  const amountMessage =
+    amountError ||
+    (isAdmissionAmountBelowMinimum(values.paymentAmount, "ADMISSION")
+      ? ADMISSION_PAYMENT_MIN_MESSAGE
+      : "");
+
   function savePayment() {
+    if (isAdmissionAmountBelowMinimum(values.paymentAmount, "ADMISSION")) {
+      setAmountError(ADMISSION_PAYMENT_MIN_MESSAGE);
+      return;
+    }
     onSave();
     setOpen(false);
   }
@@ -591,15 +618,30 @@ function InitialPaymentDialog({
           }}
         >
           <div className="field-grid">
-            <label className="form-field">
+            <label className={`form-field${amountMessage ? " has-error" : ""}`}>
               <span>Məbləğ</span>
               <Input
                 name="paymentAmount"
                 value={values.paymentAmount}
-                onChange={(event) => onChange("paymentAmount", event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  onChange("paymentAmount", value);
+                  setAmountError(
+                    isAdmissionAmountBelowMinimum(value, "ADMISSION")
+                      ? ADMISSION_PAYMENT_MIN_MESSAGE
+                      : "",
+                  );
+                }}
                 inputMode="decimal"
+                aria-invalid={Boolean(amountMessage)}
+                aria-describedby={amountMessage ? "create-payment-amount-error" : undefined}
                 required
               />
+              {amountMessage ? (
+                <small id="create-payment-amount-error" className="form-field-error" role="alert">
+                  {amountMessage}
+                </small>
+              ) : null}
             </label>
             <label className="form-field">
               <span>Metod</span>
@@ -634,11 +676,11 @@ function InitialPaymentDialog({
           </label>
           <label className="form-field">
             <span>Aid olduğu ay</span>
-            <Input
+            <MonthPicker
               name="paymentMonth"
-              type="month"
               value={values.paymentMonth}
-              onChange={(event) => onChange("paymentMonth", event.target.value)}
+              onValueChange={(value) => onChange("paymentMonth", value)}
+              allowClear={false}
               required={open}
             />
           </label>

@@ -44,6 +44,12 @@ import {
 import { createPortal } from "react-dom";
 import { cx } from "@/components/ui/cx";
 import { createSupabaseBrowserClient } from "@/server/supabase/browser";
+import { unwrapActionResult } from "@/lib/action-result";
+import {
+  createPlaybookDepartmentAction,
+  deletePlaybookDepartmentAction,
+  updatePlaybookDepartmentAction,
+} from "@/modules/playbook/actions";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import {
   mapDepartmentRow,
@@ -371,20 +377,15 @@ export function PlaybookWorkspace({
 
     try {
       if (drawerMode === "edit" && editingDepartmentId) {
-        const result = await supabase
-          .from("playbook_departments")
-          .update({
+        const updatedDepartment = unwrapActionResult(
+          await updatePlaybookDepartmentAction({
+            id: editingDepartmentId,
             name,
             color: selectedColor.color,
-            soft_color: selectedColor.softColor,
+            softColor: selectedColor.softColor,
             icon: newIcon,
-          })
-          .eq("id", editingDepartmentId)
-          .select("*")
-          .single();
-
-        if (result.error) throw result.error;
-        const updatedDepartment = mapDepartmentRow(result.data);
+          }),
+        );
         setDepartments((current) =>
           current.map((department) =>
             department.id === updatedDepartment.id ? updatedDepartment : department
@@ -392,22 +393,16 @@ export function PlaybookWorkspace({
         );
         announce(`${name} departamenti yeniləndi.`);
       } else {
-        const result = await supabase
-          .from("playbook_departments")
-          .insert({
+        const createdDepartment = unwrapActionResult(
+          await createPlaybookDepartmentAction({
             name,
-            slug: createUniqueSlug(name, departments),
             section: activeSection,
             color: selectedColor.color,
-            soft_color: selectedColor.softColor,
+            softColor: selectedColor.softColor,
             icon: newIcon,
             position: Math.max(0, ...visibleDepartments.map((department) => department.position)) + 10,
-          })
-          .select("*")
-          .single();
-
-        if (result.error) throw result.error;
-        const createdDepartment = mapDepartmentRow(result.data);
+          }),
+        );
         setDepartments((current) => [...current, createdDepartment]);
         setActiveDepartment(createdDepartment.id);
         announce(`${name} departamenti yaradıldı.`);
@@ -531,15 +526,13 @@ export function PlaybookWorkspace({
         );
       } else {
         const targetDepartment = deleteTarget.department;
-        const rpcResult = await supabase.rpc("delete_playbook_department", {
-          target_department_id: targetDepartment.id,
-        });
-        if (rpcResult.error) throw rpcResult.error;
+        const { storagePaths } = unwrapActionResult(
+          await deletePlaybookDepartmentAction(targetDepartment.id),
+        );
 
-        const paths = rpcResult.data.map((item) => item.storage_path).filter(Boolean);
         let storageCleanupFailed = false;
-        if (paths.length) {
-          const storageResult = await supabase.storage.from(STORAGE_BUCKET).remove(paths);
+        if (storagePaths.length) {
+          const storageResult = await supabase.storage.from(STORAGE_BUCKET).remove(storagePaths);
           storageCleanupFailed = Boolean(storageResult.error);
         }
 
@@ -577,7 +570,6 @@ export function PlaybookWorkspace({
       <header className="playbook-header">
         <div>
           <h1 id="playbook-title">Şirkət Playbook-u</h1>
-          <p>Şirkətin aktual bilikləri və tamamlanmış işləri, bir yerdə.</p>
         </div>
         {canManage ? <div className="playbook-header-actions">
           <button className="playbook-button playbook-button-primary" type="button" onClick={openCreateDepartment}>
@@ -875,22 +867,6 @@ function DocumentRow({ document, department, onPreview, onDownload, onMenu, canM
       </div>
     </div>
   );
-}
-
-function createUniqueSlug(name: string, departments: PlaybookDepartment[]) {
-  const base = name
-    .toLocaleLowerCase("az")
-    .replace(/ə/g, "e").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ş/g, "s").replace(/ü/g, "u").replace(/ç/g, "c").replace(/ğ/g, "g")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "") || "departament";
-  const existing = new Set(departments.map((department) => department.slug));
-  if (!existing.has(base)) return base;
-
-  let suffix = 2;
-  while (existing.has(`${base}-${suffix}`)) suffix += 1;
-  return `${base}-${suffix}`;
 }
 
 async function requestDocumentSignedUrl(documentId: string, download = false) {

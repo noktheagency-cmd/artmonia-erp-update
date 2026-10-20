@@ -506,7 +506,20 @@ button.students-kpi { cursor: pointer; }
 .student-create-dialog .ui-dialog-footer .ui-button { min-height: 38px; border-radius: 10px; }
 
 .student-payment-dialog,
-.student-edit-dialog { width: min(calc(100vw - 30px), 620px); padding: 22px; background: #f8fafc; border: 1px solid #d7e0ea; border-radius: 20px; backdrop-filter: none; }
+.student-edit-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(calc(100vw - 30px), 620px);
+  max-height: min(88vh, 820px);
+  padding: 22px;
+  overflow: hidden;
+  background: #f8fafc;
+  border: 1px solid #d7e0ea;
+  border-radius: 20px;
+  backdrop-filter: none;
+}
+.student-payment-dialog .ui-dialog-header,
+.student-edit-dialog .ui-dialog-header { flex: 0 0 auto; }
 .student-payment-dialog .ui-dialog-title,
 .student-edit-dialog .ui-dialog-title { font-weight: 650 !important; letter-spacing: -.02em; }
 .student-payment-dialog .form-field > span,
@@ -514,12 +527,33 @@ button.students-kpi { cursor: pointer; }
 .student-payment-dialog .ui-input,
 .student-payment-dialog .ui-select-trigger,
 .student-payment-dialog .date-picker-trigger,
+.student-payment-dialog .month-picker .date-picker-trigger,
 .student-edit-dialog .ui-input { background: #eef3f8; border-color: #d7e0ea; border-radius: 10px; }
 .student-payment-dialog .ui-dialog-footer,
-.student-edit-dialog .ui-dialog-footer { gap: 8px; padding-top: 12px; border-top: 1px solid #d7e0ea; }
-.student-payment-quick-dialog { overflow: hidden; }
+.student-edit-dialog .ui-dialog-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+  background: rgb(248 250 252 / 96%);
+  border-top: 1px solid #d7e0ea;
+  backdrop-filter: blur(10px);
+}
+.student-payment-dialog .student-payment-form,
+.student-edit-dialog .student-payment-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding-right: 6px;
+}
 .student-payment-quick-dialog .ui-dialog-header { padding-bottom: 14px; border-bottom: 1px solid #d7e0ea; }
-.student-payment-quick-dialog .student-payment-form { display: grid; gap: 12px; padding-top: 14px; }
+.student-payment-quick-dialog .student-payment-form { display: grid; gap: 12px; align-content: start; padding-top: 14px; }
 .student-payment-quick-dialog .ui-select-trigger { min-height: 42px; }
 .student-payment-summary { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; padding: 11px 12px; background: linear-gradient(135deg, #eef9f4, #f8fcfa); border: 1px solid #d4eee0; border-radius: 13px; }
 .student-payment-summary span,
@@ -732,6 +766,8 @@ button.students-kpi { cursor: pointer; }
 
 .program-manager { padding: 20px; background: #f8fafc; border: 1px solid #d7e0ea; border-radius: 18px; box-shadow: 0 12px 28px rgb(39 48 68 / 5%); }
 .program-manager-head { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:16px; }
+.program-archive-toggle { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+.program-archive-toggle .ui-button { width:auto; height:auto; }
 .program-manager-head h2 { margin:0; font-size:18px; }.program-manager-head p { margin:4px 0 0; color:#687386; font-size:11px; }
 .program-manager-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
 .program-card { position:relative; display:grid; gap:14px; padding:16px; background:linear-gradient(135deg,#fff,#f4f7ff); border:1px solid #dce5f7; border-radius:15px; }
@@ -789,7 +825,7 @@ button.students-kpi { cursor: pointer; }
 .journey-material-media small { color:#7b8597; font-size:8px; line-height:1.4; }
 .journey-material-media .ui-button { justify-self:start; height:28px; padding-inline:8px; color:#c74459; font-size:9px; }
 .journey-material-remove { grid-column:1 / -1; justify-self:start; color:#c74459; }
-.program-journey-footer { position:sticky; bottom:0; z-index:2; margin:0 -4px; padding:12px 4px 2px; background:linear-gradient(to bottom,transparent,#fff 24%); }
+.program-journey-footer { position:sticky; bottom:0; z-index:2; display:flex; align-items:center; justify-content:flex-end; gap:10px; margin:0 -4px; padding:12px 4px 2px; background:linear-gradient(to bottom,transparent,#fff 24%); }
 
 @media (max-width: 680px) {
   .program-journey-dialog { width:min(calc(100vw - 16px),920px); max-height:94dvh; padding:16px; }

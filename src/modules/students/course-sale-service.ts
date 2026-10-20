@@ -55,7 +55,11 @@ export async function recordCourseSalePayment(tx: Prisma.TransactionClient, inpu
     } });
     if (sale.leadId) {
       const lead = await tx.lead.findUniqueOrThrow({ where: { id: sale.leadId } });
-      await tx.lead.update({ where: { id: lead.id }, data: { stage: "REGISTERED" } });
+      // Sale closes the CRM follow-up queue: stage + plan date + open work items.
+      await tx.lead.update({
+        where: { id: lead.id },
+        data: { stage: "REGISTERED", nextFollowUpAt: null, nextActionType: null },
+      });
       if (lead.stage !== "REGISTERED") await tx.leadStageHistory.create({ data: { leadId: lead.id, oldStage: lead.stage, newStage: "REGISTERED", changedById: input.actorId, reason: "Uyğun ödənişli qəbul tamamlandı" } });
       await tx.leadWorkItem.updateMany({ where: { leadId: lead.id, source: "PRIMARY", completedAt: null, cancelledAt: null }, data: { cancelledAt: new Date(), result: "REGISTERED" } });
     }

@@ -210,9 +210,6 @@ export function HrPerformancePanel({
             <div className="title-row-compact">
               <h1>HR idarəetmə paneli</h1>
             </div>
-            <p className="crm-header-desc" style={{ marginBottom: 0 }}>
-              İşçi bazası, gündəlik aktivlik, performans analitikası və inkişaf qeydləri eyni əməliyyat ritmində görünür.
-            </p>
           </div>
 
           <div className="header-actions-wrapper-compact">

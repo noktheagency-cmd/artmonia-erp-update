@@ -259,7 +259,7 @@ export function ProgramManager({
         </Button>
       </div>
 
-      <div className="program-card-actions" role="group" aria-label="Proqram arxivi">
+      <div className="program-archive-toggle" role="group" aria-label="Proqram arxivi">
         <Button type="button" variant={showArchived ? "outline" : "default"} aria-pressed={!showArchived} onClick={() => setShowArchived(false)}>Aktiv proqramlar ({programs.filter((program) => program.isActive).length})</Button>
         <Button type="button" variant={showArchived ? "default" : "outline"} aria-pressed={showArchived} onClick={() => setShowArchived(true)}>Arxiv ({programs.filter((program) => !program.isActive).length})</Button>
       </div>

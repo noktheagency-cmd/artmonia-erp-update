@@ -158,7 +158,6 @@ export function AboutWorkspace({
           <div>
             <p>Daxili bilik bazası</p>
             <h1>Qaydalar</h1>
-            <span>Şirkət qaydalarını və daxili məlumatları kateqoriyalar üzrə kəşf edin.</span>
           </div>
         </div>
         {canEdit ? (

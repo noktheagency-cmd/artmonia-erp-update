@@ -44,7 +44,6 @@ export function MarketingDashboard({ data }: { data: MarketingDashboardData }) {
       <header className="marketing-dashboard-header">
         <div>
           <h1>Marketing dashboard</h1>
-          <p>Maliyyə xərcləri, Meta leadləri və satış nəticələri eyni axında.</p>
           <span className="marketing-dashboard-status">
             <i className={cx(data.meta.configured && "is-connected")} />
             {data.meta.configured ? "Meta bağlıdır" : "Meta bağlantısı yoxdur"}

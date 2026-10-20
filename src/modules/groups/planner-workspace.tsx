@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/components/ui/cx";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -253,7 +254,6 @@ export function PlannerWorkspace({
       <header className={styles.header}>
         <div className={styles.heading}>
           <h1>Slotlar</h1>
-          <p>Dərs vaxtlarını, müəllimləri, tutumu, tələbə planını və davamiyyəti bir yerdən idarə edin.</p>
         </div>
         <div className={styles.headerRight}>
           <Metric icon={CalendarDays} value={data.slots.length} label="slot" />
@@ -557,12 +557,16 @@ function FilterSelect({
   return (
     <label className={styles.filter}>
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="all">Bütün {label.toLocaleLowerCase("az")}lər</option>
-        {options.map((option) => (
-          <option value={option.value} key={option.value}>{option.label}</option>
-        ))}
-      </select>
+      <FormSelect
+        name={`${label}-filter`}
+        aria-label={label}
+        value={value}
+        onValueChange={onChange}
+        emptyLabel={`Bütün ${label.toLocaleLowerCase("az")}lər`}
+        emptyValue="all"
+        options={options}
+        className={styles.filterSelect}
+      />
     </label>
   );
 }
@@ -634,12 +638,14 @@ function SlotCard({
       <span className={styles.slotTeacherName}>{slot.teacherName}</span>
       <span className={styles.slotMeta}>Başlanğıc: {formatInputDate(slot.validFrom)}</span>
       <span className={styles.slotBottom}>
-        <b>{slot.assignedCount} / {slot.capacity}</b>
-        <i>
+        <span className={styles.slotCount}>
+          {slot.assignedCount}&nbsp;/&nbsp;{slot.capacity}
+        </span>
+        <span className={styles.slotAvatars}>
           {slot.members.slice(0, 3).map((member) => (
             <Avatar name={member.studentName} compact key={member.assignmentId} />
           ))}
-        </i>
+        </span>
       </span>
       <CapacityBar count={slot.assignedCount} capacity={slot.capacity} />
     </button>
@@ -756,7 +762,14 @@ function SlotDialog({
             <label><span>Tutum</span><input name="capacity" type="number" min={1} max={100} defaultValue={slot?.capacity ?? 10} required /></label>
             <label className={styles.fullField}>
               <span>{editing ? "Dəyişiklik tarixi" : "Başlama tarixi"}</span>
-              <input name="validFrom" type="date" defaultValue={slot?.validFrom ?? data.today} required />
+              <DatePicker
+                name="validFrom"
+                defaultValue={slot?.validFrom ?? data.today}
+                allowClear={false}
+                required
+                aria-label={editing ? "Dəyişiklik tarixi" : "Başlama tarixi"}
+                className={styles.slotDatePicker}
+              />
               <small className={styles.dateHint}>Keçmiş tarix də seçilə bilər.</small>
             </label>
           </div>
@@ -1022,17 +1035,19 @@ function AssignmentDialog({
                           {active ? <><Check size={12} /> Seçilib</> : shiftMeta[slot.shift].label}
                         </em>
                       </span>
-                      <span className={styles.slotChoiceTeacher}>
-                        <UserRound size={14} />
-                        <strong>{slot.teacherName}</strong>
-                      </span>
-                      <span className={styles.slotChoiceDate}>
-                        <CalendarDays size={13} />
-                        {formatNumericDateAz(occurrenceDate)}
+                      <span className={styles.slotChoiceMeta}>
+                        <span className={styles.slotChoiceTeacher}>
+                          <UserRound size={13} />
+                          <strong>{slot.teacherName}</strong>
+                        </span>
+                        <span className={styles.slotChoiceDate}>
+                          <CalendarDays size={12} />
+                          {formatNumericDateAz(occurrenceDate)}
+                        </span>
                       </span>
                       <span className={styles.slotChoiceBottom}>
-                        <small><DoorOpen size={13} />{slot.room}</small>
-                        <b><UsersRound size={13} />{full && !active ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>
+                        <small><DoorOpen size={12} />{slot.room}</small>
+                        <b><UsersRound size={12} />{full && !active ? "Dolu" : `${slot.assignedCount} / ${slot.capacity}`}</b>
                       </span>
                     </button>
                   );
@@ -1082,13 +1097,15 @@ function AssignmentDialog({
               </div>
               <label className={styles.startDateField}>
                 <span>Plan üçün ən erkən tarix</span>
-                <input
+                <DatePicker
                   name="validFrom"
-                  type="date"
-                  min={minimumAssignmentDate(selected, teacherSlots)}
                   value={validFrom}
-                  onChange={(event) => setValidFrom(event.target.value)}
+                  onValueChange={setValidFrom}
+                  minValue={minimumAssignmentDate(selected, teacherSlots)}
+                  allowClear={false}
                   required
+                  aria-label="Plan üçün ən erkən tarix"
+                  className={styles.startDatePicker}
                 />
                 <small className={styles.startDateHint}>
                   Hər slotun real başlanğıc günü yuxarıda avtomatik hesablanır.
@@ -1167,7 +1184,7 @@ function AttendanceDialog({
       <DialogContent className={styles.attendanceDialog}>
         <DialogHeader>
           <DialogTitle>Bugünkü jurnal · {weekdayMeta[slot.weekday].label}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription visible>
             {journal.dateLabel} · {journal.startTime}–{journal.endTime} · {slot.teacherName}
             {journal.location ? ` · ${journal.location}` : ""}
           </DialogDescription>

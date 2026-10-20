@@ -1,10 +1,56 @@
 import * as React from "react";
 import { cx } from "@/components/ui/cx";
+import {
+  AZ_PHONE_MAX_LENGTH,
+  blockInvalidNumberKey,
+  isPhoneFieldProps,
+  sanitizeAzPhoneInput,
+} from "@/lib/phone-input";
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, ...props }, ref) => (
-    <input ref={ref} className={cx("ui-input", className)} {...props} />
-  )
+  (
+    {
+      className,
+      type,
+      name,
+      inputMode,
+      maxLength,
+      autoComplete,
+      onChange,
+      onKeyDown,
+      ...props
+    },
+    ref,
+  ) => {
+    const isPhone = isPhoneFieldProps({ type, name, inputMode });
+    const isNumber = type === "number";
+
+    return (
+      <input
+        ref={ref}
+        className={cx("ui-input", className)}
+        {...props}
+        type={isPhone ? type ?? "tel" : type}
+        name={name}
+        inputMode={isPhone ? inputMode ?? "tel" : inputMode}
+        maxLength={isPhone ? maxLength ?? AZ_PHONE_MAX_LENGTH : maxLength}
+        autoComplete={isPhone ? autoComplete ?? "tel" : autoComplete}
+        onChange={(event) => {
+          if (isPhone) {
+            const next = sanitizeAzPhoneInput(event.target.value);
+            if (next !== event.target.value) {
+              event.target.value = next;
+            }
+          }
+          onChange?.(event);
+        }}
+        onKeyDown={(event) => {
+          if (isNumber) blockInvalidNumberKey(event);
+          onKeyDown?.(event);
+        }}
+      />
+    );
+  },
 );
 
 Input.displayName = "Input";

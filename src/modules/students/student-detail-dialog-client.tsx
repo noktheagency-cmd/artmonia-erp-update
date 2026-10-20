@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -33,6 +34,10 @@ import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-sc
 import type { StudentListData } from "@/modules/students/queries";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
+import {
+  ADMISSION_PAYMENT_MIN_MESSAGE,
+  isAdmissionAmountBelowMinimum,
+} from "@/modules/students/admission-payment-amount";
 import { ReceiptFields } from "./receipt-fields";
 import { CourseSalesPanel } from "./course-sales-panel";
 
@@ -51,9 +56,23 @@ export function StudentDetailDialogClient({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [receiptPurpose, setReceiptPurpose] = useState("RENEWAL");
+  const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
+  const [amountError, setAmountError] = useState("");
   const paymentClosed = student.lifecycleStatusValue === "COMPLETED";
+  const amountMessage =
+    amountError ||
+    (isAdmissionAmountBelowMinimum(paymentAmount, receiptPurpose)
+      ? ADMISSION_PAYMENT_MIN_MESSAGE
+      : "");
 
   async function recordPayment(formData: FormData) {
+    const nextAmount = String(formData.get("amount") ?? paymentAmount);
+    const nextPurpose = String(formData.get("receiptPurpose") ?? receiptPurpose);
+    if (isAdmissionAmountBelowMinimum(nextAmount, nextPurpose)) {
+      setAmountError(ADMISSION_PAYMENT_MIN_MESSAGE);
+      return;
+    }
     try {
       const result = unwrapActionResult(await recordPaymentAction(formData)) as {
         redirectTo: string;
@@ -68,7 +87,17 @@ export function StudentDetailDialogClient({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) {
+          setPaymentAmount(student.detail.paymentDefaultAmount);
+          setReceiptPurpose("RENEWAL");
+          setAmountError("");
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <button className="student-open-button" type="button">
           <strong>{student.name}</strong>
@@ -177,15 +206,31 @@ export function StudentDetailDialogClient({
               <input name="returnTo" type="hidden" value={returnTo} />
 
               <div className="field-grid">
-                <label className="form-field">
+                <label className={`form-field${amountMessage ? " has-error" : ""}`}>
                   <span>Məbləğ</span>
                   <Input
                     name="amount"
                     inputMode="decimal"
                     placeholder="0.00"
-                    defaultValue={student.detail.paymentDefaultAmount}
+                    value={paymentAmount}
+                    aria-invalid={Boolean(amountMessage)}
+                    aria-describedby={amountMessage ? "student-detail-amount-error" : undefined}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setPaymentAmount(value);
+                      setAmountError(
+                        isAdmissionAmountBelowMinimum(value, receiptPurpose)
+                          ? ADMISSION_PAYMENT_MIN_MESSAGE
+                          : "",
+                      );
+                    }}
                     required
                   />
+                  {amountMessage ? (
+                    <small id="student-detail-amount-error" className="form-field-error" role="alert">
+                      {amountMessage}
+                    </small>
+                  ) : null}
                 </label>
                 <label className="form-field">
                   <span>Metod</span>
@@ -220,10 +265,10 @@ export function StudentDetailDialogClient({
 
               <label className="form-field">
                 <span>Aid olduğu ay</span>
-                <Input
+                <MonthPicker
                   name="billingMonth"
-                  type="month"
                   defaultValue={student.detail.paymentDefaultMonth}
+                  allowClear={false}
                   required
                 />
               </label>
@@ -237,7 +282,17 @@ export function StudentDetailDialogClient({
                 />
               </label>
 
-              <ReceiptFields studentId={student.id} />
+              <ReceiptFields
+                studentId={student.id}
+                onPurposeChange={(purpose) => {
+                  setReceiptPurpose(purpose);
+                  setAmountError(
+                    isAdmissionAmountBelowMinimum(paymentAmount, purpose)
+                      ? ADMISSION_PAYMENT_MIN_MESSAGE
+                      : "",
+                  );
+                }}
+              />
               <p className="payment-policy-note">
                 {paymentClosed
                   ? "Tədris tamamlanıb: maliyyə öhdəliyi bağlıdır və yeni ödəniş tələb olunmur."

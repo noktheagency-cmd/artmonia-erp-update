@@ -813,11 +813,13 @@ function EmployeeFormDialog({
             </Field>
             <Field label="Telefon">
               <Input
+                name="phone"
+                type="tel"
                 value={formState.phone}
                 onChange={(event) =>
                   setFormState((current) => ({ ...current, phone: event.target.value }))
                 }
-                placeholder="+994..."
+                placeholder="+994501234567"
               />
             </Field>
           </div>

@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
@@ -96,7 +97,6 @@ export function MarketingStrategyWorkspace({ data }: { data: MarketingStrategyDa
           <span><Target /></span>
           <div>
             <h1>Ümumi marketing strategiyası</h1>
-            <p>Hər ayın hədəfləri, reklam nəticələri, content planı və əlavə xərcləri bir görünüşdə.</p>
           </div>
         </div>
         <div className="strategy-top-actions">
@@ -351,7 +351,7 @@ function StrategyEditorDialog({ open, strategy, month, people, onOpenChange }: {
           {strategy ? <input type="hidden" name="id" value={strategy.id} /> : null}
           <div className="strategy-form-grid">
             <Field label="Strategiya adı"><Input name="name" defaultValue={strategy?.name} placeholder="Məsələn: Yay satış kampaniyası" required maxLength={120} /></Field>
-            <Field label="Ay"><Input name="month" type="month" defaultValue={strategy?.month ?? month} required /></Field>
+            <Field label="Ay"><MonthPicker name="month" defaultValue={strategy?.month ?? month} allowClear={false} required /></Field>
             <Field label="Status"><select name="status" defaultValue={strategy?.status ?? "ACTIVE"}><option value="DRAFT">Qaralama</option><option value="ACTIVE">Aktiv</option><option value="COMPLETED">Tamamlanıb</option></select></Field>
             <Field label="Məsul şəxs"><select name="responsibleUserId" defaultValue={strategy?.responsibleUserId ?? ""}><option value="">Təyin edilməyib</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></Field>
             <Field label="Satış hədəfi"><Input name="salesGoal" type="number" min="0" step="1" defaultValue={strategy?.salesGoal ?? 0} /></Field>

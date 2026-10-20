@@ -234,10 +234,6 @@ export function HrWorkspace({
         <header className="hr-command-header">
           <div>
             <h1>İnsan resursları</h1>
-            <p>
-              İşçi və müəllim məlumatlarını, statusları və komanda strukturunu
-              bir yerdən idarə edin.
-            </p>
           </div>
           <div className="hr-command-actions">
             {view !== "bonus" && view !== "company-kpi" && (view === "corporate" ? corporateData.permissions.canExport : view === "teachers" ? teacherData.permissions.canExport : employeeData.permissions.canExport) ? (
@@ -292,28 +288,31 @@ export function HrWorkspace({
           </label>
           {view !== "teachers" ? (
             <>
-              <select
+              <FormSelect
+                name="hrDepartment"
                 aria-label="Departament"
                 value={department}
-                onChange={(event) => setDepartment(event.target.value)}
-              >
-                <option value="all">Bütün departamentlər</option>
-                {departments.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-              {view !== "archive" ? <select
-                aria-label="Status"
-                value={status}
-                onChange={(event) => setStatus(event.target.value)}
-              >
-                <option value="all">Bütün statuslar</option>
-                {Object.entries(statusMeta).map(([value, meta]) => (
-                  <option value={value} key={value}>
-                    {meta.label}
-                  </option>
-                ))}
-              </select> : null}
+                onValueChange={setDepartment}
+                emptyLabel="Bütün departamentlər"
+                emptyValue="all"
+                options={departments.map((item) => ({ value: item, label: item }))}
+                className="hr-filter-select"
+              />
+              {view !== "archive" ? (
+                <FormSelect
+                  name="hrStatus"
+                  aria-label="Status"
+                  value={status}
+                  onValueChange={setStatus}
+                  emptyLabel="Bütün statuslar"
+                  emptyValue="all"
+                  options={Object.entries(statusMeta).map(([value, meta]) => ({
+                    value,
+                    label: meta.label,
+                  }))}
+                  className="hr-filter-select"
+                />
+              ) : null}
             </>
           ) : null}
           <Button variant="ghost" onClick={clearFilters}>
@@ -1173,7 +1172,7 @@ function EmployeeDialog({
           </label>
           <label>
             <span>Telefon</span>
-            <Input name="phone" defaultValue={employee?.phone} />
+            <Input name="phone" type="tel" defaultValue={employee?.phone} />
           </label>
           <label className="is-wide">
             <span>Ünvan</span>
@@ -1444,7 +1443,7 @@ function TeacherProfileDialog({
           </label>
           <label>
             <span>Telefon</span>
-            <Input name="phone" defaultValue={teacher?.phone} />
+            <Input name="phone" type="tel" defaultValue={teacher?.phone} />
           </label>
           <label>
             <span>Tələbə tutumu</span>

@@ -7,17 +7,22 @@ import { LoginSceneLazy } from "./login-scene-lazy";
 import styles from "./login.module.css";
 
 type LoginPageProps = {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const { next: requestedNext } = await searchParams;
+  const { next: requestedNext, error } = await searchParams;
   const next = safeRedirectPath(requestedNext);
   const currentUser = await getCurrentErpUser();
 
   if (currentUser) {
     redirect((next ?? "/dashboard") as Route);
   }
+
+  const authNotice =
+    error === "mfa_timeout"
+      ? "İki mərhələli təsdiq vaxtı bitdi. Təhlükəsizlik üçün yenidən daxil olun."
+      : undefined;
 
   return (
     <main className={styles.login}>
@@ -34,7 +39,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <p className={styles.motto}>Təsəvvür etdiyin hər şey gerçəkdir</p>
           </div>
 
-          <LoginForm next={next} />
+          <LoginForm next={next} authNotice={authNotice} />
 
           <p className={styles.footer}>
             <span>Artmonia ERP</span>

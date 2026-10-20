@@ -17,7 +17,7 @@ export function ModulePlaceholder({
   items = defaultItems,
 }: {
   title: string;
-  description: string;
+  description?: string;
   metrics?: PlaceholderMetric[];
   items?: PlaceholderItem[];
 }) {
@@ -26,7 +26,7 @@ export function ModulePlaceholder({
       <div className="page-heading list-heading">
         <div>
           <h1>{title}</h1>
-          <p>{description}</p>
+          {description ? <p className="sr-only">{description}</p> : null}
         </div>
       </div>
 

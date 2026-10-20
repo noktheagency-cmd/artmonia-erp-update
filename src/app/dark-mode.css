@@ -808,7 +808,7 @@ html.dark .ui-mobile-select-empty {
 
 html.dark .ui-select-scroll-button {
   color: var(--dm-muted);
-  background: linear-gradient(180deg, var(--dm-surface-2), var(--dm-surface)) !important;
+  background: transparent !important;
 }
 
 html.dark .date-picker-popover::before {
@@ -816,15 +816,34 @@ html.dark .date-picker-popover::before {
   border-color: var(--dm-line-strong);
 }
 
-html.dark .date-picker-day {
+html.dark .date-picker-day,
+html.dark .month-picker-month {
   color: var(--dm-text-soft);
   background: transparent;
 }
 
+html.dark .month-picker-month {
+  background: var(--dm-surface-2);
+  border-color: var(--dm-line-strong);
+}
+
 html.dark .date-picker-day:hover,
-html.dark .date-picker-day.is-selected {
+html.dark .date-picker-day.is-selected,
+html.dark .month-picker-month:hover:not(:disabled),
+html.dark .month-picker-month.is-selected {
   color: #fff5e7;
   background: rgb(240 161 74 / 18%);
+}
+
+html.dark .month-picker-month.is-today {
+  color: #7dd3c0;
+  background: rgb(32 184 168 / 14%);
+  border-color: rgb(32 184 168 / 28%);
+}
+
+html.dark .month-picker-month.is-selected {
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgb(240 161 74 / 18%);
 }
 
 html.dark .date-picker-day.is-outside {
@@ -1593,6 +1612,68 @@ html.dark .student-readonly-status {
   border-color: var(--dm-line-strong) !important;
 }
 
+html.dark body input[type="checkbox"],
+html.dark body .ui-checkbox {
+  background: #151515 !important;
+  border-color: var(--dm-line-strong) !important;
+  box-shadow: none;
+}
+
+html.dark body input[type="checkbox"]:hover,
+html.dark body .ui-checkbox:hover {
+  border-color: rgb(147 176 255 / 55%) !important;
+  box-shadow: 0 0 0 3px rgb(49 88 244 / 12%);
+}
+
+html.dark body input[type="checkbox"]:checked,
+html.dark body .ui-checkbox:checked {
+  color: #fff5e7;
+  background: linear-gradient(135deg, #3d63f0, #1fa894) !important;
+  border-color: transparent !important;
+  box-shadow: 0 8px 18px rgb(49 88 244 / 22%);
+}
+
+html.dark body input[type="checkbox"]:indeterminate,
+html.dark body .ui-checkbox:indeterminate {
+  color: #93b0ff;
+  background: rgb(49 88 244 / 14%) !important;
+  border-color: rgb(147 176 255 / 40%) !important;
+}
+
+html.dark .contract-confirm-field {
+  color: var(--dm-text);
+  background: var(--dm-surface-2);
+  border-color: var(--dm-line-strong);
+}
+
+html.dark .contract-confirm-field:hover,
+html.dark .contract-confirm-field:has(input:checked) {
+  background: rgb(49 88 244 / 10%);
+  border-color: rgb(49 88 244 / 28%);
+  box-shadow: none;
+}
+
+html.dark .contract-confirm-icon {
+  color: #93b0ff;
+  background: #111111;
+  border-color: var(--dm-line-strong);
+}
+
+html.dark .contract-confirm-field:has(input:checked) .contract-confirm-icon {
+  color: #7dd3c0;
+  background: rgb(32 184 168 / 14%);
+  border-color: rgb(32 184 168 / 28%);
+}
+
+html.dark .contract-confirm-copy strong { color: var(--dm-text); }
+html.dark .contract-confirm-copy small { color: var(--dm-muted); }
+
+html.dark .student-payment-dialog .ui-dialog-footer,
+html.dark .student-edit-dialog .ui-dialog-footer {
+  background: rgb(10 10 10 / 96%);
+  border-top-color: var(--dm-line-strong);
+}
+
 html.dark .student-readonly-status {
   color: var(--dm-yellow) !important;
   background: rgb(244 201 107 / 10%) !important;
@@ -1699,6 +1780,42 @@ html.dark .crm-detail-dialog .crm-detail-summary svg {
 }
 
 html.dark .crm-detail-dialog .crm-dialog-section {
+  border-color: var(--dm-line) !important;
+}
+
+html.dark .crm-contact-history {
+  border-color: var(--dm-line) !important;
+}
+
+html.dark .crm-contact-history-head h4 {
+  color: var(--dm-text) !important;
+}
+
+html.dark .crm-contact-log-item {
+  background: var(--dm-surface-2) !important;
+  border-color: var(--dm-line) !important;
+}
+
+html.dark .crm-contact-log-icon {
+  background: var(--dm-surface) !important;
+  border-color: var(--dm-line-strong) !important;
+  color: var(--dm-muted) !important;
+}
+
+html.dark .crm-contact-log-top strong {
+  color: var(--dm-text) !important;
+}
+
+html.dark .crm-contact-log-top em {
+  color: var(--dm-muted) !important;
+  background: var(--dm-surface) !important;
+  border-color: var(--dm-line-strong) !important;
+}
+
+html.dark .crm-contact-empty,
+html.dark .crm-contact-flash.is-neutral {
+  color: var(--dm-muted) !important;
+  background: var(--dm-surface-2) !important;
   border-color: var(--dm-line) !important;
 }
 

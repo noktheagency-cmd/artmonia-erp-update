@@ -48,6 +48,7 @@ export default async function StudentDetailPage({
   return (
     <StudentProfileView
       student={student}
+      canReadAttendance={permissions.canReadAttendance}
       actions={
         <StudentDetailActions
           student={student}

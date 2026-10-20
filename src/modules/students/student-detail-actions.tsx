@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import {
@@ -453,11 +454,11 @@ export function StudentDetailActions({
 
             <label className="form-field">
               <span>Aid olduğu ay</span>
-              <Input
+              <MonthPicker
                 name="billingMonth"
-                type="month"
                 value={paymentMonth}
-                onChange={(event) => setPaymentMonth(event.target.value)}
+                onValueChange={setPaymentMonth}
+                allowClear={false}
                 required
               />
             </label>
@@ -553,7 +554,7 @@ export function StudentDetailActions({
                 </label>
                 <label className="form-field">
                   <span>Telefon</span>
-                  <Input name="phone" defaultValue={student.phone} minLength={6} maxLength={40} required />
+                  <Input name="phone" type="tel" defaultValue={student.phone} minLength={6} required />
                 </label>
                 <label className="form-field">
                   <span>E-poçt</span>
@@ -746,9 +747,8 @@ export function StudentDetailActions({
                 </label>
                 <label className="form-field">
                   <span>Qüvvəyə minən ay</span>
-                  <Input
+                  <MonthPicker
                     name="billingEffectiveMonth"
-                    type="month"
                     min={student.detail.earliestUpgradeMonth ?? undefined}
                     defaultValue={
                       student.detail.earliestUpgradeMonth
@@ -756,6 +756,7 @@ export function StudentDetailActions({
                         ? student.detail.earliestUpgradeMonth
                         : student.detail.paymentDefaultMonth
                     }
+                    allowClear={false}
                   />
                 </label>
                 <label className="form-field">

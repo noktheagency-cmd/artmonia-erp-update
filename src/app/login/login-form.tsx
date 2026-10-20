@@ -15,9 +15,10 @@ import styles from "./login.module.css";
 
 const initialState: SignInState = {};
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, authNotice }: { next?: string; authNotice?: string }) {
   const [state, formAction, pending] = useActionState(signInAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
+  const visibleError = state.error ?? authNotice;
 
   return (
     <form action={formAction} className={styles.form} aria-busy={pending}>
@@ -72,10 +73,10 @@ export function LoginForm({ next }: { next?: string }) {
       </div>
 
       <div className={styles.feedback} aria-live="polite">
-        {state.error ? (
+        {visibleError ? (
           <p className={styles.error} role="alert">
             <AlertCircle aria-hidden="true" />
-            <span>{state.error}</span>
+            <span>{visibleError}</span>
           </p>
         ) : pending ? (
           <p className={styles.pending}>Hesabınız yoxlanılır…</p>

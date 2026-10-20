@@ -59,13 +59,11 @@ type DuplicateResponse = { matches: DuplicateMatch[] };
 
 export function NewLeadDialogClient({
   programs,
-  campaigns,
   sourceOptions,
   currentManagerName,
   createLeadAction,
 }: {
   programs: Array<{ id: string; name: string }>;
-  campaigns: Array<{ id: string; name: string }>;
   sourceOptions: string[];
   currentManagerName: string;
   createLeadAction: (formData: FormData) => Promise<CreateLeadFormState>;
@@ -217,7 +215,7 @@ export function NewLeadDialogClient({
                     />
                   </InputGroup>
                 </Field>
-                <Field>
+                <Field className="crm-create-inline-field">
                   <FieldLabel htmlFor="new-lead-phone">Telefon</FieldLabel>
                   <InputGroup>
                     <InputGroupAddon aria-hidden="true"><Phone /></InputGroupAddon>
@@ -228,16 +226,12 @@ export function NewLeadDialogClient({
                       type="tel"
                       inputMode="tel"
                       autoComplete="tel"
-                      placeholder="+994 50 000 00 00"
-                      maxLength={40}
+                      placeholder="+994501234567"
                       onBlur={(event) => checkPhone(event.currentTarget.value)}
                     />
                   </InputGroup>
-                  <FieldDescription>
-                    {isChecking ? "Telefon nömrəsi yoxlanılır..." : "Dublikat qeyd avtomatik yoxlanılır"}
-                  </FieldDescription>
                 </Field>
-                <Field>
+                <Field className="crm-create-inline-field">
                   <FieldLabel>Mənbə</FieldLabel>
                   <FormSelect
                     aria-label="Mənbə"
@@ -250,6 +244,9 @@ export function NewLeadDialogClient({
                     createLabel="Yeni mənbə əlavə et"
                   />
                 </Field>
+                <p className="crm-create-phone-hint" aria-live="polite">
+                  {isChecking ? "Telefon nömrəsi yoxlanılır..." : "Dublikat qeyd avtomatik yoxlanılır"}
+                </p>
                 <Field>
                   <FieldLabel>Təhsil səviyyəsi</FieldLabel>
                   <FormSelect
@@ -306,18 +303,6 @@ export function NewLeadDialogClient({
                     searchable
                     searchPlaceholder="Proqram axtar..."
                     options={programs.map((program) => ({ value: program.id, label: program.name }))}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>Kampaniya</FieldLabel>
-                  <FormSelect
-                    aria-label="Kampaniya"
-                    name="campaignId"
-                    defaultValue=""
-                    emptyLabel="Kampaniya seçilməyib"
-                    searchable
-                    searchPlaceholder="Kampaniya axtar..."
-                    options={campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))}
                   />
                 </Field>
                 <Field>

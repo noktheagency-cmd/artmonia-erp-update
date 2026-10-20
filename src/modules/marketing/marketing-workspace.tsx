@@ -92,7 +92,6 @@ export function MarketingWorkspace({ data }: { data: MarketingData }) {
         <span className="marketing-title-icon"><Megaphone size={20} /></span>
         <div>
           <h1>Marketing performansı</h1>
-          <p>Meta reklam nəticələri ERP lead, satış və real ödənişləri ilə birlikdə göstərilir.</p>
           <div className="marketing-sync-state">
             <span className={cx("marketing-provider-dot", data.meta.configured && "is-connected")} />
             {data.meta.configured ? "Meta bağlıdır" : "Meta konfiqurasiyası yoxdur"}

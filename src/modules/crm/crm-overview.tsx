@@ -7,6 +7,7 @@ import {
   BellRing,
   BookOpen,
   CalendarCheck2,
+  CalendarClock,
   CheckCircle2,
   CircleDollarSign,
   Clock3,
@@ -121,6 +122,7 @@ export function CrmOverview({
     ? data.attentionFocus.filter((item) => item.category === "workshop_masterclass")
     : data.attentionFocus;
   const todayAttention = visibleAttention.filter((item) => item.bucket === "today");
+  const tomorrowAttention = visibleAttention.filter((item) => item.bucket === "tomorrow");
   const overdueAttention = visibleAttention.filter((item) => item.bucket === "overdue");
 
   return (
@@ -240,7 +242,7 @@ export function CrmOverview({
         <PanelHeading
           icon={AlertTriangle}
           title="Əlaqə gözləyən müraciətlər"
-          description="Cari günə planlanan və vaxtı keçmiş əlaqələr"
+          description="Cari günə, sabaha planlanan və vaxtı keçmiş əlaqələr"
           meta={`${visibleAttention.length} müraciət`}
           tone="coral"
         />
@@ -266,6 +268,13 @@ export function CrmOverview({
             description="Bu gün əlaqə saxlanılacaq"
             tone="today"
             items={todayAttention}
+            onLeadSelect={onLeadSelect}
+          />
+          <AttentionGroup
+            title="Sabahın planları"
+            description="Aktiv gündən sonrakı günə planlanan əlaqələr"
+            tone="tomorrow"
+            items={tomorrowAttention}
             onLeadSelect={onLeadSelect}
           />
           <AttentionGroup
@@ -363,12 +372,20 @@ function AttentionGroup({
 }: {
   title: string;
   description: string;
-  tone: "today" | "overdue";
+  tone: "today" | "tomorrow" | "overdue";
   items: CrmData["attentionFocus"];
   onLeadSelect: (leadId: string) => void;
   createdToday?: boolean;
 }) {
-  const Icon = tone === "today" ? CalendarCheck2 : AlertTriangle;
+  const Icon =
+    tone === "today" ? CalendarCheck2 : tone === "tomorrow" ? CalendarClock : AlertTriangle;
+  const emptyLabel = createdToday
+    ? "Bu gün daxil olan müraciət yoxdur"
+    : tone === "today"
+      ? "Bu gün üçün iş yoxdur"
+      : tone === "tomorrow"
+        ? "Sabaha plan yoxdur"
+        : "Gecikən müraciət yoxdur";
 
   return (
     <section className={cx("crm-attention-group", `is-${tone}`)}>
@@ -416,7 +433,7 @@ function AttentionGroup({
         ) : (
           <div className="crm-attention-empty">
             <CheckCircle2 aria-hidden="true" />
-            <span>{createdToday ? "Bu gün daxil olan müraciət yoxdur" : tone === "today" ? "Bu gün üçün iş yoxdur" : "Gecikən müraciət yoxdur"}</span>
+            <span>{emptyLabel}</span>
           </div>
         )}
       </div>
