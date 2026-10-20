@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HeaderActionsContext } from "@/components/layout/header-actions-context";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import {
   Banknote,
   BarChart3,
   BellRing,
+  BookOpen,
   CalendarCheck2,
   CalendarClock,
   CheckCircle2,
@@ -25,11 +26,14 @@ import {
   CreditCard,
   GraduationCap,
   List,
+  Search,
   Snowflake,
   UserRoundCheck,
+  Users,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   Table,
@@ -51,6 +55,7 @@ import type { StudentListData } from "@/modules/students/queries";
 import { completeStudentReminderAction } from "@/modules/students/reminder-actions";
 import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
 import { buildStudentPaginationItems } from "@/modules/students/student-pagination";
+import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 
 type StudentRow = StudentListData["students"][number];
 type DashboardTab = "overview" | "list" | "programs";
@@ -270,6 +275,16 @@ export function StudentList({ data }: { data: StudentListData }) {
         isPreview={activeTab === "overview"}
         pagination={data.pagination}
         isPending={isPending}
+        toolbar={activeTab === "list" ? (
+          <StudentListToolbar
+            query={data.query}
+            program={data.filters.program}
+            teacher={data.filters.teacher}
+            programs={data.filterOptions.programs}
+            teachers={data.filterOptions.teachers}
+            onFilter={handleQuickFilter}
+          />
+        ) : null}
         onShowAll={() => handleTabChange("list")}
         onPageChange={handlePageChange}
         onClearFilters={handleClearFilters}
@@ -463,6 +478,94 @@ function StudentAttentionEmpty({ children }: { children: ReactNode }) {
   );
 }
 
+function StudentListToolbar({
+  query,
+  program,
+  teacher,
+  programs,
+  teachers,
+  onFilter,
+}: {
+  query: string;
+  program: string;
+  teacher: string;
+  programs: StudentListData["filterOptions"]["programs"];
+  teachers: StudentListData["filterOptions"]["teachers"];
+  onFilter: (key: string, value: string) => void;
+}) {
+  const [searchValue, setSearchValue] = useState(query);
+  const onFilterRef = useRef(onFilter);
+  const searchValueRef = useRef(searchValue);
+  const submittedQueryRef = useRef(query);
+  onFilterRef.current = onFilter;
+  searchValueRef.current = searchValue;
+
+  useEffect(() => {
+    const typed = searchValueRef.current.trim();
+    if (typed !== submittedQueryRef.current && typed !== query) return;
+    submittedQueryRef.current = query;
+    setSearchValue(query);
+  }, [query]);
+
+  useEffect(() => {
+    const next = searchValue.trim();
+    if (next === query) return;
+    const timer = window.setTimeout(() => {
+      submittedQueryRef.current = next;
+      onFilterRef.current("q", next);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query, searchValue]);
+
+  function applySelect(key: "program" | "teacher", value: string) {
+    const next = value === EMPTY_SELECT_VALUE ? "" : value;
+    const current = key === "program" ? program : teacher;
+    if (next === current) return;
+    onFilter(key, next);
+  }
+
+  return (
+    <div className="students-list-toolbar" role="search">
+      <label className="students-list-search">
+        <Search aria-hidden="true" />
+        <span className="sr-only">Tələbə axtar</span>
+        <input
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          placeholder="Ad, kod və ya telefon üzrə axtar"
+        />
+        {searchValue ? (
+          <button type="button" aria-label="Axtarışı təmizlə" onClick={() => setSearchValue("")}>
+            <X aria-hidden="true" />
+          </button>
+        ) : null}
+      </label>
+      <FormSelect
+        name="listProgram"
+        aria-label="Proqram"
+        value={program}
+        onValueChange={(value) => applySelect("program", value)}
+        emptyLabel="Bütün proqramlar"
+        options={programs}
+        icon={BookOpen}
+        searchable
+        searchPlaceholder="Proqram axtar..."
+      />
+      <FormSelect
+        name="listTeacher"
+        aria-label="Müəllim"
+        value={teacher}
+        onValueChange={(value) => applySelect("teacher", value)}
+        emptyLabel="Bütün müəllimlər"
+        options={teachers}
+        icon={Users}
+        searchable
+        searchPlaceholder="Müəllim axtar..."
+      />
+    </div>
+  );
+}
+
 function StudentDataTable({
   students,
   total,
@@ -470,6 +573,7 @@ function StudentDataTable({
   isPreview,
   pagination,
   isPending,
+  toolbar,
   onShowAll,
   onPageChange,
   onClearFilters,
@@ -480,6 +584,7 @@ function StudentDataTable({
   isPreview: boolean;
   pagination: StudentListData["pagination"];
   isPending: boolean;
+  toolbar?: ReactNode;
   onShowAll: () => void;
   onPageChange: (page: number) => void;
   onClearFilters: () => void;
@@ -519,6 +624,7 @@ function StudentDataTable({
           </Button>
         ) : null}
       </header>
+      {toolbar}
 
       {students.length > 0 ? (
         <Table className="students-data-table">
@@ -693,6 +799,9 @@ function ActiveFilterBar({
   return (
     <div className="students-active-filters" aria-label="Aktiv filtrlər">
       <span>{data.total} nəticə</span>
+      {data.query ? (
+        <FilterChip label={`Axtarış: ${data.query}`} onRemove={() => onQuickFilter("q", "")} />
+      ) : null}
       {data.filters.status ? (
         <FilterChip label={`Status: ${data.filterLabels.status}`} onRemove={() => onQuickFilter("status", "")} />
       ) : null}

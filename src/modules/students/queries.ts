@@ -453,7 +453,11 @@ export async function getStudentListData(
     || paymentFilter === "overdue"
     || paymentFilter === "archive";
   const hasExplicitDateRange = Boolean(input.from?.trim() || input.to?.trim());
-  const statusListMode = Boolean(statusFilter) || churnOnly;
+  const statusListMode = Boolean(statusFilter)
+    || churnOnly
+    || Boolean(search)
+    || Boolean(programFilter)
+    || Boolean(teacherFilter);
   const defaultDateFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const dateFromFilter = normalizeDateFilter(
     debtListMode
