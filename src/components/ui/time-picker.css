@@ -1,0 +1,140 @@
+.time-picker,
+.time-picker-trigger {
+  width: 100%;
+}
+
+.time-picker-popover {
+  width: 292px;
+  padding: 14px;
+}
+
+.time-picker-clock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  color: #172033;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-picker-clock strong {
+  min-width: 52px;
+  padding: 6px 0;
+  font-size: 28px;
+  font-weight: 720;
+  letter-spacing: -0.04em;
+  text-align: center;
+}
+
+.time-picker-clock span {
+  color: #8b97a8;
+  font-size: 24px;
+  font-weight: 650;
+}
+
+.time-picker-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.time-picker-column {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  max-height: 228px;
+  padding: 8px;
+  overflow: auto;
+  background: #f4f7fb;
+  border-radius: 14px;
+  scrollbar-width: thin;
+}
+
+.time-picker-column > span {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 4px;
+  color: #7b879b;
+  background: #f4f7fb;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.time-picker-option {
+  height: 34px;
+  color: #243047;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-picker-option:hover {
+  color: #3158f4;
+  background: #eef4ff;
+}
+
+.time-picker-option.is-selected {
+  color: #fff;
+  background: #3158f5;
+}
+
+.time-picker-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.time-picker-footer button {
+  height: 36px;
+  min-width: 94px;
+  padding: 0 12px;
+  color: #536179;
+  background: #f4f7fc;
+  border: 1px solid #dae2ee;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.time-picker-footer button:last-child {
+  color: #fff;
+  background: #f28a24;
+  border-color: transparent;
+}
+
+.time-picker-footer button:hover {
+  transform: translateY(-1px);
+}
+
+html.dark .time-picker-clock {
+  color: #f5efe9;
+}
+
+html.dark .time-picker-column,
+html.dark .time-picker-column > span {
+  color: #aa9f94;
+  background: #201912;
+}
+
+html.dark .time-picker-option {
+  color: #f5efe9;
+}
+
+html.dark .time-picker-option:hover {
+  color: #fff;
+  background: #2b2218;
+}
+
+html.dark .time-picker-option.is-selected {
+  color: #fff;
+  background: #3158f5;
+}

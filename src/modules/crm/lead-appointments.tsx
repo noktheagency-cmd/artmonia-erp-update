@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
+import { TimePicker } from "@/components/ui/time-picker";
 import { listAppointments, saveAppointment } from "./appointment-actions";
 import { appointmentKindLabels, appointmentOutcomeLabels } from "./appointment-policy";
 import { dailyReportWindow } from "@/modules/dashboard/daily-report-policy";
@@ -130,11 +131,11 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
             </label>
             <label className="form-field">
               <span>Plan saatı</span>
-              <Input
+              <TimePicker
                 name="time"
-                type="time"
+                aria-label="Görüş plan saatı"
                 value={time}
-                onChange={(event) => setTime(event.target.value)}
+                onValueChange={setTime}
                 required
               />
             </label>
@@ -186,11 +187,11 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
                 </label>
                 <label className="form-field">
                   <span>Faktiki saat</span>
-                  <Input
+                  <TimePicker
                     name="occurredTime"
-                    type="time"
+                    aria-label="Faktiki görüş saatı"
                     value={actualTime}
-                    onChange={(event) => setActualTime(event.target.value)}
+                    onValueChange={setActualTime}
                     required
                   />
                 </label>

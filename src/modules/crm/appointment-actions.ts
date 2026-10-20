@@ -64,6 +64,13 @@ export const saveAppointment = safeServerAction(async (formData: FormData) => {
     await writeAuditLog(tx, { actorUserId: actor.id, action: "lead.appointment.save", entityType: "lead", entityId: lead.id,
       before: before ? { id: before.id, plannedAt: before.plannedAt.toISOString(), outcome: before.outcome, occurredAt: before.occurredAt?.toISOString() ?? null } : null,
       after: { ...input, requestKey: input.idempotencyKey, appointmentId: saved.id } });
+  }).catch((error: unknown) => {
+    if (error instanceof PublicActionError) throw error;
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("crm_appointment_values")) {
+      throw new PublicActionError("Görüş növü qəbul edilmədi. Səhifəni yeniləyib yenidən cəhd edin.");
+    }
+    throw error;
   });
   revalidatePath("/crm"); revalidatePath("/dashboard"); updateTag(erpCacheTags.crm);
 }, "Görüş yadda saxlanılmadı.");
