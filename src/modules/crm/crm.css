@@ -325,7 +325,7 @@ html body .erp-frame .crm-attention-action :is(strong, small, span) {
 .crm-conversion-detail-header-icon svg { width: 21px; height: 21px; }
 .crm-conversion-detail-dialog .ui-dialog-title { color: var(--conversion-ink); font-size: 22px; font-weight: 730; }
 .crm-conversion-detail-dialog .ui-dialog-description { max-width: 570px; color: var(--conversion-muted); font-size: 13px; line-height: 1.45; }
-.crm-conversion-detail-body { display: grid; gap: 14px; padding: 16px 18px 18px; overflow-y: auto; }
+.crm-conversion-detail-body { display: grid; flex: 1 1 auto; gap: 14px; min-height: 0; padding: 16px 18px 18px; overflow-y: auto; }
 .crm-conversion-detail-hero { display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr); gap: 10px; }
 .crm-conversion-main-rate,
 .crm-conversion-call-rate { min-width: 0; min-height: 124px; padding: 18px; border: 1px solid var(--conversion-line); border-radius: 16px; }
@@ -383,7 +383,7 @@ html.dark .crm-conversion-call-icon { background: #17120e; border-color: #4a321d
 html.dark .crm-conversion-call-rate > div > span { color: #e3bc84; }
 html.dark .crm-conversion-call-rate > div > strong { color: #f2a84a; }
 html.dark .crm-conversion-call-rate > div > small { color: #a99578; }
-.crm-modern-dialog.ui-dialog-content { display: flex; flex-direction: column; width: min(900px, calc(100vw - 32px)); max-width: 900px; max-height: min(920px, calc(100vh - 28px)); padding: 0; overflow: hidden; color: var(--crm-ink, #111827); background: #f9fbfd; border: 1px solid #d8e1eb; border-radius: 19px; box-shadow: 0 30px 80px rgb(20 30 48 / 24%); font-family: Manrope, Inter, ui-sans-serif, system-ui, sans-serif; }
+.crm-modern-dialog.ui-dialog-content { z-index: 1201; display: flex; flex-direction: column; width: min(900px, calc(100vw - 32px)); max-width: 900px; max-height: min(920px, calc(100vh - 28px)); padding: 0; overflow: hidden; color: var(--crm-ink, #111827); background: #f9fbfd; border: 1px solid #d8e1eb; border-radius: 19px; box-shadow: 0 30px 80px rgb(20 30 48 / 24%); font-family: Manrope, Inter, ui-sans-serif, system-ui, sans-serif; }
 .crm-modern-dialog .ui-dialog-header { flex: 0 0 auto; padding: 22px 24px 10px; }
 .crm-modern-dialog .ui-dialog-title { color: #111827; font-size: 20px; font-weight: 660; line-height: 1.1; letter-spacing: -.035em; }
 .crm-modern-dialog .ui-dialog-description { max-width: 720px; margin-top: 6px; color: #667085; font-size: 10.5px; line-height: 1.45; }

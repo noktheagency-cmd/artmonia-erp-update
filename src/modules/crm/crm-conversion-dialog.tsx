@@ -47,7 +47,7 @@ export function CrmConversionDialog({
           </span>
           <div>
             <DialogTitle>Konversiya detalları</DialogTitle>
-            <DialogDescription>
+            <DialogDescription visible>
               Müraciətdən əlaqəyə, görüşə və uyğun satışa qədər axının nəticələri.
             </DialogDescription>
           </div>

@@ -85,6 +85,12 @@ export function CrmPipeline({ data }: { data: CrmData }) {
     return () => window.clearTimeout(timeoutId);
   }, [dismissCreateToast, showCreateToast]);
 
+  useEffect(() => {
+    if (searchParams.get("salesDetails") === "1") {
+      setConversionDetailsOpen(true);
+    }
+  }, [searchParams]);
+
   function navigate(params: URLSearchParams, transition = false) {
     const href = params.size > 0 ? `/crm?${params.toString()}` : "/crm";
     if (transition) {
@@ -106,6 +112,15 @@ export function CrmPipeline({ data }: { data: CrmData }) {
     else params.delete(key);
     params.set("tab", "list");
     navigate(params);
+  }
+
+  function handleConversionOpenChange(open: boolean) {
+    setConversionDetailsOpen(open);
+    if (open || searchParams.get("salesDetails") !== "1") return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("salesDetails");
+    const href = params.size > 0 ? `/crm?${params.toString()}` : "/crm";
+    router.replace(href as Route, { scroll: false });
   }
 
   function handleMetricClick(index: number) {
@@ -250,7 +265,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
 
       <CrmConversionDialog
         open={conversionDetailsOpen}
-        onOpenChange={setConversionDetailsOpen}
+        onOpenChange={handleConversionOpenChange}
         totalLeads={data.metrics[0]?.value ?? "0"}
         stats={data.dashboardStats}
       />
