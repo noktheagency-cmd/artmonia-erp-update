@@ -72,7 +72,46 @@ export async function recordCourseSalePayment(tx: Prisma.TransactionClient, inpu
   const category = prior._sum.amount ? "INITIAL_BALANCE" : "ADMISSION";
   if (category !== input.purpose) throw new PublicActionError("Bu qəbulun ilk ödənişi artıq var. İlk dövrün qalığını seçin.");
   await tx.payment.update({ where: { id: payment.id }, data: { courseSaleId: sale.id, receiptPurpose: category } });
-  if (paid.gte(sale.initialFee)) await tx.courseSale.update({ where: { id: sale.id }, data: { status: "COMPLETE" } });
+  if (paid.gte(sale.initialFee)) {
+    if (!input.contractConfirmed) throw new PublicActionError("Müqavilənin imzalandığını təsdiqləyin.");
+    await tx.courseSale.update({ where: { id: sale.id }, data: { status: "COMPLETE" } });
+  }
+}
+
+export async function refundOpenDepositOnDecline(
+  tx: Prisma.TransactionClient,
+  input: { studentId: string; actorId: string; reason: string },
+) {
+  const sale = await tx.courseSale.findFirst({
+    where: { studentId: input.studentId, status: "DEPOSIT", cancelledAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!sale) return null;
+  const payments = await tx.payment.findMany({
+    where: { courseSaleId: sale.id, refundedAt: null },
+    select: { id: true, amount: true },
+  });
+  const total = payments.reduce((sum, payment) => sum.plus(payment.amount), new Prisma.Decimal(0));
+  if (total.lte(0) || total.gte(sale.initialFee)) return null;
+  const now = new Date();
+  await tx.payment.updateMany({
+    where: { id: { in: payments.map((payment) => payment.id) } },
+    data: { refundedAt: now },
+  });
+  await tx.courseSale.update({
+    where: { id: sale.id },
+    data: { status: "CANCELLED", cancelledAt: now, cancellationReason: input.reason },
+  });
+  await writeAuditLog(tx, {
+    actorUserId: input.actorId,
+    action: "student.sale.refund",
+    entityType: "student",
+    entityId: input.studentId,
+    before: { saleId: sale.id, status: sale.status },
+    after: { status: "CANCELLED", moneyReturned: total.toString() },
+    reason: input.reason,
+  });
+  return { saleId: sale.id, amount: total.toString() };
 }
 
 export async function assertSalePaymentEditable(tx: Prisma.TransactionClient, paymentId: string) {

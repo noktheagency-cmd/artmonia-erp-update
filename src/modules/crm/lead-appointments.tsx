@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, PhoneMissed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,45 @@ const dateTime = (value: string) => {
   return { date: local.slice(0, 10), time: local.slice(11, 16) };
 };
 
-export function LeadAppointments({ leadId }: { leadId: string }) {
+function bakuNow() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Baku",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return { date: `${read("year")}-${read("month")}-${read("day")}`, time: `${read("hour")}:${read("minute")}` };
+}
+
+function meetingTitle(outcome: string) {
+  if (outcome === "SCHEDULED") return "Planlaşdırılıb";
+  if (outcome === "ATTENDED") return "Görüş baş tutdu";
+  if (outcome === "NO_SHOW") return "Görüş baş tutmadı";
+  if (outcome === "RESCHEDULED") return "Plan yeniləndi";
+  if (outcome === "CANCELLED") return "Ləğv edildi";
+  return appointmentOutcomeLabels[outcome as keyof typeof appointmentOutcomeLabels] ?? outcome;
+}
+
+function meetingTone(outcome: string) {
+  if (outcome === "ATTENDED") return "success";
+  if (outcome === "NO_SHOW" || outcome === "CANCELLED") return "warning";
+  if (outcome === "SCHEDULED") return "info";
+  return "neutral";
+}
+
+export function LeadAppointments({
+  leadId,
+  embedded = false,
+  markedComplete = false,
+}: {
+  leadId: string;
+  embedded?: boolean;
+  markedComplete?: boolean;
+}) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [rows, setRows] = useState<Appointment[]>([]);
@@ -43,6 +82,45 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
   const [teacher, setTeacher] = useState("");
   const [actualDate, setActualDate] = useState(() => dailyReportWindow().date);
   const [actualTime, setActualTime] = useState("12:00");
+  const [loaded, setLoaded] = useState(false);
+  const [meetingMode, setMeetingMode] = useState<"missed" | "attended" | null>(null);
+  const [nextDate, setNextDate] = useState(() => dailyReportWindow().date);
+  const [nextTime, setNextTime] = useState("12:00");
+  const shown = embedded || expanded;
+  const scheduled = rows.find((row) => row.outcome === "SCHEDULED") ?? null;
+  const attended = rows.some((row) => row.outcome === "ATTENDED");
+  const meetingComplete = markedComplete || (attended && !scheduled);
+
+  useEffect(() => {
+    if (!embedded) return;
+    let ignore = false;
+
+    async function run() {
+      setBusy(true);
+      try {
+        const result = await listAppointments(leadId);
+        if (ignore) return;
+        if (result.ok) {
+          setRows(result.data.rows);
+          setTeachers(result.data.teachers);
+        } else {
+          setMessage(result.message);
+        }
+      } catch {
+        if (!ignore) setMessage("Görüşlər yüklənmədi.");
+      } finally {
+        if (!ignore) {
+          setBusy(false);
+          setLoaded(true);
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [embedded, leadId]);
 
   async function load() {
     const result = await listAppointments(leadId);
@@ -96,18 +174,265 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
     }
   }
 
+  async function submitAppointment(requestKey: string, fields: Record<string, string>) {
+    const form = new FormData();
+    form.set("leadId", leadId);
+    form.set("idempotencyKey", requestKey);
+    for (const [name, value] of Object.entries(fields)) {
+      if (value) form.set(name, value);
+    }
+    return saveAppointment(form);
+  }
+
+  async function planMeeting() {
+    if (busy || !date || !time) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await submitAppointment(key, {
+        date,
+        time,
+        kind: "MEETING",
+        outcome: "SCHEDULED",
+      });
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      setKey(crypto.randomUUID());
+      setMeetingMode(null);
+      setMessage("Görüş planlaşdırıldı.");
+      await load();
+      router.refresh();
+    } catch {
+      setMessage("Görüş saxlanılmadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function completeMeeting(row: Appointment) {
+    if (busy) return;
+    const planned = dateTime(row.plannedAt);
+    const now = bakuNow();
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await submitAppointment(key, {
+        appointmentId: row.id,
+        date: planned.date,
+        time: planned.time,
+        kind: row.kind,
+        outcome: "ATTENDED",
+        teacherId: row.teacherId ?? "",
+        occurredDate: now.date,
+        occurredTime: now.time,
+      });
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      setKey(crypto.randomUUID());
+      setMeetingMode(null);
+      setMessage("Görüş baş tutdu kimi təsdiqləndi.");
+      await load();
+      router.refresh();
+    } catch {
+      setMessage("Görüş saxlanılmadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function missMeeting(row: Appointment) {
+    if (busy || !nextDate || !nextTime) return;
+    const planned = dateTime(row.plannedAt);
+    const now = bakuNow();
+    setBusy(true);
+    setMessage("");
+    try {
+      const missed = await submitAppointment(key, {
+        appointmentId: row.id,
+        date: planned.date,
+        time: planned.time,
+        kind: row.kind,
+        outcome: "NO_SHOW",
+        teacherId: row.teacherId ?? "",
+        occurredDate: now.date,
+        occurredTime: now.time,
+      });
+      if (!missed.ok) {
+        setMessage(missed.message);
+        return;
+      }
+      const nextKey = crypto.randomUUID();
+      const plannedNext = await submitAppointment(nextKey, {
+        date: nextDate,
+        time: nextTime,
+        kind: "MEETING",
+        outcome: "SCHEDULED",
+      });
+      setKey(crypto.randomUUID());
+      if (!plannedNext.ok) {
+        setMessage(plannedNext.message);
+        await load();
+        return;
+      }
+      setMeetingMode(null);
+      setMessage("Görüş baş tutmadı. Növbəti plan yazıldı.");
+      await load();
+      router.refresh();
+    } catch {
+      setMessage("Görüş saxlanılmadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (embedded && !loaded) {
+    return (
+      <section className="crm-action-card is-embedded">
+        <p className="crm-panel-loading">Yüklənir…</p>
+      </section>
+    );
+  }
+
+  if (embedded) {
+    const activeWhen = scheduled ? dateTime(scheduled.plannedAt) : null;
+    return (
+      <section className="crm-action-card is-embedded">
+        <div className="crm-action-card-body">
+          <div className="crm-contact-plan">
+            <div className={meetingComplete ? "crm-contact-active is-done" : "crm-contact-active"}>
+              <div className="crm-contact-active-meta">
+                <strong>
+                  {meetingComplete ? "Görüş baş tutdu" : scheduled ? "Görüş planlaşdırılıb" : "Plan yoxdur"}
+                </strong>
+                {activeWhen ? (
+                  <small>{`${activeWhen.date.split("-").reverse().join(".")} · ${activeWhen.time}`}</small>
+                ) : null}
+              </div>
+              {scheduled ? (
+                <div className="crm-contact-choices">
+                  <button
+                    type="button"
+                    className="crm-choice is-danger"
+                    aria-pressed={meetingMode === "missed"}
+                    disabled={busy}
+                    onClick={() => setMeetingMode((current) => current === "missed" ? null : "missed")}
+                  >
+                    <PhoneMissed aria-hidden="true" />
+                    Baş tutmadı
+                  </button>
+                  <button
+                    type="button"
+                    className="crm-choice is-success"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!scheduled) return;
+                      setMeetingMode("attended");
+                      void completeMeeting(scheduled);
+                    }}
+                  >
+                    <CheckCircle2 aria-hidden="true" />
+                    Baş tutdu
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {!scheduled && !meetingComplete ? (
+              <div className="crm-dialog-fields">
+                <label className="form-field">
+                  <span>Plan tarixi</span>
+                  <DatePicker name="planDate" aria-label="Görüş plan tarixi" value={date} onValueChange={setDate} required />
+                </label>
+                <label className="form-field">
+                  <span>Plan saatı</span>
+                  <TimePicker name="planTime" aria-label="Görüş plan saatı" value={time} onValueChange={setTime} required />
+                </label>
+              </div>
+            ) : null}
+
+            {meetingMode === "missed" && scheduled ? (
+              <div className="crm-dialog-fields">
+                <label className="form-field">
+                  <span>Növbəti tarix</span>
+                  <DatePicker name="nextDate" aria-label="Növbəti görüş tarixi" value={nextDate} onValueChange={setNextDate} required />
+                </label>
+                <label className="form-field">
+                  <span>Növbəti saat</span>
+                  <TimePicker name="nextTime" aria-label="Növbəti görüş saatı" value={nextTime} onValueChange={setNextTime} required />
+                </label>
+              </div>
+            ) : null}
+
+            {meetingMode === "missed" && scheduled ? (
+              <Button
+                type="button"
+                disabled={busy || !nextDate || !nextTime}
+                onClick={() => missMeeting(scheduled)}
+              >
+                {busy ? "Saxlanılır…" : "Növbəti planı yaz"}
+              </Button>
+            ) : null}
+
+            {!scheduled && !meetingComplete ? (
+              <Button type="button" disabled={busy || !date || !time} onClick={planMeeting}>
+                {busy ? "Saxlanılır…" : "Görüşü planlaşdır"}
+              </Button>
+            ) : null}
+
+            {message ? <p className="crm-contact-confirm" role="status">{message}</p> : null}
+          </div>
+
+          <div className="crm-contact-history">
+            <div className="crm-contact-history-head">
+              <h4>Görüş tarixçəsi</h4>
+              {rows.length > 0 ? <span>{rows.length} qeyd</span> : null}
+            </div>
+            {rows.length === 0 && !busy ? <p className="crm-contact-empty">Hələ görüş planı yoxdur.</p> : null}
+            {rows.length > 0 ? (
+              <ul className="crm-contact-log">
+                {rows.map((row) => {
+                  const planned = dateTime(row.plannedAt);
+                  return (
+                    <li key={row.id} className={`crm-contact-log-item is-${meetingTone(row.outcome)}`}>
+                      <span className="crm-contact-log-icon" aria-hidden="true">
+                        {meetingTone(row.outcome) === "warning" ? <PhoneMissed /> : <CheckCircle2 />}
+                      </span>
+                      <div className="crm-contact-log-main">
+                        <div className="crm-contact-log-top">
+                          <strong>{meetingTitle(row.outcome)}</strong>
+                          <em>{appointmentKindLabels[row.kind as keyof typeof appointmentKindLabels] ?? "Görüş"}</em>
+                        </div>
+                      </div>
+                      <time dateTime={row.plannedAt}>{planned.date} · {planned.time}</time>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="crm-action-card">
-      <header>
-        <div>
-          <h3>Görüş</h3>
-          <p>Konsultasiya və sınaq görüşlərini planlayın.</p>
-        </div>
-        <Button type="button" variant="secondary" onClick={toggle} aria-expanded={expanded}>
-          {expanded ? "Bağla" : "Görüş aç"}
-        </Button>
-      </header>
-      {expanded ? (
+      {embedded ? null : (
+        <header>
+          <div>
+            <h3>Görüş</h3>
+            <p>Konsultasiya və sınaq görüşlərini planlayın.</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={toggle} aria-expanded={expanded}>
+            {expanded ? "Bağla" : "Görüş"}
+          </Button>
+        </header>
+      )}
+      {shown ? (
         <div className="crm-action-card-body">
           <p className="crm-dialog-hint">
             Sınaq yalnız müəllim təyin ediləndə seçilir.

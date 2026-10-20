@@ -225,17 +225,18 @@
     width: 100%;
   }
 
-  .erp-command-header :is(.students-header-slot, .crm-header-slot, .finance-header-slot) {
+  .erp-command-header :is(.students-header-slot, .crm-header-slot, .finance-header-slot, .dashboard-header-slot) {
     width: auto;
     min-width: 0;
     flex: 1 1 200px;
   }
 
   .global-search-panel {
-    position: absolute;
-    top: calc(100% + 9px);
-    right: 0;
-    left: 0;
+    position: fixed;
+    top: var(--search-panel-top, 72px);
+    left: var(--search-panel-left, 12px);
+    right: auto;
+    width: min(720px, var(--search-panel-width, calc(100vw - 24px)));
     max-height: min(var(--search-available-height, 60dvh), calc(100dvh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 600px);
     grid-template-rows: auto auto minmax(0, 1fr);
   }

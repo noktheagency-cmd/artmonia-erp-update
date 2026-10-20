@@ -9,6 +9,9 @@ export function LeadDetailDialog({
   sourceOptions,
   returnTo,
   canConvert = true,
+  open,
+  onOpenChange,
+  initialPanel = null,
 }: {
   lead: CrmData["leads"][number];
   programs: CrmData["programs"];
@@ -16,6 +19,9 @@ export function LeadDetailDialog({
   sourceOptions: CrmData["sourceOptions"];
   returnTo: string;
   canConvert?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialPanel?: "contact" | "meeting" | null;
 }) {
   return (
     <LeadDetailDialogClient
@@ -27,6 +33,9 @@ export function LeadDetailDialog({
       canConvert={canConvert}
       updateLeadAction={updateLeadAction}
       deleteLeadAction={deleteLeadAction}
+      open={open}
+      onOpenChange={onOpenChange}
+      initialPanel={initialPanel}
     />
   );
 }

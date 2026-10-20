@@ -31,11 +31,12 @@ import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { assertLeadPlan } from "./lead-validation";
 import { resolveRegistrationMeetingAttendance } from "./registration-attend-policy";
-import { syncLeadWorkPlan } from "./work-service";
+import { closeConvertedLeadFollowUp, syncLeadWorkPlan } from "./work-service";
 import {
   enrollmentStatusForStudentLifecycle,
   isBillingPausedStatus,
 } from "@/modules/students/lifecycle-service";
+import { resolveStudentMonthlyFee } from "@/modules/students/student-create-rules";
 import {
   safeServerAction,
   toActionFailure,
@@ -104,6 +105,18 @@ const updateLeadSchema = z.object({
   returnTo: optionalText(260),
 });
 
+const optionalAmount = z.preprocess((value) => {
+  const normalized = optionalFormString(value);
+  if (!normalized) return undefined;
+  const amount = Number(normalized.replace(",", "."));
+  return Number.isFinite(amount) ? amount : Number.NaN;
+}, z.number().nonnegative().max(100_000).optional());
+
+const optionalLessonCount = z.preprocess((value) => {
+  const normalized = optionalFormString(value);
+  return normalized ? Number(normalized) : undefined;
+}, z.number().int().positive().max(120).optional());
+
 const convertLeadSchema = z.object({
   leadId: z.string().uuid(),
   fullName: z.string().trim().min(2).max(120),
@@ -111,6 +124,11 @@ const convertLeadSchema = z.object({
   source: optionalText(60),
   educationLevel: optionalText(80),
   programId: z.string().uuid(),
+  teacherId: optionalUuid,
+  firstLessonDate: optionalText(20),
+  discountType: optionalText(80),
+  monthlyFee: optionalAmount,
+  lessonsPerMonth: optionalLessonCount,
   confirmMeetingAttended: z.preprocess(
     (value) => value === "on" || value === "true" || value === true,
     z.boolean(),
@@ -269,8 +287,15 @@ async function updateLeadActionImpl(formData: FormData) {
   const prisma = getPrisma();
   const phoneNormalized = normalizePhone(input.phone);
   const followUpAt = parseFollowUpAt(input.nextFollowUpDate);
-  assertLeadPlan({ stage: input.stage, phone: phoneNormalized, programId: input.programId,
-    nextActionType: input.nextActionType, nextDate: followUpAt, reason: input.note });
+  const existingLead = await prisma.lead.findUnique({
+    where: { id: input.leadId },
+    select: { convertedStudentId: true },
+  });
+  const alreadyConverted = Boolean(existingLead?.convertedStudentId);
+  if (!alreadyConverted) {
+    assertLeadPlan({ stage: input.stage, phone: phoneNormalized, programId: input.programId,
+      nextActionType: input.nextActionType, nextDate: followUpAt, reason: input.note });
+  }
   const nextActionType =
     input.nextActionType ??
     (input.stage === LeadStage.TRIAL_LESSON
@@ -291,6 +316,7 @@ async function updateLeadActionImpl(formData: FormData) {
         nextActionType: true,
         trialLessonCount: true,
         programInterestId: true,
+        convertedStudentId: true,
         nextFollowUpAt: true,
         contactId: true,
         contact: {
@@ -313,8 +339,13 @@ async function updateLeadActionImpl(formData: FormData) {
     }
     const managerId = resolveLeadManagerId(actor, input.managerId, current.managerId);
     if (!managerId) throw new Error("Müraciətin məsulu seçilməlidir.");
-    await syncLeadWorkPlan(tx, { leadId: current.id, ownerId: managerId, kind: nextActionType ?? null, plannedAt: followUpAt,
-      closed: input.stage === LeadStage.REGISTERED || input.stage === LeadStage.LOST });
+    const followUpClosed = Boolean(current.convertedStudentId)
+      || input.stage === LeadStage.REGISTERED
+      || input.stage === LeadStage.LOST;
+    const plannedAt = followUpClosed ? null : followUpAt;
+    const plannedAction = followUpClosed ? null : nextActionType ?? null;
+    await syncLeadWorkPlan(tx, { leadId: current.id, ownerId: managerId, kind: plannedAction, plannedAt,
+      closed: followUpClosed });
 
     if (input.programId && input.programId !== current.programInterestId && !await tx.program.findUnique({ where: { id: input.programId, isActive: true }, select: { id: true } })) {
       throw new Error("Proqram tapılmadı və ya arxivdədir.");
@@ -347,8 +378,8 @@ async function updateLeadActionImpl(formData: FormData) {
         educationLevel,
         managerId,
         programInterestId: input.programId ?? null,
-        nextFollowUpAt: followUpAt,
-        nextActionType: nextActionType ?? null,
+        nextFollowUpAt: plannedAt,
+        nextActionType: plannedAction,
         trialLessonCount,
         priority: input.priority,
       },
@@ -583,12 +614,30 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       },
     });
 
-    const monthlyFee =
-      program.pricingVersions[0]?.monthlyFee ??
-      program.defaultMonthlyFee;
-    const lessonsPerMonth =
+    const programMonthlyFee = Number(
+      program.pricingVersions[0]?.monthlyFee ?? program.defaultMonthlyFee,
+    );
+    const programLessons =
       program.pricingVersions[0]?.lessonsPerMonth ??
       program.defaultLessonsPerMonth;
+    const monthlyFee = resolveStudentMonthlyFee(
+      input.discountType,
+      input.monthlyFee ?? programMonthlyFee,
+    );
+    const lessonsPerMonth = input.lessonsPerMonth ?? programLessons;
+    const firstLessonAt = input.firstLessonDate
+      ? new Date(`${input.firstLessonDate}T00:00:00.000Z`)
+      : null;
+    if (firstLessonAt && Number.isNaN(firstLessonAt.getTime())) {
+      throw new Error("İlk dərs tarixi düzgün deyil");
+    }
+    if (input.teacherId) {
+      const teacher = await tx.teacher.findFirst({
+        where: { id: input.teacherId, isActive: true },
+        select: { id: true },
+      });
+      if (!teacher) throw new Error("Seçilən müəllim tapılmadı");
+    }
     const studentCode = await generateStudentCode(tx);
 
     const student = await tx.student.create({
@@ -602,6 +651,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         educationLevel,
         billingPaused: isBillingPausedStatus(StudentLifecycleStatus.SLOT_WAITING),
         registeredAt: today,
+        originalFirstLessonAt: firstLessonAt,
         notes: `CRM müraciətindən tələbəyə çevrildi: ${lead.id}`,
         statusHistory: {
           create: {
@@ -622,9 +672,12 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
       data: {
         studentId: student.id,
         programId: program.id,
+        teacherId: input.teacherId ?? null,
         status: enrollmentStatusForStudentLifecycle(StudentLifecycleStatus.SLOT_WAITING),
         startDate: today,
+        firstLessonAt,
         monthlyFee,
+        discountType: input.discountType ?? null,
         lessonsPerMonth,
       },
       select: {
@@ -659,6 +712,8 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         changedById: actor.id,
       },
     });
+
+    await closeConvertedLeadFollowUp(tx, lead.id);
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,
@@ -888,6 +943,53 @@ export const deleteLeadAction = safeServerAction(
   deleteLeadActionImpl,
   "Müraciət silinmədi.",
 );
+export const listRegistrationPackageOptions = safeServerAction(async () => {
+  await requireMutationActor("crm.lead.convert");
+  const today = new Date();
+  const [teachers, discountTypes, programs] = await Promise.all([
+    getPrisma().teacher.findMany({
+      where: { isActive: true },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: "asc" },
+    }),
+    getPrisma().dropdownCatalogOption.findMany({
+      where: { catalog: "STUDENT_DISCOUNT_TYPE", isActive: true },
+      select: { value: true, label: true },
+      orderBy: [{ label: "asc" }, { createdAt: "asc" }],
+    }),
+    getPrisma().program.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        defaultMonthlyFee: true,
+        defaultLessonsPerMonth: true,
+        pricingVersions: {
+          where: {
+            validFrom: { lte: today },
+            OR: [{ validTo: null }, { validTo: { gte: today } }],
+          },
+          orderBy: { validFrom: "desc" },
+          take: 1,
+          select: { monthlyFee: true, lessonsPerMonth: true },
+        },
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
+  return {
+    teachers,
+    discountTypes,
+    programs: programs.map((program) => ({
+      id: program.id,
+      monthlyFee: String(program.pricingVersions[0]?.monthlyFee ?? program.defaultMonthlyFee),
+      lessonsPerMonth: program.pricingVersions[0]?.lessonsPerMonth?.toString()
+        ?? program.defaultLessonsPerMonth?.toString()
+        ?? "",
+    })),
+  };
+}, "Paket seçimləri yüklənmədi.");
+
 export const convertLeadToStudentAction = safeServerAction(
   convertLeadToStudentActionImpl,
   "Müraciət tələbəyə çevrilmədi.",

@@ -1264,6 +1264,8 @@ html.dark .erp-frame[data-section="students"] {
   background: #000000 !important;
 }
 
+html.dark .dashboard-header-slot .owner-dashboard-greeting h1 { color: var(--dm-text); }
+html.dark .dashboard-header-slot .owner-dashboard-greeting h1 > span { color: var(--dm-muted); }
 html.dark .owner-dashboard {
   --dashboard-bg: var(--dm-canvas);
   --dashboard-surface: var(--dm-surface);

@@ -18,11 +18,13 @@ import {
 } from "@/modules/groups/slot-availability";
 import {
   firstSlotOccurrenceDate,
+  resolvePlanAnchor,
   selectionMatchesAssignedTeacher,
 } from "@/modules/groups/planner-assignment";
 import {
   dateFromInput,
   formatDateAz,
+  toDateInput,
   todayInBaku,
   weekdayFromDate,
   weekdayMeta,
@@ -69,7 +71,10 @@ const assignmentSchema = z.object({
       return z.NEVER;
     }
   }),
-  validFrom: z.string().date(),
+  validFrom: z.preprocess(
+    (value) => (value == null || value === "" ? undefined : value),
+    z.string().date().optional(),
+  ),
 });
 
 const attendanceItemSchema = z.object({
@@ -272,7 +277,6 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
   const actor = await requirePlannerManager();
   const input = assignmentSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
-  const requestedValidFrom = dateFromInput(input.validFrom);
   const uniqueSlotIds = [...new Set(input.slotIds)];
 
   const studentId = await prisma.$transaction(async (tx) => {
@@ -335,9 +339,17 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       );
     }
 
+    const recordedFirstLesson = enrollment.firstLessonAt
+      ? toDateInput(enrollment.firstLessonAt)
+      : null;
+    const planAnchor = resolvePlanAnchor(recordedFirstLesson, input.validFrom);
+    if (!planAnchor) {
+      throw new PublicActionError("Plan üçün ən erkən tarix seçilməlidir.");
+    }
+    const requestedValidFrom = dateFromInput(planAnchor);
     const startBySlotId = new Map(slots.map((slot) => [
       slot.id,
-      dateFromInput(firstSlotOccurrenceDate(input.validFrom, {
+      dateFromInput(firstSlotOccurrenceDate(planAnchor, {
         validFrom: slot.validFrom.toISOString().slice(0, 10),
         weekday: slot.weekday,
       })),
@@ -405,6 +417,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
     // BK-08: replan updates planned first lesson for waiting students; does not activate.
     if (
       slots.length
+      && !recordedFirstLesson
       && enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
     ) {
       await tx.enrollment.update({
@@ -432,7 +445,7 @@ async function replaceStudentScheduleActionImpl(formData: FormData) {
       after: {
         slotIds: uniqueSlotIds,
         teacherId: enrollment.teacherId,
-        requestedValidFrom: input.validFrom,
+        requestedValidFrom: planAnchor,
         slotStartDates: Object.fromEntries(
           [...startBySlotId].map(([slotId, start]) => [slotId, start.toISOString().slice(0, 10)]),
         ),

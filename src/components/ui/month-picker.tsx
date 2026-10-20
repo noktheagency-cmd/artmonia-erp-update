@@ -56,6 +56,18 @@ export function currentBakuMonthValue(now = new Date()) {
   return currentBakuDateValue(now).slice(0, 7);
 }
 
+export function normalizeMonthValue(value: string | undefined | null, now = new Date()) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return trimmed;
+  const isoDate = trimmed.match(/^(\d{4})-(\d{2})-\d{2}/);
+  if (isoDate) return `${isoDate[1]}-${isoDate[2]}`;
+  const azDate = trimmed.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  if (azDate) return `${azDate[3]}-${azDate[2].padStart(2, "0")}`;
+  if (/^\d{1,2}[./]\d{1,2}[./]\d{1,3}$/.test(trimmed)) return currentBakuMonthValue(now);
+  return "";
+}
+
 export function MonthPicker({
   name,
   value,
@@ -73,9 +85,10 @@ export function MonthPicker({
 }: MonthPickerProps) {
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(
-    () => defaultValue ?? (required ? currentBakuMonthValue() : ""),
+    () => normalizeMonthValue(defaultValue) || (required ? currentBakuMonthValue() : ""),
   );
-  const selectedValue = isControlled ? value : internalValue;
+  const selectedValue = normalizeMonthValue(isControlled ? value : internalValue)
+    || (required ? currentBakuMonthValue() : "");
   const [isOpen, setIsOpen] = useState(false);
   const [viewYear, setViewYear] = useState(
     () => parseMonthValue(selectedValue)?.year ?? new Date().getFullYear(),

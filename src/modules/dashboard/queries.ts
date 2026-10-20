@@ -443,7 +443,8 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
       coalesce((
         select count(*)::int
         from erp.leads l
-        where l.stage in (
+        where l.converted_student_id is null
+          and l.stage in (
             'NEW'::"erp"."LeadStage",
             'CONTACTED'::"erp"."LeadStage",
             'QUALIFIED'::"erp"."LeadStage",

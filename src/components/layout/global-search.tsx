@@ -250,10 +250,14 @@ export function GlobalSearch({
     const root = rootRef.current;
     if (!root) return;
     const updateAvailableHeight = () => {
+      const box = root.getBoundingClientRect();
       const viewport = window.visualViewport;
       const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
-      const top = root.getBoundingClientRect().bottom + 9;
-      root.style.setProperty("--search-available-height", `${Math.max(0, bottom - top - 16)}px`);
+      const top = box.bottom + 9;
+      root.style.setProperty("--search-available-height", `${Math.max(180, bottom - top - 16)}px`);
+      root.style.setProperty("--search-panel-top", `${top}px`);
+      root.style.setProperty("--search-panel-left", `${box.left}px`);
+      root.style.setProperty("--search-panel-width", `${Math.max(box.width, 320)}px`);
     };
     updateAvailableHeight();
     window.addEventListener("resize", updateAvailableHeight);
@@ -355,8 +359,12 @@ export function GlobalSearch({
             setQuery(nextQuery);
             setOpen(true);
             setActiveIndex(0);
-            setRemoteItems([]);
-            setRequestState(nextTrimmedQuery.length >= 2 ? "loading" : "idle");
+            if (nextTrimmedQuery.length < 2) {
+              setRemoteItems([]);
+              setRequestState("idle");
+            } else {
+              setRequestState("loading");
+            }
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleInputKeyDown}

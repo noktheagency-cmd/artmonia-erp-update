@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
-import { MonthPicker } from "@/components/ui/month-picker";
+import { MonthPicker, normalizeMonthValue } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
 import {
   ADMISSION_PAYMENT_MIN_MESSAGE,
@@ -69,7 +69,7 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
     notes: "",
     paymentAmount: "",
     paymentDate: createOptions.defaultPaymentDate,
-    paymentMonth: createOptions.defaultPaymentDate.slice(0, 7),
+    paymentMonth: normalizeMonthValue(createOptions.defaultPaymentDate),
     paymentMethod: "CASH",
     paymentScheduleType: "MONTHLY",
     paymentNote: "",

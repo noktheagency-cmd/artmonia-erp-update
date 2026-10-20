@@ -1,56 +1,161 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
-  MessageCircle,
   Phone,
   PhoneMissed,
-  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormSelect } from "@/components/ui/select";
+import { contactChannels, contactOutcomes, type ContactChannel, type ContactOutcome } from "./contact-policy";
 import {
-  contactChannels,
-  contactOutcomes,
-  outcomeOptionsForChannel,
-  type ContactChannel,
-} from "./contact-policy";
-import { nextActionTypeSelectOptions } from "./follow-up";
+  formatNextActionTypeLabel,
+  nextActionTypeOptions,
+  nextActionTypeSelectOptions,
+  type NextActionTypeValue,
+} from "./follow-up";
 import { listContactEvents, saveContactEvent } from "./contact-actions";
 
 type ContactRow = { id: string; channel: string; outcome: string; occurredAt: string; note: string | null };
+type PlanRow = {
+  id: string;
+  kind: string;
+  plannedAt: string;
+  createdAt: string;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  result: string | null;
+};
 
-function channelIcon(channel: string) {
-  if (channel === "WHATSAPP") return <MessageCircle aria-hidden="true" />;
-  if (channel === "IN_PERSON") return <UserRound aria-hidden="true" />;
-  if (channel === "UNANSWERED" || channel === "PHONE") return <Phone aria-hidden="true" />;
-  return <Phone aria-hidden="true" />;
+function bakuDate(value: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Baku",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
 }
 
-function outcomeTone(outcome: string) {
-  if (outcome === "TALKED" || outcome === "WHATSAPP_REPLIED") return "success";
-  if (outcome === "UNANSWERED" || outcome === "ANSWERED_NO_TALK") return "warning";
-  if (outcome === "WHATSAPP_SENT") return "info";
+const months = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avqust", "sentyabr", "oktyabr", "noyabr", "dekabr"];
+
+function formatPlanDate(value: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Baku",
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  }).formatToParts(new Date(value));
+  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const day = read("day");
+  const month = months[Number(read("month")) - 1] ?? "";
+  const year = read("year");
+  const thisYear = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Baku", year: "numeric" }).format(new Date());
+  return year === thisYear ? `${day} ${month}` : `${day} ${month} ${year}`;
+}
+
+function outcomeFor(channel: ContactChannel, reached: boolean): ContactOutcome {
+  if (channel === "WHATSAPP") return reached ? "WHATSAPP_REPLIED" : "WHATSAPP_SENT";
+  return reached ? "TALKED" : "UNANSWERED";
+}
+
+function isKnownAction(kind: string | null | undefined): kind is NextActionTypeValue {
+  return nextActionTypeOptions.includes(kind as NextActionTypeValue);
+}
+
+function planTone(plan: PlanRow) {
+  if (!plan.completedAt && !plan.cancelledAt) return "info";
+  if (plan.result === "TALKED" || plan.result === "WHATSAPP_REPLIED") return "success";
+  if (plan.result === "UNANSWERED" || plan.result === "ANSWERED_NO_TALK" || plan.result === "WHATSAPP_SENT") return "warning";
   return "neutral";
 }
 
-export function LeadContactPanel({ leadId }: { leadId: string }) {
+function planTitle(plan: PlanRow) {
+  if (!plan.completedAt && !plan.cancelledAt) return "Planlaşdırılıb";
+  if (plan.result === "TALKED" || plan.result === "WHATSAPP_REPLIED") return "Əlaqə quruldu";
+  if (plan.result === "UNANSWERED" || plan.result === "ANSWERED_NO_TALK" || plan.result === "WHATSAPP_SENT") return "Əlaqə saxlanılmadı";
+  if (plan.cancelledAt) return "Plan yeniləndi";
+  return contactOutcomes[plan.result as keyof typeof contactOutcomes] ?? "Qeyd olundu";
+}
+
+export function LeadContactPanel({
+  leadId,
+  embedded = false,
+  markedComplete = false,
+  onReached,
+}: {
+  leadId: string;
+  embedded?: boolean;
+  markedComplete?: boolean;
+  onReached?: () => void;
+}) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [rows, setRows] = useState<ContactRow[]>([]);
+  const [plans, setPlans] = useState<PlanRow[]>([]);
+  const [mode, setMode] = useState<"missed" | "reached" | null>(null);
+  const [channel, setChannel] = useState<ContactChannel>("PHONE");
+  const [nextKind, setNextKind] = useState<NextActionTypeValue>("CALL");
   const [key, setKey] = useState(() => crypto.randomUUID());
   const [date, setDate] = useState("");
-  const [channel, setChannel] = useState<ContactChannel>("PHONE");
-  const [outcome, setOutcome] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "error" | "">("");
+  const [loaded, setLoaded] = useState(false);
 
-  const outcomeOptions = useMemo(() => outcomeOptionsForChannel(channel), [channel]);
+  const shown = embedded || expanded;
+  const activePlan = useMemo(
+    () => plans.find((plan) => !plan.completedAt && !plan.cancelledAt) ?? null,
+    [plans],
+  );
+  const contactComplete = markedComplete || plans.some(
+    (plan) => plan.result === "TALKED" || plan.result === "WHATSAPP_REPLIED",
+  );
+  const historyPlans = useMemo(
+    () => [...plans].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [plans],
+  );
+
+  useEffect(() => {
+    if (!embedded) return;
+    let ignore = false;
+
+    async function run() {
+      setBusy(true);
+      try {
+        const result = await listContactEvents(leadId);
+        if (ignore) return;
+        if (!result.ok) {
+          setMessage(result.message);
+          setMessageTone("error");
+          return;
+        }
+        setRows(result.data.rows);
+        setPlans(result.data.plans);
+        setDate(result.data.suggestedDate);
+        const openPlan = result.data.plans.find((plan) => !plan.completedAt && !plan.cancelledAt);
+        if (isKnownAction(openPlan?.kind)) setNextKind(openPlan.kind);
+      } catch {
+        if (!ignore) {
+          setMessage("Tarixçə yüklənmədi.");
+          setMessageTone("error");
+        }
+      } finally {
+        if (!ignore) {
+          setBusy(false);
+          setLoaded(true);
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [embedded, leadId]);
 
   async function load() {
     const result = await listContactEvents(leadId);
@@ -60,7 +165,10 @@ export function LeadContactPanel({ leadId }: { leadId: string }) {
       return;
     }
     setRows(result.data.rows);
+    setPlans(result.data.plans);
     setDate(result.data.suggestedDate);
+    const openPlan = result.data.plans.find((plan) => !plan.completedAt && !plan.cancelledAt);
+    if (isKnownAction(openPlan?.kind)) setNextKind(openPlan.kind);
   }
 
   async function toggle() {
@@ -78,20 +186,17 @@ export function LeadContactPanel({ leadId }: { leadId: string }) {
     }
   }
 
-  function onChannelChange(next: string) {
-    const value = next as ContactChannel;
-    setChannel(value);
-    const allowed = outcomeOptionsForChannel(value).map((item) => item.value);
-    if (!allowed.includes(outcome as (typeof allowed)[number])) {
-      setOutcome("");
-    }
-  }
-
-  async function save(form: FormData) {
+  async function save(form: FormData, chosen: "missed" | "reached" = "missed") {
     if (busy) return;
+    const reached = chosen === "reached";
+    const nextDate = date || bakuDate(new Date().toISOString());
+    form.set("leadId", leadId);
+    form.set("idempotencyKey", key);
     form.set("occurredAt", new Date().toISOString());
     form.set("channel", channel);
-    form.set("outcome", outcome);
+    form.set("outcome", outcomeFor(channel, reached));
+    form.set("nextActionType", nextKind);
+    form.set("nextDate", nextDate);
     setBusy(true);
     setMessage("");
     setMessageTone("");
@@ -103,8 +208,9 @@ export function LeadContactPanel({ leadId }: { leadId: string }) {
         return;
       }
       setKey(crypto.randomUUID());
-      setOutcome("");
-      setMessage("Əlaqə və növbəti iş yadda saxlanıldı.");
+      setMode(null);
+      if (reached) onReached?.();
+      setMessage(reached ? "Əlaqə quruldu kimi təsdiqləndi." : "Əlaqə saxlanılmadı. Növbəti plan yazıldı.");
       setMessageTone("success");
       await load();
       router.refresh();
@@ -117,69 +223,102 @@ export function LeadContactPanel({ leadId }: { leadId: string }) {
   }
 
   return (
-    <section className="crm-action-card">
-      <header>
-        <div>
-          <h3>Əlaqə nəticəsi</h3>
-          <p>Kanal və real nəticəni seçin. Mərhələ dəyişməsi əlaqə sayılmır.</p>
-        </div>
-        <Button type="button" variant="secondary" onClick={toggle} aria-expanded={expanded}>
-          {expanded ? "Bağla" : "Əlaqə nəticəsini yaz"}
-        </Button>
-      </header>
-      {expanded ? (
+    <section className={embedded ? "crm-action-card is-embedded" : "crm-action-card"}>
+      {embedded ? null : (
+        <header>
+          <div>
+            <h3>Əlaqə</h3>
+          </div>
+          <Button type="button" variant="secondary" onClick={toggle} aria-expanded={expanded}>
+            {expanded ? "Bağla" : "Əlaqə"}
+          </Button>
+        </header>
+      )}
+      {shown && embedded && !loaded ? <p className="crm-panel-loading">Yüklənir…</p> : null}
+      {shown && (!embedded || loaded) ? (
         <div className="crm-action-card-body">
-          <form action={save} className="crm-dialog-fields">
-            <input type="hidden" name="leadId" value={leadId} />
-            <input type="hidden" name="idempotencyKey" value={key} />
-            <label className="form-field">
-              <span>Kanal</span>
-              <FormSelect
-                name="channel"
-                aria-label="Əlaqə kanalı"
-                value={channel}
-                onValueChange={onChannelChange}
-                options={Object.entries(contactChannels).map(([value, label]) => ({ value, label }))}
-              />
-            </label>
-            <label className="form-field">
-              <span>Nəticə</span>
-              <FormSelect
-                name="outcome"
-                aria-label="Əlaqə nəticəsi"
-                value={outcome}
-                onValueChange={setOutcome}
-                emptyLabel="Seçin"
-                options={outcomeOptions}
-                required
-              />
-            </label>
-            <label className="form-field">
-              <span>Növbəti iş</span>
-              <FormSelect
-                name="nextActionType"
-                aria-label="Növbəti iş"
-                defaultValue="CALL"
-                options={nextActionTypeSelectOptions}
-              />
-            </label>
-            <label className="form-field">
-              <span>Növbəti tarix</span>
-              <DatePicker
-                name="nextDate"
-                aria-label="Növbəti əlaqə tarixi"
-                value={date}
-                onValueChange={setDate}
-                required
-              />
-            </label>
-            <label className="form-field">
-              <span>Qısa qeyd (istəyə görə)</span>
-              <Input name="note" maxLength={500} />
-            </label>
-            <Button type="submit" disabled={busy || !outcome}>
-              {busy ? "Saxlanılır…" : "Saxla"}
-            </Button>
+          <form action={(form) => save(form, "missed")} className="crm-contact-plan">
+            <div className={contactComplete ? "crm-contact-active is-done" : "crm-contact-active"}>
+              <div className="crm-contact-active-meta">
+                <strong>
+                  {activePlan
+                    ? formatNextActionTypeLabel(activePlan.kind)
+                    : contactComplete
+                      ? "Əlaqə quruldu"
+                      : "Plan yoxdur"}
+                </strong>
+                {activePlan ? <small>{formatPlanDate(activePlan.plannedAt)}</small> : null}
+              </div>
+              <div className="crm-contact-choices">
+                <button
+                  type="button"
+                  className="crm-choice is-danger"
+                  aria-pressed={mode === "missed"}
+                  disabled={busy}
+                  onClick={() => setMode((current) => current === "missed" ? null : "missed")}
+                >
+                  <PhoneMissed aria-hidden="true" />
+                  Əlaqə saxlanılmadı
+                </button>
+                <button
+                  type="button"
+                  className="crm-choice is-success"
+                  aria-pressed={mode === "reached"}
+                  disabled={busy}
+                  onClick={() => {
+                    setMode("reached");
+                    void save(new FormData(), "reached");
+                  }}
+                >
+                  <CheckCircle2 aria-hidden="true" />
+                  Əlaqə quruldu
+                </button>
+              </div>
+            </div>
+            {mode === "missed" ? (
+              <>
+                <div className="crm-dialog-fields">
+                  <label className="form-field">
+                    <span>Kanal</span>
+                    <FormSelect
+                      name="channel"
+                      aria-label="Kanal"
+                      value={channel}
+                      onValueChange={(value) => setChannel(value as ContactChannel)}
+                      options={Object.entries(contactChannels).map(([value, label]) => ({ value, label }))}
+                    />
+                  </label>
+                  <label className="form-field">
+                    <span>Növbəti iş</span>
+                    <FormSelect
+                      name="nextKind"
+                      aria-label="Növbəti iş"
+                      value={nextKind}
+                      onValueChange={(value) => setNextKind(value as NextActionTypeValue)}
+                      options={nextActionTypeSelectOptions}
+                    />
+                  </label>
+                  <label className="form-field">
+                    <span>Növbəti tarix</span>
+                    <DatePicker
+                      name="nextDate"
+                      aria-label="Növbəti tarix"
+                      value={date}
+                      onValueChange={setDate}
+                      minValue={bakuDate(new Date().toISOString())}
+                      required
+                    />
+                  </label>
+                  <label className="form-field">
+                    <span>Qısa qeyd</span>
+                    <Input name="note" maxLength={500} placeholder="İstəyə görə" />
+                  </label>
+                </div>
+                <Button type="submit" disabled={busy || !date}>
+                  {busy ? "Saxlanılır…" : "Əlaqəni və işi saxla"}
+                </Button>
+              </>
+            ) : null}
           </form>
 
           {message ? (
@@ -199,51 +338,29 @@ export function LeadContactPanel({ leadId }: { leadId: string }) {
           <div className="crm-contact-history">
             <div className="crm-contact-history-head">
               <h4>Əlaqə tarixçəsi</h4>
-              {rows.length > 0 ? <span>{rows.length} qeyd</span> : null}
+              {historyPlans.length > 0 ? <span>{historyPlans.length} qeyd</span> : null}
             </div>
 
-            {rows.length === 0 && !busy ? (
-              <p className="crm-contact-empty">Hələ faktiki əlaqə qeydi yoxdur.</p>
+            {historyPlans.length === 0 && rows.length === 0 && !busy ? (
+              <p className="crm-contact-empty">Hələ əlaqə planı yoxdur.</p>
             ) : null}
 
-            {rows.length > 0 ? (
+            {historyPlans.length > 0 ? (
               <ul className="crm-contact-log">
-                {rows.map((row) => {
-                  const channelLabel =
-                    contactChannels[row.channel as keyof typeof contactChannels] ?? row.channel;
-                  const outcomeLabel =
-                    contactOutcomes[row.outcome as keyof typeof contactOutcomes] ?? row.outcome;
-                  const when = new Intl.DateTimeFormat("az-AZ", {
-                    timeZone: "Asia/Baku",
-                    day: "2-digit",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }).format(new Date(row.occurredAt));
-
-                  return (
-                    <li
-                      key={row.id}
-                      className={`crm-contact-log-item is-${outcomeTone(row.outcome)}`}
-                    >
-                      <span className="crm-contact-log-icon" aria-hidden="true">
-                        {row.outcome === "UNANSWERED" ? (
-                          <PhoneMissed />
-                        ) : (
-                          channelIcon(row.channel)
-                        )}
-                      </span>
-                      <div className="crm-contact-log-main">
-                        <div className="crm-contact-log-top">
-                          <strong>{outcomeLabel}</strong>
-                          <em>{channelLabel}</em>
-                        </div>
-                        {row.note ? <p>{row.note}</p> : null}
+                {historyPlans.map((plan) => (
+                  <li key={plan.id} className={`crm-contact-log-item is-${planTone(plan)}`}>
+                    <span className="crm-contact-log-icon" aria-hidden="true">
+                      {planTone(plan) === "warning" ? <PhoneMissed /> : planTone(plan) === "success" ? <CheckCircle2 /> : <Phone />}
+                    </span>
+                    <div className="crm-contact-log-main">
+                      <div className="crm-contact-log-top">
+                        <strong>{planTitle(plan)}</strong>
+                        <em>{formatNextActionTypeLabel(plan.kind)}</em>
                       </div>
-                      <time dateTime={row.occurredAt}>{when}</time>
-                    </li>
-                  );
-                })}
+                    </div>
+                    <time dateTime={plan.plannedAt}>{formatPlanDate(plan.plannedAt)}</time>
+                  </li>
+                ))}
               </ul>
             ) : null}
           </div>

@@ -52,3 +52,71 @@ export const cancelCourseSale=safeServerAction(async(form:FormData)=>{
  });
  revalidatePath("/students");revalidatePath("/dashboard");revalidatePath("/finance");updateTag(erpCacheTags.students);updateTag(erpCacheTags.finance);
 },"Satış ləğv edilmədi.");
+
+export const refundAdvanceSale = safeServerAction(async (form: FormData) => {
+  const actor = await requireMutationActor("student.status.change");
+  const id = z.string().uuid().parse(form.get("saleId"));
+  const reason = z.string().trim().min(3).max(500).parse(form.get("reason"));
+  await getPrisma().$transaction(async (tx) => {
+    const sale = await tx.courseSale.findUniqueOrThrow({ where: { id } });
+    await tx.$queryRaw`select id from erp.students where id=${sale.studentId}::uuid for update`;
+    const fresh = await tx.courseSale.findUniqueOrThrow({ where: { id } });
+    const student = await tx.student.findUniqueOrThrow({
+      where: { id: sale.studentId },
+      include: { enrollments: { where: { status: { in: ["ACTIVE", "PAUSED"] } }, orderBy: { createdAt: "desc" }, take: 1, select: { id: true } } },
+    });
+    if (scopeFor(actor.permissions, "student.status.change") !== "ALL" && student.managerId !== actor.id) {
+      throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur.", "FORBIDDEN");
+    }
+    if (fresh.status === "CANCELLED") return;
+    const latest = await tx.courseSale.findFirst({ where: { studentId: student.id }, orderBy: { createdAt: "desc" } });
+    if (latest?.id !== id || student.enrollments[0]?.id !== sale.enrollmentId || !["SLOT_WAITING", "ACTIVE"].includes(student.lifecycleStatus)) {
+      throw new PublicActionError("Yalnız cari qəbulun açıq avansı geri qaytarıla bilər.");
+    }
+    const payments = await tx.payment.findMany({
+      where: { courseSaleId: id, refundedAt: null },
+      select: { id: true, amount: true },
+    });
+    const total = payments.reduce((sum, payment) => sum.plus(payment.amount), new Prisma.Decimal(0));
+    assertDepositCancellation(total, fresh.initialFee, fresh.status);
+    if (total.lte(0)) throw new PublicActionError("Geri qaytarılacaq avans tapılmadı.");
+    const now = new Date();
+    const effectiveAt = new Date(dailyReportWindow(now).date + "T00:00:00Z");
+    await tx.payment.updateMany({
+      where: { id: { in: payments.map((payment) => payment.id) } },
+      data: { refundedAt: now },
+    });
+    await tx.courseSale.update({
+      where: { id },
+      data: { status: "CANCELLED", cancelledAt: now, cancellationReason: reason },
+    });
+    await tx.student.update({ where: { id: student.id }, data: buildStudentStatusUpdateData("DECLINED", effectiveAt) });
+    await clearStudentPaymentSchedules(tx, [student.id]);
+    await pauseStudentLifecycleRelations(tx, { studentId: student.id, effectiveAt, changedById: actor.id, clearTeacherAssignment: false });
+    await tx.studentStatusHistory.create({
+      data: {
+        studentId: student.id,
+        oldStatus: student.lifecycleStatus,
+        newStatus: "DECLINED",
+        effectiveAt,
+        changedById: actor.id,
+        reason: "Avans geri qaytarıldı",
+        note: reason,
+      },
+    });
+    await writeAuditLog(tx, {
+      actorUserId: actor.id,
+      action: "student.sale.refund",
+      entityType: "student",
+      entityId: student.id,
+      before: { saleId: id, status: fresh.status },
+      after: { status: "CANCELLED", moneyReturned: total.toString() },
+      reason,
+    });
+  });
+  revalidatePath("/students");
+  revalidatePath("/dashboard");
+  revalidatePath("/finance");
+  updateTag(erpCacheTags.students);
+  updateTag(erpCacheTags.finance);
+}, "Avans geri qaytarılmadı.");

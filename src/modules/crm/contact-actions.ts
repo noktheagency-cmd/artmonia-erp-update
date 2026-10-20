@@ -17,7 +17,11 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
   const id = z.string().uuid().parse(leadId);
   const db = getPrisma();
   assertCanAccessLead(actor, await db.lead.findUnique({ where: { id } }), "crm.lead.read");
-  const rows = await db.leadContactEvent.findMany({ where: { leadId: id }, orderBy: { occurredAt: "desc" }, take: 30 });
+  const [rows, workItems, leadPlan] = await Promise.all([
+    db.leadContactEvent.findMany({ where: { leadId: id }, orderBy: { occurredAt: "desc" }, take: 30 }),
+    db.leadWorkItem.findMany({ where: { leadId: id, source: "PRIMARY" }, orderBy: { createdAt: "desc" }, take: 30 }),
+    db.lead.findUnique({ where: { id }, select: { stage: true, nextActionType: true, nextFollowUpAt: true, createdAt: true } }),
+  ]);
   const lastTalk = await db.leadContactEvent.findFirst({
     where: { leadId: id, channel: "PHONE", outcome: "TALKED" },
     orderBy: { occurredAt: "desc" },
@@ -29,7 +33,29 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
     ...(lastTalk ? { occurredAt: { gt: lastTalk.occurredAt } } : {}),
   };
   const [firstAttempt, attempts] = await Promise.all([db.leadContactEvent.findFirst({ where: unanswered, orderBy: { occurredAt: "asc" } }), db.leadContactEvent.count({ where: unanswered })]);
+  const plans = workItems.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    plannedAt: row.plannedAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    completedAt: row.completedAt?.toISOString() ?? null,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    result: row.result,
+  }));
+  if (plans.length === 0 && leadPlan?.nextActionType && leadPlan.nextFollowUpAt) {
+    plans.push({
+      id: `plan-${leadPlan.createdAt.toISOString()}`,
+      kind: leadPlan.nextActionType,
+      plannedAt: leadPlan.nextFollowUpAt.toISOString(),
+      createdAt: leadPlan.createdAt.toISOString(),
+      completedAt: null,
+      cancelledAt: null,
+      result: null,
+    });
+  }
   return { rows: rows.map((row) => ({ id: row.id, channel: row.channel, outcome: row.outcome, occurredAt: row.occurredAt.toISOString(), note: row.note })),
+    plans,
+    stage: leadPlan?.stage ?? "NEW",
     suggestedDate: nextUnansweredDate(firstAttempt?.occurredAt ?? new Date(), new Date(), attempts) };
 }, "Əlaqə tarixçəsi yüklənmədi.");
 
@@ -43,7 +69,9 @@ export const saveContactEvent = safeServerAction(async (form: FormData) => {
     await tx.$queryRaw`select id from erp.leads where id = ${input.leadId}::uuid for update`;
     const lead = await tx.lead.findUnique({ where: { id: input.leadId } });
     assertCanEditLead(actor, lead);
-    if (lead.stage === "REGISTERED" || lead.stage === "LOST") throw new PublicActionError("Bu müraciət artıq bağlanıb.");
+    if (lead.stage === "REGISTERED" || lead.stage === "LOST" || lead.convertedStudentId) {
+      throw new PublicActionError("Bu müraciət artıq qeydiyyata keçib.");
+    }
     if (!lead.programInterestId) throw new PublicActionError("Əvvəl müraciətin proqramını tamamlayın.");
     const previous = await tx.leadContactEvent.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (previous) {
@@ -63,7 +91,23 @@ export const saveContactEvent = safeServerAction(async (form: FormData) => {
     const plannedAt = new Date(`${input.nextDate}T12:00:00+04:00`);
     const ownerId = lead.managerId ?? actor.id;
     await syncLeadWorkPlan(tx, { leadId: lead.id, ownerId, kind: input.nextActionType, plannedAt });
-    await tx.lead.update({ where: { id: lead.id }, data: { managerId: ownerId, nextActionType: input.nextActionType, nextFollowUpAt: plannedAt } });
+    const established = input.outcome === "TALKED" || input.outcome === "WHATSAPP_REPLIED";
+    const advanceStage = established && lead.stage === "NEW";
+    await tx.lead.update({ where: { id: lead.id }, data: {
+      managerId: ownerId,
+      nextActionType: input.nextActionType,
+      nextFollowUpAt: plannedAt,
+      ...(advanceStage ? { stage: "CONTACTED" } : {}),
+    } });
+    if (advanceStage) {
+      await tx.leadStageHistory.create({ data: {
+        leadId: lead.id,
+        oldStage: "NEW",
+        newStage: "CONTACTED",
+        reason: input.note || "Əlaqə quruldu",
+        changedById: actor.id,
+      } });
+    }
     await writeAuditLog(tx, { actorUserId: actor.id, action: "lead.contact.record", entityType: "lead", entityId: lead.id,
       after: { contactEventId: event.id, channel: input.channel, outcome: input.outcome, occurredAt: input.occurredAt, nextDate: input.nextDate, nextActionType: input.nextActionType }, reason: input.note || null });
   });

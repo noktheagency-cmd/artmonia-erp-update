@@ -22,6 +22,7 @@ import { RevenueAreaChart, RevenueSummaryCards } from "@/modules/dashboard/dashb
 import type { TaskData } from "@/modules/tasks/queries";
 import type { CompanyKpiData } from "@/modules/hr/company-kpi-data";
 import { CompanyKpiProgressPanel } from "@/modules/dashboard/company-kpi-progress-panel";
+import { DashboardGreeting } from "@/modules/dashboard/dashboard-greeting";
 
 type TaskAction = (formData: FormData) => unknown | Promise<unknown>;
 
@@ -56,14 +57,12 @@ export function OwnerDashboard({
 }) {
   return (
     <section className="owner-dashboard" aria-labelledby="owner-dashboard-title">
-      <header className="owner-dashboard-header">
-        <div className="owner-dashboard-greeting">
-          <h1 id="owner-dashboard-title"><span>Salam,</span> {firstName(actorName)}</h1>
-        </div>
-        {companyKpiData?.permissions.canRead ? (
+      <DashboardGreeting name={firstName(actorName)} />
+      {companyKpiData?.permissions.canRead ? (
+        <header className="owner-dashboard-header">
           <CompanyKpiProgressPanel data={companyKpiData} />
-        ) : null}
-      </header>
+        </header>
+      ) : null}
 
       <div className="owner-dashboard-kpi-grid">
         {data.kpis.map((item, index) => {

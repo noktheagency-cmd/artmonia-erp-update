@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
   CheckCircle2,
   CircleUserRound,
-  GraduationCap,
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,10 +20,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
-import { convertLeadToStudentAction } from "@/modules/crm/actions";
+import { convertLeadToStudentAction, listRegistrationPackageOptions } from "@/modules/crm/actions";
+import { isGiftDiscount } from "@/modules/students/student-create-rules";
+import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import type { CrmData } from "@/modules/crm/queries";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
@@ -49,11 +51,55 @@ export function LeadRegistrationDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [programId, setProgramId] = useState(lead.detail.programId);
+  const [discountType, setDiscountType] = useState("");
+  const [monthlyFee, setMonthlyFee] = useState("");
+  const [lessonsPerMonth, setLessonsPerMonth] = useState("");
+  const [teachers, setTeachers] = useState<{ id: string; fullName: string }[]>([]);
+  const [discountTypes, setDiscountTypes] = useState<{ value: string; label: string }[]>([]);
+  const [programTerms, setProgramTerms] = useState<Record<string, { monthlyFee: string; lessonsPerMonth: string }>>({});
   const enabled = lead.canConvert && canConvert;
+  const gift = isGiftDiscount(discountType);
 
   function handleOpenChange(nextOpen: boolean) {
     if (isPending) return;
     setOpen(nextOpen);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let ignore = false;
+
+    async function load() {
+      const result = await listRegistrationPackageOptions();
+      if (ignore || !result.ok) return;
+      setTeachers(result.data.teachers);
+      setDiscountTypes(result.data.discountTypes);
+      setProgramTerms(Object.fromEntries(result.data.programs.map((program) => [
+        program.id,
+        { monthlyFee: program.monthlyFee, lessonsPerMonth: program.lessonsPerMonth },
+      ])));
+    }
+
+    void load();
+    return () => {
+      ignore = true;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const terms = programTerms[programId];
+    if (!terms) return;
+    setMonthlyFee((current) => current || terms.monthlyFee);
+    setLessonsPerMonth((current) => current || terms.lessonsPerMonth);
+  }, [programId, programTerms]);
+
+  function handleProgramChange(value: string) {
+    setProgramId(value);
+    const terms = programTerms[value];
+    if (!terms) return;
+    setMonthlyFee(terms.monthlyFee);
+    setLessonsPerMonth(terms.lessonsPerMonth);
   }
 
   function registerLead(formData: FormData) {
@@ -164,23 +210,77 @@ export function LeadRegistrationDialog({
             </section>
 
             <section className="crm-dialog-section">
-              <header><BookOpen aria-hidden="true" /><h3>Tədris məlumatları</h3></header>
+              <header><BookOpen aria-hidden="true" /><h3>Cari paket və ödəniş planı</h3></header>
               <FieldGroup className="crm-dialog-fields">
-                <Field className="is-full">
+                <Field>
                   <FieldLabel>Proqram</FieldLabel>
                   <FormSelect
                     aria-label="Qeydiyyat proqramı"
                     name="programId"
-                    defaultValue={lead.detail.programId}
+                    value={programId}
+                    onValueChange={handleProgramChange}
                     emptyLabel="Proqram seçin"
                     options={programs.map((program) => ({ value: program.id, label: program.name }))}
                     searchable
                     searchPlaceholder="Proqram axtar..."
                     required
                   />
-                  <FieldDescription>
-                    Aylıq məbləğ və dərs sayı seçilən proqramın cari tarifindən götürüləcək.
-                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel>Müəllim</FieldLabel>
+                  <FormSelect
+                    aria-label="Müəllim"
+                    name="teacherId"
+                    emptyLabel="Müəllim seçilməyib"
+                    options={teachers.map((teacher) => ({ value: teacher.id, label: teacher.fullName }))}
+                    searchable
+                    searchPlaceholder="Müəllim axtar..."
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Cari paket üzrə ilk dərs</FieldLabel>
+                  <DatePicker name="firstLessonDate" aria-label="Cari paket üzrə ilk dərs" />
+                </Field>
+                <Field>
+                  <FieldLabel>Güzəşt növü</FieldLabel>
+                  <FormSelect
+                    aria-label="Güzəşt növü"
+                    name="discountType"
+                    value={discountType}
+                    onValueChange={(value) => setDiscountType(value === EMPTY_SELECT_VALUE ? "" : value)}
+                    emptyLabel="Güzəşt yoxdur"
+                    options={discountTypes}
+                    searchable
+                    searchPlaceholder="Güzəşt növü axtar..."
+                    catalogKey="STUDENT_DISCOUNT_TYPE"
+                    createLabel="Yeni güzəşt növü əlavə et"
+                  />
+                </Field>
+                {gift ? (
+                  <input name="monthlyFee" type="hidden" value="0" />
+                ) : (
+                  <Field>
+                    <FieldLabel>{discountType ? "Güzəştli aylıq məbləğ" : "Aylıq məbləğ"}</FieldLabel>
+                    <Input
+                      name="monthlyFee"
+                      value={monthlyFee}
+                      onChange={(event) => setMonthlyFee(event.target.value)}
+                      inputMode="decimal"
+                      required
+                    />
+                  </Field>
+                )}
+                <Field>
+                  <FieldLabel>Aylıq dərs sayı</FieldLabel>
+                  <Input
+                    name="lessonsPerMonth"
+                    value={lessonsPerMonth}
+                    onChange={(event) => setLessonsPerMonth(event.target.value)}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={120}
+                  />
                 </Field>
               </FieldGroup>
             </section>
@@ -199,11 +299,6 @@ export function LeadRegistrationDialog({
                 </label>
               </section>
             ) : null}
-
-            <div className="crm-register-note">
-              <GraduationCap aria-hidden="true" />
-              <p><strong>Təsdiqdən sonra:</strong> müraciət “Qeydiyyata alınıb”, tələbə isə “Slot gözləyir” statusuna keçəcək. Satış yalnız uyğun müqavilə və ödənişlə yaranır.</p>
-            </div>
           </div>
 
           <DialogFooter className="crm-dialog-actions">

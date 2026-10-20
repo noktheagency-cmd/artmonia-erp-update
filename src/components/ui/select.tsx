@@ -72,6 +72,7 @@ type FormSelectProps = {
   optionCrud?: SelectOptionCrudConfig;
   searchPlaceholder?: string;
   createLabel?: string;
+  onOpenChange?: (open: boolean) => void;
   "aria-label"?: string;
   icon?: React.ComponentType<{ className?: string; size?: number }>;
 };
@@ -201,6 +202,7 @@ function FormSelectState({
   optionCrud,
   searchPlaceholder = "Axtar...",
   createLabel = "Yeni seçim əlavə et",
+  onOpenChange,
   "aria-label": ariaLabel,
   icon: Icon,
 }: FormSelectProps) {
@@ -335,6 +337,7 @@ function FormSelectState({
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
 
     if (nextOpen) {
       setDialogPortalContainer(
@@ -554,6 +557,8 @@ function FormSelectState({
     );
   }
 
+  const optionPanel = crudPanel();
+
   if (isMobileSheet) {
     const showMobileSearch = searchable || items.length >= 8 || creatable;
     const sheetTitle =
@@ -669,7 +674,7 @@ function FormSelectState({
                 <div className="ui-mobile-select-empty">Nəticə tapılmadı</div>
               ) : null}
             </div>
-            <div className="ui-mobile-select-crud-panel">{crudPanel()}</div>
+            {optionPanel ? <div className="ui-mobile-select-crud-panel">{optionPanel}</div> : null}
           </DialogContent>
         </Dialog>
       </>
@@ -762,7 +767,7 @@ function FormSelectState({
                   )}
                 </Combobox.List>
               </div>
-              <div className="ui-select-crud-panel">{crudPanel()}</div>
+              {optionPanel ? <div className="ui-select-crud-panel">{optionPanel}</div> : null}
             </Combobox.Popup>
           </Combobox.Positioner>
         </Combobox.Portal>
@@ -803,7 +808,7 @@ function FormSelectState({
         ) : (
           <div className="ui-select-empty-state">Nəticə tapılmadı</div>
         )}
-        <div className="ui-select-crud-panel">{crudPanel()}</div>
+        {optionPanel ? <div className="ui-select-crud-panel">{optionPanel}</div> : null}
       </SelectContent>
     </Select>
   );

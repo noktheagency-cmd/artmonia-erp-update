@@ -1,21 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   Banknote,
   BookOpen,
+  ChevronDown,
   Edit,
   GraduationCap,
   Plus,
   RefreshCcw,
   Trash2,
+  Undo2,
   UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
-import { MonthPicker } from "@/components/ui/month-picker";
+import { currentBakuMonthValue, MonthPicker, normalizeMonthValue } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import {
@@ -29,7 +32,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
-import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
+import {
+  AVANS_DEFAULT_AMOUNT,
+  AVANS_PAYMENT_KIND,
+  storedScheduleTypeForPaymentKind,
+  studentPaymentKindOptions,
+} from "@/modules/students/payment-schedule-type";
+import {
+  ADMISSION_PAYMENT_MIN_MESSAGE,
+  isAdmissionAmountBelowMinimum,
+} from "@/modules/students/admission-payment-amount";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
@@ -38,7 +50,7 @@ import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
 
 const studentStatusOptions = [
-  { value: "SLOT_WAITING", label: "Slota əlavə et / Slot gözləyir" },
+  { value: "SLOT_WAITING", label: "Slot gözləyir" },
   { value: "ACTIVE", label: "Aktiv" },
   // BK-10: single freeze — seat kept, monthly billing continues.
   { value: "FROZEN", label: "Dondurulub (yer saxlanır, haqq davam edir)" },
@@ -54,6 +66,7 @@ interface StudentDetail {
   code: string;
   lifecycleStatusValue: string;
   freezeReserved: boolean;
+  advanceRefund: { saleId: string; amount: string; remaining: string } | null;
   detail: {
     hasEditableEnrollment: boolean;
     email: string;
@@ -116,6 +129,7 @@ export function StudentDetailActions({
   updateStudentStatusAction,
   deleteStudentAction,
   createStudentReminderAction,
+  refundAdvanceAction,
 }: {
   student: StudentDetail;
   editOptions: StudentEditOptions;
@@ -126,25 +140,33 @@ export function StudentDetailActions({
   updateStudentStatusAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteStudentAction: (formData: FormData) => unknown | Promise<unknown>;
   createStudentReminderAction: (formData: FormData) => unknown | Promise<unknown>;
+  refundAdvanceAction: (formData: FormData) => unknown | Promise<unknown>;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
-  const [editScope, setEditScope] = useState<"PROFILE_ONLY" | "WITH_ENROLLMENT">("PROFILE_ONLY");
-  const editingEnrollment = editScope === "WITH_ENROLLMENT" && student.detail.hasEditableEnrollment;
+  const [editLifecycleStatus, setEditLifecycleStatus] = useState(student.lifecycleStatusValue);
+  const lifecycleStatusOpen = useRef(false);
+  const [editProgramId, setEditProgramId] = useState(student.detail.programId);
+  const [editMonthlyFee, setEditMonthlyFee] = useState(student.detail.monthlyFee);
+  const editingEnrollment = student.detail.hasEditableEnrollment;
   const [profileBusy, setProfileBusy] = useState(false);
   const [packageBusy, setPackageBusy] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundBusy, setRefundBusy] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [statusValue, setStatusValue] = useState(student.lifecycleStatusValue);
+  const statusSelectOpen = useRef(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
+  const [paymentKind, setPaymentKind] = useState("MONTHLY");
+  const [paymentAmountError, setPaymentAmountError] = useState("");
+  const [paymentRequestId, setPaymentRequestId] = useState(() => crypto.randomUUID());
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
-  const [paymentMonth, setPaymentMonth] = useState(student.detail.paymentDefaultMonth);
-  const availableStudentStatusOptions = studentStatusOptions.filter(
-    (option) => option.value !== student.lifecycleStatusValue
-      || (option.value === "ACTIVE" && student.freezeReserved),
+  const [paymentMonth, setPaymentMonth] = useState(
+    () => normalizeMonthValue(student.detail.paymentDefaultMonth) || currentBakuMonthValue(),
   );
   const sourceOptions = editOptions.sourceOptions.includes(student.detail.source)
     ? editOptions.sourceOptions
@@ -314,11 +336,17 @@ export function StudentDetailActions({
             <div className="field-grid">
               <label className="form-field">
                 <span>Status</span>
+                <input name="lifecycleStatus" type="hidden" value={statusValue} />
                 <FormSelect
-                  name="lifecycleStatus"
+                  name="lifecycleStatusPicker"
                   value={statusValue}
-                  onValueChange={setStatusValue}
-                  options={availableStudentStatusOptions}
+                  onOpenChange={(open) => {
+                    statusSelectOpen.current = open;
+                  }}
+                  onValueChange={(value) => {
+                    if (statusSelectOpen.current) setStatusValue(value);
+                  }}
+                  options={studentStatusOptions}
                 />
               </label>
               <label className="form-field">
@@ -340,11 +368,11 @@ export function StudentDetailActions({
               />
             </label>
 
-            <p className="payment-policy-note">
-              {statusValue === "FROZEN"
-                ? "Yer saxlanır, dərs keçirilməsə də aylıq haqq qalır. Bu seçim ödənişi avtomatik qəbul etmir."
-                : "İmtina zamanı qəbul edilən ödəniş geri qaytarılmır."}
-            </p>
+            {statusValue === "FROZEN" ? (
+              <p className="payment-policy-note">
+                Yer saxlanır, dərs keçirilməsə də aylıq haqq qalır. Bu seçim ödənişi avtomatik qəbul etmir.
+              </p>
+            ) : null}
 
             <DialogFooter>
               <DialogClose asChild>
@@ -361,15 +389,72 @@ export function StudentDetailActions({
         </DialogContent>
       </Dialog>
 
+      {student.advanceRefund ? (
+        <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
+          <DialogTrigger asChild>
+            <Button type="button" variant="ghost" disabled={!permissions.canChangeStatus}>
+              <Undo2 data-icon="inline-start" />
+              Avansı geri qaytar
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="student-payment-dialog">
+            <DialogHeader>
+              <DialogTitle>Avansı geri qaytar</DialogTitle>
+            </DialogHeader>
+            <form
+              className="student-payment-form"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (refundBusy || !student.advanceRefund) return;
+                setRefundBusy(true);
+                const formData = new FormData(event.currentTarget);
+                try {
+                  unwrapActionResult(await refundAdvanceAction(formData));
+                  setRefundOpen(false);
+                  notifySuccess("Avans geri qaytarıldı", "Tələbənin statusu imtinaya keçdi.");
+                  router.refresh();
+                } catch (error) {
+                  notifyCaughtError(error, "Avans geri qaytarılmadı.");
+                } finally {
+                  setRefundBusy(false);
+                }
+              }}
+            >
+              <input name="saleId" type="hidden" value={student.advanceRefund.saleId} />
+              <label className="form-field">
+                <span>Məbləğ</span>
+                <Input value={student.advanceRefund.amount} readOnly />
+              </label>
+              <label className="form-field">
+                <span>Səbəb</span>
+                <Input name="reason" minLength={3} maxLength={500} required placeholder="Məsələn: ilk dərsə gəlmədi" />
+              </label>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="ghost">Ləğv et</Button>
+                </DialogClose>
+                <Button type="submit" disabled={refundBusy}>
+                  <Undo2 data-icon="inline-start" />
+                  {refundBusy ? "Qaytarılır…" : "Geri qaytar"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
       {/* Record Payment Dialog */}
       <Dialog
         open={paymentOpen}
         onOpenChange={(nextOpen) => {
           setPaymentOpen(nextOpen);
           if (nextOpen) {
-            setPaymentAmount(student.detail.paymentDefaultAmount);
+            setPaymentKind("MONTHLY");
+            setPaymentAmount(student.advanceRefund?.remaining || student.detail.paymentDefaultAmount);
+            setPaymentAmountError("");
+            setPaymentRequestId(crypto.randomUUID());
             setPaymentDate(student.detail.paymentDefaultDate);
-            setPaymentMonth(student.detail.paymentDefaultMonth);
+            setPaymentMonth(normalizeMonthValue(student.detail.paymentDefaultMonth) || currentBakuMonthValue());
           }
         }}
       >
@@ -382,15 +467,18 @@ export function StudentDetailActions({
         <DialogContent className="student-payment-dialog">
           <DialogHeader>
             <DialogTitle>Ödəniş qəbul et</DialogTitle>
-            <DialogDescription>
-              {student.name} üçün yeni ödəniş əməliyyatı qeyd edin.
-            </DialogDescription>
           </DialogHeader>
 
           <form
             onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
+              const purpose = String(formData.get("receiptPurpose") ?? "");
+              if (isAdmissionAmountBelowMinimum(String(formData.get("amount") ?? ""), purpose)) {
+                setPaymentAmountError(ADMISSION_PAYMENT_MIN_MESSAGE);
+                return;
+              }
+              setPaymentAmountError("");
               if (!confirmPaymentMonthMismatch(formData)) return;
               try {
                 const result = unwrapActionResult(await recordPaymentAction(formData)) as {
@@ -408,19 +496,56 @@ export function StudentDetailActions({
           >
             <input name="studentId" type="hidden" value={student.id} />
             <input name="returnTo" type="hidden" value={`/students/${student.id}`} />
+            <input name="idempotencyKey" type="hidden" value={paymentRequestId} />
+            <input name="scheduleType" type="hidden" value={storedScheduleTypeForPaymentKind(paymentKind)} />
+            {paymentKind === AVANS_PAYMENT_KIND ? (
+              <>
+                <input name="receiptPurpose" type="hidden" value="ADMISSION" />
+                <input name="contractConfirmed" type="hidden" value="on" />
+              </>
+            ) : student.advanceRefund ? (
+              <input name="receiptPurpose" type="hidden" value="INITIAL_BALANCE" />
+            ) : null}
 
             <div className="field-grid">
               <label className="form-field">
+                <span>Ödəniş növü</span>
+                <FormSelect
+                  name="paymentKind"
+                  value={paymentKind}
+                  onValueChange={(kind) => {
+                    setPaymentKind(kind);
+                    setPaymentAmountError("");
+                    if (kind === AVANS_PAYMENT_KIND) setPaymentAmount(AVANS_DEFAULT_AMOUNT);
+                  }}
+                  options={student.advanceRefund
+                    ? studentPaymentKindOptions.filter((option) => option.value !== AVANS_PAYMENT_KIND)
+                    : studentPaymentKindOptions}
+                />
+              </label>
+              <label className={`form-field${paymentAmountError ? " has-error" : ""}`}>
                 <span>Məbləğ (AZN)</span>
                 <Input
                   name="amount"
                   inputMode="decimal"
                   placeholder="0.00"
                   value={paymentAmount}
-                  onChange={(event) => setPaymentAmount(event.target.value)}
+                  aria-invalid={Boolean(paymentAmountError)}
+                  onChange={(event) => {
+                    setPaymentAmount(event.target.value);
+                    setPaymentAmountError("");
+                  }}
                   required
                 />
+                {paymentAmountError ? (
+                  <small className="form-field-error" role="alert">
+                    {paymentAmountError}
+                  </small>
+                ) : null}
               </label>
+            </div>
+
+            <div className="field-grid">
               <label className="form-field">
                 <span>Ödəniş metodu</span>
                 <FormSelect
@@ -429,9 +554,6 @@ export function StudentDetailActions({
                   options={studentPaymentMethodOptions}
                 />
               </label>
-            </div>
-
-            <div className="field-grid">
               <label className="form-field">
                 <span>Ödəniş tarixi</span>
                 <DatePicker
@@ -442,14 +564,6 @@ export function StudentDetailActions({
                   allowClear={false}
                   popoverPlacement="floating"
                   required
-                />
-              </label>
-              <label className="form-field">
-                <span>Ödəniş növü</span>
-                <FormSelect
-                  name="scheduleType"
-                  defaultValue="MONTHLY"
-                  options={studentPaymentScheduleTypeOptions}
                 />
               </label>
             </div>
@@ -474,9 +588,12 @@ export function StudentDetailActions({
               />
             </label>
 
-            <p className="payment-policy-note">
-              Ödəniş yalnız seçilmiş ayın fakturasına yazılır. Birdəfəlik seçimdə növbəti aylıq tarix yaradılmır.
-            </p>
+            {student.advanceRefund && paymentKind !== AVANS_PAYMENT_KIND ? (
+              <label className="contract-confirm-field">
+                <Checkbox name="contractConfirmed" required />
+                <span>Müqavilə imzalanıb</span>
+              </label>
+            ) : null}
 
             <DialogFooter>
               <DialogClose asChild>
@@ -494,7 +611,15 @@ export function StudentDetailActions({
       </Dialog>
 
       {/* Edit Student Dialog */}
-      <Dialog open={editOpen} onOpenChange={(value) => { if (profileBusy) return; setEditOpen(value); if (value) setEditScope("PROFILE_ONLY"); }}>
+      <Dialog open={editOpen} onOpenChange={(value) => {
+        if (profileBusy) return;
+        if (value) {
+          setEditProgramId(student.detail.programId);
+          setEditMonthlyFee(student.detail.monthlyFee);
+          setEditLifecycleStatus(student.lifecycleStatusValue);
+        }
+        setEditOpen(value);
+      }}>
         <DialogTrigger asChild>
           <Button className="student-action-edit" type="button" disabled={!permissions.canUpdateStudent}>
             <Edit data-icon="inline-start" />
@@ -531,14 +656,6 @@ export function StudentDetailActions({
             <input name="studentId" type="hidden" value={student.id} />
 
             <input name="editScope" type="hidden" value={editingEnrollment ? "WITH_ENROLLMENT" : "PROFILE_ONLY"} />
-            <div className="field-grid">
-              <Button type="button" variant={editingEnrollment ? "outline" : "default"} onClick={() => setEditScope("PROFILE_ONLY")} aria-pressed={!editingEnrollment}>Şəxsi məlumatlar</Button>
-              {student.detail.hasEditableEnrollment ? (
-                <Button type="button" variant={editingEnrollment ? "default" : "outline"} onClick={() => setEditScope("WITH_ENROLLMENT")} aria-pressed={editingEnrollment}>Cari paket və ödəniş planı</Button>
-              ) : (
-                <Button type="button" variant="outline" onClick={() => { setEditOpen(false); setPackageOpen(true); }}>Yeni paket əlavə et</Button>
-              )}
-            </div>
 
             <section className="student-create-section">
               <div className="student-detail-section-title">
@@ -590,18 +707,23 @@ export function StudentDetailActions({
               </div>
             </section>
 
+            {editingEnrollment ? (
             <section className="student-create-section">
               <div className="student-detail-section-title">
-                <BookOpen />
-                <span>{editingEnrollment ? "Tədris və kampaniya məlumatları" : "Qeydiyyat və məsul şəxslər"}</span>
+                <GraduationCap />
+                <span>Cari paket və ödəniş planı</span>
               </div>
               <div className="student-create-grid">
-                {editingEnrollment ? <>
                 <label className="form-field">
                   <span>Proqram</span>
                   <FormSelect
                     name="programId"
-                    defaultValue={student.detail.programId}
+                    value={editProgramId}
+                    onValueChange={(value) => {
+                      setEditProgramId(value);
+                      const program = editOptions.programs.find((item) => item.id === value);
+                      if (program) setEditMonthlyFee(program.monthlyFee);
+                    }}
                     emptyLabel="Proqram seçin"
                     options={editOptions.programs.map((program) => ({ value: program.id, label: program.name }))}
                     searchable
@@ -620,7 +742,144 @@ export function StudentDetailActions({
                     searchPlaceholder="Müəllim axtar..."
                   />
                 </label>
-                </> : null}
+                <label className="form-field">
+                  <span>Cari paket üzrə ilk dərs</span>
+                  <DatePicker name="firstLessonDate" defaultValue={student.detail.firstLessonDate} />
+                </label>
+                <label className="form-field">
+                  <span>Status</span>
+                  {permissions.canChangeStatus && !student.freezeReserved ? (
+                    <>
+                      <input name="lifecycleStatus" type="hidden" value={editLifecycleStatus} />
+                      <FormSelect
+                        name="lifecycleStatusPicker"
+                        value={editLifecycleStatus}
+                        onOpenChange={(open) => {
+                          lifecycleStatusOpen.current = open;
+                        }}
+                        onValueChange={(value) => {
+                          if (lifecycleStatusOpen.current) setEditLifecycleStatus(value);
+                        }}
+                        options={studentStatusOptions}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <input name="lifecycleStatus" type="hidden" value={student.lifecycleStatusValue} />
+                      <div className="student-readonly-status"><span /><strong>{student.freezeReserved ? "Yer rezervdir — dəyişmək üçün “Status dəyiş” bölməsini açın" : "Status dəyişmə icazəsi yoxdur"}</strong></div>
+                    </>
+                  )}
+                </label>
+                <label className="form-field">
+                  <span>Status tarixi (status dəyişərsə)</span>
+                  {permissions.canChangeStatus ? (
+                    <DatePicker
+                      name="statusEffectiveDate"
+                      defaultValue={student.detail.paymentDefaultDate}
+                    />
+                  ) : (
+                    <Input
+                      name="statusEffectiveDate"
+                      defaultValue={student.detail.paymentDefaultDate}
+                      readOnly
+                    />
+                  )}
+                </label>
+                <label className="form-field">
+                  <span>Güzəşt növü</span>
+                  <FormSelect
+                    name="discountType"
+                    defaultValue={student.detail.discountType}
+                    emptyLabel="Güzəşt yoxdur"
+                    options={editOptions.discountTypes}
+                    searchable
+                    searchPlaceholder="Güzəşt növü axtar..."
+                    catalogKey="STUDENT_DISCOUNT_TYPE"
+                    createLabel="Yeni güzəşt növü əlavə et"
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Aylıq məbləğ</span>
+                  <Input
+                    name="monthlyFee"
+                    value={editMonthlyFee}
+                    onChange={(event) => setEditMonthlyFee(event.target.value)}
+                    inputMode="decimal"
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Aylıq dərs sayı</span>
+                  <Input
+                    name="lessonsPerMonth"
+                    defaultValue={student.detail.lessonsPerMonth}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={120}
+                  />
+                </label>
+              </div>
+              <details className="student-billing-change">
+                <summary>
+                  <span>Qiymət və dərs dəyişikliyi</span>
+                  <ChevronDown size={16} aria-hidden="true" />
+                </summary>
+                <div className="field-grid">
+                  <label className="form-field">
+                    <span>Qiymət dəyişikliyinin tətbiqi</span>
+                    <FormSelect
+                      name="billingChangeMode"
+                      defaultValue="FROM_MONTH"
+                      options={[
+                        { value: "FROM_MONTH", label: "Seçilən aydan etibarən" },
+                        { value: "ONLY_MONTH", label: "Yalnız seçilən ay üçün" },
+                      ]}
+                    />
+                  </label>
+                  <label className="form-field">
+                    <span>Qüvvəyə minən ay</span>
+                    <MonthPicker
+                      name="billingEffectiveMonth"
+                      min={student.detail.earliestUpgradeMonth ?? undefined}
+                      defaultValue={
+                        student.detail.earliestUpgradeMonth
+                        && student.detail.paymentDefaultMonth < student.detail.earliestUpgradeMonth
+                          ? student.detail.earliestUpgradeMonth
+                          : student.detail.paymentDefaultMonth
+                      }
+                      allowClear={false}
+                    />
+                  </label>
+                  <label className="form-field">
+                    <span>Qiymət/dərs dəyişikliyi səbəbi</span>
+                    <Input name="billingChangeReason" maxLength={240} />
+                  </label>
+                  {permissions.canChangeStatus ? (
+                    <label className="form-field">
+                      <span>Status dəyişiklik qeydi</span>
+                      <Input name="statusNote" maxLength={240} />
+                    </label>
+                  ) : null}
+                </div>
+              </details>
+            </section>
+            ) : (
+              <section className="student-create-section">
+                <div className="student-detail-section-title">
+                  <GraduationCap />
+                  <span>Cari paket və ödəniş planı</span>
+                </div>
+                <Button type="button" variant="outline" onClick={() => { setEditOpen(false); setPackageOpen(true); }}>Yeni paket əlavə et</Button>
+              </section>
+            )}
+
+            <section className="student-create-section">
+              <div className="student-detail-section-title">
+                <BookOpen />
+                <span>Qeydiyyat və məsul şəxslər</span>
+              </div>
+              <div className="student-create-grid">
                 <label className="form-field">
                   <span>Məsul şəxs</span>
                   {permissions.canAssignStudentManager ? (
@@ -660,10 +919,6 @@ export function StudentDetailActions({
                     required
                   />
                 </label>
-                {editingEnrollment ? <label className="form-field">
-                  <span>Cari paket üzrə ilk dərs</span>
-                  <DatePicker name="firstLessonDate" defaultValue={student.detail.firstLessonDate} />
-                </label> : null}
                 <label className="form-field">
                   <span>Billing anchor (qorunan)</span>
                   <Input value={student.detail.billingAnchorDate || "Təsdiqlənməyib"} readOnly aria-readonly="true" />
@@ -672,119 +927,6 @@ export function StudentDetailActions({
             </section>
 
             <section className="student-create-section">
-              {editingEnrollment ? <>
-              <div className="student-detail-section-title">
-                <GraduationCap />
-                <span>Status və ödəniş planı</span>
-              </div>
-              <div className="student-create-grid">
-                <label className="form-field">
-                  <span>Status</span>
-                  {permissions.canChangeStatus && !student.freezeReserved ? (
-                    <FormSelect
-                      name="lifecycleStatus"
-                      defaultValue={student.lifecycleStatusValue}
-                      options={availableStudentStatusOptions}
-                    />
-                  ) : (
-                    <>
-                      <input name="lifecycleStatus" type="hidden" value={student.lifecycleStatusValue} />
-                      <div className="student-readonly-status"><span /><strong>{student.freezeReserved ? "Yer rezervdir — dəyişmək üçün “Status dəyiş” bölməsini açın" : "Status dəyişmə icazəsi yoxdur"}</strong></div>
-                    </>
-                  )}
-                </label>
-                <label className="form-field">
-                  <span>Status tarixi (status dəyişərsə)</span>
-                  {permissions.canChangeStatus ? (
-                    <DatePicker
-                      name="statusEffectiveDate"
-                      defaultValue={student.detail.paymentDefaultDate}
-                    />
-                  ) : (
-                    <Input
-                      name="statusEffectiveDate"
-                      defaultValue={student.detail.paymentDefaultDate}
-                      readOnly
-                    />
-                  )}
-                </label>
-                <label className="form-field">
-                  <span>Güzəşt növü</span>
-                  <FormSelect
-                    name="discountType"
-                    defaultValue={student.detail.discountType}
-                    emptyLabel="Güzəşt yoxdur"
-                    options={editOptions.discountTypes}
-                    searchable
-                    searchPlaceholder="Güzəşt növü axtar..."
-                    catalogKey="STUDENT_DISCOUNT_TYPE"
-                    createLabel="Yeni güzəşt növü əlavə et"
-                  />
-                </label>
-                <label className="form-field">
-                  <span>Aylıq məbləğ</span>
-                  <Input name="monthlyFee" defaultValue={student.detail.monthlyFee} inputMode="decimal" required />
-                </label>
-                <label className="form-field">
-                  <span>Aylıq dərs sayı</span>
-                  <Input
-                    name="lessonsPerMonth"
-                    defaultValue={student.detail.lessonsPerMonth}
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={120}
-                  />
-                </label>
-                <label className="form-field">
-                  <span>Qiymət dəyişikliyinin tətbiqi</span>
-                  <FormSelect
-                    name="billingChangeMode"
-                    defaultValue="FROM_MONTH"
-                    options={[
-                      { value: "FROM_MONTH", label: "Seçilən aydan etibarən" },
-                      { value: "ONLY_MONTH", label: "Yalnız seçilən ay üçün" },
-                    ]}
-                  />
-                </label>
-                <label className="form-field">
-                  <span>Qüvvəyə minən ay</span>
-                  <MonthPicker
-                    name="billingEffectiveMonth"
-                    min={student.detail.earliestUpgradeMonth ?? undefined}
-                    defaultValue={
-                      student.detail.earliestUpgradeMonth
-                      && student.detail.paymentDefaultMonth < student.detail.earliestUpgradeMonth
-                        ? student.detail.earliestUpgradeMonth
-                        : student.detail.paymentDefaultMonth
-                    }
-                    allowClear={false}
-                  />
-                </label>
-                <label className="form-field">
-                  <span>Qiymət/dərs dəyişikliyi səbəbi</span>
-                  <Input
-                    name="billingChangeReason"
-                    maxLength={240}
-                    placeholder="Məsələn: 4 dərslik paket və ya yarımay"
-                  />
-                  <small>
-                    Paket yüksəltmə yalnız ikinci dərs dövründən etibarən mümkündür.
-                    İlk ayda məbləğ və ya dərs sayı artırıla bilməz.
-                    {student.detail.earliestUpgradeMonth
-                      ? ` Ən tez yüksəltmə ayı: ${student.detail.earliestUpgradeMonth}.`
-                      : " Aktivləşmədən əvvəl paket düzəlişi yüksəltmə sayılmır."}
-                  </small>
-                </label>
-                {permissions.canChangeStatus ? (
-                  <label className="form-field">
-                    <span>Status dəyişiklik qeydi</span>
-                    <Input name="statusNote" maxLength={240} placeholder="Yalnız status dəyişərsə tarixçəyə yazılır" />
-                  </label>
-                ) : null}
-              </div>
-              </> : null}
-
               <label className="form-field student-create-notes">
                 <span>Profil qeydi</span>
                 <Input

@@ -1,5 +1,13 @@
 export type StudentPaymentStatusTone = "success" | "neutral" | "warning" | "danger";
-export type StudentPaymentStatusCode = "NOT_BILLED" | "PAID" | "UPCOMING" | "DUE" | "OVERDUE" | "OVERDUE_3_PLUS";
+export type StudentPaymentStatusCode =
+  | "NOT_BILLED"
+  | "ADVANCE_PAID"
+  | "ADVANCE_REFUNDED"
+  | "PAID"
+  | "UPCOMING"
+  | "DUE"
+  | "OVERDUE"
+  | "OVERDUE_3_PLUS";
 
 export function isStudentDebtDue({
   balance,
@@ -18,13 +26,23 @@ export function resolveStudentPaymentStatus({
   nextPaymentAt,
   today,
   hasBillingRecord = true,
+  advancePaid = 0,
+  advanceRefunded = 0,
 }: {
   balance: number;
   nextPaymentAt: Date | null | undefined;
   today: Date;
   hasBillingRecord?: boolean;
+  advancePaid?: number;
+  advanceRefunded?: number;
 }): { code: StudentPaymentStatusCode; label: string; tone: StudentPaymentStatusTone } {
   if (!hasBillingRecord) {
+    if (advancePaid > 0) {
+      return { code: "ADVANCE_PAID", label: "Avans ödənilib", tone: "success" };
+    }
+    if (advanceRefunded > 0) {
+      return { code: "ADVANCE_REFUNDED", label: "Avans qaytarılıb", tone: "neutral" };
+    }
     return { code: "NOT_BILLED", label: "Ödəniş yaranmayıb", tone: "neutral" };
   }
 

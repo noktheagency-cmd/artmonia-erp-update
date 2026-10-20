@@ -57,7 +57,8 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
       count(*)::int as "leadCount",
       (select count(*)::int from erp.students student where student.manager_id = ${actorId}::uuid) as "studentCount",
       count(*) filter (
-        where l.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_LESSON', 'TRIAL_CONSULTATION', 'NURTURE')
+        where l.converted_student_id is null
+          and l.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_LESSON', 'TRIAL_CONSULTATION', 'NURTURE')
           and (l.next_follow_up_at is null or l.next_follow_up_at <= now() + interval '1 day')
       )::int as "followUps",
       count(*) filter (where ${leadSaleSql})::int as converted,
@@ -72,6 +73,8 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
           from erp.leads lead
           join erp.contacts contact on contact.id = lead.contact_id
           where lead.manager_id = ${actorId}::uuid
+            and lead.converted_student_id is null
+            and lead.stage not in ('REGISTERED', 'LOST')
           order by lead.next_follow_up_at asc nulls last, lead.updated_at desc
           limit 5
         ) recent

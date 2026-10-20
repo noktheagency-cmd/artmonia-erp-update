@@ -336,8 +336,8 @@ function StudentCard({
             <small>{member.educationLevel ?? "Təhsil səviyyəsi qeyd edilməyib"}</small>
           </span>
         ) : null}
-        <span className={styles.slotStudentStatus} data-status={member.lifecycleStatus || "UNKNOWN"}>
-          {lifecycleLabels[member.lifecycleStatus] ?? "Tələbə"}
+        <span className={styles.slotStudentStatus} data-status={member.reserved ? "RESERVED" : member.lifecycleStatus || "UNKNOWN"}>
+          {member.reserved ? "Rezerv" : lifecycleLabels[member.lifecycleStatus] ?? "Tələbə"}
         </span>
       </summary>
 

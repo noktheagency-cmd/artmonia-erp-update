@@ -715,6 +715,7 @@ export function AppShell({
       >
 
         <div className="erp-command-header">
+          {pathname === "/dashboard" ? <div className="dashboard-header-slot" ref={setHeaderActionsTarget} /> : null}
           <GlobalSearch
             navigationItems={searchNavigationItems}
             onNavigate={markNavigation}

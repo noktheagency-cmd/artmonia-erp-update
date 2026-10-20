@@ -54,9 +54,9 @@ import type {
   PlannerWorkspaceData,
 } from "@/modules/groups/planner-queries";
 import {
+  assignmentAnchorDate,
   firstSlotOccurrenceDate,
   minimumAssignmentDate,
-  preferredAssignmentDate,
   selectedSlotsFirst,
   slotsForAssignedTeacher,
 } from "@/modules/groups/planner-assignment";
@@ -378,7 +378,13 @@ export function PlannerWorkspace({
                     key={member.assignmentId}
                   >
                     <Avatar name={member.studentName} />
-                    <span><strong>{member.studentName}</strong><small>{member.studentCode} · {member.program}</small></span>
+                    <span>
+                      <strong>
+                        {member.studentName}
+                        {member.reserved ? <em className={styles.memberReserve}>Rezerv</em> : null}
+                      </strong>
+                      <small>{member.studentCode} · {member.program}</small>
+                    </span>
                     {data.canManage ? <ChevronRight size={15} /> : null}
                   </button>
                 ))}
@@ -641,6 +647,9 @@ function SlotCard({
         <span className={styles.slotCount}>
           {slot.assignedCount}&nbsp;/&nbsp;{slot.capacity}
         </span>
+        {slot.members.some((member) => member.reserved) ? (
+          <span className={styles.slotReserve}>Rezerv</span>
+        ) : null}
         <span className={styles.slotAvatars}>
           {slot.members.slice(0, 3).map((member) => (
             <Avatar name={member.studentName} compact key={member.assignmentId} />
@@ -724,28 +733,38 @@ function SlotDialog({
           <div className={styles.formGrid}>
             <label>
               <span>Müəllim</span>
-              <select name="teacherId" defaultValue={slot?.teacherId ?? ""}>
-                <option value="">Müəllim təyin edilməyib</option>
-                {data.teachers.map((teacher) => (
-                  <option value={teacher.id} key={teacher.id}>{teacher.name}</option>
-                ))}
-              </select>
+              <FormSelect
+                name="teacherId"
+                defaultValue={slot?.teacherId ?? ""}
+                emptyLabel="Müəllim təyin edilməyib"
+                options={data.teachers.map((teacher) => ({ value: teacher.id, label: teacher.name }))}
+                searchable
+                searchPlaceholder="Müəllim axtar..."
+                aria-label="Müəllim"
+                contentClassName={styles.slotSelectMenu}
+              />
             </label>
             <label>
               <span>Gün</span>
-              <select name="weekday" defaultValue={slot?.weekday ?? groupWeekdays.MONDAY}>
-                {orderedWeekdays.map((day) => (
-                  <option value={day} key={day}>{weekdayMeta[day].label}</option>
-                ))}
-              </select>
+              <FormSelect
+                name="weekday"
+                defaultValue={slot?.weekday ?? groupWeekdays.MONDAY}
+                options={orderedWeekdays.map((day) => ({ value: day, label: weekdayMeta[day].label }))}
+                aria-label="Gün"
+                required
+                contentClassName={styles.slotSelectMenu}
+              />
             </label>
             <label>
               <span>Növbə</span>
-              <select name="shift" defaultValue={slot ? shiftMeta[slot.shift].value : "MORNING"}>
-                {Object.values(shiftMeta).map((shift) => (
-                  <option value={shift.value} key={shift.value}>{shift.label}</option>
-                ))}
-              </select>
+              <FormSelect
+                name="shift"
+                defaultValue={slot ? shiftMeta[slot.shift].value : "MORNING"}
+                options={Object.values(shiftMeta).map((shift) => ({ value: shift.value, label: shift.label }))}
+                aria-label="Növbə"
+                required
+                contentClassName={styles.slotSelectMenu}
+              />
             </label>
             <TimeSelect label="Başlama · Bakı vaxtı" name="startTime" defaultValue={slot?.startTime ?? "09:00"} />
             <TimeSelect label="Bitmə · Bakı vaxtı" name="endTime" defaultValue={slot?.endTime ?? "10:30"} />
@@ -808,10 +827,16 @@ function TimeSelect({
   return (
     <label className={styles.timeField}>
       <span>{label}</span>
-      <select name={name} defaultValue={defaultValue} required>
-        {options.map((time) => <option value={time} key={time}>{time}</option>)}
-      </select>
-      <small>24-saat formatı · AM/PM yoxdur</small>
+      <FormSelect
+        name={name}
+        defaultValue={defaultValue}
+        options={options.map((time) => ({ value: time, label: time }))}
+        searchable
+        searchPlaceholder="Vaxt axtar..."
+        aria-label={label}
+        required
+        contentClassName={styles.slotSelectMenu}
+      />
     </label>
   );
 }
@@ -854,7 +879,12 @@ function AssignmentDialog({
       ?? initialSlot.weekday
   ));
   const [validFrom, setValidFrom] = useState(() => (
-    preferredAssignmentDate(initialSelection, initialTeacherSlots, data.today)
+    assignmentAnchorDate(
+      firstEnrollment?.firstLessonDate,
+      initialSelection,
+      initialTeacherSlots,
+      data.today,
+    )
   ));
   const enrollmentsById = useMemo(
     () => new Map(data.enrollments.map((item) => [item.id, item])),
@@ -909,7 +939,12 @@ function AssignmentDialog({
         ?? nextTeacherSlots[0]?.weekday
         ?? initialSlot.weekday,
     );
-    setValidFrom(preferredAssignmentDate(nextSelection, nextTeacherSlots, data.today));
+    setValidFrom(assignmentAnchorDate(
+      next?.firstLessonDate,
+      nextSelection,
+      nextTeacherSlots,
+      data.today,
+    ));
   }
 
   function toggle(slot: PlannerSlot) {
@@ -918,7 +953,12 @@ function AssignmentDialog({
       ? selected.filter((id) => id !== slot.id)
       : [...selected, slot.id];
     setSelected(next);
-    setValidFrom(preferredAssignmentDate(next, teacherSlots, data.today));
+    setValidFrom(assignmentAnchorDate(
+      enrollment?.firstLessonDate,
+      next,
+      teacherSlots,
+      data.today,
+    ));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -1095,22 +1135,24 @@ function AssignmentDialog({
                   <p><UserRound size={16} /> {enrollment.teacherName}</p>
                 ) : <p>Heç bir slot seçilməyib. Plan saxlananda silinəcək.</p>}
               </div>
-              <label className={styles.startDateField}>
-                <span>Plan üçün ən erkən tarix</span>
-                <DatePicker
-                  name="validFrom"
-                  value={validFrom}
-                  onValueChange={setValidFrom}
-                  minValue={minimumAssignmentDate(selected, teacherSlots)}
-                  allowClear={false}
-                  required
-                  aria-label="Plan üçün ən erkən tarix"
-                  className={styles.startDatePicker}
-                />
-                <small className={styles.startDateHint}>
-                  Hər slotun real başlanğıc günü yuxarıda avtomatik hesablanır.
-                </small>
-              </label>
+              {enrollment?.firstLessonDate ? null : (
+                <label className={styles.startDateField}>
+                  <span>Plan üçün ən erkən tarix</span>
+                  <DatePicker
+                    name="validFrom"
+                    value={validFrom}
+                    onValueChange={setValidFrom}
+                    minValue={minimumAssignmentDate(selected, teacherSlots)}
+                    allowClear={false}
+                    required
+                    aria-label="Plan üçün ən erkən tarix"
+                    className={styles.startDatePicker}
+                  />
+                  <small className={styles.startDateHint}>
+                    Hər slotun real başlanğıc günü yuxarıda avtomatik hesablanır.
+                  </small>
+                </label>
+              )}
               {enrollment?.lessonsPerMonth ? (
                 <div className={styles.packageNote}>
                   <span>Aylıq paket</span><strong>{enrollment.lessonsPerMonth} dərs</strong>

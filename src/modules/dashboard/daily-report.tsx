@@ -40,7 +40,7 @@ export function DailyReport({data}:{data:DailyReportData}) {
  const groups:Group[]=[
  {title:"Lead və əlaqə",icon:UsersRound,tone:"blue",value:report.leads,unit:"yeni şəxs",detail:report.contacted+" nəfərlə danışıldı",badge:report.unanswered+" cavabsız · "+report.unworked+" işlənməyib",description:"Əlaqə yalnız faktiki danışıq qeydinə əsaslanır. Cavabsız: cəhd olub, dövr ərzində danışıq olmayıb. İşlənməyib: yeni şəxs üzrə həmin dövrdə heç bir cəhd yoxdur. Əlaqə meneceri faktiki işi edən şəxsdir.",metrics:[["Yeni şəxslər",report.leads],["Danışılan şəxslər",report.contacted],["Yeni lead üzrə danışıq",report.newContacted],["Əvvəlki lead üzrə danışıq",report.oldContacted],["Əlaqə əməliyyatları",report.contactOps],["Cavabsız şəxslər",report.unanswered],["İşlənməmiş yeni şəxslər",report.unworked]],kinds:["leads","contacts"]},
  {title:"Görüş",icon:CalendarDays,tone:"violet",value:report.scheduled,unit:"bu dövrə planlı görüş",detail:report.attended+" baş tutdu",badge:report.noShow+" gəlmədi · "+report.rescheduled+" təxirə salındı",description:"Konsultasiya və sınaq vahid görüş axınıdır; növ yalnız Ətraflıda görünür. Baş tutdu / gəlmədi faktiki tarix üzrədir.",metrics:[["Bu dövrdə yeni təyin edildi",report.appointmentCreated],["Bu dövrə planlı görüşlər",report.scheduled],["Planlı şəxslər",report.appointmentPeople],["Faktiki iştirak (görüş)",report.attended],["Gəlmədi",report.noShow],["Təxirə salındı",report.rescheduled],["Ləğv edildi",report.appointmentCancelled],["Faktiki vaxtı bilinməyən köhnə nəticə",report.legacyAppointments],["Ətraflı — konsultasiya növü",report.consultations],["Ətraflı — sınaq növü",report.trials]],kinds:["appointments"]},
- {title:"Satış və ödəniş",icon:Wallet,tone:"green",value:report.sales,unit:"uyğun satış",detail:report.payments+" AZN",badge:"faktiki daxil olan pul",description:"Satış: imzalanmış müqavilə və bir qəbul ödənişində ən azı 20 AZN. Yeni qəbul və Dayandırılıb statusundan qayıdış sayılır. Qalıq, davam, dondurmanın bərpası və paket keçidi satış yaratmır. Say dövrün sonundakı ləğv vəziyyətinə görədir; ilk satış və ləğv ayrıca göstərilir. Pul satış sahibinə, workshop pulu qəbul edən əməkdaşa görə süzülür.",metrics:[["Uyğun satış",report.sales],["İlkin satış qeydləri",report.originalSales],["Dövrün sonunadək ləğv olunan",report.cancelledSales],["Bu dövrdə ləğv hadisəsi",report.cancellationEvents],["Yeni qəbul",report.newSales],["Qayıdış",report.returnSales],["CRM",report.crmSales],["Birbaşa",report.directSales],["Qəbul ödənişi",report.deposit+" AZN"],["İlk dövrün qalığı",report.balance+" AZN"],["Davam ödənişi",report.renewal+" AZN"],["Birdəfəlik dərs",report.oneOff+" AZN"],["Digər / workshop",report.other+" AZN"],["Bölgüsü təsdiqlənməmiş pul",report.unclassified+" AZN"]],kinds:["sales","payments"]},
+ {title:"Satış və ödəniş",icon:Wallet,tone:"green",value:report.sales,unit:"uyğun satış",detail:report.payments+" AZN",badge:"faktiki daxil olan pul",description:"",metrics:[],kinds:["sales","payments"]},
  {title:"Follow-up",icon:CheckCheck,tone:"amber",value:report.completed,unit:"iş yerinə yetirilib",detail:report.overdue+" gecikmiş",badge:report.tomorrow+" növbəti günə",description:"Edildi danışıq demək deyil: cavabsız cəhd də görülmüş işdir. Gecikmə dövrün sonundakı açıq planlardan hesablanır. Yenidən planlanan gecikmiş işlər tarixçədə ayrıca qalır. Köhnə planların keçmiş vəziyyəti təxmin edilmir.",metrics:[["Yerinə yetirilmiş işlər",report.completed],["Dövrün sonunda gecikmiş",report.overdue],["Gecikib yenidən planlanan",report.overdueReplanned],["Növbəti günə",report.tomorrow]],kinds:["work"]},
  {title:"Tələbə statusları",icon:CirclePause,tone:"rose",value:report.frozen+report.stopped,unit:"status göstəricisi",detail:report.frozen+" donduran",badge:report.stopped+" dayandıran",description:"Qüvvəyə minmə tarixi üzrə status tarixçəsi. Hər tələbə hər göstəricidə bir dəfə sayılır. Eyni tələbə hər iki keçidi edibsə, hər ikisində görünür. Test tələbələri hesablanmır.",metrics:[["Donduran",report.frozen],["Dayandıran",report.stopped]],kinds:["statuses"]}
  ];
@@ -65,16 +65,21 @@ export function DailyReport({data}:{data:DailyReportData}) {
     returnSales={report.returnSales}
   />
   <footer className="daily-report-footer">Rəqəmə klikləyərək əməliyyatlara baxın <ChevronRight size={14}/></footer>
-  <Dialog open={active!==null} onOpenChange={open=>{if(!open)setSelected(null);}}><DialogContent className={"daily-report-dialog daily-report-"+(active?.tone??"blue")}><DialogHeader><span className="daily-report-dialog-icon">{ActiveIcon?<ActiveIcon size={24}/>:null}</span><DialogTitle>{active?.title}</DialogTitle><DialogDescription>{active?.description}</DialogDescription></DialogHeader>
-   <dl className="daily-report-metrics">{active?.metrics.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+  <Dialog open={active!==null} onOpenChange={open=>{if(!open)setSelected(null);}}><DialogContent className={"daily-report-dialog daily-report-"+(active?.tone??"blue")}><DialogHeader><span className="daily-report-dialog-icon">{ActiveIcon?<ActiveIcon size={24}/>:null}</span><DialogTitle>{active?.title}</DialogTitle>{active?.description?<DialogDescription>{active.description}</DialogDescription>:null}</DialogHeader>
    {active?.title==="Satış və ödəniş"?(
-    <SalesSourceSplit
-      crmSales={report.crmSales}
-      directSales={report.directSales}
-      newSales={report.newSales}
-      returnSales={report.returnSales}
-    />
-   ):null}
+    <>
+     <h3 className="daily-report-metric-heading">Satışın mənbəyi</h3>
+     <dl className="daily-report-metrics">
+      {([["CRM",report.crmSales],["Birbaşa",report.directSales],["Yeni qəbul",report.newSales],["Qayıdış",report.returnSales]] as const).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+     </dl>
+     <h3 className="daily-report-metric-heading">Ödənişin istiqaməti</h3>
+     <dl className="daily-report-metrics">
+      {([["Qəbul ödənişi",report.deposit+" AZN"],["İlk dövrün qalığı",report.balance+" AZN"],["Davam ödənişi",report.renewal+" AZN"],["Birdəfəlik dərs",report.oneOff+" AZN"],["Digər / workshop",report.other+" AZN"],["Bölgüsü təsdiqlənməmiş pul",report.unclassified+" AZN"]] as const).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+     </dl>
+    </>
+   ):(
+    <dl className="daily-report-metrics">{active?.metrics.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+   )}
    <div className="daily-report-detail-tabs">{active?.kinds.map(k=><Button key={k} type="button" variant={kind===k?"default":"secondary"} disabled={detailBusy} onClick={()=>void fetchDetails(k)}>{kindLabels[k]}</Button>)}</div>
    {detailError?<p role="alert">{detailError}</p>:null}{detailBusy?<p role="status">Yüklənir…</p>:<><div className="daily-report-detail-list">{details.length===0?<p>Əməliyyat qeydi yoxdur.</p>:details.map(row=><article key={row.id}><strong>{row.name}</strong><small>{new Intl.DateTimeFormat("az-AZ",{timeZone:"Asia/Baku",dateStyle:"short",timeStyle:"short"}).format(new Date(row.at))}</small><p>{detailLabel(row.description)}</p></article>)}</div><div className="daily-report-detail-tabs"><Button type="button" variant="secondary" disabled={page===0} onClick={()=>void fetchDetails(kind,page-1)}>Əvvəlki</Button><span>{page+1}</span><Button type="button" variant="secondary" disabled={!hasMore||page>=199} onClick={()=>void fetchDetails(kind,page+1)}>Növbəti</Button></div></>}
   </DialogContent></Dialog>

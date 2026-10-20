@@ -224,6 +224,9 @@ export type StudentListData = {
     lifecycleStatus: string;
     lifecycleTone: StudentTone;
     paymentStatus: string;
+    paymentStatusCode: string;
+    advancePaid: string;
+    advanceRefunded: string;
     paymentTone: StudentTone;
     paidThisMonth: string;
     lastContact: string;
@@ -721,6 +724,8 @@ export async function getStudentListData(
             nextPaymentAt,
             today,
             hasBillingRecord: student.invoices.length > 0,
+            advancePaid: toNumber(student.admissionPaid),
+            advanceRefunded: toNumber(student.admissionRefunded),
           });
       const overdueDays = getOverdueDays(
         nextPaymentAt ?? undefined,
@@ -755,6 +760,9 @@ export async function getStudentListData(
         lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
         lifecycleTone: lifecycleStatus.tone,
         paymentStatus: paymentStatus.label,
+        paymentStatusCode: paymentStatus.code,
+        advancePaid: formatAmount(student.admissionPaid),
+        advanceRefunded: formatAmount(student.admissionRefunded),
         paymentTone: paymentStatus.tone,
         paidThisMonth: formatAmount(currentMonthPaid),
         lastContact: `Qeydiyyat: ${formatShortDate(student.registeredAt)}`,
@@ -771,9 +779,9 @@ export async function getStudentListData(
           billingPaused: student.billingPaused ? "Dayandırılıb" : "Aktivdir",
           paymentDefaultAmount: defaultPaymentAmount,
           paymentDefaultDate: formatDateInput(new Date()),
-          paymentDefaultMonth: formatDateInput(
+          paymentDefaultMonth: formatLocalMonthInput(
             student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
-          ).slice(0, 7),
+          ),
           earliestUpgradeMonth: null,
           monthlyFee: student.monthlyFee ? formatDecimalInput(student.monthlyFee) : "",
           invoices: student.invoices.map((invoice) => {
@@ -790,21 +798,7 @@ export async function getStudentListData(
             };
           }),
           slots: student.slots.map(mapStudentSlot),
-          payments: student.payments.map((payment) => ({
-            id: payment.id,
-            amount: formatAmount(payment.amount),
-            paidAt: formatShortDate(payment.paidAt),
-            paymentMonth: formatMonthInput(payment.paymentMonth),
-            nextPaymentDate: payment.scheduleType === "ONE_TIME"
-              ? "Tam ödənilib"
-              : student.nextDueDate
-                ? formatShortDate(student.nextDueDate)
-                : "—",
-            scheduleType: getStudentPaymentScheduleTypeLabel(payment.scheduleType),
-            method: getStudentPaymentMethodLabel(payment.method),
-            note: payment.note ?? "-",
-            createdBy: payment.createdByName ?? "Sistem",
-          })),
+          payments: student.payments.map((payment) => presentStudentPayment(payment, student.nextDueDate)),
           monthlyPayments: [],
           timeline: student.timeline.map((item) => ({
             id: item.id,
@@ -839,6 +833,8 @@ type StudentListQueryRow = {
   currentMonthPaid: unknown;
   nextDueDate: Date | string | null;
   totalPaid: unknown;
+  admissionPaid: unknown;
+  admissionRefunded: unknown;
   paidMonths: unknown;
   creditBalance: unknown;
   totalCount: number;
@@ -901,6 +897,8 @@ type StudentPaymentRecord = {
   paymentMonth: Date | string;
   nextPaymentAt: Date | string | null;
   scheduleType: string;
+  receiptPurpose?: string | null;
+  refundedAt?: Date | string | null;
   method: string;
   note: string | null;
   createdByName: string | null;
@@ -1211,9 +1209,11 @@ async function getStudentRows(
       (select concat(t.full_name, ' · ', cs.start_time, '–', cs.end_time) from erp.student_schedule_assignments ssa join erp.class_slots cs on cs.id = ssa.slot_id join erp.teachers t on t.id = cs.teacher_id join erp.enrollments se on se.id = ssa.enrollment_id where se.student_id = ps.id and ssa.valid_to is null order by ssa.valid_from desc, ssa.created_at desc limit 1) as "slotLabel",
       inv.due_debt as "dueDebt",
       inv.future_receivable as "futureReceivable",
-      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', ${input.today}::date)), 0) as "currentMonthPaid",
+      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and date_trunc('month', p.paid_at) = date_trunc('month', ${input.today}::date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
+      clv.admission_paid as "admissionPaid",
+      clv.admission_refunded as "admissionRefunded",
       clv.paid_months as "paidMonths",
       clv.credit_balance as "creditBalance",
       inv.invoices,
@@ -1275,9 +1275,25 @@ async function getStudentRows(
     ) inv on true
     left join lateral (
       select
-        coalesce(sum(p.amount), 0) as total_paid,
+        coalesce(sum(p.amount) filter (where p.refunded_at is null), 0) as total_paid,
+        coalesce(sum(p.amount) filter (
+          where p.receipt_purpose = 'ADMISSION'
+            and p.refunded_at is null
+            and exists (
+              select 1 from erp.course_sales cs
+              where cs.id = p.course_sale_id
+                and cs.status = 'DEPOSIT'
+                and cs.cancelled_at is null
+            )
+        ), 0) as admission_paid,
+        coalesce(sum(p.amount) filter (
+          where p.receipt_purpose = 'ADMISSION'
+            and p.refunded_at is not null
+        ), 0) as admission_refunded,
         count(distinct p.payment_month) filter (
           where p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
+            and p.receipt_purpose is distinct from 'ADMISSION'
+            and p.receipt_purpose is distinct from 'INITIAL_BALANCE'
         )::int as paid_months,
         coalesce(sum(greatest(
           p.amount - coalesce((
@@ -1299,6 +1315,8 @@ async function getStudentRows(
           'paymentMonth', ordered.payment_month,
           'nextPaymentAt', ordered.next_payment_at,
           'scheduleType', ordered.schedule_type::text,
+          'receiptPurpose', ordered.receipt_purpose::text,
+          'refundedAt', ordered.refunded_at,
           'method', ordered.method::text,
           'note', ordered.note,
           'createdByName', ordered.created_by_name
@@ -1306,7 +1324,7 @@ async function getStudentRows(
         order by ordered.paid_at desc, ordered.created_at desc
       ), '[]'::jsonb) as payments
       from (
-        select p.id, p.amount, p.paid_at, p.payment_month, p.next_payment_at, p.schedule_type, p.method, p.note, p.created_at, u.full_name as created_by_name
+        select p.id, p.amount, p.paid_at, p.payment_month, p.next_payment_at, p.schedule_type, p.receipt_purpose, p.refunded_at, p.method, p.note, p.created_at, u.full_name as created_by_name
         from erp.payments p
         left join erp.users u on u.id = p.created_by_id
         where p.student_id = ps.id
@@ -1416,7 +1434,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v17"],
+  ["student-list-data-v21"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -2595,6 +2613,36 @@ function formatMonthInput(value: Date | string) {
   return new Date(value).toISOString().slice(0, 7);
 }
 
+function formatLocalMonthInput(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function presentStudentPayment(payment: StudentPaymentRecord, nextDueDate: Date | string | null) {
+  const refunded = Boolean(payment.refundedAt);
+  const advance = payment.receiptPurpose === "ADMISSION";
+  return {
+    id: payment.id,
+    amount: formatAmount(payment.amount),
+    paidAt: formatShortDate(payment.paidAt),
+    paymentMonth: formatMonthInput(payment.paymentMonth),
+    nextPaymentDate: advance
+      ? "—"
+      : payment.scheduleType === "ONE_TIME"
+        ? "Tam ödənilib"
+        : nextDueDate
+          ? formatShortDate(nextDueDate)
+          : "—",
+    scheduleType: refunded
+      ? "Avans qaytarılıb"
+      : advance
+        ? "Avans"
+        : getStudentPaymentScheduleTypeLabel(payment.scheduleType),
+    method: getStudentPaymentMethodLabel(payment.method),
+    note: payment.note ?? "-",
+    createdBy: payment.createdByName ?? "Sistem",
+  };
+}
+
 function formatDecimalInput(value: unknown) {
   const amount = toNumber(value);
   return amount > 0 ? amount.toFixed(2) : "";
@@ -2704,9 +2752,11 @@ export async function getStudentDetailData(studentId: string) {
       (select concat(t.full_name, ' · ', cs.start_time, '–', cs.end_time) from erp.student_schedule_assignments ssa join erp.class_slots cs on cs.id = ssa.slot_id join erp.teachers t on t.id = cs.teacher_id join erp.enrollments se on se.id = ssa.enrollment_id where se.student_id = ps.id and ssa.valid_to is null order by ssa.valid_from desc, ssa.created_at desc limit 1) as "slotLabel",
       inv.due_debt as "dueDebt",
       inv.future_receivable as "futureReceivable",
-      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)), 0) as "currentMonthPaid",
+      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
+      clv.admission_paid as "admissionPaid",
+      clv.admission_refunded as "admissionRefunded",
       clv.paid_months as "paidMonths",
       clv.credit_balance as "creditBalance",
       clv_history.monthly_payments as "monthlyPayments",
@@ -2771,9 +2821,25 @@ export async function getStudentDetailData(studentId: string) {
     ) inv on true
     left join lateral (
       select
-        coalesce(sum(p.amount), 0) as total_paid,
+        coalesce(sum(p.amount) filter (where p.refunded_at is null), 0) as total_paid,
+        coalesce(sum(p.amount) filter (
+          where p.receipt_purpose = 'ADMISSION'
+            and p.refunded_at is null
+            and exists (
+              select 1 from erp.course_sales cs
+              where cs.id = p.course_sale_id
+                and cs.status = 'DEPOSIT'
+                and cs.cancelled_at is null
+            )
+        ), 0) as admission_paid,
+        coalesce(sum(p.amount) filter (
+          where p.receipt_purpose = 'ADMISSION'
+            and p.refunded_at is not null
+        ), 0) as admission_refunded,
         count(distinct p.payment_month) filter (
           where p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
+            and p.receipt_purpose is distinct from 'ADMISSION'
+            and p.receipt_purpose is distinct from 'INITIAL_BALANCE'
         )::int as paid_months,
         coalesce(sum(greatest(
           p.amount - coalesce((
@@ -2803,6 +2869,8 @@ export async function getStudentDetailData(studentId: string) {
         from erp.payments p
         where p.student_id = ps.id
           and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
+          and p.receipt_purpose is distinct from 'ADMISSION'
+            and p.receipt_purpose is distinct from 'INITIAL_BALANCE'
         group by date_trunc('month', p.payment_month)::date
       ) monthly
     ) clv_history on true
@@ -2815,6 +2883,8 @@ export async function getStudentDetailData(studentId: string) {
           'paymentMonth', ordered.payment_month,
           'nextPaymentAt', ordered.next_payment_at,
           'scheduleType', ordered.schedule_type::text,
+          'receiptPurpose', ordered.receipt_purpose::text,
+          'refundedAt', ordered.refunded_at,
           'method', ordered.method::text,
           'note', ordered.note,
           'createdByName', ordered.created_by_name
@@ -2822,7 +2892,7 @@ export async function getStudentDetailData(studentId: string) {
         order by ordered.paid_at desc, ordered.created_at desc
       ), '[]'::jsonb) as payments
       from (
-        select p.id, p.amount, p.paid_at, p.payment_month, p.next_payment_at, p.schedule_type, p.method, p.note, p.created_at, u.full_name as created_by_name
+        select p.id, p.amount, p.paid_at, p.payment_month, p.next_payment_at, p.schedule_type, p.receipt_purpose, p.refunded_at, p.method, p.note, p.created_at, u.full_name as created_by_name
         from erp.payments p
         left join erp.users u on u.id = p.created_by_id
         where p.student_id = ps.id
@@ -2875,6 +2945,8 @@ export async function getStudentDetailData(studentId: string) {
         nextPaymentAt,
         today,
         hasBillingRecord: asJsonArray<StudentInvoiceRecord>(student.invoices).length > 0,
+        advancePaid: toNumber(student.admissionPaid),
+        advanceRefunded: toNumber(student.admissionRefunded),
       });
   const overdueDays = getOverdueDays(
     nextPaymentAt ?? undefined,
@@ -3046,6 +3118,28 @@ export async function getStudentDetailData(studentId: string) {
     discountTypes.push({ value: student.discountType, label: student.discountType });
   }
 
+  const openAdvance = ["SLOT_WAITING", "ACTIVE"].includes(String(student.lifecycleStatus))
+    ? await prisma.courseSale.findFirst({
+        where: { studentId: student.id, status: "DEPOSIT", cancelledAt: null },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          initialFee: true,
+          payments: {
+            where: { refundedAt: null },
+            select: { amount: true },
+          },
+        },
+      })
+    : null;
+  const openAdvanceAmount = openAdvance?.payments.reduce(
+    (sum, payment) => sum + toNumber(payment.amount),
+    0,
+  ) ?? 0;
+  const openAdvanceFee = openAdvance ? toNumber(openAdvance.initialFee) : 0;
+  const openAdvanceRemaining = Math.max(0, openAdvanceFee - openAdvanceAmount);
+  const canRefundAdvance = Boolean(openAdvance) && openAdvanceAmount > 0 && openAdvanceAmount < openAdvanceFee;
+
   return {
     returnTo: `/students/${student.id}`,
     permissions: {
@@ -3103,6 +3197,13 @@ export async function getStudentDetailData(studentId: string) {
         : null,
       paymentStatus: paymentStatus.label,
       paymentTone: paymentStatus.tone,
+      advanceRefund: canRefundAdvance && openAdvance
+        ? {
+            saleId: openAdvance.id,
+            amount: formatAmount(openAdvanceAmount),
+            remaining: openAdvanceRemaining.toFixed(2),
+          }
+        : null,
       paidThisMonth: formatAmount(currentMonthPaid),
       lastContact: `Qeydiyyat: ${formatShortDate(student.registeredAt as Date)}`,
       clv: {
@@ -3155,11 +3256,11 @@ export async function getStudentDetailData(studentId: string) {
         reminders,
         paymentDefaultAmount: defaultPaymentAmount,
         paymentDefaultDate: formatDateInput(new Date()),
-        paymentDefaultMonth: formatDateInput(
+        paymentDefaultMonth: formatLocalMonthInput(
           student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
-        ).slice(0, 7),
+        ),
         earliestUpgradeMonth: student.billingAnchorDate
-          ? formatDateInput(earliestPackageUpgradeMonth(new Date(student.billingAnchorDate))).slice(0, 7)
+          ? formatLocalMonthInput(earliestPackageUpgradeMonth(new Date(student.billingAnchorDate)))
           : null,
         monthlyFee: formatNonNegativeDecimalInput(student.monthlyFee),
         monthlyFeeLabel: student.monthlyFee === null || student.monthlyFee === undefined
@@ -3207,21 +3308,9 @@ export async function getStudentDetailData(studentId: string) {
           };
         }),
         slots: asJsonArray<StudentSlotRecord>(student.slots).map(mapStudentSlot),
-        payments: asJsonArray<StudentPaymentRecord>(student.payments).map((payment) => ({
-          id: payment.id,
-          amount: formatAmount(payment.amount),
-          paidAt: formatShortDate(payment.paidAt),
-          paymentMonth: formatMonthInput(payment.paymentMonth),
-          nextPaymentDate: payment.scheduleType === "ONE_TIME"
-            ? "Tam ödənilib"
-            : student.nextDueDate
-              ? formatShortDate(student.nextDueDate)
-              : "—",
-          scheduleType: getStudentPaymentScheduleTypeLabel(payment.scheduleType),
-          method: getStudentPaymentMethodLabel(payment.method),
-          note: payment.note ?? "-",
-          createdBy: payment.createdByName ?? "Sistem",
-        })),
+        payments: asJsonArray<StudentPaymentRecord>(student.payments).map((payment) =>
+          presentStudentPayment(payment, student.nextDueDate),
+        ),
         monthlyPayments: asJsonArray<StudentMonthlyPaymentRecord>(student.monthlyPayments).map((payment) => ({
           month: formatMonthInput(payment.month),
           amount: formatAmount(payment.amount),

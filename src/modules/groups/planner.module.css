@@ -882,6 +882,28 @@
   padding-left: 4px;
 }
 
+.slotReserve,
+.memberReserve {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  color: #805e20;
+  background: #fff8e7;
+  border: 1px solid #eedba7;
+  border-radius: 6px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.member strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .slot .compactAvatar {
   color: var(--slot-accent-strong, #2b62b6);
   background: color-mix(in srgb, var(--slot-accent, #1769e8) 13%, #fff);
@@ -927,11 +949,33 @@
   height: 40px;
 }
 
-.filter :global(.ui-select-trigger),
-.form :global(.ui-select-trigger),
-.timeField :global(.ui-select-trigger) {
+.filter :global(.ui-select-trigger) {
   width: 100%;
   min-height: 40px;
+}
+
+.slotDialog :global(.ui-select-trigger) {
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+:global(html:not(.dark)) .slotDialog :global(.ui-select-trigger) {
+  background: #fff;
+}
+
+.slotDialog .form input {
+  height: 48px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.slotSelectMenu:global(.ui-select-content) {
+  border-radius: 12px;
 }
 
 .member {
@@ -2022,7 +2066,8 @@
 .slotStudentStatus[data-status="DEBT"],
 .slotStudentStatus[data-status="DECLINED"] { color: #a8413d; background: #fff1f0; border-color: #efc8c5; }
 .slotStudentStatus[data-status="FROZEN"],
-.slotStudentStatus[data-status="SLOT_WAITING"] { color: #805e20; background: #fff8e7; border-color: #eedba7; }
+.slotStudentStatus[data-status="SLOT_WAITING"],
+.slotStudentStatus[data-status="RESERVED"] { color: #805e20; background: #fff8e7; border-color: #eedba7; }
 .slotStudentCardBody { display: grid; gap: 16px; padding: 17px 18px 18px; border-top: 1px solid var(--p-line); background: #fbfcfe; border-radius: 0 0 14px 14px; }
 .studentInfoGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .studentInfoItem { min-width: 0; gap: 8px; padding: 10px; background: #fff; border: 1px solid #e6ebf2; border-radius: 10px; }

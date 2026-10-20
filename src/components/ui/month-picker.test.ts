@@ -11,6 +11,19 @@ test("formats the current Baku month as YYYY-MM", () => {
   );
 });
 
+test("repairs a dotted payment date sliced into the month field", () => {
+  const html = renderToStaticMarkup(
+    createElement(MonthPicker, {
+      name: "billingMonth",
+      value: "20.10.2",
+      allowClear: false,
+    }),
+  );
+
+  assert.match(html, new RegExp(`value="${currentBakuMonthValue()}"`));
+  assert.doesNotMatch(html, /20\.10\.2/);
+});
+
 test("renders a selected month with Azerbaijani label", () => {
   const html = renderToStaticMarkup(
     createElement(MonthPicker, {

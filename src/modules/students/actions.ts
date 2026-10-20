@@ -17,6 +17,7 @@ import { requireMutationActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { normalizePhone } from "@/modules/crm/duplicate-phone";
+import { closeConvertedLeadFollowUp } from "@/modules/crm/work-service";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { toNumber } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
@@ -68,7 +69,7 @@ import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { updatePersonalStudentProfile } from "@/modules/students/personal-profile-service";
 import { planNewStudentPackage } from "@/modules/students/package-return-policy";
 import { contractConfirmationSchema, receiptPurposeSchema } from "./course-sale-policy";
-import { recordCourseSalePayment } from "./course-sale-service";
+import { recordCourseSalePayment, refundOpenDepositOnDecline } from "./course-sale-service";
 import { lockPaymentStudent, replayPayment, assertAdmissionLeadActor } from "./payment-entry-guard";
 import {
   deleteStudentMobileAuthUser,
@@ -500,6 +501,8 @@ async function createStudentActionImpl(formData: FormData) {
           changedById: actor.id,
         },
       });
+
+      await closeConvertedLeadFollowUp(tx, lead.id);
     }
 
     if (paymentResult) await recordCourseSalePayment(tx, { studentId: student.id, paymentId: paymentResult.payment.id, purpose: "ADMISSION", contractConfirmed: input.contractConfirmed, actorId: actor.id });
@@ -652,7 +655,6 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       throw new PublicActionError("Rezervli dondurma statusunu bu gün üçün dəyişin");
 
     assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
-    if (input.lifecycleStatus === "DECLINED" && await tx.courseSale.count({ where: { studentId: current.id } })) throw new PublicActionError("Satışı ləğv etmək üçün Qəbul satışları bölməsindən istifadə edin.");
     if (current.lifecycleStatus === input.lifecycleStatus && !current.freezeReserved) return;
 
     const { historicalOnly } = await planLifecycleHistoryChange(tx, {
@@ -667,6 +669,14 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       current.lifecycleStatus,
     );
     const updateData = buildSharedStudentStatusUpdateData(input.lifecycleStatus, effectiveAt);
+
+    if (!historicalOnly && input.lifecycleStatus === "DECLINED") {
+      await refundOpenDepositOnDecline(tx, {
+        studentId: current.id,
+        actorId: actor.id,
+        reason: input.note?.trim() || "İmtina: ödəniş satışdan geri qaytarıldı",
+      });
+    }
 
     if (!historicalOnly) await tx.student.update({
       where: { id: current.id },
@@ -835,7 +845,6 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     }
     if (statusChanged) {
       assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
-      if (input.lifecycleStatus === "DECLINED" && await tx.courseSale.count({ where: { studentId: current.id } })) throw new PublicActionError("Satışı ləğv etmək üçün Qəbul satışları bölməsindən istifadə edin.");
     }
 
     const { historicalOnly } = statusChanged
@@ -1032,6 +1041,13 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     }
 
     if (statusChanged) {
+      if (!historicalOnly && input.lifecycleStatus === "DECLINED") {
+        await refundOpenDepositOnDecline(tx, {
+          studentId: current.id,
+          actorId: actor.id,
+          reason: input.statusNote?.trim() || "İmtina: ödəniş satışdan geri qaytarıldı",
+        });
+      }
       if (!historicalOnly) await tx.student.update({
         where: { id: current.id },
         data: buildSharedStudentStatusUpdateData(input.lifecycleStatus, statusEffectiveAt),

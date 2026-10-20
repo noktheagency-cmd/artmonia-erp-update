@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assignmentAnchorDate,
   firstSlotOccurrenceDate,
   minimumAssignmentDate,
   preferredAssignmentDate,
+  resolvePlanAnchor,
   selectionMatchesAssignedTeacher,
   selectedSlotsFirst,
   slotsForAssignedTeacher,
@@ -42,6 +44,24 @@ test("moves a requested date forward to the selected slot weekday", () => {
     firstSlotOccurrenceDate("2026-08-20", slots[1]),
     "2026-08-20",
   );
+});
+
+test("keeps a recorded first lesson as the plan anchor", () => {
+  assert.equal(
+    assignmentAnchorDate("2026-07-03", ["morning", "evening"], slots, "2026-08-15"),
+    "2026-07-03",
+  );
+  assert.equal(
+    assignmentAnchorDate(null, ["morning"], slots, "2026-08-15"),
+    "2026-08-17",
+  );
+});
+
+test("ignores the earliest plan date when the first lesson is already recorded", () => {
+  assert.equal(resolvePlanAnchor("2026-07-03", "2026-08-17"), "2026-07-03");
+  assert.equal(resolvePlanAnchor("2026-07-03", null), "2026-07-03");
+  assert.equal(resolvePlanAnchor(null, "2026-08-17"), "2026-08-17");
+  assert.equal(resolvePlanAnchor(null, ""), null);
 });
 
 test("uses the earliest real lesson when multiple weekdays are selected", () => {

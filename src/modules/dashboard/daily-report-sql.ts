@@ -10,7 +10,7 @@ export function dailyReportCtes(w: Window) {
  appointments as (select a.*, l.contact_id from erp.crm_appointments a join erp.leads l on l.id=a.lead_id where ((a.planned_at >= ${w.start} and a.planned_at < ${w.end}) or (a.created_at >= ${w.start} and a.created_at < ${w.end}) or (a.occurred_at >= ${w.start} and a.occurred_at < ${w.end})) ${owner(Prisma.sql`a.owner_id`, w.managerId)}),
  sales as (select x.* from erp.course_sales x join erp.students s on s.id=x.student_id where not s.is_test_data and x.qualified_at >= ${w.from}::date and x.qualified_at < ${w.nextDate}::date ${owner(Prisma.sql`x.owner_id`, w.managerId)}),
  cancellations as (select x.* from erp.course_sales x join erp.students s on s.id=x.student_id where not s.is_test_data and x.cancelled_at >= ${w.start} and x.cancelled_at < ${w.end} ${owner(Prisma.sql`x.owner_id`, w.managerId)}),
- receipts as (select p.id, p.student_id, p.amount, p.paid_at, p.receipt_purpose, coalesce(x.owner_id,s.manager_id,p.created_by_id) owner_id from erp.payments p join erp.students s on s.id=p.student_id left join erp.course_sales x on x.id=p.course_sale_id where not s.is_test_data and p.paid_at >= ${w.from}::date and p.paid_at < ${w.nextDate}::date ${owner(Prisma.sql`coalesce(x.owner_id,s.manager_id,p.created_by_id)`, w.managerId)}),
+ receipts as (select p.id, p.student_id, p.amount, p.paid_at, p.receipt_purpose, x.cancelled_at as sale_cancelled_at, coalesce(x.owner_id,s.manager_id,p.created_by_id) owner_id from erp.payments p join erp.students s on s.id=p.student_id left join erp.course_sales x on x.id=p.course_sale_id where not s.is_test_data and p.refunded_at is null and p.paid_at >= ${w.from}::date and p.paid_at < ${w.nextDate}::date ${owner(Prisma.sql`coalesce(x.owner_id,s.manager_id,p.created_by_id)`, w.managerId)}),
  workshop_receipts as (select p.* from erp.workshop_payments p where p.paid_at >= ${w.from}::date and p.paid_at < ${w.nextDate}::date ${owner(Prisma.sql`p.created_by_id`, w.managerId)}),
  work as (select x.* from erp.lead_work_items x where x.created_at < ${w.end} ${owner(Prisma.sql`x.owner_id`, w.managerId)}),
  lifecycle as (select h.* from erp.student_status_history h join erp.students s on s.id=h.student_id where not s.is_test_data and h.effective_at >= ${w.from}::date and h.effective_at < ${w.nextDate}::date and h.old_status is distinct from h.new_status ${owner(Prisma.sql`s.manager_id`, w.managerId)})
@@ -43,7 +43,7 @@ export function dailyReportSummarySql(w: Window) {
  (select count(*)::int from sales where route='CRM' and (cancelled_at is null or cancelled_at >= ${w.end})) as "crmSales",
  (select count(*)::int from sales where route='DIRECT' and (cancelled_at is null or cancelled_at >= ${w.end})) as "directSales",
  ((select coalesce(sum(amount),0) from receipts)+(select coalesce(sum(amount),0) from workshop_receipts))::text payments,
- (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='ADMISSION') deposit,
+ (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='ADMISSION' and sale_cancelled_at is null) deposit,
  (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='INITIAL_BALANCE') balance,
  (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='RENEWAL') renewal,
  (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='ONE_OFF') as "oneOff",

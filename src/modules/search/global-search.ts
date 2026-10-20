@@ -105,8 +105,21 @@ export function normalizeAzerbaijaniSearch(value: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+const foldedLettersFrom = "əğıöşüçƏĞIİÖŞÜÇ";
+const foldedLettersTo = "egiosucegiiosuc";
+
 function normalizedSql(column: Prisma.Sql) {
-  return Prisma.sql`translate(lower(coalesce(${column}, '')), 'əğıöşüç', 'egiosuc')`;
+  return Prisma.sql`translate(lower(coalesce(${column}, '')), ${foldedLettersFrom}, ${foldedLettersTo})`;
+}
+
+function foldedNameMatchSql(column: Prisma.Sql, search: SearchContext) {
+  const tokens = search.normalized.split(" ").filter((token) => token.length >= 2);
+  if (tokens.length === 0) return Prisma.sql`false`;
+  const folded = normalizedSql(column);
+  return Prisma.sql`(${Prisma.join(
+    tokens.map((token) => Prisma.sql`${folded} like ${`%${token}%`}`),
+    " and ",
+  )})`;
 }
 
 async function searchAllKinds(actor: ErpActor, search: SearchContext) {
@@ -207,6 +220,7 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
             or student_contact.full_name ilike ${search.rawPattern}
             or student_contact.phone_display ilike ${search.rawPattern}
             or ${normalizedStudentName} like ${search.normalizedPattern}
+            or ${foldedNameMatchSql(Prisma.sql`student_contact.full_name`, search)}
             ${studentPhoneSql}
           )
         order by rank asc, s.updated_at desc
@@ -240,6 +254,7 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
             or l.source ilike ${search.rawPattern}
             or lead_program.name ilike ${search.rawPattern}
             or ${normalizedLeadName} like ${search.normalizedPattern}
+            or ${foldedNameMatchSql(Prisma.sql`lead_contact.full_name`, search)}
             ${leadPhoneSql}
           )
         order by rank asc, l.updated_at desc
@@ -272,6 +287,7 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
             or he.department ilike ${search.rawPattern}
             or he.position ilike ${search.rawPattern}
             or ${normalizedEmployeeName} like ${search.normalizedPattern}
+            or ${foldedNameMatchSql(Prisma.sql`he.full_name`, search)}
             ${employeePhoneSql}
           )
         order by rank asc, he.updated_at desc
@@ -377,10 +393,13 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
     order by combined."kindOrder" asc, combined.rank asc, combined."sortValue" desc
   `);
 
-  return rows.map(mapGlobalSearchRow);
+  return rows.flatMap((row) => {
+    const item = mapGlobalSearchRow(row);
+    return item ? [item] : [];
+  });
 }
 
-function mapGlobalSearchRow(row: GlobalSearchRawRow): GlobalSearchItem {
+function mapGlobalSearchRow(row: GlobalSearchRawRow): GlobalSearchItem | null {
   switch (row.kind) {
     case "student":
       return {
@@ -436,6 +455,8 @@ function mapGlobalSearchRow(row: GlobalSearchRawRow): GlobalSearchItem {
         meta: compactMeta(formatDate(new Date(row.meta1)), row.meta2, row.meta3),
         href: `/workshops/${row.id}`,
       };
+    default:
+      return null;
   }
 }
 

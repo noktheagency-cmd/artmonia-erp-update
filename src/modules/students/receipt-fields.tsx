@@ -60,7 +60,7 @@ export function ReceiptFields({
         </label>
       ) : null}
 
-      {purpose === "ADMISSION" ? (
+      {purpose === "ADMISSION" || purpose === "INITIAL_BALANCE" ? (
         <label className="contract-confirm-field">
           <Checkbox name="contractConfirmed" required />
           <span className="contract-confirm-icon" aria-hidden="true">
@@ -68,7 +68,9 @@ export function ReceiptFields({
           </span>
           <span className="contract-confirm-copy">
             <strong>Müqavilə imzalanıb</strong>
-            <small>Satış üçün bu ödəniş ən azı 20 AZN olmalıdır.</small>
+            {purpose === "ADMISSION" ? (
+              <small>Satış üçün bu ödəniş ən azı 20 AZN olmalıdır.</small>
+            ) : null}
           </span>
         </label>
       ) : null}

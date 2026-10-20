@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ArrowRight, Inbox, Phone, Sparkles, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -53,7 +54,7 @@ export function CrmLeadsTable({
             <TableRow>
               <TableHead>Müraciət</TableHead>
               <TableHead>Maraq</TableHead>
-              <TableHead>Status / prioritet</TableHead>
+              <TableHead className="crm-status-col">Status / prioritet</TableHead>
               <TableHead>Növbəti addım</TableHead>
               <TableHead>Məsul / qeyd</TableHead>
               <TableHead>Əməliyyat</TableHead>
@@ -61,68 +62,7 @@ export function CrmLeadsTable({
           </TableHeader>
           <TableBody>
             {rows.map((lead) => (
-              <TableRow key={lead.id}>
-                <TableCell>
-                  <div className="crm-lead-person-cell">
-                    <span className="crm-person-avatar" aria-hidden="true">
-                      {lead.name.slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <LeadDetailDialog
-                        lead={lead}
-                        managers={data.managers}
-                        programs={data.programs}
-                        sourceOptions={data.sourceOptions}
-                        returnTo={data.returnTo}
-                        canConvert={data.access.canConvertLead}
-                      />
-                      <span>
-                        <Phone aria-hidden="true" />
-                        {lead.phone}
-                      </span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="crm-table-stack">
-                    <strong>{lead.program}</strong>
-                    <span>{lead.source}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="crm-status-pair">
-                    <StatusChip tone={lead.stageTone}>{lead.stageLabel}</StatusChip>
-                    <StatusChip tone={lead.priorityTone}>{lead.priorityLabel}</StatusChip>
-                    {lead.trialLessonCount > 0 ? (
-                      <small className="crm-trial-count-note">{lead.trialLessonCount} sınaq dərsi</small>
-                    ) : null}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="crm-table-stack">
-                    <strong>{lead.nextActionTypeLabel}</strong>
-                    <span>{lead.nextFollowUpAt}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="crm-table-stack">
-                    <strong className="crm-owner-line">
-                      <UserRound aria-hidden="true" />
-                      {lead.manager}
-                    </strong>
-                    <span className="crm-note-line">{lead.latestNote || "Qeyd yoxdur"}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <LeadRegistrationDialog
-                    lead={lead}
-                    programs={data.programs}
-                    sourceOptions={data.sourceOptions}
-                    returnTo={data.returnTo}
-                    canConvert={data.access.canConvertLead}
-                  />
-                </TableCell>
-              </TableRow>
+              <CrmLeadRow key={lead.id} lead={lead} data={data} />
             ))}
           </TableBody>
         </Table>
@@ -140,5 +80,104 @@ export function CrmLeadsTable({
         </div>
       )}
     </article>
+  );
+}
+
+function CrmLeadRow({
+  lead,
+  data,
+}: {
+  lead: CrmData["leads"][number];
+  data: CrmData;
+}) {
+  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<"contact" | "meeting" | null>(null);
+
+  function openLead(nextPanel: "contact" | "meeting" | null) {
+    setPanel(nextPanel);
+    setOpen(true);
+  }
+
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="crm-lead-person-cell">
+          <span className="crm-person-avatar" aria-hidden="true">
+            {lead.name.slice(0, 2).toUpperCase()}
+          </span>
+          <div>
+            <button className="crm-lead-open-button" type="button" onClick={() => openLead(null)}>
+              <strong>{lead.name}</strong>
+              <span>Profili aç</span>
+            </button>
+            <span>
+              <Phone aria-hidden="true" />
+              {lead.phone}
+            </span>
+            <LeadDetailDialog
+              lead={lead}
+              managers={data.managers}
+              programs={data.programs}
+              sourceOptions={data.sourceOptions}
+              returnTo={data.returnTo}
+              canConvert={data.access.canConvertLead}
+              open={open}
+              onOpenChange={setOpen}
+              initialPanel={panel}
+            />
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="crm-table-stack">
+          <strong>{lead.program}</strong>
+          <span>{lead.source}</span>
+        </div>
+      </TableCell>
+      <TableCell className="crm-status-col">
+        <div className="crm-status-cell">
+          <StatusChip tone={lead.stageTone}>{lead.stageLabel}</StatusChip>
+          <span className={`crm-priority-line is-${lead.priorityTone}`}>
+            {lead.priorityLabel}
+          </span>
+          {lead.trialLessonCount > 0 ? (
+            <small className="crm-trial-count-note">{lead.trialLessonCount} sınaq dərsi</small>
+          ) : null}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="crm-table-stack">
+          <strong>{lead.nextActionTypeLabel}</strong>
+          <span>{lead.nextFollowUpAt}</span>
+          {lead.suggestion ? (
+            <button
+              type="button"
+              className={`crm-suggestion is-${lead.suggestion.panel}`}
+              onClick={() => openLead(lead.suggestion?.panel ?? null)}
+            >
+              {lead.suggestion.action}
+            </button>
+          ) : null}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="crm-table-stack">
+          <strong className="crm-owner-line">
+            <UserRound aria-hidden="true" />
+            {lead.manager}
+          </strong>
+          <span className="crm-note-line">{lead.latestNote || "Qeyd yoxdur"}</span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <LeadRegistrationDialog
+          lead={lead}
+          programs={data.programs}
+          sourceOptions={data.sourceOptions}
+          returnTo={data.returnTo}
+          canConvert={data.access.canConvertLead}
+        />
+      </TableCell>
+    </TableRow>
   );
 }

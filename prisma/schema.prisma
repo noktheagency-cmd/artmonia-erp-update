@@ -2552,6 +2552,7 @@ model Payment {
   receiptFilePath  String?             @map("receipt_file_path")
   receiptReference String?             @map("receipt_reference")
   idempotencyKey   String?             @unique @map("idempotency_key")
+  refundedAt       DateTime?           @map("refunded_at")
   createdById      String?             @map("created_by_id") @db.Uuid
   createdAt        DateTime            @default(now()) @map("created_at")
 

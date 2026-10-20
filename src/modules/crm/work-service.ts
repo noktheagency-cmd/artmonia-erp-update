@@ -13,3 +13,15 @@ export async function syncLeadWorkPlan(tx: Prisma.TransactionClient, input: {
     leadId: input.leadId, ownerId: input.ownerId, kind: input.kind, plannedAt: input.plannedAt,
   } });
 }
+
+/** Registration is finished CRM follow-up. The lead may stay in payment-pending stage. */
+export async function closeConvertedLeadFollowUp(tx: Prisma.TransactionClient, leadId: string, now = new Date()) {
+  await tx.lead.update({
+    where: { id: leadId },
+    data: { nextFollowUpAt: null, nextActionType: null },
+  });
+  await tx.leadWorkItem.updateMany({
+    where: { leadId, source: "PRIMARY", completedAt: null, cancelledAt: null },
+    data: { cancelledAt: now, result: "CONVERTED" },
+  });
+}

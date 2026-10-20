@@ -273,7 +273,7 @@ const valueLabels: Record<string, string> = {
   CARD: "Kart",
   CASH: "Nağd",
   COMPLETED: "Tamamlanıb",
-  CONTACTED: "Xatırlatma",
+  CONTACTED: "Əlaqə quruldu",
   CRITICAL: "Təcili",
   DRAFT: "Qaralama",
   FINANCE: "Maliyyə",

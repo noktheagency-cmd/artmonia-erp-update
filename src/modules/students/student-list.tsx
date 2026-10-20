@@ -666,11 +666,15 @@ function StudentDataTable({
                     <div className="students-payment-cell">
                       <StatusChip tone={student.paymentTone}>{student.paymentStatus}</StatusChip>
                       <small data-debt={hasDebt}>
-                        {student.paymentTone === "success"
-                          ? `Ödənən: ${student.paidThisMonth}`
-                          : student.hasDueDebt
-                            ? `Borc: ${student.dueDebt}`
-                            : `Gələcək: ${student.futureReceivable}`}
+                        {student.paymentStatusCode === "ADVANCE_PAID"
+                          ? student.advancePaid
+                          : student.paymentStatusCode === "ADVANCE_REFUNDED"
+                            ? student.advanceRefunded
+                            : student.paymentTone === "success"
+                            ? `Ödənən: ${student.paidThisMonth}`
+                            : student.hasDueDebt
+                              ? `Borc: ${student.dueDebt}`
+                              : `Gələcək: ${student.futureReceivable}`}
                       </small>
                     </div>
                   </TableCell>

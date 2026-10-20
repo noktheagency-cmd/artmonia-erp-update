@@ -1,0 +1,2 @@
+ALTER TABLE erp.payments
+  ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;

@@ -24,6 +24,7 @@ export type PlannerMember = {
   studentCode: string;
   studentName: string;
   program: string;
+  reserved?: boolean;
 };
 
 export type PlannerSlot = {
@@ -51,6 +52,7 @@ export type PlannerEnrollment = {
   teacherId: string | null;
   teacherName: string | null;
   lessonsPerMonth: number | null;
+  firstLessonDate: string | null;
   slotIds: string[];
   /** BK-08: waiting student whose planned first lesson already passed. */
   activationWarning: string | null;
@@ -182,6 +184,7 @@ export async function getPlannerWorkspaceData(input?: {
           orderBy: { createdAt: "asc" },
           select: {
             id: true,
+            validFrom: true,
             enrollment: {
               select: {
                 id: true,
@@ -190,6 +193,7 @@ export async function getPlannerWorkspaceData(input?: {
                   select: {
                     id: true,
                     code: true,
+                    lifecycleStatus: true,
                     contact: { select: { fullName: true } },
                   },
                 },
@@ -262,6 +266,9 @@ export async function getPlannerWorkspaceData(input?: {
       studentCode: assignment.enrollment.student.code,
       studentName: assignment.enrollment.student.contact.fullName,
       program: assignment.enrollment.program.name,
+      reserved: assignment.enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
+        && toDateInput(slot.validFrom) <= today
+        && toDateInput(assignment.validFrom) <= today,
     })),
   }));
   const selectedSlot = plannerSlots.find((slot) => slot.id === input?.slotId) ?? plannerSlots[0];
@@ -496,6 +503,9 @@ export async function getPlannerWorkspaceData(input?: {
         registeredAt: toDateInput(assignment.enrollment.student.registeredAt),
         enrollmentStartedAt: toDateInput(assignment.enrollment.startDate),
         assignmentStartedAt: toDateInput(assignment.validFrom),
+        reserved: assignment.enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
+          && (selectedSlot?.validFrom ?? "9999-99-99") <= today
+          && toDateInput(assignment.validFrom) <= today,
         monthlyFee: formatAmount(assignment.enrollment.monthlyFee),
         lessonsPerMonth: assignment.enrollment.lessonsPerMonth,
         managerName: assignment.enrollment.student.manager?.fullName ?? null,
@@ -609,6 +619,7 @@ export async function getPlannerWorkspaceData(input?: {
       teacherId: enrollment.teacher?.id ?? null,
       teacherName: enrollment.teacher?.fullName ?? null,
       lessonsPerMonth: enrollment.lessonsPerMonth,
+      firstLessonDate: enrollment.firstLessonAt ? toDateInput(enrollment.firstLessonAt) : null,
       slotIds: [...new Set(enrollment.scheduleAssignments.map((assignment) => assignment.slotId))],
       activationWarning: hasMissedPlannedFirstLesson({
         lifecycleStatus: enrollment.student.lifecycleStatus,

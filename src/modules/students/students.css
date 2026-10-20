@@ -500,6 +500,12 @@ button.students-kpi { cursor: pointer; }
 
 .student-create-form { flex: 1 1 auto; min-height: 0; max-height: none; gap: 11px; margin-top: 12px; padding-bottom: 0; overflow-y: auto; }
 .student-create-section { gap: 10px; padding: 11px 0 3px; background: transparent; border: 0; border-top: 1px solid #d7e0ea; border-radius: 0; box-shadow: none; backdrop-filter: none; }
+.student-billing-change { margin-top: 2px; border: 1px solid #d7e0ea; border-radius: 12px; background: #f8fafc; }
+.student-billing-change summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 42px; padding: 0 12px; color: #252d3d; font-size: 11px; font-weight: 650; list-style: none; cursor: pointer; }
+.student-billing-change summary::-webkit-details-marker { display: none; }
+.student-billing-change summary svg { flex: 0 0 auto; color: #687386; transition: transform 160ms ease; }
+.student-billing-change[open] summary svg { transform: rotate(180deg); }
+.student-billing-change .field-grid { padding: 0 12px 12px; }
 .student-create-section .student-detail-section-title { color: #252d3d; font-size: 11px; font-weight: 620; }
 .student-create-section .student-detail-section-title svg { color: #4667e8; }
 .student-create-dialog .field-grid { gap: 9px; }
@@ -581,6 +587,23 @@ button.students-kpi { cursor: pointer; }
 .student-create-dialog .student-create-grid-personal {
   grid-template-columns: repeat(2, minmax(250px, 1fr));
   gap: 10px 12px;
+}
+
+.student-profile-edit-dialog {
+  overflow-x: hidden;
+}
+
+.student-profile-edit-dialog .student-create-form {
+  overflow-x: hidden;
+}
+
+.student-profile-edit-dialog .student-create-grid,
+.student-profile-edit-dialog .student-create-grid-personal {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.student-profile-edit-dialog .ui-dialog-footer {
+  margin-inline: 0;
 }
 
 .student-create-dialog .ui-select-trigger {

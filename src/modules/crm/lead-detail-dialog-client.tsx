@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LeadAppointments } from "./lead-appointments";
 import { LeadContactPanel } from "./lead-contact-panel";
 import { LeadRegistrationDialog } from "./lead-registration-dialog";
@@ -8,6 +8,7 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   CalendarClock,
+  Check,
   CircleUserRound,
   Clock3,
   History,
@@ -39,7 +40,7 @@ import {
   type NextActionTypeValue,
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
-import { leadStageSelectOptions, type LeadStageValue } from "@/modules/crm/stage";
+import { isContactStageCompleted, isMeetingStageCompleted, leadStageLabels, leadStageSelectOptions, leadStageTones, type LeadStageValue } from "@/modules/crm/stage";
 import { DEFAULT_TRIAL_LESSON_COUNT } from "@/modules/crm/trial-lesson";
 import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
@@ -59,6 +60,7 @@ export function LeadDetailDialogClient({
   deleteLeadAction,
   open: controlledOpen,
   onOpenChange,
+  initialPanel = null,
 }: {
   lead: LeadRow;
   programs: CrmData["programs"];
@@ -70,6 +72,7 @@ export function LeadDetailDialogClient({
   deleteLeadAction: (formData: FormData) => unknown | Promise<unknown>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  initialPanel?: "contact" | "meeting" | null;
 }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -79,6 +82,7 @@ export function LeadDetailDialogClient({
     onOpenChange?.(nextOpen);
   }
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [actionPanel, setActionPanel] = useState<"contact" | "meeting" | null>(null);
   const [note, setNote] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -90,10 +94,34 @@ export function LeadDetailDialogClient({
   const [trialLessonCount, setTrialLessonCount] = useState(
     String(lead.detail.trialLessonCount || DEFAULT_TRIAL_LESSON_COUNT),
   );
+  const suggestion = lead.suggestion;
+  const contactDone =
+    suggestion?.panel !== "contact" &&
+    (isContactStageCompleted(stage) || isContactStageCompleted(lead.stage));
+  const meetingDone =
+    suggestion?.panel !== "meeting" &&
+    (isMeetingStageCompleted(stage) || isMeetingStageCompleted(lead.stage) || lead.meetingAttended);
+  const readyToRegister = contactDone && meetingDone && stage !== "REGISTERED" && lead.stage !== "REGISTERED" && lead.canConvert;
+
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      setActionPanel(initialPanel);
+      setNote("");
+      setStage(lead.detail.stage);
+      setNextActionType(lead.detail.nextActionType);
+      setTrialLessonCount(String(lead.detail.trialLessonCount || DEFAULT_TRIAL_LESSON_COUNT));
+    }
+    if (!open) setActionPanel(null);
+    wasOpen.current = open;
+  }, [open, initialPanel, lead]);
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
-    if (!nextOpen) return;
+    if (!nextOpen) {
+      setActionPanel(null);
+      return;
+    }
 
     setNote("");
     setStage(lead.detail.stage);
@@ -167,7 +195,7 @@ export function LeadDetailDialogClient({
               <DialogDescription>Müraciət profili, izləmə planı və CRM tarixçəsi.</DialogDescription>
             </div>
             <div className="crm-detail-statuses">
-              <StatusChip tone={lead.stageTone}>{lead.stageLabel}</StatusChip>
+              <StatusChip tone={leadStageTones[stage]}>{leadStageLabels[stage]}</StatusChip>
               <StatusChip tone={lead.priorityTone}>{lead.priorityLabel}</StatusChip>
             </div>
           </div>
@@ -198,37 +226,88 @@ export function LeadDetailDialogClient({
           </div>
 
           <section className="crm-dialog-section crm-manager-actions" aria-label="Menecer əsas əməliyyatları">
-            <header>
-              <h3>Əsas əməliyyatlar</h3>
-              <ol className="crm-manager-flow">
-                <li>Əlaqə nəticəsi</li>
-                <li>Görüş</li>
-                <li>Qeydiyyatı tamamla</li>
-              </ol>
-            </header>
-            <div className="crm-manager-actions-body">
-              {open ? <LeadContactPanel leadId={lead.id} /> : null}
-              {open ? <LeadAppointments leadId={lead.id} /> : null}
-              {open ? (
-                <div className="crm-manager-register">
-                  <LeadRegistrationDialog
-                    lead={lead}
-                    programs={programs}
-                    sourceOptions={sourceOptions}
-                    returnTo={returnTo}
-                    canConvert={canConvert}
+            <div className="crm-ops-bar">
+              <div className="crm-ops-choices" role="group" aria-label="Əlaqə və görüş">
+                <button
+                  type="button"
+                  className={[contactDone ? "is-done" : "", suggestion?.panel === "contact" && !contactDone ? "is-suggested" : ""].filter(Boolean).join(" ") || undefined}
+                  aria-pressed={actionPanel === "contact"}
+                  onClick={() => setActionPanel((value) => (value === "contact" ? null : "contact"))}
+                >
+                  {contactDone ? <Check aria-hidden="true" /> : null}
+                  Əlaqə
+                </button>
+                <button
+                  type="button"
+                  className={[meetingDone ? "is-done" : "", suggestion?.panel === "meeting" && !meetingDone ? "is-suggested" : ""].filter(Boolean).join(" ") || undefined}
+                  aria-pressed={actionPanel === "meeting"}
+                  onClick={() => setActionPanel((value) => (value === "meeting" ? null : "meeting"))}
+                >
+                  {meetingDone ? <Check aria-hidden="true" /> : null}
+                  Görüş
+                </button>
+              </div>
+              <div className={readyToRegister ? "crm-ops-register is-ready" : "crm-ops-register"}>
+                <LeadRegistrationDialog
+                  lead={lead}
+                  programs={programs}
+                  sourceOptions={sourceOptions}
+                  returnTo={returnTo}
+                  canConvert={canConvert}
+                />
+              </div>
+            </div>
+            {readyToRegister ? (
+              <p className="crm-ops-ready">Əlaqə və görüş tamamdır. Qeydiyyata alın.</p>
+            ) : suggestion ? (
+              <button
+                type="button"
+                className={`crm-ops-suggestion is-${suggestion.panel}`}
+                onClick={() => setActionPanel(suggestion.panel)}
+              >
+                <strong>{suggestion.title}</strong>
+                <span>{suggestion.action}</span>
+              </button>
+            ) : null}
+            {open ? (
+              <div className="crm-ops-scroll" hidden={actionPanel === null}>
+                <div hidden={actionPanel !== "contact"}>
+                  <LeadContactPanel
+                    leadId={lead.id}
+                    embedded
+                    markedComplete={contactDone}
+                    onReached={() => {
+                      setStage((current) =>
+                        current === "QUALIFIED" ||
+                        current === "TRIAL_LESSON" ||
+                        current === "TRIAL_CONSULTATION" ||
+                        current === "REGISTERED" ||
+                        current === "LOST"
+                          ? current
+                          : "CONTACTED",
+                      );
+                    }}
                   />
                 </div>
-              ) : null}
-            </div>
+                <div hidden={actionPanel !== "meeting"}>
+                  <LeadAppointments leadId={lead.id} embedded markedComplete={meetingDone} />
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <form id={`lead-update-${lead.id}`} action={updateLead} className="crm-detail-update-form">
             <input name="leadId" type="hidden" value={lead.id} />
             <input name="returnTo" type="hidden" value={returnTo} />
 
-            <section className="crm-dialog-section">
-              <header><CircleUserRound aria-hidden="true" /><h3>Profil və maraq</h3></header>
+            <section className="crm-dialog-section crm-profile-card">
+              <header>
+                <span className="crm-profile-card-icon" aria-hidden="true"><CircleUserRound /></span>
+                <div>
+                  <h3>Profil və maraq</h3>
+                  <p>Ad, telefon və maraq məlumatı</p>
+                </div>
+              </header>
               <FieldGroup className="crm-dialog-fields">
                 <Field>
                   <FieldLabel htmlFor={`lead-name-${lead.id}`}>Ad və soyad</FieldLabel>
@@ -328,8 +407,14 @@ export function LeadDetailDialogClient({
               </FieldGroup>
             </section>
 
-            <section className="crm-dialog-section">
-              <header><CalendarClock aria-hidden="true" /><h3>İzləmə planı</h3></header>
+            <section className="crm-dialog-section crm-profile-card crm-followup-card">
+              <header>
+                <span className="crm-profile-card-icon" aria-hidden="true"><CalendarClock /></span>
+                <div>
+                  <h3>İzləmə planı</h3>
+                  <p>Prioritet, növbəti addım və qeyd</p>
+                </div>
+              </header>
               <FieldGroup className="crm-dialog-fields crm-followup-fields">
                 <Field>
                   <FieldLabel>Prioritet</FieldLabel>
@@ -359,7 +444,7 @@ export function LeadDetailDialogClient({
                     compact
                   />
                 </Field>
-                <Field>
+                <Field className="is-full">
                   <FieldLabel htmlFor={`lead-note-${lead.id}`}>Yeniləmə qeydi *</FieldLabel>
                   <Input
                     id={`lead-note-${lead.id}`}
@@ -378,8 +463,14 @@ export function LeadDetailDialogClient({
               </FieldGroup>
             </section>
 
-            <section className="crm-dialog-section crm-history-section">
-              <header><History aria-hidden="true" /><h3>Müraciət tarixçəsi</h3></header>
+            <section className="crm-dialog-section crm-profile-card crm-history-card">
+              <header>
+                <span className="crm-profile-card-icon" aria-hidden="true"><History /></span>
+                <div>
+                  <h3>Müraciət tarixçəsi</h3>
+                  <p>Status dəyişiklikləri</p>
+                </div>
+              </header>
               {lead.detail.timeline.length > 0 ? (
                 <ol className="crm-history-list">
                   {lead.detail.timeline.map((item) => (

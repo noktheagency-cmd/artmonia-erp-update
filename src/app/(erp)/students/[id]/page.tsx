@@ -9,6 +9,7 @@ import {
   updateStudentProfileAction,
   updateStudentStatusAction,
 } from "@/modules/students/actions";
+import { refundAdvanceSale } from "@/modules/students/course-sale-actions";
 import { StudentDetailActions } from "@/modules/students/student-detail-actions";
 import { StudentMobileAccountCard } from "@/modules/students/student-mobile-account-card";
 import {
@@ -68,6 +69,7 @@ export default async function StudentDetailPage({
           updateStudentStatusAction={updateStudentStatusAction}
           deleteStudentAction={deleteStudentAction}
           createStudentReminderAction={createStudentReminderAction}
+          refundAdvanceAction={refundAdvanceSale}
         />
       }
       mobileAccount={

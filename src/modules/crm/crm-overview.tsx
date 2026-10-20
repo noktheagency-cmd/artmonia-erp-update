@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   BellRing,
-  BookOpen,
   CalendarCheck2,
   CalendarClock,
   CheckCircle2,
@@ -40,16 +39,15 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { cx } from "@/components/ui/cx";
 import type { CrmData } from "@/modules/crm/queries";
 
-const stageIcons = [
-  PhoneCall,
-  BellRing,
-  CalendarCheck2,
-  BookOpen,
-  CircleDollarSign,
-  CheckCircle2,
-  XCircle,
-  RotateCcw,
-];
+const stageIcons = {
+  NEW: PhoneCall,
+  CONTACTED: BellRing,
+  CONSULTATION_TRIAL: CalendarCheck2,
+  TRIAL_CONSULTATION: CircleDollarSign,
+  REGISTERED: CheckCircle2,
+  LOST: XCircle,
+  NURTURE: RotateCcw,
+} as const;
 
 const conversionConfig = {
   registered: { label: "Qeydiyyata alınıb", color: "#3158f5" },
@@ -136,7 +134,7 @@ export function CrmOverview({
         />
         <div className="crm-stage-track" role="list" aria-label="Müraciət mərhələləri">
           {data.stageSummary.map((stage, index) => {
-            const Icon = stageIcons[index] ?? TrendingUp;
+            const Icon = stageIcons[stage.stage as keyof typeof stageIcons] ?? TrendingUp;
             return (
               <button
                 type="button"
@@ -151,7 +149,14 @@ export function CrmOverview({
                   <Icon />
                 </span>
                 <span className="crm-stage-copy">
-                  <span>{stage.label}</span>
+                  <span>
+                    {stage.label.includes("/") ? (
+                      <>
+                        <span className="crm-stage-line">{stage.label.slice(0, stage.label.indexOf("/") + 1)}</span>
+                        <span className="crm-stage-line">{stage.label.slice(stage.label.indexOf("/") + 1)}</span>
+                      </>
+                    ) : stage.label}
+                  </span>
                   <strong>{stage.value}</strong>
                 </span>
               </button>
@@ -203,7 +208,7 @@ export function CrmOverview({
           </div>
           <dl className="crm-conversion-stats">
             <div>
-              <dt>Cəmi müraciət (seçilmiş dövr)</dt>
+              <dt>Cəmi müraciət</dt>
               <dd>{data.metrics[0]?.value ?? "0"}</dd>
             </div>
             <div>
@@ -211,7 +216,7 @@ export function CrmOverview({
               <dd>{data.dashboardStats.salesCount}</dd>
             </div>
             <div>
-              <dt>Görüş (konsultasiya + sınaq)</dt>
+              <dt>Görüş</dt>
               <dd>{data.dashboardStats.meetingAttendedCount} iştirak · {data.dashboardStats.meetingCount} təyinat</dd>
             </div>
             <div>

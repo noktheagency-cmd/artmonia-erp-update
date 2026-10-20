@@ -41,6 +41,8 @@
 .daily-report-dialog-icon { width: 48px; height: 48px; margin-bottom: 14px; }
 .daily-report-dialog .daily-report-eyebrow { margin-bottom: 8px; }
 .daily-report-dialog .ui-dialog-description { font-size: 13px; line-height: 1.7; }
+.daily-report-metric-heading { margin: 22px 0 0; color: inherit; font-size: 13px; font-weight: 750; letter-spacing: -.01em; }
+.daily-report-metric-heading + .daily-report-metrics { margin-top: 4px; }
 .daily-report-metrics { display: grid; gap: 0; margin: 20px 0 0; }
 .daily-report-metrics > div { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 17px 0; border-top: 1px solid #e4e9f2; }
 .daily-report-metrics dt { color: #647187; font-size: 13px; }

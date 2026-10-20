@@ -31,11 +31,11 @@ export function blockInvalidNumberKey(event: {
   ctrlKey: boolean;
   metaKey: boolean;
   altKey: boolean;
-  key: string;
+  key?: string;
   preventDefault: () => void;
 }) {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key.length !== 1) return;
+  if (typeof event.key !== "string" || event.key.length !== 1) return;
   // Block scientific notation and any letter; keep digits, decimal, sign.
   if (/[eE]/.test(event.key) || /[a-zA-Z]/.test(event.key)) {
     event.preventDefault();

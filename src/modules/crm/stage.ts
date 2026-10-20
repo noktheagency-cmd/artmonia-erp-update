@@ -11,9 +11,14 @@ export const leadStageOptions = [
 
 export type LeadStageValue = (typeof leadStageOptions)[number];
 
+/** Consultation and trial lesson are one pipeline step. */
+export const consultationTrialStage = "CONSULTATION_TRIAL" as const;
+export type CrmStageFilter = LeadStageValue | typeof consultationTrialStage;
+export const consultationTrialLabel = "Konsultasiya/Sınaq";
+
 export const leadStageLabels: Record<LeadStageValue, string> = {
   NEW: "Zəng gözləyir",
-  CONTACTED: "Xatırlatma",
+  CONTACTED: "Əlaqə quruldu",
   QUALIFIED: "Konsultasiya təyin olundu",
   TRIAL_LESSON: "Sınaq dərsi",
   TRIAL_CONSULTATION: "Ödəniş gözlənilir",
@@ -31,12 +36,36 @@ export function formatLeadStageLabel(value: string) {
   return leadStageLabels[value as LeadStageValue] ?? value;
 }
 
+const contactCompletedStages = new Set<LeadStageValue>([
+  "CONTACTED",
+  "QUALIFIED",
+  "TRIAL_LESSON",
+  "TRIAL_CONSULTATION",
+  "REGISTERED",
+  "NURTURE",
+]);
+
+const meetingCompletedStages = new Set<LeadStageValue>([
+  "QUALIFIED",
+  "TRIAL_LESSON",
+  "TRIAL_CONSULTATION",
+  "REGISTERED",
+]);
+
+export function isContactStageCompleted(stage: string) {
+  return contactCompletedStages.has(stage as LeadStageValue);
+}
+
+export function isMeetingStageCompleted(stage: string) {
+  return meetingCompletedStages.has(stage as LeadStageValue);
+}
+
 export const leadStageTones: Record<
   LeadStageValue,
   "success" | "warning" | "danger" | "neutral" | "info"
 > = {
   NEW: "info",
-  CONTACTED: "neutral",
+  CONTACTED: "success",
   QUALIFIED: "warning",
   TRIAL_LESSON: "info",
   TRIAL_CONSULTATION: "warning",

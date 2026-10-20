@@ -89,6 +89,32 @@ test("does not label a student as paid before any billing record exists", () => 
   );
 });
 
+test("labels an advance payment as paid before a monthly invoice exists", () => {
+  assert.deepEqual(
+    resolveStudentPaymentStatus({
+      balance: 0,
+      nextPaymentAt: null,
+      today: utcDate("2026-10-20"),
+      hasBillingRecord: false,
+      advancePaid: 20,
+    }),
+    { code: "ADVANCE_PAID", label: "Avans ödənilib", tone: "success" },
+  );
+});
+
+test("labels a returned advance after the money is given back", () => {
+  assert.deepEqual(
+    resolveStudentPaymentStatus({
+      balance: 0,
+      nextPaymentAt: null,
+      today: utcDate("2026-10-20"),
+      hasBillingRecord: false,
+      advanceRefunded: 20,
+    }),
+    { code: "ADVANCE_REFUNDED", label: "Avans qaytarılıb", tone: "neutral" },
+  );
+});
+
 test("labels a zero-balance invoiced student as paid", () => {
   assert.deepEqual(
     resolveStudentPaymentStatus({

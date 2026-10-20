@@ -905,10 +905,12 @@ strong {
 }
 
 .global-search-panel {
-  position: absolute;
-  top: calc(100% + 9px);
-  right: 0;
-  left: 0;
+  position: fixed;
+  top: var(--search-panel-top, 72px);
+  left: var(--search-panel-left, 16px);
+  right: auto;
+  z-index: 80;
+  width: min(720px, var(--search-panel-width, 640px));
   display: grid;
   overflow: hidden;
   visibility: hidden;
@@ -2812,6 +2814,10 @@ strong {
 .ui-select-crud-status svg {
   width: 15px;
   height: 15px;
+}
+
+.ui-select-crud-panel:empty {
+  display: none;
 }
 
 .ui-select-crud-panel {

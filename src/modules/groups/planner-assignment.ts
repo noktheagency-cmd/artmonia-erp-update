@@ -47,6 +47,24 @@ export function minimumAssignmentDate(
   return minimum;
 }
 
+export function assignmentAnchorDate(
+  firstLessonDate: string | null | undefined,
+  slotIds: readonly string[],
+  slots: readonly AssignmentSlot[],
+  today: string,
+) {
+  if (firstLessonDate) return firstLessonDate;
+  return preferredAssignmentDate(slotIds, slots, today);
+}
+
+export function resolvePlanAnchor(
+  recordedFirstLesson: string | null | undefined,
+  requestedEarliestDate: string | null | undefined,
+) {
+  if (recordedFirstLesson) return recordedFirstLesson;
+  return requestedEarliestDate || null;
+}
+
 export function preferredAssignmentDate(
   slotIds: readonly string[],
   slots: readonly AssignmentSlot[],

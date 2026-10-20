@@ -37,7 +37,7 @@ import {
   leadPrioritySelectOptions,
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
-import { leadStageLabels, leadStageSelectOptions } from "@/modules/crm/stage";
+import { consultationTrialLabel, consultationTrialStage, leadStageLabels, leadStageSelectOptions } from "@/modules/crm/stage";
 
 const followUpLabels = {
   all: "İzləmə",
@@ -362,7 +362,11 @@ function CrmFilterPanel({
             name="stage"
             defaultValue={data.filters.stage}
             emptyLabel="Status"
-            options={leadStageSelectOptions}
+            options={leadStageSelectOptions.flatMap((option) => {
+              if (option.value === "TRIAL_LESSON") return [];
+              if (option.value === "QUALIFIED") return [{ value: consultationTrialStage, label: consultationTrialLabel }];
+              return [option];
+            })}
             icon={Activity}
           />
           <FormSelect
@@ -431,7 +435,7 @@ function ActiveFiltersBar({
 
   const chips = [
     data.filters.stage
-      ? { key: "stage", label: `Status: ${leadStageLabels[data.filters.stage]}` }
+      ? { key: "stage", label: `Status: ${data.filters.stage === consultationTrialStage ? consultationTrialLabel : leadStageLabels[data.filters.stage]}` }
       : null,
     data.filters.priority
       ? { key: "priority", label: `Prioritet: ${leadPriorityLabels[data.filters.priority]}` }

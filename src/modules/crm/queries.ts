@@ -33,11 +33,15 @@ import {
   normalizeCrmPeriod,
 } from "@/modules/crm/period";
 import {
+  consultationTrialLabel,
+  consultationTrialStage,
+  type CrmStageFilter,
   type LeadStageValue,
   leadStageLabels,
   leadStageOptions,
   leadStageTones,
 } from "@/modules/crm/stage";
+import { buildWorkerSuggestion, type WorkerSuggestion } from "@/modules/crm/worker-suggestion";
 import {
   leadHadMeetingAttendedSql,
   leadHadMeetingScheduledSql,
@@ -81,7 +85,7 @@ export type CrmData = {
   query: string;
   returnTo: string;
   filters: {
-    stage: LeadStageValue | "";
+    stage: CrmStageFilter | "";
     owner: string;
     program: string;
     source: string;
@@ -110,7 +114,7 @@ export type CrmData = {
     tone: "blue" | "coral" | "yellow" | "mint";
   }>;
   stageSummary: Array<{
-    stage: LeadStageValue;
+    stage: CrmStageFilter;
     label: string;
     value: string;
     tone: "success" | "warning" | "danger" | "neutral" | "info";
@@ -177,6 +181,8 @@ export type CrmData = {
     conversionLabel: string;
     /** BK-18: open SCHEDULED meeting without ATTENDED yet. */
     needsMeetingAttendanceConfirm: boolean;
+    meetingAttended: boolean;
+    suggestion: WorkerSuggestion | null;
     detail: {
       contactId: string;
       fullName: string;
@@ -231,7 +237,7 @@ type CrmCacheInput = {
   actor: CrmCacheActor;
   search: string;
   searchDigits: string;
-  stageFilter: LeadStageValue | "";
+  stageFilter: CrmStageFilter | "";
   ownerFilter: string;
   programFilter: string;
   sourceFilter: string;
@@ -296,6 +302,11 @@ type CrmLeadRawRow = {
   programName: string | null;
   convertedStudentCode: string | null;
   needsMeetingAttendanceConfirm: boolean | null;
+  meetingAttended: boolean | null;
+  latestMeetingOutcome: string | null;
+  meetingOverdue: boolean | null;
+  meetingUpcoming: boolean | null;
+  latestContactResult: string | null;
   timeline: unknown;
 };
 
@@ -485,12 +496,23 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
         tone: "yellow",
       },
     ],
-    stageSummary: leadStageOptions.map((stage) => ({
-      stage,
-      label: leadStageLabels[stage],
-      value: formatCount(stageCounts[stage] ?? 0),
-      tone: leadStageTones[stage],
-    })),
+    stageSummary: leadStageOptions.flatMap((stage) => {
+      if (stage === "TRIAL_LESSON") return [];
+      if (stage === "QUALIFIED") {
+        return [{
+          stage: consultationTrialStage,
+          label: consultationTrialLabel,
+          value: formatCount(toNumber(stageCounts.QUALIFIED) + toNumber(stageCounts.TRIAL_LESSON)),
+          tone: "warning" as const,
+        }];
+      }
+      return [{
+        stage,
+        label: leadStageLabels[stage],
+        value: formatCount(stageCounts[stage] ?? 0),
+        tone: leadStageTones[stage],
+      }];
+    }),
     stageAllTimeTotal,
     listTotalCount,
     attentionFocus: attentionRows.map((lead) =>
@@ -556,7 +578,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data-v7"],
+  ["crm-pipeline-data-v14"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -594,7 +616,7 @@ function getCrmRawData(
     actor: CrmCacheActor;
     search: string;
     searchDigits: string;
-    stageFilter: LeadStageValue | undefined;
+    stageFilter: CrmStageFilter | undefined;
     ownerFilter: string;
     programFilter: string;
     sourceFilter: string;
@@ -640,6 +662,7 @@ function getCrmRawData(
           select l.stage::text as stage, count(*)::int as total_count
           from erp.leads l
           where ${scopeSql}
+            and l.converted_student_id is null
           group by l.stage
         ) summary
       ), '{}'::jsonb) as "stageCounts",
@@ -673,12 +696,14 @@ function getCrmRawData(
             'TRIAL_CONSULTATION'::"erp"."LeadStage",
             'NURTURE'::"erp"."LeadStage"
           )
+          and l.converted_student_id is null
           and (l.next_follow_up_at is null or l.next_follow_up_at <= ${input.today})
       ), 0) as "openFollowUps",
       coalesce((
         select count(*)::int
         from erp.leads l
         where ${summarySql}
+          and l.converted_student_id is null
           and l.stage in (
             'QUALIFIED'::"erp"."LeadStage",
             'TRIAL_LESSON'::"erp"."LeadStage",
@@ -862,6 +887,7 @@ function getCrmRawData(
           join erp.contacts c on c.id = l.contact_id
           left join erp.users m on m.id = l.manager_id
           where ${scopeSql}
+            and l.converted_student_id is null
             and l.stage in (
               'NEW'::"erp"."LeadStage",
               'CONTACTED'::"erp"."LeadStage",
@@ -917,9 +943,17 @@ function getCrmRawData(
             'programName', lead_rows.program_name,
             'convertedStudentCode', lead_rows.converted_student_code,
             'needsMeetingAttendanceConfirm', lead_rows.needs_meeting_attendance_confirm,
+            'meetingAttended', lead_rows.meeting_attended,
+            'latestMeetingOutcome', lead_rows.latest_meeting_outcome,
+            'meetingOverdue', lead_rows.meeting_overdue,
+            'meetingUpcoming', lead_rows.meeting_upcoming,
+            'latestContactResult', lead_rows.latest_contact_result,
             'timeline', coalesce(history.timeline, '[]'::jsonb)
           )
-          order by lead_rows.next_follow_up_at asc nulls last, lead_rows.created_at desc
+          order by
+            case when lead_rows.priority = 'CRITICAL'::"erp"."LeadPriority" then 0 else 1 end,
+            lead_rows.created_at desc nulls last,
+            lead_rows.id desc
         )
         from (
           select
@@ -940,7 +974,44 @@ function getCrmRawData(
             m.full_name as manager_name,
             p.name as program_name,
             s.code as converted_student_code,
-            ${leadNeedsAttendSql} as needs_meeting_attendance_confirm
+            ${leadNeedsAttendSql} as needs_meeting_attendance_confirm,
+            exists (
+              select 1 from erp.crm_appointments attended_meeting
+              where attended_meeting.lead_id = l.id
+                and attended_meeting.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
+                and attended_meeting.outcome = 'ATTENDED'
+            ) as meeting_attended,
+            (
+              select a.outcome
+              from erp.crm_appointments a
+              where a.lead_id = l.id
+                and a.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
+              order by a.planned_at desc, a.created_at desc
+              limit 1
+            ) as latest_meeting_outcome,
+            exists (
+              select 1 from erp.crm_appointments overdue_meeting
+              where overdue_meeting.lead_id = l.id
+                and overdue_meeting.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
+                and overdue_meeting.outcome = 'SCHEDULED'
+                and overdue_meeting.planned_at < now()
+            ) as meeting_overdue,
+            exists (
+              select 1 from erp.crm_appointments upcoming_meeting
+              where upcoming_meeting.lead_id = l.id
+                and upcoming_meeting.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
+                and upcoming_meeting.outcome = 'SCHEDULED'
+                and upcoming_meeting.planned_at >= now()
+            ) as meeting_upcoming,
+            (
+              select w.result
+              from erp.lead_work_items w
+              where w.lead_id = l.id
+                and w.source = 'PRIMARY'
+                and w.completed_at is not null
+              order by w.completed_at desc
+              limit 1
+            ) as latest_contact_result
           from erp.leads l
           join erp.contacts c on c.id = l.contact_id
           left join erp.users m on m.id = l.manager_id
@@ -948,13 +1019,9 @@ function getCrmRawData(
           left join erp.students s on s.id = l.converted_student_id
           where ${listWhereSql}
           order by
-            case l.priority
-              when 'CRITICAL'::"erp"."LeadPriority" then 0
-              when 'MEDIUM'::"erp"."LeadPriority" then 1
-              else 2
-            end asc,
-            l.next_follow_up_at asc nulls last,
-            l.created_at desc
+            case when l.priority = 'CRITICAL'::"erp"."LeadPriority" then 0 else 1 end,
+            l.created_at desc nulls last,
+            l.id desc
           limit 50
         ) lead_rows
         left join lateral (
@@ -1104,7 +1171,7 @@ function buildCrmListWhereSql(input: {
   actor: CrmCacheActor;
   search: string;
   searchDigits: string;
-  stageFilter: LeadStageValue | undefined;
+  stageFilter: CrmStageFilter | undefined;
   ownerFilter: string;
   programFilter: string;
   sourceFilter: string;
@@ -1118,6 +1185,7 @@ function buildCrmListWhereSql(input: {
   const conditions: Prisma.Sql[] = [
     buildLeadScopeSql(input.actor),
     buildLeadPeriodSql(input.periodRange),
+    Prisma.sql`l.converted_student_id is null`,
   ];
 
   if (input.search.length > 0) {
@@ -1138,7 +1206,9 @@ function buildCrmListWhereSql(input: {
     conditions.push(Prisma.sql`(${Prisma.join(searchConditions, " OR ")})`);
   }
 
-  if (input.stageFilter) {
+  if (input.stageFilter === consultationTrialStage) {
+    conditions.push(Prisma.sql`l.stage in ('QUALIFIED'::"erp"."LeadStage", 'TRIAL_LESSON'::"erp"."LeadStage")`);
+  } else if (input.stageFilter) {
     conditions.push(Prisma.sql`l.stage = ${input.stageFilter}::"erp"."LeadStage"`);
   }
 
@@ -1228,22 +1298,37 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
   });
   if (!lead) return null;
 
-  const [openScheduled, attendedMeeting] = await Promise.all([
+  const now = new Date();
+  const meetingWhere = {
+    leadId: lead.id,
+    kind: { in: ["MEETING", "CONSULTATION", "TRIAL"] as ("MEETING" | "CONSULTATION" | "TRIAL")[] },
+  };
+  const [openScheduled, attendedMeeting, latestMeeting, overdueMeeting, upcomingMeeting, latestWork] = await Promise.all([
     getPrisma().crmAppointment.findFirst({
-      where: {
-        leadId: lead.id,
-        kind: { in: ["MEETING", "CONSULTATION", "TRIAL"] },
-        outcome: "SCHEDULED",
-      },
+      where: { ...meetingWhere, outcome: "SCHEDULED" },
       select: { id: true },
     }),
     getPrisma().crmAppointment.findFirst({
-      where: {
-        leadId: lead.id,
-        kind: { in: ["MEETING", "CONSULTATION", "TRIAL"] },
-        outcome: "ATTENDED",
-      },
+      where: { ...meetingWhere, outcome: "ATTENDED" },
       select: { id: true },
+    }),
+    getPrisma().crmAppointment.findFirst({
+      where: meetingWhere,
+      orderBy: [{ plannedAt: "desc" }, { createdAt: "desc" }],
+      select: { outcome: true },
+    }),
+    getPrisma().crmAppointment.findFirst({
+      where: { ...meetingWhere, outcome: "SCHEDULED", plannedAt: { lt: now } },
+      select: { id: true },
+    }),
+    getPrisma().crmAppointment.findFirst({
+      where: { ...meetingWhere, outcome: "SCHEDULED", plannedAt: { gte: now } },
+      select: { id: true },
+    }),
+    getPrisma().leadWorkItem.findFirst({
+      where: { leadId: lead.id, source: "PRIMARY", completedAt: { not: null } },
+      orderBy: { completedAt: "desc" },
+      select: { result: true },
     }),
   ]);
 
@@ -1258,6 +1343,11 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
     programName: lead.programInterest?.name ?? null,
     convertedStudentCode: lead.convertedStudent?.code ?? null,
     needsMeetingAttendanceConfirm: Boolean(openScheduled) && !attendedMeeting,
+    meetingAttended: Boolean(attendedMeeting),
+    latestMeetingOutcome: latestMeeting?.outcome ?? null,
+    meetingOverdue: Boolean(overdueMeeting),
+    meetingUpcoming: Boolean(upcomingMeeting),
+    latestContactResult: latestWork?.result ?? null,
     timeline: lead.stageHistory.map((entry) => ({
       id: entry.id,
       newStage: entry.newStage,
@@ -1294,16 +1384,16 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
     priority,
     priorityLabel: formatLeadPriorityLabel(priority),
     priorityTone: leadPriorityTones[priority],
-    nextActionType,
-    nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),
+    nextActionType: convertedStudentCode ? "" : nextActionType,
+    nextActionTypeLabel: convertedStudentCode ? "Təyin edilməyib" : formatNextActionTypeLabel(nextActionType),
     trialLessonCount,
     createdAt: formatShortDate(lead.createdAt),
-    nextFollowUpAt: lead.nextFollowUpAt
-      ? formatShortDate(lead.nextFollowUpAt)
-      : "Tarix yoxdur",
-    nextFollowUpIso: lead.nextFollowUpAt
-      ? new Date(lead.nextFollowUpAt).toISOString()
-      : null,
+    nextFollowUpAt: convertedStudentCode || !lead.nextFollowUpAt
+      ? "Tarix yoxdur"
+      : formatShortDate(lead.nextFollowUpAt),
+    nextFollowUpIso: convertedStudentCode || !lead.nextFollowUpAt
+      ? null
+      : new Date(lead.nextFollowUpAt).toISOString(),
     latestNote: formatLeadHistoryReason(timeline[0]?.reason),
     canConvert:
       Boolean(programId) &&
@@ -1315,6 +1405,15 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
         ? "Qeydiyyata al"
         : "Proqram seçilməyib",
     needsMeetingAttendanceConfirm: Boolean(lead.needsMeetingAttendanceConfirm),
+    meetingAttended: Boolean(lead.meetingAttended),
+    suggestion: convertedStudentCode
+      ? null
+      : buildWorkerSuggestion({
+          stage,
+          latestMeetingOutcome: lead.latestMeetingOutcome,
+          meetingUpcoming: Boolean(lead.meetingUpcoming),
+          latestContactResult: lead.latestContactResult,
+        }),
     detail: {
       contactId: lead.contactId,
       fullName: lead.fullName,
@@ -1325,9 +1424,9 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
       managerId,
       stage,
       priority,
-      nextActionType,
+      nextActionType: convertedStudentCode ? "" : nextActionType,
       trialLessonCount,
-      nextFollowUpDate: formatDateInput(lead.nextFollowUpAt),
+      nextFollowUpDate: convertedStudentCode ? "" : formatDateInput(lead.nextFollowUpAt),
       createdAt: formatShortDate(lead.createdAt),
       convertedStudentCode,
       timeline: timeline.map((item) => {
@@ -1349,7 +1448,8 @@ function normalizeText(value: string | undefined) {
   return formFilterString(value);
 }
 
-function normalizeStage(value: string | undefined): LeadStageValue | undefined {
+function normalizeStage(value: string | undefined): CrmStageFilter | undefined {
+  if (value === consultationTrialStage) return consultationTrialStage;
   return leadStageOptions.find((stage) => stage === value);
 }
 

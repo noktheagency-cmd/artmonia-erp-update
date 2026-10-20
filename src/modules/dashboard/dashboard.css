@@ -42,7 +42,7 @@
 .owner-dashboard-header {
   display: flex;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   min-width: 0;
   padding: 1px 2px 4px;
@@ -52,19 +52,43 @@
   min-width: 0;
 }
 
+.erp-frame[data-dashboard-section="true"] .erp-command-header {
+  align-items: center;
+  width: 100%;
+  max-width: 1540px;
+}
+
+.erp-frame[data-dashboard-section="true"] .global-search {
+  width: auto;
+  min-width: 280px;
+  flex: 1 1 480px;
+}
+
+.dashboard-header-slot { flex: 0 1 auto; min-width: 0; max-width: 280px; }
+.dashboard-header-slot:empty { display: none; }
+
 .owner-dashboard-greeting {
   flex: 0 1 auto;
   min-width: 0;
 }
 
+.owner-dashboard-greeting h1,
 .owner-dashboard-header .owner-dashboard-greeting h1 {
   margin: 0;
-  color: var(--dashboard-ink);
+  color: var(--dashboard-ink, #252d3d);
   font-size: 18px;
   font-weight: 650;
-  line-height: 1.4;
+  line-height: 1.2;
   letter-spacing: -0.015em;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-dashboard-header .owner-dashboard-company-kpi {
+  width: 100%;
+  max-width: none;
+  flex-basis: auto;
 }
 
 .owner-dashboard-header p {
@@ -170,6 +194,34 @@
 
 .owner-dashboard-company-kpi-progress [data-slot="progress-track"] {
   height: 7px;
+}
+
+.owner-dashboard-company-kpi-progress [data-slot="progress-indicator"],
+.owner-dashboard-company-kpi-metric-progress [data-slot="progress-indicator"] {
+  position: relative;
+  overflow: hidden;
+}
+
+.owner-dashboard-company-kpi-progress [data-slot="progress-indicator"]::after,
+.owner-dashboard-company-kpi-metric-progress [data-slot="progress-indicator"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgb(255 255 255 / 0%) 28%,
+    rgb(255 255 255 / 78%) 50%,
+    rgb(255 255 255 / 0%) 72%,
+    transparent 100%
+  );
+  transform: translateX(-130%);
+  animation: owner-dashboard-kpi-flow 1.8s ease-in-out infinite;
+}
+
+@keyframes owner-dashboard-kpi-flow {
+  0% { transform: translateX(-130%); }
+  100% { transform: translateX(130%); }
 }
 
 .owner-dashboard-company-kpi-chevron {
@@ -1043,6 +1095,18 @@
   .owner-dashboard-lower-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+@media (max-width: 960px) {
+  .erp-frame[data-dashboard-section="true"] .erp-command-header .global-search {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .erp-frame[data-dashboard-section="true"] .dashboard-header-slot {
+    flex: 0 1 auto;
+    width: auto;
+  }
+}
+
 @media (max-width: 820px) {
   .owner-dashboard { gap: 14px; }
   .owner-dashboard-header { flex-direction: column; gap: 14px; align-items: stretch; }
@@ -1106,6 +1170,11 @@
   .owner-dashboard-header .dashboard-date-trigger:hover,
   .owner-dashboard-header .dashboard-date-trigger.is-open { transform: none; }
 
+  .owner-dashboard-company-kpi-progress [data-slot="progress-indicator"]::after,
+  .owner-dashboard-company-kpi-metric-progress [data-slot="progress-indicator"]::after {
+    animation: none;
+  }
+
 }
 
-.owner-dashboard-greeting h1 > span { color: var(--dashboard-muted); font-weight: 450; }
+.owner-dashboard-greeting h1 > span { color: var(--dashboard-muted, #687386); font-weight: 450; }

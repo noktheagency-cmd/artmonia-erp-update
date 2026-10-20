@@ -25,6 +25,7 @@ export function FormInputGuards() {
           name: target.name,
           inputMode: target.inputMode,
         }) &&
+        typeof event.key === "string" &&
         event.key.length === 1 &&
         /[a-zA-Z]/i.test(event.key) &&
         !event.ctrlKey &&
