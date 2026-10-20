@@ -31,4 +31,6 @@ Legacy `admission_tracking=false` rows are never auto-qualified (BK-25 / no sile
 | Company KPI newSales | `course_sales` |
 | CRM conversion sales | `leadHasQualifiedSaleSql` → `course_sales` |
 | Retention / freeze-stop | `registered_at` population (not sales) |
-| HR acquisition bonus | registration calendar (separate policy) |
+| Marketing campaign satış / gəlir | `course_sales` (+ payments on `course_sale_id`) |
+| HR acquisition bonus (DEPARTMENT_SALES_COUNT) | `course_sales.qualified_at` by sale owner |
+| Owner dashboard konversiya | `companySalesCount` / period leads |

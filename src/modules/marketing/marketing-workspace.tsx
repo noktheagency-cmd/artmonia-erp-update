@@ -119,7 +119,7 @@ export function MarketingWorkspace({ data }: { data: MarketingData }) {
       <Metric icon={MousePointerClick} label="Conversation qiyməti" value={money(costPerConversation, totals.currency)} helper="Xərc / conversation" tone="amber" />
       <Metric icon={UsersRound} label="ERP lead" value={count(totals.leads)} helper="CRM-də qeydə alınan" tone="violet" />
       <Metric icon={Activity} label="Satış" value={count(totals.sales)} helper="Qeydiyyata çevrilən" tone="amber" />
-      <Metric icon={WalletCards} label="Real gəlir" value={money(totals.revenue, "AZN")} helper="ERP ödənişlərindən" tone="green" />
+      <Metric icon={WalletCards} label="Real gəlir" value={money(totals.revenue, "AZN")} helper="Satışa bağlı ödənişlər (course_sales)" tone="green" />
     </div>
 
     <section className="marketing-workspace-grid" aria-label="Kampaniya iş sahəsi">

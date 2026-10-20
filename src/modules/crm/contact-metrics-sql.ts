@@ -60,7 +60,7 @@ export function leadHadMeetingScheduledSql() {
     select 1
     from erp.crm_appointments a
     where a.lead_id = l.id
-      and a.kind in ('CONSULTATION', 'TRIAL')
+      and a.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
   )`;
 }
 
@@ -69,7 +69,7 @@ export function leadHadMeetingAttendedSql() {
     select 1
     from erp.crm_appointments a
     where a.lead_id = l.id
-      and a.kind in ('CONSULTATION', 'TRIAL')
+      and a.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
       and a.outcome = 'ATTENDED'
   )`;
 }

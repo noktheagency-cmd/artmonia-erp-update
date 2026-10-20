@@ -491,7 +491,7 @@ export async function getPlannerWorkspaceData(input?: {
         phone: assignment.enrollment.student.contact.phoneDisplay,
         email: assignment.enrollment.student.contact.email,
         educationLevel: assignment.enrollment.student.educationLevel,
-        lifecycleStatus: assignment.enrollment.student.freezeReserved ? "FROZEN_RESERVED" : assignment.enrollment.student.lifecycleStatus,
+        lifecycleStatus: assignment.enrollment.student.lifecycleStatus,
         enrollmentStatus: assignment.enrollment.status,
         registeredAt: toDateInput(assignment.enrollment.student.registeredAt),
         enrollmentStartedAt: toDateInput(assignment.enrollment.startDate),

@@ -143,17 +143,34 @@ export async function getMarketingData(filters?: { from?: string; to?: string })
         and lead.created_at < ${businessRangeEndExclusive}
     ) lead_summary on true
     left join lateral (
+      -- BK-21: admission sales from course_sales, not student registration.
       select count(*)::int as count
-      from erp.students student
-      where student.campaign_id = campaign.id
-        and student.registered_at >= ${businessRangeStart}
-        and student.registered_at < ${businessRangeEndExclusive}
+      from erp.course_sales cs
+      join erp.students student on student.id = cs.student_id
+      left join erp.leads lead on lead.id = cs.lead_id
+      where cs.cancelled_at is null
+        and student.is_test_data = false
+        and cs.qualified_at >= ${businessRangeStart}::date
+        and cs.qualified_at < ${businessRangeEndExclusive}::date
+        and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
+        and (
+          student.campaign_id = campaign.id
+          or lead.campaign_id = campaign.id
+        )
     ) sale_summary on true
     left join lateral (
+      -- Revenue tied to campaign-attributed qualifying sales (not all campaign payments).
       select coalesce(sum(payment.amount), 0)::float8 as revenue
-      from erp.students student
-      join erp.payments payment on payment.student_id = student.id
-      where student.campaign_id = campaign.id
+      from erp.payments payment
+      join erp.course_sales cs on cs.id = payment.course_sale_id
+      join erp.students student on student.id = cs.student_id
+      left join erp.leads lead on lead.id = cs.lead_id
+      where cs.cancelled_at is null
+        and student.is_test_data = false
+        and (
+          student.campaign_id = campaign.id
+          or lead.campaign_id = campaign.id
+        )
         and payment.paid_at >= ${businessRangeStart}
         and payment.paid_at < ${businessRangeEndExclusive}
     ) payment_summary on true

@@ -6,6 +6,7 @@ Primary product sources:
 
 - `Artmonia_ERP_Final_Technical_PRD_v2.0.pdf` (initial MVP)
 - `Artmonia-ERP-Biznes-Mentiqi-2026-10-18.pdf` (confirmed business rules BK-01…BK-25; overrides older conflicting notes below)
+- In-repo extract: `docs/bk-01-bk-25-rules.md` (BK + AQ open edges)
 
 The product is an education ERP, not a simple CRM. Core coverage: CRM, students, enrollments, payments/debt, teacher HR/payroll basics, dashboards, targets, audit log, and Excel migration.
 

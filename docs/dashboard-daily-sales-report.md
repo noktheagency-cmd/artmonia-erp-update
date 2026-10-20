@@ -29,8 +29,8 @@ Popup-lar 50 qeyd/səhifə, ən çox 200 səhifədir. CRM əlaqə/görüş tarix
 Miqrasiya: prisma/migrations/20261010120000_daily_sales_facts/migration.sql. Sətirlər və pul silinmir. Köhnə payments UNCLASSIFIED, köhnə tələbələr admission_tracking=false qalır. Müqavilə və uyğun satış keçmiş qeydiyyatdan təxmin edilmir. Köhnə plan yalnız miqrasiya anından məlum sayılır; əvvəlki replanning tarixçəsi uydurulmur. Tamamlanmış köhnə follow-up işinin məlum vaxtı qorunur. Köhnə görüşün plan tarixi və nəticəsi köçürülür, amma faktiki vaxtı bilinmirsə occurred_at boş/is_legacy=true qalır və ayrıca göstərilir. Məsulu bilinməyən köhnə task mənbədə saxlanır.
 
 Miqrasiya PostgreSQL 17 olan ayrıca yerli UTF-8 inkişaf bazasında yoxlanıb. Canlı tətbiq üçün hədəf müəyyən edilməli, ehtiyat nüsxə və miqrasiya baxışı tamamlanmalıdır. Yeni kod və miqrasiya eyni buraxılışda tətbiq edilməlidir; yeni cədvəllər olmadan bu hesabat işləməz. Dashboard şirkət satış cəmi, CRM konversiya/satış və HR company KPI `newSales`/`convertedLeads`
-göstəriciləri eyni `course_sales` jurnalına bağlanıb (BK-21). HR acquisition bonus hələ
-`registered_at` təqvimindən istifadə edir və ayrıca siyasət kimi saxlanır.
+göstəriciləri eyni `course_sales` jurnalına bağlanıb (BK-21). HR acquisition bonus
+(`DEPARTMENT_SALES_COUNT`) də `course_sales` üzərindədir (satış sahibi).
 
 2026-10-15 deploy baxışı: `20261015120000_course_sale_cash_delete_guard` miqrasiyası adi, satışa bağlı olmayan ödənişin mövcud silinmə axınını qoruyur. Qəbul pulunun silinməsi, məbləğinin dəyişdirilməsi və refund qoruması saxlanır. Dörd sərhəd halı ayrıca müvəqqəti PostgreSQL cədvəllərində yoxlanıb, sintetik qeydlər rollback olunub.
 

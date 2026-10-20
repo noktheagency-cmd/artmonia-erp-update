@@ -1,4 +1,3 @@
-import { actualRegistrationSql } from "@/modules/students/sales-metrics-sql";
 import {
   HrBonusCampaignStatus,
   Prisma,
@@ -68,8 +67,9 @@ export async function calculateBonusCampaignValues(
         )
         when 'DEPARTMENT_SALES_COUNT'::"erp"."HrBonusMetricKind" then (
           select count(*)::numeric
-          from erp.students student
-          join erp.hr_employees employee on employee.user_id = student.manager_id
+          from erp.course_sales cs
+          join erp.students student on student.id = cs.student_id
+          join erp.hr_employees employee on employee.user_id = cs.owner_id
           where employee.department = campaign.department
             and exists (
               select 1 from erp.hr_bonus_participants participant
@@ -77,9 +77,10 @@ export async function calculateBonusCampaignValues(
                 and participant.employee_id = employee.id
                 and participant.is_eligible = true
             )
-            and ${actualRegistrationSql(Prisma.sql`student.registered_at`)}
-            and student.registered_at >= campaign.starts_at
-            and student.registered_at <= campaign.ends_at
+            and cs.cancelled_at is null
+            and cs.qualified_at >= campaign.starts_at
+            and cs.qualified_at <= campaign.ends_at
+            and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
             and student.is_test_data = false
         )
         when 'TEACHER_RETENTION_RATE'::"erp"."HrBonusMetricKind" then (
@@ -93,15 +94,7 @@ export async function calculateBonusCampaignValues(
         )
         else 0
       end as "baseValue",
-      case when campaign.metric_kind = 'DEPARTMENT_SALES_COUNT' then (
-        select count(*)::int from erp.students student
-        join erp.hr_employees employee on employee.user_id = student.manager_id
-        where employee.department = campaign.department
-          and exists (select 1 from erp.hr_bonus_participants participant where participant.campaign_id = campaign.id and participant.employee_id = employee.id and participant.is_eligible = true)
-          and student.registered_at >= campaign.starts_at and student.registered_at <= campaign.ends_at
-          and student.registered_at > (now() at time zone 'Asia/Baku')::date
-          and student.is_test_data = false
-      ) else 0 end as "scheduledValue",
+      0::int as "scheduledValue",
       coalesce((
         select sum(adjustment.amount)
         from erp.hr_bonus_progress_adjustments adjustment
@@ -153,8 +146,9 @@ export async function calculateBonusCampaignValue(campaignId: string) {
   } else if (campaign.metricKind === "DEPARTMENT_SALES_COUNT") {
     const [row] = await prisma.$queryRaw<NumericRow[]>(Prisma.sql`
       select count(*)::int as value
-      from erp.students s
-      join erp.hr_employees he on he.user_id = s.manager_id
+      from erp.course_sales cs
+      join erp.students s on s.id = cs.student_id
+      join erp.hr_employees he on he.user_id = cs.owner_id
       where he.department = ${campaign.department}
         and exists (
           select 1 from erp.hr_bonus_participants participant
@@ -162,9 +156,10 @@ export async function calculateBonusCampaignValue(campaignId: string) {
             and participant.employee_id = he.id
             and participant.is_eligible = true
         )
-        and ${actualRegistrationSql(Prisma.sql`s.registered_at`)}
-        and s.registered_at >= ${campaign.startsAt}
-        and s.registered_at <= ${campaign.endsAt}
+        and cs.cancelled_at is null
+        and cs.qualified_at >= ${campaign.startsAt}
+        and cs.qualified_at <= ${campaign.endsAt}
+        and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
         and s.is_test_data = false
     `);
     baseValue = Number(row?.value ?? 0);
@@ -413,18 +408,22 @@ async function calculateParticipantSalesValues(campaignId: string) {
   const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
     select
       participant.id::text as "participantId",
-      count(student.id)::int as value
+      count(cs.id)::int as value
     from erp.hr_bonus_participants participant
     left join erp.hr_employees employee on employee.id = participant.employee_id
-    left join erp.students student on student.manager_id = employee.user_id
-      and ${actualRegistrationSql(Prisma.sql`student.registered_at`)}
-      and student.registered_at >= (
+    left join erp.course_sales cs on cs.owner_id = employee.user_id
+      and cs.cancelled_at is null
+      and cs.qualified_at >= (
         select campaign.starts_at from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
       )
-      and student.registered_at <= (
+      and cs.qualified_at <= (
         select campaign.ends_at from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
       )
-      and student.is_test_data = false
+      and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
+      and exists (
+        select 1 from erp.students student
+        where student.id = cs.student_id and student.is_test_data = false
+      )
     where participant.campaign_id = ${campaignId}::uuid
       and participant.is_eligible = true
     group by participant.id

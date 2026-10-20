@@ -1232,7 +1232,7 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
     getPrisma().crmAppointment.findFirst({
       where: {
         leadId: lead.id,
-        kind: { in: ["CONSULTATION", "TRIAL"] },
+        kind: { in: ["MEETING", "CONSULTATION", "TRIAL"] },
         outcome: "SCHEDULED",
       },
       select: { id: true },
@@ -1240,7 +1240,7 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
     getPrisma().crmAppointment.findFirst({
       where: {
         leadId: lead.id,
-        kind: { in: ["CONSULTATION", "TRIAL"] },
+        kind: { in: ["MEETING", "CONSULTATION", "TRIAL"] },
         outcome: "ATTENDED",
       },
       select: { id: true },

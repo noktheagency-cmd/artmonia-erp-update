@@ -80,7 +80,7 @@ Exit criteria:
 
 - Payment states come from invoice balances
 - Advance can be allocated according to selected case
-- Frozen students stop billing
+- Frozen students keep their seat and continue monthly billing (BK-10)
 - Overdue tasks are created by job
 
 ## Phase 4 - Teachers + Payroll Basics

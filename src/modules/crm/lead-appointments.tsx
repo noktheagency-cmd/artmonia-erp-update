@@ -37,7 +37,7 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
   const [id, setId] = useState("");
   const [date, setDate] = useState(() => dailyReportWindow().date);
   const [time, setTime] = useState("12:00");
-  const [kind, setKind] = useState("CONSULTATION");
+  const [kind, setKind] = useState("MEETING");
   const [outcome, setOutcome] = useState("SCHEDULED");
   const [teacher, setTeacher] = useState("");
   const [actualDate, setActualDate] = useState(() => dailyReportWindow().date);
@@ -71,7 +71,7 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
     setId("");
     setKey(crypto.randomUUID());
     setOutcome("SCHEDULED");
-    setKind("CONSULTATION");
+    setKind("MEETING");
   }
 
   async function save(form: FormData) {
@@ -149,6 +149,9 @@ export function LeadAppointments({ leadId }: { leadId: string }) {
                   label,
                 }))}
               />
+              <small className="payment-policy-note">
+                BK-16: əsas seçim “Görüş”dir. Konsultasiya/sınaq yalnız detal üçündür; hesabatda hamısı bir axındır.
+              </small>
             </label>
             <label className="form-field">
               <span>Nəticə</span>

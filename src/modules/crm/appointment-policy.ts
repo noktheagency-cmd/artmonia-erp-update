@@ -4,7 +4,7 @@ const optionalId = z.preprocess(optionalFormString, z.string().uuid().optional()
 export const appointmentSchema = z.object({
   leadId: z.string().uuid(), idempotencyKey: z.string().uuid(), appointmentId: optionalId,
   date: z.iso.date(), time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-  kind: z.enum(["CONSULTATION", "TRIAL"]), teacherId: optionalId,
+  kind: z.enum(["MEETING", "CONSULTATION", "TRIAL"]), teacherId: optionalId,
   outcome: z.enum(["SCHEDULED", "ATTENDED", "NO_SHOW", "CANCELLED", "RESCHEDULED"]),
   occurredDate: z.preprocess((value) => value === "" ? undefined : value, z.iso.date().optional()),
   occurredTime: z.preprocess((value) => value === "" ? undefined : value, z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional()),
@@ -16,10 +16,14 @@ export const appointmentSchema = z.object({
 });
 export const appointmentOutcomeLabels = { SCHEDULED: "Təyin edildi", ATTENDED: "Baş tutdu", NO_SHOW: "Gəlmədi", CANCELLED: "Ləğv edildi", RESCHEDULED: "Təxirə salındı" };
 
-/** BK-16: main reports treat consultation+trial as one meeting flow; kind is a detail subtype. */
+/** BK-16: MEETING is the unified flow; CONSULTATION/TRIAL remain optional detail subtypes. */
 export const appointmentKindLabels = {
-  CONSULTATION: "Görüş · konsultasiya",
-  TRIAL: "Görüş · sınaq",
+  MEETING: "Görüş",
+  CONSULTATION: "Görüş · konsultasiya (detal)",
+  TRIAL: "Görüş · sınaq (detal)",
 } as const;
+
+/** All appointment kinds that count in the unified meeting flow / registration attendance. */
+export const meetingAppointmentKinds = ["MEETING", "CONSULTATION", "TRIAL"] as const;
 
 export function appointmentInstant(date: string, time: string) { return new Date(date + "T" + time + ":00+04:00"); }

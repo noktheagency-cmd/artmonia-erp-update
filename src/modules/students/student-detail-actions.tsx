@@ -40,8 +40,8 @@ import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-pol
 const studentStatusOptions = [
   { value: "SLOT_WAITING", label: "Slota əlavə et / Slot gözləyir" },
   { value: "ACTIVE", label: "Aktiv" },
-  { value: "FROZEN", label: "Dondurulub" },
-  { value: "FROZEN_RESERVED", label: "Dondurulub — yer rezervdir" },
+  // BK-10: single freeze — seat kept, monthly billing continues.
+  { value: "FROZEN", label: "Dondurulub (yer saxlanır, haqq davam edir)" },
   { value: "STOPPED", label: "Dayandırılıb" },
   { value: "DECLINED", label: "İmtina edib" },
   { value: "COMPLETED", label: "Tamamlayıb" },
@@ -136,15 +136,15 @@ export function StudentDetailActions({
   const [packageOpen, setPackageOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
-  const [statusValue, setStatusValue] = useState(student.freezeReserved ? "FROZEN_RESERVED" : student.lifecycleStatusValue);
+  const [statusValue, setStatusValue] = useState(student.lifecycleStatusValue);
   const [statusBusy, setStatusBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(student.detail.paymentDefaultAmount);
   const [paymentDate, setPaymentDate] = useState(student.detail.paymentDefaultDate);
   const [paymentMonth, setPaymentMonth] = useState(student.detail.paymentDefaultMonth);
   const availableStudentStatusOptions = studentStatusOptions.filter(
-    (option) => (option.value !== "ACTIVE" || student.lifecycleStatusValue === "ACTIVE" || student.freezeReserved)
-      && (option.value !== "FROZEN_RESERVED" || student.lifecycleStatusValue === "ACTIVE" || student.freezeReserved),
+    (option) => option.value !== student.lifecycleStatusValue
+      || (option.value === "ACTIVE" && student.freezeReserved),
   );
   const sourceOptions = editOptions.sourceOptions.includes(student.detail.source)
     ? editOptions.sourceOptions
@@ -291,7 +291,7 @@ export function StudentDetailActions({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={statusOpen} onOpenChange={(value) => { if (statusBusy) return; setStatusOpen(value); if (value) setStatusValue(student.freezeReserved ? "FROZEN_RESERVED" : student.lifecycleStatusValue); }}>
+      <Dialog open={statusOpen} onOpenChange={(value) => { if (statusBusy) return; setStatusOpen(value); if (value) setStatusValue(student.lifecycleStatusValue); }}>
         <DialogTrigger asChild>
           <Button className="student-action-status" variant="outline" type="button" disabled={!permissions.canChangeStatus}>
             <RefreshCcw data-icon="inline-start" />
@@ -302,8 +302,8 @@ export function StudentDetailActions({
           <DialogHeader>
             <DialogTitle>Status dəyiş</DialogTitle>
             <DialogDescription>
-              Adi dondurma slotu bağlayır. Rezervli dondurma yeri saxlayır və aylıq ödəniş hesablanmağa davam edir. Rezervdən birbaşa Aktiv statusuna qayıtmaq mümkündür.
-              Keçmiş fasilənin borcunu yoxlamaq üçün profildəki “Dondurulma dövrləri” bölməsindən istifadə edin.
+              Dondurma yerini saxlayır və aylıq haqq hesablanmağa davam edir (BK-10). Ödəniş günü dəyişmir; ödənişi ayrıca “Ödəniş qəbul et”dən yazın.
+              Keçmiş fasilə üçün profildəki “Dondurulma dövrləri” bölməsinə baxın.
             </DialogDescription>
           </DialogHeader>
 
@@ -335,13 +335,15 @@ export function StudentDetailActions({
               <Input
                 name="note"
                 maxLength={240}
-                required={statusValue === "FROZEN_RESERVED" || student.freezeReserved}
+                required={statusValue === "FROZEN" || student.freezeReserved}
                 placeholder="Məsələn: slot başladı, imtina etdi"
               />
             </label>
 
             <p className="payment-policy-note">
-              {statusValue === "FROZEN_RESERVED" ? "Yer bron olunur, dərs keçirilməsə də aylıq haqq qalır. Ödənişi ayrıca “Ödəniş qəbul et” düyməsindən həmin ay üçün qeyd edin; bu seçim ödənişi avtomatik qəbul etmir." : "İmtina zamanı qəbul edilən ödəniş geri qaytarılmır."}
+              {statusValue === "FROZEN"
+                ? "Yer saxlanır, dərs keçirilməsə də aylıq haqq qalır. Bu seçim ödənişi avtomatik qəbul etmir."
+                : "İmtina zamanı qəbul edilən ödəniş geri qaytarılmır."}
             </p>
 
             <DialogFooter>
@@ -682,7 +684,7 @@ export function StudentDetailActions({
                     <FormSelect
                       name="lifecycleStatus"
                       defaultValue={student.lifecycleStatusValue}
-                      options={availableStudentStatusOptions.filter(option=>option.value!=="FROZEN_RESERVED")}
+                      options={availableStudentStatusOptions}
                     />
                   ) : (
                     <>

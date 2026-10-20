@@ -586,13 +586,19 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
               Prisma.sql`${periodStart}`,
               Prisma.sql`${periodEndExclusive}`,
             )}::int as sales,
-            coalesce(sum(p.amount), 0) as revenue
+            coalesce((
+              select sum(p.amount)
+              from erp.course_sales cs
+              join erp.students sale_student on sale_student.id = cs.student_id
+              join erp.payments p on p.course_sale_id = cs.id
+              where cs.owner_id = u.id
+                and cs.cancelled_at is null
+                and sale_student.is_test_data = false
+                and cs.qualified_at >= ${periodStart}::date
+                and cs.qualified_at < ${periodEndExclusive}::date
+            ), 0) as revenue
           from erp.leads l
           join erp.users u on u.id = l.manager_id and u.is_active = true
-          left join erp.payments p
-            on p.student_id = l.converted_student_id
-            and p.paid_at >= ${periodStart}
-            and p.paid_at < ${periodEndExclusive}
           where l.created_at >= ${periodStart}
             and l.created_at < ${periodEndExclusive}
           group by u.id, coalesce(u.full_name, 'Menecer təyin edilməyib')
@@ -712,9 +718,9 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const totalAging = debtByBucket.reduce((sum, bucket) => sum + bucket.value, 0);
 
   const totalLeadsThisMonth = toNumber(row?.totalLeadsThisMonth);
-  const convertedLeadsThisMonth = toNumber(row?.convertedLeadsThisMonth);
-  const conversionRate = totalLeadsThisMonth > 0 
-    ? `${Math.round((convertedLeadsThisMonth / totalLeadsThisMonth) * 100)}%`
+  const companySalesCount = toNumber(row?.companySalesCount);
+  const conversionRate = totalLeadsThisMonth > 0
+    ? `${Math.round((companySalesCount / totalLeadsThisMonth) * 100)}%`
     : "0%";
   const churnCounts = row?.retention ?? { population: 0, frozen: 0, stopped: 0, total: 0 };
   const churnRate = `${retentionRate(churnCounts.total, churnCounts.population)}%`;
@@ -860,8 +866,8 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     programStats,
     teamPerformance,
     conversionRate,
-    conversionHelper: `${convertedLeadsThisMonth} satış / ${totalLeadsThisMonth} müraciət`,
-    salesCount: toNumber(row?.companySalesCount),
+    conversionHelper: `${companySalesCount} satış / ${totalLeadsThisMonth} müraciət`,
+    salesCount: companySalesCount,
     totalLeadCount: totalLeadsThisMonth,
     churnRate,
     churnCounts,

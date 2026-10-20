@@ -18,7 +18,7 @@ export async function resolveRegistrationMeetingAttendance(
   const appointments = await tx.crmAppointment.findMany({
     where: {
       leadId: input.leadId,
-      kind: { in: ["CONSULTATION", "TRIAL"] },
+      kind: { in: ["MEETING", "CONSULTATION", "TRIAL"] },
     },
     orderBy: [{ plannedAt: "desc" }, { createdAt: "desc" }],
     select: {
@@ -73,13 +73,13 @@ export function leadNeedsMeetingAttendanceConfirmSql() {
     exists (
       select 1 from erp.crm_appointments a
       where a.lead_id = l.id
-        and a.kind in ('CONSULTATION', 'TRIAL')
+        and a.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
         and a.outcome = 'SCHEDULED'
     )
     and not exists (
       select 1 from erp.crm_appointments a2
       where a2.lead_id = l.id
-        and a2.kind in ('CONSULTATION', 'TRIAL')
+        and a2.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
         and a2.outcome = 'ATTENDED'
     )
   )`;

@@ -70,8 +70,8 @@ export function ownerSalesCountSql(
 }
 
 /**
- * Acquisition-bonus eligibility still uses registration calendar day (not sale journal).
- * Bonus policy is intentionally separate from company/KPI admission-sale totals.
+ * Calendar-day guard for dates that must not count in the future (Baku).
+ * Prefer course_sales.qualified_at for admission-sale KPIs and HR sales bonus.
  */
 export function actualRegistrationSql(date: Prisma.Sql) {
   return Prisma.sql`${date} <= (now() at time zone 'Asia/Baku')::date`;
