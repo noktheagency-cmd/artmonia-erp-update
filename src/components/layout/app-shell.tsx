@@ -39,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
+import { TabGlide } from "@/components/ui/tab-glide";
 import { FormInputGuards } from "@/components/ui/form-input-guards";
 import { SessionHeartbeat } from "@/components/auth/session-heartbeat";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -414,6 +415,7 @@ export function AppShell({
       )}
     >
       {sessionGuardEnabled ? <SessionHeartbeat /> : null}
+      <TabGlide />
       <FormInputGuards />
       <div className="studio-wash" aria-hidden="true" />
       <div className="route-progress" aria-hidden={!isNavigating} data-visible={isNavigating} />
