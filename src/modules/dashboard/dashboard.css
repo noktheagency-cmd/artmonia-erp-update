@@ -194,8 +194,7 @@
 
 .owner-dashboard-company-kpi-progress [data-slot="progress-track"],
 .owner-dashboard-company-kpi-metric-progress [data-slot="progress-track"] {
-  transform-origin: center;
-  animation: owner-dashboard-kpi-swell 1.8s ease-in-out infinite;
+  overflow: visible;
 }
 
 .owner-dashboard-company-kpi-progress [data-slot="progress-track"] {
@@ -206,7 +205,9 @@
 .owner-dashboard-company-kpi-metric-progress [data-slot="progress-indicator"] {
   position: relative;
   overflow: hidden;
-  animation: owner-dashboard-kpi-glow 1.8s ease-in-out infinite;
+  border-radius: 999px;
+  transform-origin: center;
+  animation: owner-dashboard-kpi-swell 1.8s ease-in-out infinite;
 }
 
 .owner-dashboard-company-kpi-progress [data-slot="progress-indicator"]::after,
@@ -232,14 +233,9 @@
 }
 
 @keyframes owner-dashboard-kpi-swell {
-  0%, 16%, 100% { transform: scaleY(1); }
-  42% { transform: scaleY(2); }
-  64% { transform: scaleY(1.12); }
-}
-
-@keyframes owner-dashboard-kpi-glow {
-  0%, 16%, 100% { filter: brightness(1); }
-  42% { filter: brightness(1.22); }
+  0%, 16%, 100% { transform: scaleY(1); filter: brightness(1); }
+  42% { transform: scaleY(2); filter: brightness(1.22); }
+  64% { transform: scaleY(1.12); filter: brightness(1.06); }
 }
 
 .owner-dashboard-company-kpi-chevron {
@@ -1229,15 +1225,10 @@
   .owner-dashboard-header .dashboard-date-trigger:hover,
   .owner-dashboard-header .dashboard-date-trigger.is-open { transform: none; }
 
-  .owner-dashboard-company-kpi-progress [data-slot="progress-track"],
-  .owner-dashboard-company-kpi-metric-progress [data-slot="progress-track"] {
-    animation: none;
-    transform: none;
-  }
-
   .owner-dashboard-company-kpi-progress [data-slot="progress-indicator"],
   .owner-dashboard-company-kpi-metric-progress [data-slot="progress-indicator"] {
     animation: none;
+    transform: none;
     filter: none;
   }
 

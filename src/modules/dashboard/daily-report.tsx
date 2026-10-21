@@ -65,23 +65,55 @@ export function DailyReport({data}:{data:DailyReportData}) {
     returnSales={report.returnSales}
   />
   <footer className="daily-report-footer">Rəqəmə klikləyərək əməliyyatlara baxın <ChevronRight size={14}/></footer>
-  <Dialog open={active!==null} onOpenChange={open=>{if(!open)setSelected(null);}}><DialogContent className={"daily-report-dialog daily-report-"+(active?.tone??"blue")}><DialogHeader><span className="daily-report-dialog-icon">{ActiveIcon?<ActiveIcon size={24}/>:null}</span><DialogTitle>{active?.title}</DialogTitle>{active?.description?<DialogDescription>{active.description}</DialogDescription>:null}</DialogHeader>
-   {active?.title==="Satış və ödəniş"?(
-    <>
-     <h3 className="daily-report-metric-heading">Satışın mənbəyi</h3>
-     <dl className="daily-report-metrics">
-      {([["CRM",report.crmSales],["Birbaşa",report.directSales],["Yeni qəbul",report.newSales],["Qayıdış",report.returnSales]] as const).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
-     </dl>
-     <h3 className="daily-report-metric-heading">Ödənişin istiqaməti</h3>
-     <dl className="daily-report-metrics">
-      {([["Qəbul ödənişi",report.deposit+" AZN"],["İlk dövrün qalığı",report.balance+" AZN"],["Davam ödənişi",report.renewal+" AZN"],["Birdəfəlik dərs",report.oneOff+" AZN"],["Digər / workshop",report.other+" AZN"],["Bölgüsü təsdiqlənməmiş pul",report.unclassified+" AZN"]] as const).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
-     </dl>
-    </>
-   ):(
-    <dl className="daily-report-metrics">{active?.metrics.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-   )}
-   <div className="daily-report-detail-tabs">{active?.kinds.map(k=><Button key={k} type="button" variant={kind===k?"default":"secondary"} disabled={detailBusy} onClick={()=>void fetchDetails(k)}>{kindLabels[k]}</Button>)}</div>
-   {detailError?<p role="alert">{detailError}</p>:null}{detailBusy?<p role="status">Yüklənir…</p>:<><div className="daily-report-detail-list">{details.length===0?<p>Əməliyyat qeydi yoxdur.</p>:details.map(row=><article key={row.id}><strong>{row.name}</strong><small>{new Intl.DateTimeFormat("az-AZ",{timeZone:"Asia/Baku",dateStyle:"short",timeStyle:"short"}).format(new Date(row.at))}</small><p>{detailLabel(row.description)}</p></article>)}</div><div className="daily-report-detail-tabs"><Button type="button" variant="secondary" disabled={page===0} onClick={()=>void fetchDetails(kind,page-1)}>Əvvəlki</Button><span>{page+1}</span><Button type="button" variant="secondary" disabled={!hasMore||page>=199} onClick={()=>void fetchDetails(kind,page+1)}>Növbəti</Button></div></>}
-  </DialogContent></Dialog>
+  <Dialog open={active!==null} onOpenChange={open=>{if(!open)setSelected(null);}}>
+   <DialogContent className={"daily-report-dialog daily-report-"+(active?.tone??"blue")+(active?.title==="Satış və ödəniş"?" daily-report-dialog-wide":"")}>
+    <DialogHeader>
+     <span className="daily-report-dialog-icon">{ActiveIcon?<ActiveIcon size={24}/>:null}</span>
+     <DialogTitle>{active?.title}</DialogTitle>
+     {active?.description?<DialogDescription>{active.description}</DialogDescription>:null}
+    </DialogHeader>
+    {active?.title==="Satış və ödəniş"?(
+     <>
+      <div className="daily-report-cash-tabs" role="tablist" aria-label="Satış və ödəniş">
+       <Button type="button" role="tab" aria-selected={kind!=="payments"} variant={kind!=="payments"?"default":"secondary"} disabled={detailBusy} onClick={()=>void fetchDetails("sales")}>Satış</Button>
+       <Button type="button" role="tab" aria-selected={kind==="payments"} variant={kind==="payments"?"default":"secondary"} disabled={detailBusy} onClick={()=>void fetchDetails("payments")}>Ödəniş</Button>
+      </div>
+      {kind==="payments"?(
+       <>
+        <h3 className="daily-report-metric-heading">Ödənişin istiqaməti</h3>
+        <dl className="daily-report-metrics">
+         {([["Qəbul ödənişi",report.deposit+" AZN"],["İlk dövrün qalığı",report.balance+" AZN"],["Davam ödənişi",report.renewal+" AZN"],["Birdəfəlik dərs",report.oneOff+" AZN"],["Digər / workshop",report.other+" AZN"],["Bölgüsü təsdiqlənməmiş pul",report.unclassified+" AZN"]] as const).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+        </dl>
+       </>
+      ):(
+       <>
+        <h3 className="daily-report-metric-heading">Satışın mənbəyi</h3>
+        <dl className="daily-report-metrics">
+         {([["CRM",report.crmSales],["Birbaşa",report.directSales],["Yeni qəbul",report.newSales],["Qayıdış",report.returnSales]] as const).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+        </dl>
+       </>
+      )}
+     </>
+    ):(
+     <>
+      <dl className="daily-report-metrics">{active?.metrics.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+      <div className="daily-report-detail-tabs">{active?.kinds.map(k=><Button key={k} type="button" variant={kind===k?"default":"secondary"} disabled={detailBusy} onClick={()=>void fetchDetails(k)}>{kindLabels[k]}</Button>)}</div>
+     </>
+    )}
+    {detailError?<p role="alert">{detailError}</p>:null}
+    {detailBusy?<p role="status">Yüklənir…</p>:(
+     <>
+      <div className="daily-report-detail-list">
+       {details.length===0?<p>Əməliyyat qeydi yoxdur.</p>:details.map(row=><article key={row.id}><strong>{row.name}</strong><small>{new Intl.DateTimeFormat("az-AZ",{timeZone:"Asia/Baku",dateStyle:"short",timeStyle:"short"}).format(new Date(row.at))}</small><p>{detailLabel(row.description)}</p></article>)}
+      </div>
+      <div className="daily-report-detail-tabs">
+       <Button type="button" variant="secondary" disabled={page===0} onClick={()=>void fetchDetails(kind,page-1)}>Əvvəlki</Button>
+       <span>{page+1}</span>
+       <Button type="button" variant="secondary" disabled={!hasMore||page>=199} onClick={()=>void fetchDetails(kind,page+1)}>Növbəti</Button>
+      </div>
+     </>
+    )}
+   </DialogContent>
+  </Dialog>
  </section>;
 }
