@@ -1,4 +1,4 @@
-import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
+import { registeredSalesCountSql } from "@/modules/students/sales-metrics-sql";
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
@@ -204,7 +204,7 @@ async function getActuals(periodStart: Date, actualEnd: Date): Promise<CompanyKp
             s.lifecycle_status
           ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
       ), 0) as "openingActiveStudents",
-      ${companySalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${actualEnd}`)} as "newSales",
+      ${registeredSalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${actualEnd}`)} as "newSales",
       coalesce((
         select count(distinct h.student_id)::int
         from erp.student_status_history h
@@ -229,20 +229,21 @@ async function getActuals(periodStart: Date, actualEnd: Date): Promise<CompanyKp
         from erp.leads l
         where l.created_at >= ${periodStart}
           and l.created_at < ${actualEnd}
-          and exists (
-            select 1
-            from erp.course_sales cs
-            join erp.students sale_student on sale_student.id = cs.student_id
-            where sale_student.is_test_data = false
-              and cs.cancelled_at is null
-              and cs.qualified_at < ${actualEnd}
-              and (
-                cs.lead_id = l.id
-                or (
-                  l.converted_student_id is not null
-                  and cs.student_id = l.converted_student_id
-                )
-              )
+          and (
+            exists (
+              select 1
+              from erp.lead_stage_history lh
+              where lh.lead_id = l.id
+                and lh.new_stage = 'REGISTERED'::"erp"."LeadStage"
+                and lh.created_at < ${actualEnd}
+            )
+            or exists (
+              select 1
+              from erp.students converted
+              where converted.id = l.converted_student_id
+                and converted.registered_at < ${actualEnd}
+                and converted.is_test_data = false
+            )
           )
       ), 0) as "convertedLeads",
       coalesce((

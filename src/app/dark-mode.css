@@ -589,6 +589,9 @@ html.dark .owner-dashboard-insight-card {
 html.dark .owner-dashboard-insight-conversion {
   background: linear-gradient(145deg, rgb(84 79 176 / 20%), var(--dm-surface)) !important;
 }
+html.dark .owner-dashboard-insight-sale { border-bottom-color: var(--dm-line); }
+html.dark .owner-dashboard-insight-sale strong { color: #d9d4ff; }
+html.dark .owner-dashboard-insight-conversion-link:hover { background: rgb(255 255 255 / 4%); }
 
 html.dark .owner-dashboard-insight-forecast {
   background: linear-gradient(145deg, rgb(31 130 112 / 20%), var(--dm-surface)) !important;

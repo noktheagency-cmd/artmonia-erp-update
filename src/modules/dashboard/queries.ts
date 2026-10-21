@@ -857,7 +857,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     programStats,
     teamPerformance,
     conversionRate,
-    conversionHelper: `${convertedLeadsThisMonth} satış / ${totalLeadsThisMonth} müraciət`,
+    conversionHelper: `${convertedLeadsThisMonth} qeydiyyat / ${totalLeadsThisMonth} müraciət`,
     salesCount: companySalesCount,
     totalLeadCount: totalLeadsThisMonth,
     churnRate,

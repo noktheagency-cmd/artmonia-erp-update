@@ -37,19 +37,25 @@ export function DashboardInsights({
 
   return (
     <aside className="owner-dashboard-panel owner-dashboard-insights-panel owner-dashboard-entrance">
-      <Link
-        href="/crm?salesDetails=1"
-        className="owner-dashboard-insight-card owner-dashboard-insight-conversion"
-        aria-haspopup="dialog"
-        aria-label="Satış sayı və konversiya detallarını aç"
-      >
-        <MetricRing value={conversionValue} config={conversionChartConfig} tone="conversion" />
-        <div className="owner-dashboard-insight-copy">
-          <span><Percent size={15} aria-hidden="true" /> Satış sayı</span>
+      <article className="owner-dashboard-insight-card owner-dashboard-insight-conversion">
+        <div className="owner-dashboard-insight-sale">
+          <span>Bu ay satış</span>
           <strong>{salesCount}</strong>
-          <small>Konversiya {conversionRate} · {conversionHelper}</small>
         </div>
-      </Link>
+        <Link
+          href="/crm?salesDetails=1"
+          className="owner-dashboard-insight-conversion-link"
+          aria-haspopup="dialog"
+          aria-label="Konversiya detallarını aç"
+        >
+          <MetricRing value={conversionValue} config={conversionChartConfig} tone="conversion" />
+          <span className="owner-dashboard-insight-copy">
+            <span><Percent size={15} aria-hidden="true" /> Konversiya</span>
+            <strong>{conversionRate}</strong>
+            <small>{conversionHelper}</small>
+          </span>
+        </Link>
+      </article>
 
       <Link
         href={retentionDetailsHref(from, to)}

@@ -48,7 +48,7 @@ export function CrmConversionDialog({
           <div>
             <DialogTitle>Konversiya detalları</DialogTitle>
             <DialogDescription visible>
-              Müraciətdən əlaqəyə, konsultasiyaya və qeydiyyata qədər satış axınının nəticələri.
+              Seçilmiş dövrdə yaranmış {totalLeads} müraciətin nəticəsi.
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -74,7 +74,7 @@ export function CrmConversionDialog({
             <header>
               <div>
                 <h3 id="crm-conversion-funnel-title">Satış hunisi</h3>
-                <p>Seçilmiş dövr üzrə mərhələlərdə olan müraciət sayı</p>
+                <p>Eyni müraciət bir neçə mərhələdə sayılır.</p>
               </div>
               <span>{stats.contactRate} əlaqə faizi</span>
             </header>
@@ -98,14 +98,28 @@ export function CrmConversionDialog({
           <section className="crm-conversion-detail-section" aria-labelledby="crm-conversion-results-title">
             <header>
               <div>
-                <h3 id="crm-conversion-results-title">Nəticə detalları</h3>
-                <p>Satış kanalı, sınaq dərsi və itki göstəriciləri</p>
+                <h3 id="crm-conversion-results-title">{stats.salesCount} qeydiyyatın bölgüsü</h3>
+                <p>Birbaşa və konsultasiya ilə qeydiyyat</p>
               </div>
               <span>{stats.consultationToSaleRate} konsultasiya → satış</span>
             </header>
-            <div className="crm-conversion-result-grid">
+            <div className="crm-conversion-result-grid is-split">
               <ConversionResult icon={Target} label="Birbaşa satış" value={stats.directSales} tone="blue" />
               <ConversionResult icon={CircleDollarSign} label="Konsultasiya ilə satış" value={stats.consultationSales} tone="green" />
+            </div>
+            <p className="crm-conversion-split-total">
+              {stats.directSales} + {stats.consultationSales} = {stats.salesCount}
+            </p>
+          </section>
+
+          <section className="crm-conversion-detail-section" aria-labelledby="crm-conversion-extra-title">
+            <header>
+              <div>
+                <h3 id="crm-conversion-extra-title">Əlavə</h3>
+                <p>Bu rəqəmlər qeydiyyatın hissəsi deyil</p>
+              </div>
+            </header>
+            <div className="crm-conversion-result-grid is-extra">
               <ConversionResult icon={Presentation} label="Sınaq dərsi" value={stats.trialLessonLeads} helper={`${stats.trialLessonCount} dərs`} tone="amber" />
               <ConversionResult icon={TrendingDown} label="İtki faizi" value={stats.lossRate} tone="coral" />
             </div>
