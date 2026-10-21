@@ -1,4 +1,4 @@
-export const STUDENT_LIST_PAGE_SIZE = 50;
+export const STUDENT_LIST_PAGE_SIZE = 15;
 
 export type StudentPaginationItem =
   | number

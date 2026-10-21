@@ -2,11 +2,13 @@
 
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import type { PaymentDateRiskDto } from "@/modules/audit/session-types";
 import styles from "./audit-log.module.css";
 
 export function PaymentDateAuditPanel({ payments }: { payments: PaymentDateRiskDto[] }) {
   const futureCount = payments.filter((payment) => payment.isFutureToday).length;
+  const pagination = useClientTablePagination(payments);
 
   return (
     <section className={styles.auditPanel}>
@@ -28,7 +30,7 @@ export function PaymentDateAuditPanel({ payments }: { payments: PaymentDateRiskD
             </tr>
           </thead>
           <tbody>
-            {payments.map((payment) => (
+            {pagination.pageRows.map((payment) => (
               <tr key={payment.id}>
                 <td><strong>{payment.studentName}</strong><small>{payment.studentCode}</small></td>
                 <td><strong>{payment.amount} ₼</strong></td>
@@ -42,6 +44,14 @@ export function PaymentDateAuditPanel({ payments }: { payments: PaymentDateRiskD
         </table>
         {!payments.length ? <div className={styles.empty}>Riskli ödəniş tarixi tapılmadı.</div> : null}
       </div>
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        label="Ödəniş tarixi yoxlaması səhifələri"
+      />
     </section>
   );
 }

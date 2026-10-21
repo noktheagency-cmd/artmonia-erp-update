@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type CSSProperties,
@@ -51,6 +53,7 @@ import {
 import type {
   PlannerJournalMember,
   PlannerSlot,
+  PlannerStudentDetail,
   PlannerWorkspaceData,
 } from "@/modules/groups/planner-queries";
 import {
@@ -60,6 +63,8 @@ import {
   selectedSlotsFirst,
   slotsForAssignedTeacher,
 } from "@/modules/groups/planner-assignment";
+import { canEditAttendanceToday } from "@/modules/groups/planner-journal";
+import { getPlannerSlotDetailAction } from "@/modules/groups/planner-actions";
 import { bakuTimeOptions, buildPlannerTimeAxis } from "@/modules/groups/planner-time";
 import { SlotDetailDialog } from "@/modules/groups/slot-detail-dialog";
 import { AttendanceSiteQrDialog } from "@/modules/groups/attendance-site-qr-dialog";
@@ -72,6 +77,41 @@ type PlannerActions = {
   replaceSchedule: (formData: FormData) => Promise<unknown>;
   saveAttendance: (formData: FormData) => Promise<unknown>;
 };
+
+type SlotDetailState = PlannerWorkspaceData["slotDetail"];
+type CachedSlotDetail = SlotDetailState & {
+  journalCanEdit: boolean;
+  journalDisabledReason: string | null;
+};
+
+function stubSlotDetail(slot: PlannerSlot): SlotDetailState {
+  const members: PlannerStudentDetail[] = slot.members.map((member) => ({
+    ...member,
+    phone: null,
+    email: null,
+    educationLevel: null,
+    lifecycleStatus: "",
+    enrollmentStatus: "",
+    registeredAt: "",
+    enrollmentStartedAt: "",
+    assignmentStartedAt: "",
+    monthlyFee: "",
+    lessonsPerMonth: null,
+    managerName: null,
+    notes: null,
+    activationWarning: null,
+    relatedContacts: [],
+  }));
+  return { slotId: slot.id, members, journalHistory: [] };
+}
+
+function syncPlannerUrl(slotId: string, options?: { details?: boolean; attendance?: boolean }) {
+  const params = new URLSearchParams();
+  params.set("slot", slotId);
+  if (options?.details) params.set("details", "1");
+  if (options?.attendance) params.set("attendance", "1");
+  window.history.replaceState(window.history.state, "", `/groups?${params.toString()}`);
+}
 
 const shiftMeta = {
   morning: { label: "Səhər", value: "MORNING" },
@@ -174,6 +214,40 @@ export function PlannerWorkspace({
   const [attendanceOpen, setAttendanceOpen] = useState(initialAttendanceOpen);
   const [attendanceSiteQrOpen, setAttendanceSiteQrOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
+  const [liveDetail, setLiveDetail] = useState<SlotDetailState>(data.slotDetail);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [liveJournalGate, setLiveJournalGate] = useState({
+    slotId: data.journal.slotId,
+    canEdit: data.journal.canEdit,
+    disabledReason: data.journal.disabledReason,
+  });
+  const detailRequestId = useRef(0);
+  const detailCacheRef = useRef(new Map<string, CachedSlotDetail>());
+
+  useEffect(() => {
+    detailCacheRef.current.clear();
+    if (data.slotDetail.slotId) {
+      detailCacheRef.current.set(data.slotDetail.slotId, {
+        slotId: data.slotDetail.slotId,
+        members: data.slotDetail.members,
+        journalHistory: data.slotDetail.journalHistory,
+        journalCanEdit: data.journal.canEdit,
+        journalDisabledReason: data.journal.disabledReason,
+      });
+    }
+    setLiveDetail(data.slotDetail);
+    setLiveJournalGate({
+      slotId: data.journal.slotId,
+      canEdit: data.journal.canEdit,
+      disabledReason: data.journal.disabledReason,
+    });
+    setDetailLoading(false);
+  }, [
+    data.slotDetail,
+    data.journal.slotId,
+    data.journal.canEdit,
+    data.journal.disabledReason,
+  ]);
 
   const teacherSlotStyles = useMemo(
     () => buildTeacherSlotStyles(data.teachers.map((teacher) => teacher.id)),
@@ -232,16 +306,68 @@ export function PlannerWorkspace({
 
   function openSlotDetails(slot: PlannerSlot) {
     setSelectedSlotId(slot.id);
-    if (slot.id === data.selectedSlotId) {
-      setDetailsOpen(true);
+    setDetailsOpen(true);
+    syncPlannerUrl(slot.id, { details: true });
+
+    const cached = detailCacheRef.current.get(slot.id);
+    if (cached) {
+      setLiveDetail({
+        slotId: cached.slotId,
+        members: cached.members,
+        journalHistory: cached.journalHistory,
+      });
+      setLiveJournalGate({
+        slotId: cached.slotId,
+        canEdit: cached.journalCanEdit,
+        disabledReason: cached.journalDisabledReason,
+      });
+      setDetailLoading(false);
       return;
     }
-    router.push(`/groups?slot=${slot.id}&details=1` as Route);
+
+    setLiveDetail(stubSlotDetail(slot));
+    const optimisticJournal = canEditAttendanceToday({
+      today: data.today,
+      weekday: slot.weekday,
+      validFrom: slot.validFrom,
+      hasTeacher: Boolean(slot.teacherId),
+    });
+    setLiveJournalGate({
+      slotId: slot.id,
+      canEdit: optimisticJournal.canEdit,
+      disabledReason: optimisticJournal.reason,
+    });
+
+    const requestId = detailRequestId.current + 1;
+    detailRequestId.current = requestId;
+    setDetailLoading(true);
+    void (async () => {
+      try {
+        const result = unwrapActionResult(await getPlannerSlotDetailAction(slot.id));
+        if (requestId !== detailRequestId.current) return;
+        detailCacheRef.current.set(result.slotId, result);
+        setLiveDetail({
+          slotId: result.slotId,
+          members: result.members,
+          journalHistory: result.journalHistory,
+        });
+        setLiveJournalGate({
+          slotId: result.slotId,
+          canEdit: result.journalCanEdit,
+          disabledReason: result.journalDisabledReason,
+        });
+      } catch (error) {
+        if (requestId !== detailRequestId.current) return;
+        setNotice(notifyCaughtError(error, "Slot detalları yüklənmədi"));
+      } finally {
+        if (requestId === detailRequestId.current) setDetailLoading(false);
+      }
+    })();
   }
 
   function closeSlotDetails(slot: PlannerSlot) {
     setDetailsOpen(false);
-    router.replace(`/groups?slot=${slot.id}` as Route, { scroll: false });
+    syncPlannerUrl(slot.id);
   }
 
   function openAttendance(slot: PlannerSlot) {
@@ -423,16 +549,35 @@ export function PlannerWorkspace({
         </aside>
       </div>
 
-      {detailsOpen && selectedSlot && data.slotDetail.slotId === selectedSlot.id ? (
+      {detailsOpen && selectedSlot ? (
         <SlotDetailDialog
           key={selectedSlot.id}
           slot={selectedSlot}
-          detail={data.slotDetail}
+          detail={liveDetail.slotId === selectedSlot.id ? liveDetail : stubSlotDetail(selectedSlot)}
+          detailLoading={detailLoading || liveDetail.slotId !== selectedSlot.id}
           canManage={data.canManage}
           canManageAttendance={data.canManageAttendance}
           canReadStudentDetails={data.canReadStudentDetails}
-          journalCanEdit={data.journal.canEdit}
-          journalDisabledReason={data.journal.disabledReason}
+          journalCanEdit={
+            liveJournalGate.slotId === selectedSlot.id
+              ? liveJournalGate.canEdit
+              : canEditAttendanceToday({
+                  today: data.today,
+                  weekday: selectedSlot.weekday,
+                  validFrom: selectedSlot.validFrom,
+                  hasTeacher: Boolean(selectedSlot.teacherId),
+                }).canEdit
+          }
+          journalDisabledReason={
+            liveJournalGate.slotId === selectedSlot.id
+              ? liveJournalGate.disabledReason
+              : canEditAttendanceToday({
+                  today: data.today,
+                  weekday: selectedSlot.weekday,
+                  validFrom: selectedSlot.validFrom,
+                  hasTeacher: Boolean(selectedSlot.teacherId),
+                }).reason
+          }
           onClose={() => closeSlotDetails(selectedSlot)}
           onEditSlot={() => {
             closeSlotDetails(selectedSlot);

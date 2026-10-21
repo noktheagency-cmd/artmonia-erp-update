@@ -517,7 +517,7 @@ button.students-kpi { cursor: pointer; }
 .student-create-dialog .student-readonly-status { min-height: 38px; background: #eef3f8; border-color: #d7e0ea; border-radius: 10px; }
 .student-payment-toggle { min-height: 38px; padding: 0 12px; color: #3f4b61; background: #eef3f8; border-color: #d7e0ea; border-radius: 11px; font-size: 10.5px; }
 .student-create-dialog .payment-policy-note { padding: 9px 11px; color: #9c4b2f; background: #fff5ec; border-color: #f0d6c7; border-radius: 10px; font-size: 9.5px; }
-.student-create-dialog .ui-dialog-footer { position: sticky; bottom: 0; gap: 8px; margin: 0 -22px; padding: 11px 22px; background: rgb(248 250 252 / 96%); border-top: 1px solid #d7e0ea; backdrop-filter: blur(12px); }
+.student-create-dialog .ui-dialog-footer { position: sticky; bottom: 0; gap: 8px; margin: 0 -22px; padding: 11px 22px; background: transparent; border-top: 1px solid #d7e0ea; backdrop-filter: none; }
 .student-create-dialog .ui-dialog-footer .ui-button { min-height: 38px; border-radius: 10px; }
 
 .student-payment-dialog,
@@ -552,9 +552,9 @@ button.students-kpi { cursor: pointer; }
   gap: 8px;
   margin-top: 4px;
   padding-top: 12px;
-  background: rgb(248 250 252 / 96%);
+  background: transparent;
   border-top: 1px solid #d7e0ea;
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
 }
 .student-payment-dialog .student-payment-form,
 .student-edit-dialog .student-payment-form {

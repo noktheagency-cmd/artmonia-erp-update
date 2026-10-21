@@ -1,0 +1,274 @@
+.erp-table-pagination {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgb(248 250 252 / 78%), #eef3f8);
+  border-top: 1px solid #e3e7ee;
+}
+
+.erp-table-pagination-pages {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+}
+
+.erp-table-pagination-button {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  color: #6b7486;
+  background: #ffffff;
+  border: 1px solid #e3e7ee;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.erp-table-pagination-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.erp-table-pagination-button:hover:not(:disabled) {
+  color: #4667e8;
+  border-color: rgb(70 103 232 / 34%);
+  transform: translateY(-1px);
+}
+
+.erp-table-pagination-button[data-active="true"] {
+  color: #ffffff;
+  background: linear-gradient(135deg, #4667e8, #6682f0);
+  border-color: transparent;
+  box-shadow: 0 7px 16px rgb(70 103 232 / 22%);
+}
+
+.erp-table-pagination-button:disabled:not([data-active="true"]) {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.erp-table-pagination-ellipsis {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 32px;
+  color: #8b93a3;
+  font-size: 12px;
+}
+
+.erp-table-pagination-size {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+  color: #6b7486;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.erp-table-pagination-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.erp-table-pagination-size-trigger {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px 0 12px;
+  color: #202637;
+  background: #ffffff;
+  border: 1px solid #e3e7ee;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.erp-table-pagination-size-trigger svg {
+  width: 14px;
+  height: 14px;
+  color: #6b7486;
+  transition: transform 180ms ease;
+}
+
+.erp-table-pagination-select[data-open="true"] .erp-table-pagination-size-trigger {
+  color: #4667e8;
+  border-color: rgb(70 103 232 / 42%);
+  box-shadow: 0 0 0 3px rgb(70 103 232 / 14%);
+}
+
+.erp-table-pagination-select[data-open="true"] .erp-table-pagination-size-trigger svg {
+  color: #4667e8;
+  transform: rotate(180deg);
+}
+
+.erp-table-pagination-size-trigger:focus-visible,
+.erp-table-pagination-button:focus-visible,
+.erp-table-pagination-size-menu button:focus-visible {
+  outline: 3px solid rgb(70 103 232 / 22%);
+  outline-offset: 2px;
+}
+
+.erp-table-pagination-size-menu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  gap: 2px;
+  min-width: 92px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: #ffffff;
+  border: 1px solid #e4e8f0;
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgb(32 38 55 / 14%);
+  translate: 0 -100%;
+  animation: erp-table-pagination-menu-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.erp-table-pagination-size-menu[data-above="false"] {
+  translate: 0 0;
+}
+
+.erp-table-pagination-size-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  color: #3a4254;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.erp-table-pagination-size-menu button:hover {
+  color: #4667e8;
+  background: #edf1ff;
+}
+
+.erp-table-pagination-size-menu button[data-active="true"] {
+  color: #ffffff;
+  background: linear-gradient(135deg, #4667e8, #6682f0);
+  box-shadow: 0 6px 14px rgb(70 103 232 / 22%);
+}
+
+@keyframes erp-table-pagination-menu-in {
+  from { opacity: 0; translate: 0 calc(-100% + 6px); }
+  to { opacity: 1; translate: 0 -100%; }
+}
+
+.erp-table-pagination-size-menu[data-above="false"] {
+  animation-name: erp-table-pagination-menu-in-below;
+}
+
+@keyframes erp-table-pagination-menu-in-below {
+  from { opacity: 0; translate: 0 -6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+html.dark .erp-table-pagination {
+  background: var(--dm-surface-2);
+  border-top-color: var(--dm-line);
+}
+
+html.dark .erp-table-pagination-button,
+html.dark .erp-table-pagination-size-trigger,
+html.dark .erp-table-pagination-size-menu {
+  color: var(--dm-text-soft);
+  background: var(--dm-surface);
+  border-color: var(--dm-line);
+}
+
+html.dark .erp-table-pagination-size-menu {
+  box-shadow: 0 16px 36px rgb(0 0 0 / 36%);
+}
+
+html.dark .erp-table-pagination-size-menu button {
+  color: var(--dm-text-soft);
+}
+
+html.dark .erp-table-pagination-size-menu button:hover {
+  color: var(--dm-accent-strong);
+  background: var(--dm-surface-3);
+}
+
+html.dark .erp-table-pagination-size-menu button[data-active="true"] {
+  color: #1a1008;
+  background: linear-gradient(135deg, var(--dm-accent), var(--dm-accent-strong));
+  box-shadow: 0 6px 14px var(--dm-accent-glow);
+}
+
+html.dark .erp-table-pagination-select[data-open="true"] .erp-table-pagination-size-trigger {
+  color: var(--dm-accent-strong);
+  border-color: var(--dm-line-strong);
+  box-shadow: 0 0 0 3px var(--dm-accent-soft);
+}
+
+html.dark .erp-table-pagination-button:hover:not(:disabled) {
+  color: var(--dm-accent-strong);
+  border-color: var(--dm-line-strong);
+}
+
+html.dark .erp-table-pagination-button[data-active="true"] {
+  color: #1a1008;
+  background: linear-gradient(135deg, var(--dm-accent), var(--dm-accent-strong));
+  box-shadow: 0 7px 16px var(--dm-accent-glow);
+}
+
+html.dark .erp-table-pagination-ellipsis,
+html.dark .erp-table-pagination-size,
+html.dark .erp-table-pagination-size-trigger svg {
+  color: var(--dm-muted);
+}
+
+html.dark .erp-table-pagination-select[data-open="true"] .erp-table-pagination-size-trigger svg {
+  color: var(--dm-accent-strong);
+}
+
+@media (max-width: 720px) {
+  .erp-table-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .erp-table-pagination-pages {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .erp-table-pagination-pages::-webkit-scrollbar {
+    display: none;
+  }
+
+  .erp-table-pagination-size {
+    margin-left: 0;
+    justify-content: space-between;
+  }
+}

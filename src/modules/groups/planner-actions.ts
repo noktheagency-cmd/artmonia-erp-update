@@ -21,6 +21,7 @@ import {
   resolvePlanAnchor,
   selectionMatchesAssignedTeacher,
 } from "@/modules/groups/planner-assignment";
+import { getPlannerSlotDetail } from "@/modules/groups/planner-slot-detail";
 import {
   dateFromInput,
   formatDateAz,
@@ -782,6 +783,15 @@ function revalidatePlanner(studentId?: string) {
   updateTag(erpCacheTags.finance);
 }
 
+async function getPlannerSlotDetailActionImpl(slotId: string) {
+  const parsed = z.string().uuid().parse(slotId);
+  return getPlannerSlotDetail(parsed);
+}
+
+export const getPlannerSlotDetailAction = safeServerAction(
+  getPlannerSlotDetailActionImpl,
+  "Slot detalları yüklənmədi.",
+);
 export const createClassSlotAction = safeServerAction(
   createClassSlotActionImpl,
   "Dərs slotu yaradılmadı.",

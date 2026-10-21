@@ -3161,13 +3161,18 @@ html body .ui-checkbox:disabled {
   line-height: 1.5;
 }
 
-.ui-dialog-footer {
+.ui-dialog-footer,
+.ui-dialog-content > .ui-dialog-footer,
+[data-slot="dialog-footer"],
+.export-dialog-footer,
+.corporate-dialog-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 4px;
   background: transparent;
+  backdrop-filter: none;
 }
 
 @keyframes dialog-fade {
@@ -9905,7 +9910,7 @@ html body .ui-checkbox:disabled {
     bottom: -20px;
     padding-top: 12px;
     padding-bottom: 2px;
-    background: linear-gradient(180deg, rgb(248 250 255 / 0), #f8faff 36%);
+    background: transparent;
   }
 
   .ui-dialog-footer .ui-button {
@@ -18551,7 +18556,7 @@ html body .ui-checkbox:disabled {
   bottom: -12px;
   z-index: 2;
   padding: 10px 0 0;
-  background: linear-gradient(180deg, rgba(245, 247, 251, 0), var(--fin-soft) 30%);
+  background: transparent;
 }
 
 .erp-frame[data-dashboard-section="false"] .finance-form .ui-dialog-footer .ui-button {
@@ -20381,7 +20386,7 @@ html body .ui-checkbox:disabled {
   gap: 10px;
   justify-content: flex-end;
   padding: 10px 0 0;
-  background: linear-gradient(180deg, rgba(247, 249, 252, 0), #f7f9fc 38%);
+  background: transparent;
 }
 
 @media (max-width: 1260px) {
@@ -21974,7 +21979,7 @@ body .erp-frame th {
 .export-preview-table p { margin: 0; padding: 14px; color: #71809a; }
 .export-summary-toggle { margin-top: 14px; padding: 12px; border: 1px solid #bde8d7; border-radius: 9px; background: #f2fcf7; }
 .export-feedback { margin: 0; padding: 10px 26px; border-top: 1px solid #e3e9f3; color: #255cc4; font-size: 13px; }
-.export-dialog-footer { display: flex; justify-content: space-between; gap: 14px; padding: 17px 26px; border-top: 1px solid #e3e9f3; background: #fbfcfe; }
+.export-dialog-footer { display: flex; justify-content: space-between; gap: 14px; padding: 17px 26px; border-top: 1px solid #e3e9f3; background: transparent; }
 .export-format-switch { display: inline-flex; gap: 5px; padding: 3px; border: 1px solid #dfe7f2; border-radius: 9px; background: #fff; }
 .export-format-switch button { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 6px; padding: 7px 11px; background: transparent; color: #60708a; font-size: 12px; cursor: pointer; }
 .export-format-switch button.is-selected { background: #eaf1ff; color: #2146ca; font-weight: 700; }
@@ -22246,8 +22251,12 @@ body .erp-frame th {
 }
 
 .hr-compact-tabs [data-slot="tabs-trigger"]::after {
-  bottom: -15px !important;
-  height: 2px !important;
+  display: none;
+}
+
+.hr-compact-tabs [data-slot="tabs-indicator"] {
+  bottom: -15px;
+  height: 2px;
   background: #008a5e !important;
 }
 
@@ -23094,8 +23103,8 @@ body:has(.workshop-dialog) .ui-select-content {
   margin: 16px -28px 0 !important;
   padding: 16px 28px !important;
   border-top: 1px solid #e6ebf3 !important;
-  background: rgba(255, 255, 255, 0.98) !important;
-  box-shadow: 0 -10px 18px rgba(255, 255, 255, 0.88) !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .workshop-dialog-form button[type="submit"] {

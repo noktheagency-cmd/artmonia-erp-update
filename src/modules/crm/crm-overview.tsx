@@ -234,7 +234,6 @@ export function CrmOverview({
       <article className="crm-panel crm-attention-panel crm-enter" style={{ animationDelay: "170ms" }}>
         <AttentionGroup
           title="Bu gün daxil olan müraciətlər"
-          description="Bakı vaxtı ilə cari gündə follow-up-a əlavə edilən müraciətlər"
           tone="today"
           items={data.createdTodayFocus}
           onLeadSelect={onLeadSelect}
@@ -246,7 +245,6 @@ export function CrmOverview({
         <PanelHeading
           icon={AlertTriangle}
           title="Əlaqə gözləyən müraciətlər"
-          description="Cari günə, sabaha planlanan və vaxtı keçmiş əlaqələr"
           meta={`${visibleAttention.length} müraciət`}
           tone="coral"
         />
@@ -273,6 +271,7 @@ export function CrmOverview({
             tone="today"
             items={todayAttention}
             onLeadSelect={onLeadSelect}
+            stacked
           />
           <AttentionGroup
             title="Sabahın planları"
@@ -280,6 +279,7 @@ export function CrmOverview({
             tone="tomorrow"
             items={tomorrowAttention}
             onLeadSelect={onLeadSelect}
+            stacked
           />
           <AttentionGroup
             title="Gecikənlər"
@@ -287,6 +287,7 @@ export function CrmOverview({
             tone="overdue"
             items={overdueAttention}
             onLeadSelect={onLeadSelect}
+            stacked
           />
         </div>
       </article>
@@ -304,7 +305,7 @@ export function CrmOverview({
             <ChartContainer
               config={teamConfig}
               className="crm-team-chart"
-              style={{ height: `${Math.max(118, teamData.length * 34)}px` }}
+              style={{ height: `${Math.max(132, teamData.length * 40)}px` }}
             >
               <BarChart accessibilityLayer data={teamData} layout="vertical" margin={{ left: 2, right: 12 }}>
               <CartesianGrid horizontal={false} />
@@ -315,14 +316,15 @@ export function CrmOverview({
                 allowDecimals={false}
                 domain={[0, teamMax]}
                 ticks={[0, teamMax]}
+                tick={{ fontSize: 12 }}
               />
               <YAxis
                 type="category"
                 dataKey="manager"
                 axisLine={false}
                 tickLine={false}
-                width={92}
-                tick={{ fontSize: 9 }}
+                width={148}
+                tick={{ fontSize: 12 }}
               />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
@@ -373,13 +375,15 @@ function AttentionGroup({
   items,
   onLeadSelect,
   createdToday = false,
+  stacked = false,
 }: {
   title: string;
-  description: string;
+  description?: string;
   tone: "today" | "tomorrow" | "overdue";
   items: CrmData["attentionFocus"];
   onLeadSelect: (leadId: string) => void;
   createdToday?: boolean;
+  stacked?: boolean;
 }) {
   const Icon =
     tone === "today" ? CalendarCheck2 : tone === "tomorrow" ? CalendarClock : AlertTriangle;
@@ -397,21 +401,55 @@ function AttentionGroup({
         <span aria-hidden="true"><Icon /></span>
         <div>
           <h3>{title}</h3>
-          <p>{description}</p>
+          {description ? <p>{description}</p> : null}
         </div>
         <strong>{items.length}</strong>
       </header>
       <div className="crm-attention-list">
         {items.length > 0 ? (
-          items.map((item) => (
+          items.map((item) => {
+            const when = createdToday ? `Daxil olub: ${item.createdAt}` : item.nextFollowUpAt;
+            const label = createdToday
+              ? `${item.name}. Bu gün daxil olub. Müraciəti aç`
+              : `${item.name} ilə əlaqə saxlanılmalıdır. ${item.nextActionTypeLabel}, ${item.nextFollowUpAt}`;
+
+            if (stacked) {
+              return (
+                <button
+                  type="button"
+                  className="crm-focus-row"
+                  onClick={() => onLeadSelect(item.id)}
+                  key={item.id}
+                  aria-label={label}
+                >
+                  <span className="crm-person-avatar" aria-hidden="true">
+                    {item.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="crm-focus-body">
+                    <span className="crm-focus-top">
+                      <strong className="crm-focus-name">{item.name}</strong>
+                      <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
+                    </span>
+                    <span className="crm-focus-sub">
+                      <span>{item.phone}</span>
+                      <i aria-hidden="true">·</i>
+                      <span>{item.nextActionTypeLabel}</span>
+                      <i aria-hidden="true">·</i>
+                      <span>{when}</span>
+                    </span>
+                  </span>
+                  <ArrowUpRight className="crm-attention-open-icon" aria-hidden="true" />
+                </button>
+              );
+            }
+
+            return (
             <button
               type="button"
               className="crm-attention-row"
               onClick={() => onLeadSelect(item.id)}
               key={item.id}
-              aria-label={createdToday
-                ? `${item.name}. Bu gün daxil olub. Müraciəti aç`
-                : `${item.name} ilə əlaqə saxlanılmalıdır. ${item.nextActionTypeLabel}, ${item.nextFollowUpAt}`}
+              aria-label={label}
             >
               <span className="crm-person-avatar" aria-hidden="true">
                 {item.name.slice(0, 2).toUpperCase()}
@@ -428,12 +466,13 @@ function AttentionGroup({
                 </span>
                 <small>
                   <Clock3 aria-hidden="true" />
-                  {createdToday ? `Daxil olub: ${item.createdAt}` : item.nextFollowUpAt}
+                  {when}
                 </small>
               </span>
               <ArrowUpRight className="crm-attention-open-icon" aria-hidden="true" />
             </button>
-          ))
+            );
+          })
         ) : (
           <div className="crm-attention-empty">
             <CheckCircle2 aria-hidden="true" />

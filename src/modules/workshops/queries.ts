@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { formatAmount, formatCount, toNumber } from "@/modules/shared/format";
 import { formFilterString } from "@/modules/shared/form-values";
+import { normalizeTablePageSize } from "@/components/ui/table-page-size";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 import {
   calculateWorkshopParticipantFinance,
@@ -1177,7 +1178,7 @@ function normalizeWorkshopFilters(input: WorkshopFilters): NormalizedWorkshopFil
     sort: ["upcoming", "newest", "revenue", "expense", "profit", "participants"].includes(input.sort ?? "")
       ? input.sort as NormalizedWorkshopFilters["sort"] : "upcoming",
     page: boundedInt(input.page, 1, 10_000, 1),
-    pageSize: [10, 25, 50, 100].includes(Number(input.pageSize)) ? Number(input.pageSize) : 25,
+    pageSize: normalizeTablePageSize(input.pageSize),
     selected: formFilterString(input.selected),
     followUpQuery: formFilterString(input.followUpQ),
     followUpStatus: ["PENDING", "CONTACTED", "NO_ANSWER", "INTERESTED", "CONVERTED", "NOT_INTERESTED"].includes(input.followUpStatus ?? "")
@@ -1198,7 +1199,7 @@ function normalizeDetailFilters(input: WorkshopDetailFilters) {
     participantType: ["all", "student", "guest"].includes(input.participantType ?? "")
       ? input.participantType ?? "all" : "all",
     page: boundedInt(input.page, 1, 10_000, 1),
-    pageSize: [10, 25, 50, 100].includes(Number(input.pageSize)) ? Number(input.pageSize) : 25,
+    pageSize: normalizeTablePageSize(input.pageSize),
   };
 }
 

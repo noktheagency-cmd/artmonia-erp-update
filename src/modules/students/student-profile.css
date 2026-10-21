@@ -46,7 +46,8 @@
 .student-profile-page .sp-tabs { display: flex; justify-content: flex-start; gap: 16px; width: 100%; height: 47px; margin: 0; padding: 0; border-radius: 0; background: none; overflow-x: auto; }
 .student-profile-page .sp-tabs [role="tab"] { flex: 0 0 auto; min-width: 76px; height: 47px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--sp-muted); background: none; box-shadow: none; font-size: 13px; font-weight: 550; }
 .student-profile-page .sp-tabs [role="tab"]::after { display: none; }
-.student-profile-page .sp-tabs [role="tab"][data-active] { color: var(--sp-accent); border-bottom-color: var(--sp-accent); background: none; box-shadow: none; }
+.student-profile-page .sp-tabs [data-slot="tabs-indicator"] { bottom: 0; height: 2px; background: var(--sp-accent) !important; }
+.student-profile-page .sp-tabs [role="tab"][data-active] { color: var(--sp-accent); border-bottom-color: transparent; background: none; box-shadow: none; }
 .sp-tab-content { display: grid; gap: 18px; padding-top: 18px; min-width: 0; }
 .sp-tab-content[hidden] { display: none; }
 .sp-overview-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(290px, 1fr); align-items: start; gap: 18px; }

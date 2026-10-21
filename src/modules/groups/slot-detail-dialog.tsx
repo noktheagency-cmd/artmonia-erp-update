@@ -38,6 +38,8 @@ import type {
 import { weekdayMeta } from "@/modules/groups/shared";
 import styles from "./planner.module.css";
 
+type SlotDetail = PlannerWorkspaceData["slotDetail"];
+
 type DetailTab = "overview" | "students" | "journal";
 
 const shiftLabels: Record<PlannerSlot["shift"], string> = {
@@ -66,6 +68,7 @@ const enrollmentLabels: Record<string, string> = {
 export function SlotDetailDialog({
   slot,
   detail,
+  detailLoading = false,
   canManage,
   canManageAttendance,
   canReadStudentDetails,
@@ -78,7 +81,8 @@ export function SlotDetailDialog({
   onOpenJournal,
 }: {
   slot: PlannerSlot;
-  detail: PlannerWorkspaceData["slotDetail"];
+  detail: SlotDetail;
+  detailLoading?: boolean;
   canManage: boolean;
   canManageAttendance: boolean;
   canReadStudentDetails: boolean;
@@ -137,7 +141,7 @@ export function SlotDetailDialog({
             Tələbələr <span>{slot.assignedCount}</span>
           </button>
           <button type="button" data-active={tab === "journal" || undefined} onClick={() => setTab("journal")}>
-            Jurnal tarixçəsi <span>{detail.journalHistory.length}</span>
+            Jurnal tarixçəsi <span>{detailLoading ? "…" : detail.journalHistory.length}</span>
           </button>
         </nav>
 
@@ -166,16 +170,30 @@ export function SlotDetailDialog({
           ) : null}
 
           {tab === "journal" ? (
-            <JournalHistory
-              history={detail.journalHistory}
-              canManageAttendance={canManageAttendance}
-              journalDisabled={journalDisabled}
-              onOpenJournal={onOpenJournal}
-            />
+            detailLoading ? (
+              <DetailLoadingState label="Jurnal tarixçəsi yüklənir…" />
+            ) : (
+              <JournalHistory
+                history={detail.journalHistory}
+                canManageAttendance={canManageAttendance}
+                journalDisabled={journalDisabled}
+                onOpenJournal={onOpenJournal}
+              />
+            )
           ) : null}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DetailLoadingState({ label }: { label: string }) {
+  return (
+    <div className={styles.slotDetailEmpty} role="status" aria-live="polite">
+      <NotebookTabs />
+      <strong>{label}</strong>
+      <p>Ümumi məlumat artıq açıqdır — digər tablar bir an sonra hazır olacaq.</p>
+    </div>
   );
 }
 

@@ -19,8 +19,6 @@ import {
   CalendarCheck2,
   CalendarClock,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   CirclePause,
   CircleX,
   CreditCard,
@@ -54,7 +52,7 @@ import { ExportDialog } from "@/modules/exports/export-dialog";
 import type { StudentListData } from "@/modules/students/queries";
 import { completeStudentReminderAction } from "@/modules/students/reminder-actions";
 import { CompleteStudentReminderButton } from "@/modules/students/student-reminders-client";
-import { buildStudentPaginationItems } from "@/modules/students/student-pagination";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 
 type StudentRow = StudentListData["students"][number];
@@ -142,6 +140,15 @@ export function StudentList({ data }: { data: StudentListData }) {
     params.set("tab", "list");
     if (page > 1) params.set("page", page.toString());
     else params.delete("page");
+    navigate(`/students?${params.toString()}`);
+  }
+
+  function handlePageSizeChange(pageSize: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "list");
+    params.delete("page");
+    if (pageSize === 15) params.delete("pageSize");
+    else params.set("pageSize", pageSize.toString());
     navigate(`/students?${params.toString()}`);
   }
 
@@ -268,27 +275,30 @@ export function StudentList({ data }: { data: StudentListData }) {
         />
       ) : null}
 
-      <StudentDataTable
-        students={visibleStudents}
-        total={data.total}
-        metrics={data.listMetrics}
-        isPreview={activeTab === "overview"}
-        pagination={data.pagination}
-        isPending={isPending}
-        toolbar={activeTab === "list" ? (
-          <StudentListToolbar
-            query={data.query}
-            program={data.filters.program}
-            teacher={data.filters.teacher}
-            programs={data.filterOptions.programs}
-            teachers={data.filterOptions.teachers}
-            onFilter={handleQuickFilter}
-          />
-        ) : null}
-        onShowAll={() => handleTabChange("list")}
-        onPageChange={handlePageChange}
-        onClearFilters={handleClearFilters}
-      />
+      {activeTab === "programs" ? null : (
+        <StudentDataTable
+          students={visibleStudents}
+          total={data.total}
+          metrics={data.listMetrics}
+          isPreview={activeTab === "overview"}
+          pagination={data.pagination}
+          isPending={isPending}
+          toolbar={activeTab === "list" ? (
+            <StudentListToolbar
+              query={data.query}
+              program={data.filters.program}
+              teacher={data.filters.teacher}
+              programs={data.filterOptions.programs}
+              teachers={data.filterOptions.teachers}
+              onFilter={handleQuickFilter}
+            />
+          ) : null}
+          onShowAll={() => handleTabChange("list")}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          onClearFilters={handleClearFilters}
+        />
+      )}
     </section>
   );
 }
@@ -576,6 +586,7 @@ function StudentDataTable({
   toolbar,
   onShowAll,
   onPageChange,
+  onPageSizeChange,
   onClearFilters,
 }: {
   students: StudentRow[];
@@ -587,6 +598,7 @@ function StudentDataTable({
   toolbar?: ReactNode;
   onShowAll: () => void;
   onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
   onClearFilters: () => void;
 }) {
   return (
@@ -717,75 +729,18 @@ function StudentDataTable({
           </Button>
         </div>
       )}
-      {!isPreview && students.length > 0 && pagination.totalPages > 1 ? (
-        <StudentPagination
-          pagination={pagination}
+      {!isPreview && students.length > 0 ? (
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
           total={total}
-          isPending={isPending}
+          disabled={isPending}
           onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          label="Tələbə siyahısı səhifələri"
         />
       ) : null}
     </article>
-  );
-}
-
-function StudentPagination({
-  pagination,
-  total,
-  isPending,
-  onPageChange,
-}: {
-  pagination: StudentListData["pagination"];
-  total: number;
-  isPending: boolean;
-  onPageChange: (page: number) => void;
-}) {
-  const items = buildStudentPaginationItems(pagination.page, pagination.totalPages);
-
-  return (
-    <nav className="students-pagination" aria-label="Tələbə siyahısı səhifələri">
-      <span className="students-pagination-summary">
-        {pagination.from}–{pagination.to} / {total} tələbə
-      </span>
-      <div className="students-pagination-controls">
-        <button
-          type="button"
-          className="students-pagination-button is-direction"
-          disabled={isPending || pagination.page === 1}
-          onClick={() => onPageChange(pagination.page - 1)}
-          aria-label="Əvvəlki səhifə"
-        >
-          <ChevronLeft aria-hidden="true" />
-        </button>
-        {items.map((item) =>
-          typeof item === "number" ? (
-            <button
-              type="button"
-              className="students-pagination-button"
-              data-active={item === pagination.page}
-              disabled={isPending || item === pagination.page}
-              onClick={() => onPageChange(item)}
-              aria-current={item === pagination.page ? "page" : undefined}
-              aria-label={`${item}-ci səhifə`}
-              key={item}
-            >
-              {item}
-            </button>
-          ) : (
-            <span className="students-pagination-ellipsis" aria-hidden="true" key={item}>…</span>
-          ),
-        )}
-        <button
-          type="button"
-          className="students-pagination-button is-direction"
-          disabled={isPending || pagination.page === pagination.totalPages}
-          onClick={() => onPageChange(pagination.page + 1)}
-          aria-label="Növbəti səhifə"
-        >
-          <ChevronRight aria-hidden="true" />
-        </button>
-      </div>
-    </nav>
   );
 }
 

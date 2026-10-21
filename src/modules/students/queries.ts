@@ -21,10 +21,8 @@ import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 import { getStudentPaymentScheduleTypeLabel } from "@/modules/students/payment-schedule-type";
 import { calculatePackageLessonUsage } from "@/modules/students/package-lesson-usage";
-import {
-  normalizeStudentPage,
-  STUDENT_LIST_PAGE_SIZE,
-} from "@/modules/students/student-pagination";
+import { DEFAULT_TABLE_PAGE_SIZE, normalizeTablePageSize } from "@/components/ui/table-page-size";
+import { normalizeStudentPage } from "@/modules/students/student-pagination";
 import type {
   ProgramJourneyMaterial,
   ProgramJourneyStep,
@@ -67,6 +65,7 @@ export type StudentListFilters = {
   from?: string;
   to?: string;
   page?: string;
+  pageSize?: string;
   tab?: string;
 };
 
@@ -451,6 +450,7 @@ export async function getStudentListData(
   const paymentFilter = normalizePaymentFilter(input.payment);
   const activeTab = normalizeStudentTab(input.tab);
   let page = activeTab === "list" ? normalizeStudentPage(input.page) : 1;
+  const pageSize = activeTab === "list" ? normalizeTablePageSize(input.pageSize) : DEFAULT_TABLE_PAGE_SIZE;
   const today = startOfToday();
   const debtListMode = paymentFilter === "open"
     || paymentFilter === "overdue"
@@ -492,7 +492,7 @@ export async function getStudentListData(
       dateFrom: dateFromFilter.input,
       dateTo: dateToFilter.input,
       page,
-      pageSize: STUDENT_LIST_PAGE_SIZE,
+      pageSize,
     }),
     getTodayStudentReminders(getPrisma(), actor),
   ]);
@@ -508,7 +508,7 @@ export async function getStudentListData(
         dateFrom: dateFromFilter.input,
         dateTo: dateToFilter.input,
         page: 1,
-        pageSize: STUDENT_LIST_PAGE_SIZE,
+        pageSize,
       })
     : initialRawData;
   if (rawData !== initialRawData) page = 1;
@@ -557,9 +557,9 @@ export async function getStudentListData(
     dateToFilter.input,
   ].filter(Boolean).length;
   const total = rows[0]?.totalCount ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / STUDENT_LIST_PAGE_SIZE));
-  const pageFrom = total > 0 ? (page - 1) * STUDENT_LIST_PAGE_SIZE + 1 : 0;
-  const pageTo = Math.min(page * STUDENT_LIST_PAGE_SIZE, total);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageFrom = total > 0 ? (page - 1) * pageSize + 1 : 0;
+  const pageTo = Math.min(page * pageSize, total);
 
   return {
     query: search,
@@ -573,12 +573,13 @@ export async function getStudentListData(
       from: dateFromFilter.input,
       to: dateToFilter.input,
       page,
+      pageSize,
       tab: activeTab,
     }),
     total,
     pagination: {
       page,
-      pageSize: STUDENT_LIST_PAGE_SIZE,
+      pageSize,
       totalPages,
       from: pageFrom,
       to: pageTo,
@@ -2543,6 +2544,7 @@ function buildStudentsUrl({
   from,
   to,
   page,
+  pageSize,
   tab,
 }: {
   q: string;
@@ -2554,6 +2556,7 @@ function buildStudentsUrl({
   from?: string;
   to?: string;
   page?: number;
+  pageSize?: number;
   tab?: "overview" | "list" | "programs";
 }) {
   const params = new URLSearchParams();
@@ -2596,6 +2599,10 @@ function buildStudentsUrl({
 
   if (tab === "list" && page && page > 1) {
     params.set("page", page.toString());
+  }
+
+  if (tab === "list" && pageSize && pageSize !== DEFAULT_TABLE_PAGE_SIZE) {
+    params.set("pageSize", pageSize.toString());
   }
 
   return params.size > 0 ? `/students?${params.toString()}` : "/students";

@@ -5,8 +5,6 @@ import type { Route } from "next";
 import {
   Building2,
   Check,
-  ChevronLeft,
-  ChevronRight,
   ContactRound,
   FileText,
   MoreHorizontal,
@@ -28,6 +26,7 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -46,8 +45,6 @@ import type {
   CorporateCustomerStatus,
 } from "@/modules/hr/corporate-customer-data";
 import "./corporate-customers.css";
-
-const PAGE_SIZE = 8;
 
 const statusMeta: Record<CorporateCustomerStatus, { label: string; className: string }> = {
   ACTIVE: { label: "Aktiv", className: "is-active" },
@@ -81,7 +78,6 @@ export function CorporateCustomerWorkspace({
   const deferredQuery = useDeferredValue(query);
   const [status, setStatus] = useState("all");
   const [budget, setBudget] = useState("all");
-  const [page, setPage] = useState(1);
 
   const filteredCustomers = useMemo(() => {
     const needle = deferredQuery.trim().toLocaleLowerCase("az");
@@ -104,19 +100,12 @@ export function CorporateCustomerWorkspace({
       );
     });
   }, [budget, data.customers, deferredQuery, status]);
-
-  const pageCount = Math.max(1, Math.ceil(filteredCustomers.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageRows = filteredCustomers.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
+  const pagination = useClientTablePagination(filteredCustomers);
 
   function clearFilters() {
     setQuery("");
     setStatus("all");
     setBudget("all");
-    setPage(1);
   }
 
   return (
@@ -128,7 +117,6 @@ export function CorporateCustomerWorkspace({
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
-              setPage(1);
             }}
             placeholder="Şirkət, VÖEN və ya əlaqəli şəxs axtar..."
           />
@@ -139,7 +127,6 @@ export function CorporateCustomerWorkspace({
           value={status}
           onValueChange={(value) => {
             setStatus(value);
-            setPage(1);
           }}
           emptyLabel="Bütün statuslar"
           emptyValue="all"
@@ -155,7 +142,6 @@ export function CorporateCustomerWorkspace({
           value={budget}
           onValueChange={(value) => {
             setBudget(value);
-            setPage(1);
           }}
           emptyLabel="Bütün büdcələr"
           emptyValue="all"
@@ -221,7 +207,7 @@ export function CorporateCustomerWorkspace({
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((customer) => (
+              {pagination.pageRows.map((customer) => (
                 <CorporateCustomerTableRow
                   key={customer.id}
                   customer={customer}
@@ -232,7 +218,7 @@ export function CorporateCustomerWorkspace({
                   onManageAccounts={onManageAccounts}
                 />
               ))}
-              {pageRows.length === 0 ? (
+              {pagination.pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={data.permissions.canManage || data.permissions.canManageAccounts ? 8 : 7} className="corporate-empty-cell">
                     <Building2 />
@@ -248,34 +234,14 @@ export function CorporateCustomerWorkspace({
           </table>
         </div>
 
-        {filteredCustomers.length > 0 ? (
-          <footer className="corporate-pagination">
-            <span>
-              {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredCustomers.length)} / {filteredCustomers.length} nəticə
-            </span>
-            <div>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="Əvvəlki səhifə"
-                disabled={currentPage === 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                <ChevronLeft />
-              </Button>
-              <span>{currentPage} / {pageCount}</span>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label="Növbəti səhifə"
-                disabled={currentPage === pageCount}
-                onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
-              >
-                <ChevronRight />
-              </Button>
-            </div>
-          </footer>
-        ) : null}
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          label="Korporativ müştəri səhifələri"
+        />
       </section>
     </div>
   );

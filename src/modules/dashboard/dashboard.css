@@ -203,11 +203,13 @@
 
 .owner-dashboard-company-kpi-progress [data-slot="progress-indicator"],
 .owner-dashboard-company-kpi-metric-progress [data-slot="progress-indicator"] {
+  --owner-kpi-motion: 2.8s;
   position: relative;
   overflow: hidden;
   border-radius: 999px;
   transform-origin: center;
-  animation: owner-dashboard-kpi-swell 1.8s ease-in-out infinite;
+  transition: width 320ms ease;
+  animation: owner-dashboard-kpi-swell var(--owner-kpi-motion) linear infinite;
 }
 
 .owner-dashboard-company-kpi-progress [data-slot="progress-indicator"]::after,
@@ -224,18 +226,20 @@
     transparent 100%
   );
   transform: translateX(-130%);
-  animation: owner-dashboard-kpi-flow 1.8s ease-in-out infinite;
+  animation: owner-dashboard-kpi-flow var(--owner-kpi-motion) linear infinite;
 }
 
 @keyframes owner-dashboard-kpi-flow {
   0% { transform: translateX(-130%); }
+  50% { transform: translateX(0%); }
   100% { transform: translateX(130%); }
 }
 
 @keyframes owner-dashboard-kpi-swell {
-  0%, 16%, 100% { transform: scaleY(1); filter: brightness(1); }
-  42% { transform: scaleY(2); filter: brightness(1.22); }
-  64% { transform: scaleY(1.12); filter: brightness(1.06); }
+  0%, 100% { transform: scaleY(1); box-shadow: 0 0 0 rgb(39 48 68 / 0%); }
+  25% { transform: scaleY(1.14); box-shadow: 0 2px 5px rgb(39 48 68 / 5%); }
+  50% { transform: scaleY(1.36); box-shadow: 0 3px 7px rgb(39 48 68 / 10%); }
+  75% { transform: scaleY(1.14); box-shadow: 0 2px 5px rgb(39 48 68 / 5%); }
 }
 
 .owner-dashboard-company-kpi-chevron {
@@ -256,7 +260,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin: 2px 0 4px;
+  margin: 10px 0 4px;
 }
 
 .owner-dashboard-company-kpi-metric {

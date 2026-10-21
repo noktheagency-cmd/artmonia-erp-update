@@ -305,14 +305,16 @@ export function LeadAppointments({
           <div className="crm-contact-plan">
             <div className={meetingComplete ? "crm-contact-active is-done" : "crm-contact-active"}>
               <div className="crm-contact-active-meta">
-                <strong>
-                  {meetingComplete ? "Görüş baş tutdu" : scheduled ? "Görüş planlaşdırılıb" : "Plan yoxdur"}
-                </strong>
-                {activeWhen ? (
-                  <small>{`${activeWhen.date.split("-").reverse().join(".")} · ${activeWhen.time}`}</small>
-                ) : null}
+                <div className="crm-contact-active-copy">
+                  <strong>
+                    {meetingComplete ? "Görüş baş tutdu" : scheduled ? "Görüş planlaşdırılıb" : "Plan yoxdur"}
+                  </strong>
+                  {activeWhen ? (
+                    <small>{`${activeWhen.date.split("-").reverse().join(".")} · ${activeWhen.time}`}</small>
+                  ) : null}
+                </div>
               </div>
-              {scheduled ? (
+              {scheduled && !meetingComplete ? (
                 <div className="crm-contact-choices">
                   <button
                     type="button"

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import { ChartContainer } from "@/components/ui/chart";
 import {
   Dialog,
@@ -794,6 +795,7 @@ function EmployeeTable({
   onDelete?: (employee: HrEmployeeRow) => void;
   compact?: boolean;
 }) {
+  const pagination = useClientTablePagination(employees);
   return (
     <section
       className={
@@ -814,8 +816,8 @@ function EmployeeTable({
             </tr>
           </thead>
           <tbody>
-            {employees.length ? (
-              employees.map((employee) => (
+            {pagination.pageRows.length ? (
+              pagination.pageRows.map((employee) => (
                 <tr key={employee.id}>
                   <td>
                     <Link href={`/hr/${employee.id}` as Route} className="hr-person hr-person-link">
@@ -900,6 +902,16 @@ function EmployeeTable({
           </tbody>
         </table>
       </div>
+      {compact ? null : (
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          label="Əməkdaş səhifələri"
+        />
+      )}
     </section>
   );
 }
@@ -911,6 +923,7 @@ function ArchiveTable({
   employees: HrEmployeeRow[];
   allTimeEmployeeCount: number;
 }) {
+  const pagination = useClientTablePagination(employees);
   return (
     <section className="hr-surface hr-table-section hr-archive-section">
       <div className="hr-archive-summary">
@@ -933,7 +946,7 @@ function ArchiveTable({
             </tr>
           </thead>
           <tbody>
-            {employees.length ? employees.map((employee) => (
+            {pagination.pageRows.length ? pagination.pageRows.map((employee) => (
               <tr key={employee.id}>
                 <td>
                   <Link href={`/hr/${employee.id}` as Route} className="hr-person hr-person-link">
@@ -953,6 +966,14 @@ function ArchiveTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        label="Komanda arxivi səhifələri"
+      />
     </section>
   );
 }
@@ -970,6 +991,7 @@ function TeacherTable({
   onEditSalary: (teacher: TeacherDirectoryData["teachers"][number]) => void;
   onDelete: (teacher: TeacherDirectoryData["teachers"][number]) => void;
 }) {
+  const pagination = useClientTablePagination(teachers);
   return (
     <section className="hr-surface hr-table-section">
       <div className="hr-table-scroll" data-erp-table-scroll="">
@@ -985,8 +1007,8 @@ function TeacherTable({
             </tr>
           </thead>
           <tbody>
-            {teachers.length ? (
-              teachers.map((teacher) => (
+            {pagination.pageRows.length ? (
+              pagination.pageRows.map((teacher) => (
                 <tr key={teacher.id}>
                   <td>
                     <Link href={(teacher.hrEmployeeId ? `/hr/${teacher.hrEmployeeId}` : "/hr") as Route} className="hr-person hr-person-link">
@@ -1065,6 +1087,14 @@ function TeacherTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        label="Müəllim səhifələri"
+      />
     </section>
   );
 }

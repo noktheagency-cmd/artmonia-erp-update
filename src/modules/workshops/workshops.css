@@ -2208,7 +2208,7 @@
   margin: 2px -24px 0 !important;
   padding: 12px 24px !important;
   border-top: 1px solid #e5eaf2 !important;
-  background: rgba(255, 255, 255, 0.97) !important;
+  background: transparent !important;
   box-shadow: 0 -10px 22px rgba(31, 45, 73, 0.06) !important;
   backdrop-filter: blur(12px);
 }

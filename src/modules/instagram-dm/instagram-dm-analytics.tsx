@@ -2,6 +2,7 @@
 
 import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import {
   AlertTriangle,
   BarChart3,
@@ -26,6 +27,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
   const ai = data.ai.state === "ready" ? data.ai : null;
   const aiUnavailableReason = data.ai.state === "ready" ? "" : data.ai.reason;
   const analysisRunning = data.snapshot?.status === "RUNNING";
+  const history = useClientTablePagination(data.history);
   useEffect(() => {
     if (!analysisRunning || refreshPending) return;
     const timer = window.setTimeout(() => startRefresh(() => router.refresh()), 15_000);
@@ -136,7 +138,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
           <div className="instagram-dm-history-scroll">
             <table>
               <thead><tr><th>Analiz günü</th><th>Vəziyyət</th><th>Analiz edilən</th><th>Müştəri sorğusu</th><th>Yüksək niyyətli, cavabsız</th></tr></thead>
-              <tbody>{data.history.map((entry) => <tr key={entry.day}>
+              <tbody>{history.pageRows.map((entry) => <tr key={entry.day}>
                 <td>{displayDate(entry.day)}</td>
                 <td>{({ READY: "Hazır", RUNNING: "Hazırlanır", FAILED: "Xəta", NO_DATA: "Mətnli dialoq yoxdur" })[entry.state] ?? entry.state}</td>
                 <td>{entry.analyzedConversations === null ? "—" : count(entry.analyzedConversations)}</td>
@@ -145,6 +147,14 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
               </tr>)}</tbody>
             </table>
           </div>
+          <TablePagination
+            page={history.page}
+            pageSize={history.pageSize}
+            total={history.total}
+            onPageChange={history.setPage}
+            onPageSizeChange={history.setPageSize}
+            label="Analiz tarixçəsi səhifələri"
+          />
         </section>
       ) : null}
 

@@ -26,7 +26,10 @@ import { Button } from "@/components/ui/button";
 import { cx } from "@/components/ui/cx";
 import { FormSelect, type SelectOption } from "@/components/ui/select";
 import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
-import { CrmConversionDialog } from "@/modules/crm/crm-conversion-dialog";
+import {
+  CrmConversionDialog,
+  type CrmConversionFunnelStep,
+} from "@/modules/crm/crm-conversion-dialog";
 import { CrmOverview } from "@/modules/crm/crm-overview";
 import { OverviewLeadDialog } from "@/modules/crm/overview-lead-dialog";
 import type { CrmData } from "@/modules/crm/queries";
@@ -121,6 +124,25 @@ export function CrmPipeline({ data }: { data: CrmData }) {
     params.delete("salesDetails");
     const href = params.size > 0 ? `/crm?${params.toString()}` : "/crm";
     router.replace(href as Route, { scroll: false });
+  }
+
+  function handleFunnelStepSelect(step: CrmConversionFunnelStep) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("salesDetails");
+    params.delete("followUp");
+    params.delete("q");
+    if (step === "leads") {
+      params.delete("stage");
+    } else if (step === "contacted") {
+      params.set("stage", "CONTACTED");
+    } else if (step === "consultation") {
+      params.set("stage", consultationTrialStage);
+    } else {
+      params.set("stage", "REGISTERED");
+    }
+    params.set("tab", "list");
+    setConversionDetailsOpen(false);
+    navigate(params);
   }
 
   function handleMetricClick(index: number) {
@@ -268,6 +290,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
         onOpenChange={handleConversionOpenChange}
         totalLeads={data.metrics[0]?.value ?? "0"}
         stats={data.dashboardStats}
+        onFunnelStepSelect={handleFunnelStepSelect}
       />
 
       <div className="crm-view-toolbar crm-enter" style={{ animationDelay: "230ms" }}>
@@ -323,8 +346,6 @@ export function CrmPipeline({ data }: { data: CrmData }) {
           />
           <CrmLeadsTable
             data={data}
-            preview
-            onShowAll={() => handleTabChange("list")}
             onClearFilters={handleClearFilters}
           />
         </>

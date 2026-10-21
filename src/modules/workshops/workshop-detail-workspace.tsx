@@ -23,6 +23,8 @@ import {
   WalletCards,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DEFAULT_TABLE_PAGE_SIZE } from "@/components/ui/table-page-size";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FileUploadControl } from "@/components/ui/file-upload-control";
 import {
@@ -240,6 +242,7 @@ function ParticipantsTab({ data, actions, autoOpen }: { data: WorkshopDetailData
 }
 
 function PaymentsTab({ data, actions }: { data: WorkshopDetailData; actions: Actions }) {
+  const pagination = useClientTablePagination(data.payments);
   return (
     <div className="workshop-detail-content is-finance-tab">
       <section className="workshop-detail-card is-full">
@@ -250,7 +253,7 @@ function PaymentsTab({ data, actions }: { data: WorkshopDetailData; actions: Act
         <div className="workshop-table-scroll" data-erp-table-scroll="">
           <table className="workshop-data-table is-detail-table" data-erp-table="" data-erp-sticky-first="">
             <thead><tr><th>İştirakçı</th><th>Tarix</th><th>Metod</th><th>Məbləğ</th><th>Ödəyən</th><th>Status</th><th /></tr></thead>
-            <tbody>{data.payments.length ? data.payments.map((payment) => (
+            <tbody>{pagination.pageRows.length ? pagination.pageRows.map((payment) => (
               <tr key={payment.id} className={payment.statusLabel === "Ləğv edilib" ? "is-voided" : undefined}>
                 <td><strong>{payment.participantName}</strong><small>{payment.receipt}</small></td>
                 <td>{payment.paidAt}</td><td>{payment.method}</td><td><strong>{payment.amount}</strong></td>
@@ -260,6 +263,14 @@ function PaymentsTab({ data, actions }: { data: WorkshopDetailData; actions: Act
             )) : <EmptyTable colSpan={7} text="Ödəniş əməliyyatı yoxdur" />}</tbody>
           </table>
         </div>
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          label="Ödəniş səhifələri"
+        />
       </section>
       <FinanceRail data={data} actions={actions} />
     </div>
@@ -267,6 +278,7 @@ function PaymentsTab({ data, actions }: { data: WorkshopDetailData; actions: Act
 }
 
 function ExpensesTab({ data, actions, autoOpen }: { data: WorkshopDetailData; actions: Actions; autoOpen: boolean }) {
+  const pagination = useClientTablePagination(data.expenses);
   return (
     <div className="workshop-detail-content is-finance-tab">
       <section className="workshop-detail-card is-full">
@@ -277,7 +289,7 @@ function ExpensesTab({ data, actions, autoOpen }: { data: WorkshopDetailData; ac
         <div className="workshop-table-scroll" data-erp-table-scroll="">
           <table className="workshop-data-table is-detail-table" data-erp-table="" data-erp-sticky-first="">
             <thead><tr><th>Kateqoriya</th><th>Tarix</th><th>Metod</th><th>Məbləğ</th><th>Status</th><th /></tr></thead>
-            <tbody>{data.expenses.length ? data.expenses.map((expense) => (
+            <tbody>{pagination.pageRows.length ? pagination.pageRows.map((expense) => (
               <tr key={expense.id} className={expense.statusLabel === "Ləğv edilib" ? "is-voided" : undefined}>
                 <td><strong>{expense.category}</strong><small>{expense.description}</small></td>
                 <td>{expense.expenseDate}</td><td>{expense.method}</td><td><strong>{expense.amount}</strong></td>
@@ -287,6 +299,14 @@ function ExpensesTab({ data, actions, autoOpen }: { data: WorkshopDetailData; ac
             )) : <EmptyTable colSpan={6} text="Xərc əməliyyatı yoxdur" />}</tbody>
           </table>
         </div>
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          label="Xərc səhifələri"
+        />
       </section>
       <FinanceRail data={data} actions={actions} />
     </div>
@@ -375,9 +395,33 @@ function EmptyTable({ colSpan, text }: { colSpan: number; text: string }) {
 }
 
 function DetailPagination({ data }: { data: WorkshopDetailData }) {
-  const p = data.participantPagination;
-  if (p.totalPages <= 1) return <div className="workshop-pagination"><span>Cəmi {p.total} iştirakçı</span></div>;
-  return <div className="workshop-pagination"><span>Cəmi {p.total} iştirakçı</span><div>{p.page} / {p.totalPages}</div></div>;
+  const router = useRouter();
+  const pagination = data.participantPagination;
+  function push(next: { page?: number; pageSize?: number }) {
+    const params = new URLSearchParams();
+    const filters = data.participantFilters;
+    const page = next.page ?? pagination.page;
+    const pageSize = next.pageSize ?? pagination.pageSize;
+    if (data.activeTab !== "overview") params.set("tab", data.activeTab);
+    if (filters.query) params.set("q", filters.query);
+    if (filters.paymentState !== "all") params.set("paymentState", filters.paymentState);
+    if (filters.participantType !== "all") params.set("participantType", filters.participantType);
+    if (page > 1) params.set("page", String(page));
+    if (pageSize !== DEFAULT_TABLE_PAGE_SIZE) params.set("pageSize", String(pageSize));
+    const query = params.toString();
+    router.push((query ? `/workshops/${data.event.id}?${query}` : `/workshops/${data.event.id}`) as Route);
+  }
+
+  return (
+    <TablePagination
+      page={pagination.page}
+      pageSize={pagination.pageSize}
+      total={pagination.total}
+      onPageChange={(page) => push({ page })}
+      onPageSizeChange={(pageSize) => push({ page: 1, pageSize })}
+      label="İştirakçı səhifələri"
+    />
+  );
 }
 
 function ParticipantDialog({ data, action, autoOpen = false }: { data: WorkshopDetailData; action: WorkshopAction; autoOpen?: boolean }) {

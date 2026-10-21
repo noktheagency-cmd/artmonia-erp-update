@@ -1043,7 +1043,7 @@
   gap: 7px;
   margin: 0 -2px -2px;
   padding: 10px 2px 2px;
-  background: #f5f7fb;
+  background: transparent;
 }
 
 .finance-dialog .ui-dialog-footer .ui-button {

@@ -11,7 +11,10 @@ import { hasMissedPlannedFirstLesson } from "@/modules/students/activation-from-
 import { formatAmount } from "@/modules/shared/format";
 import { requireErpActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
-import { buildPlannerSlotScope } from "@/modules/groups/planner-scope";
+import {
+  buildPlannerSlotScope,
+  resolvePlannerAccessScope,
+} from "@/modules/groups/planner-scope";
 import { getPrisma } from "@/server/db/prisma";
 
 const MISSED_FIRST_LESSON_WARNING =
@@ -143,7 +146,10 @@ export async function getPlannerWorkspaceData(input?: {
   const canManage = actor.permissions.has("group.manage");
   const canManageAttendance = actor.permissions.has("attendance.manage");
   const canReadStudentDetails = actor.permissions.has("student.read");
-  const groupReadScope = scopeFor(actor.permissions, "group.read") ?? "ASSIGNED";
+  const groupReadScope = resolvePlannerAccessScope({
+    readScope: scopeFor(actor.permissions, "group.read"),
+    canManage,
+  });
   const teacherProfile = groupReadScope === "ASSIGNED"
     ? await prisma.teacher.findUnique({ where: { userId: actor.id }, select: { id: true } })
     : null;

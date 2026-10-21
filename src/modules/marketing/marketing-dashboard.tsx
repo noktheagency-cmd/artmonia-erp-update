@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import {
   ArrowRight,
   BadgeCheck,
@@ -25,6 +26,7 @@ export function MarketingDashboard({ data }: { data: MarketingDashboardData }) {
   const [syncMessage, setSyncMessage] = useState("");
   const [syncPending, startSync] = useTransition();
   const { totals } = data;
+  const campaigns = useClientTablePagination(data.campaigns);
 
   function syncMeta() {
     setSyncMessage("");
@@ -129,10 +131,11 @@ export function MarketingDashboard({ data }: { data: MarketingDashboardData }) {
       <article className="marketing-dashboard-surface marketing-campaign-summary">
         <header><div><h2>Kampaniya nəticələri</h2><p>Meta lead → Follow-up → ilk ödəniş</p></div></header>
         {data.campaigns.length ? (
+          <>
           <div className="marketing-dashboard-table-wrap">
             <table>
               <thead><tr><th>Kampaniya</th><th>Meta lead</th><th>Follow-up</th><th>İlk ödəniş</th><th>Lead → ödəniş</th></tr></thead>
-              <tbody>{data.campaigns.map((campaign) => (
+              <tbody>{campaigns.pageRows.map((campaign) => (
                 <tr key={campaign.id}>
                   <td>{campaign.name}</td>
                   <td>{count(campaign.metaLeads)}</td>
@@ -143,6 +146,15 @@ export function MarketingDashboard({ data }: { data: MarketingDashboardData }) {
               ))}</tbody>
             </table>
           </div>
+          <TablePagination
+            page={campaigns.page}
+            pageSize={campaigns.pageSize}
+            total={campaigns.total}
+            onPageChange={campaigns.setPage}
+            onPageSizeChange={campaigns.setPageSize}
+            label="Kampaniya səhifələri"
+          />
+          </>
         ) : <EmptyState text="Meta sync-dən sonra kampaniya nəticələri burada görünəcək." />}
       </article>
     </section>

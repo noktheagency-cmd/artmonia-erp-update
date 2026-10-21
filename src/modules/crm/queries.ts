@@ -567,7 +567,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data-v15"],
+  ["crm-pipeline-data-v17"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -636,6 +636,24 @@ function getCrmRawData(
       (status) => Prisma.sql`${status}::"erp"."HrEmployeeStatus"`,
     ),
   );
+  const createdTodayFrom = new Date(input.todayStart.getTime() - 4 * 60 * 60 * 1000);
+  const createdTodayUntil = new Date(input.tomorrowStart.getTime() - 4 * 60 * 60 * 1000);
+
+  function leadQueueOrderSql(tableAlias: "l" | "lead_rows") {
+    const createdAt = Prisma.raw(`${tableAlias}.created_at`);
+    const priority = Prisma.raw(`${tableAlias}.priority`);
+    const id = Prisma.raw(`${tableAlias}.id`);
+
+    return Prisma.sql`
+      case
+        when ${createdAt} >= ${createdTodayFrom} and ${createdAt} < ${createdTodayUntil} then 0
+        when ${priority} = 'CRITICAL'::"erp"."LeadPriority" then 1
+        else 2
+      end,
+      ${createdAt} desc nulls last,
+      ${id} desc
+    `;
+  }
 
   return prisma.$queryRaw<CrmRawRow[]>(Prisma.sql`
     select
@@ -933,8 +951,8 @@ function getCrmRawData(
         join erp.contacts c on c.id = l.contact_id
         left join erp.users m on m.id = l.manager_id
         where ${scopeSql}
-          and l.created_at >= ${new Date(input.todayStart.getTime() - 4 * 60 * 60 * 1000)}
-          and l.created_at < ${new Date(input.tomorrowStart.getTime() - 4 * 60 * 60 * 1000)}
+          and l.created_at >= ${createdTodayFrom}
+          and l.created_at < ${createdTodayUntil}
       ), '[]'::jsonb) as "createdTodayLeads",
       coalesce((
         select jsonb_agg(
@@ -964,10 +982,7 @@ function getCrmRawData(
             'latestContactResult', lead_rows.latest_contact_result,
             'timeline', coalesce(history.timeline, '[]'::jsonb)
           )
-          order by
-            case when lead_rows.priority = 'CRITICAL'::"erp"."LeadPriority" then 0 else 1 end,
-            lead_rows.created_at desc nulls last,
-            lead_rows.id desc
+          order by ${leadQueueOrderSql("lead_rows")}
         )
         from (
           select
@@ -1032,11 +1047,8 @@ function getCrmRawData(
           left join erp.programs p on p.id = l.program_interest_id
           left join erp.students s on s.id = l.converted_student_id
           where ${listWhereSql}
-          order by
-            case when l.priority = 'CRITICAL'::"erp"."LeadPriority" then 0 else 1 end,
-            l.created_at desc nulls last,
-            l.id desc
-          limit 50
+          order by ${leadQueueOrderSql("l")}
+          limit 300
         ) lead_rows
         left join lateral (
           select jsonb_agg(
@@ -1213,10 +1225,27 @@ function buildCrmListWhereSql(input: {
   todayStart: Date;
   tomorrowStart: Date;
 }) {
+  // Siyahı: seçilmiş dövr + bu gün əlavə olunanlar + bütün açıq kritiklər (dövrə düşməsə belə).
+  const createdTodayFrom = new Date(input.todayStart.getTime() - 4 * 60 * 60 * 1000);
+  const createdTodayUntil = new Date(input.tomorrowStart.getTime() - 4 * 60 * 60 * 1000);
+  const periodSql = buildLeadPeriodSql(input.periodRange);
   const conditions: Prisma.Sql[] = [
     buildLeadScopeSql(input.actor),
-    buildLeadPeriodSql(input.periodRange),
     Prisma.sql`l.converted_student_id is null`,
+    Prisma.sql`(
+      (${periodSql})
+      or (
+        l.created_at >= ${createdTodayFrom}
+        and l.created_at < ${createdTodayUntil}
+      )
+      or (
+        l.priority = 'CRITICAL'::"erp"."LeadPriority"
+        and l.stage not in (
+          'REGISTERED'::"erp"."LeadStage",
+          'LOST'::"erp"."LeadStage"
+        )
+      )
+    )`,
   ];
 
   if (input.search.length > 0) {

@@ -33,6 +33,7 @@ import {
   TimerReset,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -450,6 +451,7 @@ function DailyTab({
       row.cells.some((c) => String(c ?? "").toLowerCase().includes(query))
     );
   }, [rows, searchQuery]);
+  const pagination = useClientTablePagination(filteredRows);
 
   const managers = useMemo(() => {
     return Array.from(new Set(workspace.dailyRows.map((r) => r.cells[1] as string).filter(Boolean)));
@@ -538,6 +540,7 @@ function DailyTab({
       </HrToolbar>
 
       <div className="hr-employee-layout">
+        <div>
         <div className="data-table-wrap hr-excel-table-wrap" data-erp-table-scroll="">
           <table className="data-table hr-excel-table hr-daily-compact-table" data-erp-table="" data-erp-sticky-first="">
             <thead>
@@ -552,8 +555,8 @@ function DailyTab({
               </tr>
             </thead>
             <tbody>
-              {filteredRows.length > 0 ? (
-                filteredRows.map((row) => (
+              {pagination.pageRows.length > 0 ? (
+                pagination.pageRows.map((row) => (
                   <tr
                     key={row.id}
                     className={cx(row.id === selectedRow?.id && "is-selected")}
@@ -600,6 +603,15 @@ function DailyTab({
               )}
             </tbody>
           </table>
+        </div>
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          label="Gündəlik aktivlik səhifələri"
+        />
         </div>
 
         <DailyDetailCard

@@ -107,16 +107,25 @@ export function LeadContactPanel({
   const [loaded, setLoaded] = useState(false);
 
   const shown = embedded || expanded;
-  const activePlan = useMemo(
-    () => plans.find((plan) => !plan.completedAt && !plan.cancelledAt) ?? null,
-    [plans],
-  );
   const contactComplete = markedComplete || plans.some(
     (plan) => plan.result === "TALKED" || plan.result === "WHATSAPP_REPLIED",
   );
+  const activePlan = useMemo(
+    () => {
+      if (contactComplete) return null;
+      return plans.find((plan) => !plan.completedAt && !plan.cancelledAt) ?? null;
+    },
+    [contactComplete, plans],
+  );
   const historyPlans = useMemo(
-    () => [...plans].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [plans],
+    () => [...plans]
+      .filter((plan) => {
+        if (!contactComplete) return true;
+        // Əlaqə qurulandan sonra açıq plan history-də də görünməməlidir.
+        return Boolean(plan.completedAt || plan.cancelledAt);
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [contactComplete, plans],
   );
 
   useEffect(() => {
@@ -240,40 +249,47 @@ export function LeadContactPanel({
           <form action={(form) => save(form, "missed")} className="crm-contact-plan">
             <div className={contactComplete ? "crm-contact-active is-done" : "crm-contact-active"}>
               <div className="crm-contact-active-meta">
-                <strong>
-                  {activePlan
-                    ? formatNextActionTypeLabel(activePlan.kind)
-                    : contactComplete
-                      ? "Əlaqə quruldu"
-                      : "Plan yoxdur"}
-                </strong>
-                {activePlan ? <small>{formatPlanDate(activePlan.plannedAt)}</small> : null}
+                <div className="crm-contact-active-copy">
+                  <strong>
+                    {activePlan
+                      ? "Planlaşdırılıb"
+                      : contactComplete
+                        ? "Əlaqə quruldu"
+                        : "Plan yoxdur"}
+                  </strong>
+                  {activePlan ? (
+                    <em>{formatNextActionTypeLabel(activePlan.kind)}</em>
+                  ) : null}
+                  {activePlan ? <small>{formatPlanDate(activePlan.plannedAt)}</small> : null}
+                </div>
               </div>
-              <div className="crm-contact-choices">
-                <button
-                  type="button"
-                  className="crm-choice is-danger"
-                  aria-pressed={mode === "missed"}
-                  disabled={busy}
-                  onClick={() => setMode((current) => current === "missed" ? null : "missed")}
-                >
-                  <PhoneMissed aria-hidden="true" />
-                  Əlaqə saxlanılmadı
-                </button>
-                <button
-                  type="button"
-                  className="crm-choice is-success"
-                  aria-pressed={mode === "reached"}
-                  disabled={busy}
-                  onClick={() => {
-                    setMode("reached");
-                    void save(new FormData(), "reached");
-                  }}
-                >
-                  <CheckCircle2 aria-hidden="true" />
-                  Əlaqə quruldu
-                </button>
-              </div>
+              {!contactComplete ? (
+                <div className="crm-contact-choices">
+                  <button
+                    type="button"
+                    className="crm-choice is-danger"
+                    aria-pressed={mode === "missed"}
+                    disabled={busy}
+                    onClick={() => setMode((current) => current === "missed" ? null : "missed")}
+                  >
+                    <PhoneMissed aria-hidden="true" />
+                    Əlaqə saxlanılmadı
+                  </button>
+                  <button
+                    type="button"
+                    className="crm-choice is-success"
+                    aria-pressed={mode === "reached"}
+                    disabled={busy}
+                    onClick={() => {
+                      setMode("reached");
+                      void save(new FormData(), "reached");
+                    }}
+                  >
+                    <CheckCircle2 aria-hidden="true" />
+                    Əlaqə quruldu
+                  </button>
+                </div>
+              ) : null}
             </div>
             {mode === "missed" ? (
               <>

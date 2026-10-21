@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -42,6 +43,7 @@ export function AuditLogPanel({ logs }: { logs: AuditLogDto[] }) {
     () => selected ? getAuditDisplayChanges(selected.before, selected.after) : [],
     [selected],
   );
+  const pagination = useClientTablePagination(filtered);
 
   return <section className={styles.auditPanel}>
     <div className={styles.auditStats}>
@@ -58,7 +60,7 @@ export function AuditLogPanel({ logs }: { logs: AuditLogDto[] }) {
     <div className={styles.auditTableWrap} data-erp-table-scroll="">
       <table className={`${styles.auditTable} erp-audit-table`} data-erp-table="" data-erp-sticky-first="">
         <thead><tr><th>Tarix və saat</th><th>Əməkdaş</th><th>Əməliyyat</th><th>Obyekt</th><th>Səbəb</th><th /></tr></thead>
-        <tbody>{filtered.map((log) => <tr key={log.id}>
+        <tbody>{pagination.pageRows.map((log) => <tr key={log.id}>
           <td><strong>{formatTime(log.createdAt)}</strong><small>{formatDate(log.createdAt)}</small></td>
           <td><strong>{log.actorName}</strong><small>{log.actorEmail ?? "Sistem əməliyyatı"}</small></td>
           <td><Badge variant="outline">{getAuditActionLabel(log.action)}</Badge></td>
@@ -69,6 +71,14 @@ export function AuditLogPanel({ logs }: { logs: AuditLogDto[] }) {
       </table>
       {!filtered.length ? <div className={styles.empty}>Seçilmiş filtrlərə uyğun jurnal qeydi yoxdur.</div> : null}
     </div>
+    <TablePagination
+      page={pagination.page}
+      pageSize={pagination.pageSize}
+      total={pagination.total}
+      onPageChange={pagination.setPage}
+      onPageSizeChange={pagination.setPageSize}
+      label="Audit jurnalı səhifələri"
+    />
     <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
       <DialogContent className={styles.auditDialog}>
         <DialogHeader className={styles.auditDialogHeader}>

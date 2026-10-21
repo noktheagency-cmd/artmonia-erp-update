@@ -17,6 +17,7 @@ export default async function StudentsPage({
     from?: string;
     to?: string;
     page?: string;
+    pageSize?: string;
     tab?: string;
   }>;
 }) {

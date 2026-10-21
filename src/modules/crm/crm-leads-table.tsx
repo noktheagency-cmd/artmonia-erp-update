@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import { LeadDetailDialog } from "@/modules/crm/lead-detail-dialog";
 import { LeadRegistrationDialog } from "@/modules/crm/lead-registration-dialog";
 import type { CrmData } from "@/modules/crm/queries";
@@ -27,7 +28,8 @@ export function CrmLeadsTable({
   onShowAll?: () => void;
   onClearFilters: () => void;
 }) {
-  const rows = preview ? data.leads.slice(0, 5) : data.leads;
+  const pagination = useClientTablePagination(data.leads);
+  const rows = preview ? data.leads.slice(0, 5) : pagination.pageRows;
 
   return (
     <article className="crm-panel crm-table-panel crm-enter" style={{ animationDelay: "320ms" }}>
@@ -79,6 +81,16 @@ export function CrmLeadsTable({
           </Button>
         </div>
       )}
+      {!preview ? (
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          label="Müraciət siyahısı səhifələri"
+        />
+      ) : null}
     </article>
   );
 }

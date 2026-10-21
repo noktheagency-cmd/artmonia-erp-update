@@ -6,7 +6,6 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import {
-  ArrowLeft,
   ArrowRight,
   Activity,
   Banknote,
@@ -24,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult, type ActionResult } from "@/lib/action-result";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -557,42 +557,41 @@ function Metric({ icon: Icon, label, value, helper, tone }: {
 }
 
 function Pagination({ data }: { data: WorkshopData }) {
-  const { pagination } = data;
-  if (pagination.totalPages <= 1) return <div className="workshop-pagination"><span>Cəmi {pagination.total} tədbir</span></div>;
-  return (
-    <div className="workshop-pagination">
-      <span>Cəmi {pagination.total} tədbir</span>
-      <div>
-        {pagination.hasPrevious ? (
-          <Link aria-label="Əvvəlki səhifə" href={buildWorkshopUrl(data, { page: String(pagination.page - 1) })}><ArrowLeft /></Link>
-        ) : <span className="is-disabled"><ArrowLeft /></span>}
-        <strong>{pagination.page}</strong>
-        <span>/ {pagination.totalPages}</span>
-        {pagination.hasNext ? (
-          <Link aria-label="Növbəti səhifə" href={buildWorkshopUrl(data, { page: String(pagination.page + 1) })}><ArrowRight /></Link>
-        ) : <span className="is-disabled"><ArrowRight /></span>}
-      </div>
-    </div>
-  );
+  return <WorkshopTablePagination data={data} pagination={data.pagination} label="Tədbir səhifələri" />;
 }
 
 function FollowUpPagination({ data }: { data: WorkshopData }) {
-  const pagination = data.followUpPagination;
-  if (pagination.totalPages <= 1) return <div className="workshop-pagination"><span>Cəmi {pagination.total} iştirakçı</span></div>;
   return (
-    <div className="workshop-pagination">
-      <span>Cəmi {pagination.total} iştirakçı</span>
-      <div>
-        {pagination.hasPrevious ? (
-          <Link aria-label="Əvvəlki səhifə" href={buildWorkshopUrl(data, { view: "follow-up", page: String(pagination.page - 1) })}><ArrowLeft /></Link>
-        ) : <span className="is-disabled"><ArrowLeft /></span>}
-        <strong>{pagination.page}</strong>
-        <span>/ {pagination.totalPages}</span>
-        {pagination.hasNext ? (
-          <Link aria-label="Növbəti səhifə" href={buildWorkshopUrl(data, { view: "follow-up", page: String(pagination.page + 1) })}><ArrowRight /></Link>
-        ) : <span className="is-disabled"><ArrowRight /></span>}
-      </div>
-    </div>
+    <WorkshopTablePagination
+      data={data}
+      pagination={data.followUpPagination}
+      view="follow-up"
+      label="Follow-up səhifələri"
+    />
+  );
+}
+
+function WorkshopTablePagination({
+  data,
+  pagination,
+  view,
+  label,
+}: {
+  data: WorkshopData;
+  pagination: WorkshopData["pagination"];
+  view?: string;
+  label: string;
+}) {
+  const router = useRouter();
+  return (
+    <TablePagination
+      page={pagination.page}
+      pageSize={pagination.pageSize}
+      total={pagination.total}
+      label={label}
+      onPageChange={(page) => router.push(buildWorkshopUrl(data, { ...(view ? { view } : {}), page: String(page) }))}
+      onPageSizeChange={(pageSize) => router.push(buildWorkshopUrl(data, { ...(view ? { view } : {}), page: "1", pageSize: String(pageSize) }))}
+    />
   );
 }
 

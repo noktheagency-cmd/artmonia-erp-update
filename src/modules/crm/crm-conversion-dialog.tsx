@@ -20,22 +20,31 @@ import {
 } from "@/components/ui/dialog";
 import type { CrmData } from "@/modules/crm/queries";
 
+export type CrmConversionFunnelStep = "leads" | "contacted" | "consultation" | "registered";
+
 export function CrmConversionDialog({
   open,
   onOpenChange,
   totalLeads,
   stats,
+  onFunnelStepSelect,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   totalLeads: string;
   stats: CrmData["dashboardStats"];
+  onFunnelStepSelect?: (step: CrmConversionFunnelStep) => void;
 }) {
-  const funnel = [
-    { label: "Müraciət", value: totalLeads, icon: UsersRound },
-    { label: "Əlaqə quruldu", value: stats.contactedCount, icon: PhoneCall },
-    { label: "Konsultasiya", value: stats.consultationCount, icon: Presentation },
-    { label: "Qeydiyyat", value: stats.salesCount, icon: CheckCircle2 },
+  const funnel: Array<{
+    key: CrmConversionFunnelStep;
+    label: string;
+    value: string;
+    icon: typeof UsersRound;
+  }> = [
+    { key: "leads", label: "Müraciət", value: totalLeads, icon: UsersRound },
+    { key: "contacted", label: "Əlaqə quruldu", value: stats.contactedCount, icon: PhoneCall },
+    { key: "consultation", label: "Konsultasiya", value: stats.consultationCount, icon: Presentation },
+    { key: "registered", label: "Qeydiyyat", value: stats.salesCount, icon: CheckCircle2 },
   ];
 
   return (
@@ -73,8 +82,8 @@ export function CrmConversionDialog({
           <section className="crm-conversion-detail-section" aria-labelledby="crm-conversion-funnel-title">
             <header>
               <div>
-                <h3 id="crm-conversion-funnel-title">Satış hunisi</h3>
-                <p>Eyni müraciət bir neçə mərhələdə sayılır.</p>
+                <h3 id="crm-conversion-funnel-title">Konversiya yolu</h3>
+                <p>Kartı seçin — eyni dövr üçün detallı siyahı açılsın.</p>
               </div>
               <span>{stats.contactRate} əlaqə faizi</span>
             </header>
@@ -82,14 +91,21 @@ export function CrmConversionDialog({
               {funnel.map((step, index) => {
                 const Icon = step.icon;
                 return (
-                  <div className="crm-conversion-funnel-item" role="listitem" key={step.label}>
+                  <button
+                    type="button"
+                    className="crm-conversion-funnel-item"
+                    role="listitem"
+                    key={step.key}
+                    onClick={() => onFunnelStepSelect?.(step.key)}
+                    aria-label={`${step.label}: ${step.value}. Detallı siyahını aç`}
+                  >
                     <span aria-hidden="true"><Icon /></span>
                     <div>
                       <small>{step.label}</small>
                       <strong>{step.value}</strong>
                     </div>
                     {index < funnel.length - 1 ? <ArrowRight aria-hidden="true" /> : null}
-                  </div>
+                  </button>
                 );
               })}
             </div>

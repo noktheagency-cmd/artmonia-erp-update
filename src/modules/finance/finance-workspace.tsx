@@ -53,6 +53,7 @@ import type { PieLabelRenderProps } from "recharts";
 import { createPortal, useFormStatus } from "react-dom";
 import { HeaderActionsContext } from "@/components/layout/header-actions-context";
 import { Button } from "@/components/ui/button";
+import { TablePagination, useClientTablePagination } from "@/components/ui/table-pagination";
 import { FileUploadControl } from "@/components/ui/file-upload-control";
 import {
   Card,
@@ -2105,6 +2106,7 @@ function PaymentLedger({
   deleteAction: FinanceMutationAction;
   onNotify: (message: Omit<FinanceToastMessage, "id">) => void;
 }) {
+  const pagination = useClientTablePagination(payments);
   return (
     <article className="finance-panel">
       <div className="finance-panel-head">
@@ -2131,8 +2133,8 @@ function PaymentLedger({
             </tr>
           </thead>
           <tbody>
-            {payments.length > 0 ? (
-              payments.map((payment) => (
+            {pagination.pageRows.length > 0 ? (
+              pagination.pageRows.map((payment) => (
                 <tr key={payment.id}>
                   <td>
                     <div className="finance-entity-cell">
@@ -2177,6 +2179,14 @@ function PaymentLedger({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        label="Ödəniş səhifələri"
+      />
     </article>
   );
 }
@@ -2402,6 +2412,7 @@ function DebtLedger({ data }: { data: FinanceData }) {
     if (filter === "workshop") return debt.sourceKind === "WORKSHOP";
     return debt.sourceKind === "MASTERCLASS";
   });
+  const pagination = useClientTablePagination(debtors);
 
   return (
     <article className="finance-panel finance-receivables-panel">
@@ -2437,8 +2448,8 @@ function DebtLedger({ data }: { data: FinanceData }) {
             </tr>
           </thead>
           <tbody>
-            {debtors.length > 0 ? (
-              debtors.map((debt) => (
+            {pagination.pageRows.length > 0 ? (
+              pagination.pageRows.map((debt) => (
                 <tr key={debt.id}>
                   <td>
                     <div className="finance-entity-cell">
@@ -2481,6 +2492,14 @@ function DebtLedger({ data }: { data: FinanceData }) {
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        label="Alacaq səhifələri"
+      />
     </article>
   );
 }
@@ -2498,6 +2517,7 @@ function ExpenseLedger({
   deleteAction: FinanceMutationAction;
   onNotify: (message: Omit<FinanceToastMessage, "id">) => void;
 }) {
+  const pagination = useClientTablePagination(expenses);
   return (
     <article className="finance-panel">
       <div className="finance-panel-head">
@@ -2524,8 +2544,8 @@ function ExpenseLedger({
             </tr>
           </thead>
           <tbody>
-            {expenses.length > 0 ? (
-              expenses.map((expense) => (
+            {pagination.pageRows.length > 0 ? (
+              pagination.pageRows.map((expense) => (
                 <tr key={expense.id}>
                   <td>
                     <div className="finance-entity-cell">
@@ -2576,6 +2596,14 @@ function ExpenseLedger({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        label="Xərc səhifələri"
+      />
     </article>
   );
 }
@@ -2712,6 +2740,7 @@ function PayrollLedger({
   deleteAction: FinanceMutationAction;
   onNotify: (message: Omit<FinanceToastMessage, "id">) => void;
 }) {
+  const pagination = useClientTablePagination(payrollItems);
   return (
     <article className="finance-panel">
       <div className="finance-panel-head">
@@ -2738,8 +2767,8 @@ function PayrollLedger({
             </tr>
           </thead>
           <tbody>
-            {payrollItems.length > 0 ? (
-              payrollItems.map((payroll) => (
+            {pagination.pageRows.length > 0 ? (
+              pagination.pageRows.map((payroll) => (
                 <tr key={payroll.id}>
                   <td>
                     <div className="finance-entity-cell">
@@ -2780,6 +2809,14 @@ function PayrollLedger({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        label="Əməkhaqqı səhifələri"
+      />
     </article>
   );
 }
