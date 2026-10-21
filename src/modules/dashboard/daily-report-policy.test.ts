@@ -6,8 +6,8 @@ import type { EffectivePermissions } from "@/server/rbac/permissions";
 const permissions = (): EffectivePermissions => new Map([
   ["dashboard.owner.read", "ALL"], ["crm.lead.read", "ALL"], ["student.read", "ALL"], ["billing.payment.read", "ALL"], ["task.read", "ALL"],
 ]);
-test("daily report is limited to the two accounts with full read scopes", () => {
-  for (const id of ["f74ddcf3-fed2-4d36-86e5-5e75ab94f225", "d0fb9ad2-ec06-4bc6-8dc9-5c037775486a"]) {
+test("daily report is limited to the accounts with full read scopes", () => {
+  for (const id of ["f74ddcf3-fed2-4d36-86e5-5e75ab94f225", "d0fb9ad2-ec06-4bc6-8dc9-5c037775486a", "e070d1cc-346f-4111-8a90-8b33d9e05b8e"]) {
     assert.equal(canReadDailyReport(id, permissions()), true);
     for (const key of permissions().keys()) {
       const restricted = permissions(); restricted.delete(key);

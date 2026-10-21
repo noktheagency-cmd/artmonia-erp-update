@@ -4,6 +4,7 @@ import { z } from "zod";
 const dailyReportViewers = new Set([
   "f74ddcf3-fed2-4d36-86e5-5e75ab94f225", // Vaqif
   "d0fb9ad2-ec06-4bc6-8dc9-5c037775486a", // İsmət
+  "e070d1cc-346f-4111-8a90-8b33d9e05b8e", // Pashanur
 ]);
 
 export function canReadDailyReport(id: string, permissions: EffectivePermissions) {

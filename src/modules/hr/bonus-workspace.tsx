@@ -196,7 +196,7 @@ export function BonusWorkspace({
             <div className="hr-bonus-track"><span style={{ width: `${selected.progress}%` }} /></div>
             <small>{formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</small>
           </div>
-          {selected.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki yeni satışlar</strong><span>Şirkət KPI ilə eyni mənbə: <code>course_sales</code> (müqavilə + ≥20 AZN). Sayım satış sahibinə görədir.</span></div> : null}
+          {selected.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki yeni satışlar</strong><span>Şirkət KPI ilə eyni mənbə: yeni qeydiyyat və ödənişli geri dönüş. Sayım tələbə menecerinə görədir.</span></div> : null}
           {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
           {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Sadə hesab</strong><span>Tələbə sayına uyğun bonus seçilir, sonra həmin pillə üçün churn kəsintisi çıxılır.</span></div> : null}
           {selected.perUnitBonusPercent > 0 || selected.perUnitBonusAmount > 0 ? <div className="hr-bonus-method-note"><strong>Satışdan sonrakı bonus</strong><span>İlk {selected.requiredThreshold} satış məcburidir. Sonrakı hər satış üçün {selected.perUnitBonusPercent > 0 ? `${selected.perUnitBonusPercent}%` : ""}{selected.perUnitBonusPercent > 0 && selected.perUnitBonusAmount > 0 ? " + " : ""}{selected.perUnitBonusAmount > 0 ? formatMoney(selected.perUnitBonusAmount) : ""} hesablanır.</span></div> : null}

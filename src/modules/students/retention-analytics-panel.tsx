@@ -33,7 +33,7 @@ export function RetentionAnalyticsPanel({ from, to, teacherId, groupId, onOption
   if (!report) return <div role="alert">{result.error} <Button variant="outline" onClick={() => setAttempt(attempt + 1)}>Yenidən cəhd et</Button></div>;
   const choose = (next: "FROZEN" | "STOPPED") => { setStatus(next); setPage(1); setExpanded(true); };
   return <section className="retention-section" aria-label="Dondurma və dayandırma statistikası">
-    <div className="attendance-section-heading"><div><h3>Tələbələrin saxlanması və itkisi</h3><p>Seçilmiş dövrdə donduran və dayandıran tələbələr. Bu panel qəbul satışı (course_sales) KPI-sı deyil — baza qeydiyyat tarixinə görədir.</p></div></div>
+    <div className="attendance-section-heading"><div><h3>Tələbələrin saxlanması və itkisi</h3><p>Seçilmiş dövrdə donduran və dayandıran tələbələr. Bu panel satış KPI-sı deyil — baza qeydiyyat tarixinə görədir.</p></div></div>
     <div className="attendance-kpis retention-kpis">
       <div className="attendance-kpi is-primary"><span>Tələbə itkisi faizi</span><strong>{report.rate}%</strong><small>{report.total} tələbə / {report.population} nəfərlik baza</small></div>
       <div className="attendance-kpi"><span>Saxlanma faizi</span><strong>{100 - report.rate}%</strong><small>Bu dövrdə dondurmayan və dayandırmayanlar</small></div>
@@ -45,6 +45,6 @@ export function RetentionAnalyticsPanel({ from, to, teacherId, groupId, onOption
       {report.details.length === 0 ? <p>Seçilmiş dövr və filtrlər üzrə tələbə yoxdur.</p> : <div className="students-attendance-table-wrap"><table className="students-attendance-table"><thead><tr><th>Tələbə</th><th>Tarix</th><th>Səbəb və qeyd</th><th>Məsul menecer</th></tr></thead><tbody>{report.details.map((student) => <tr key={student.id}><td><Link href={`/students/${student.studentId}`}>{student.name}</Link></td><td>{student.date.split("-").reverse().join(".")}</td><td>{student.reason}{student.note && <p>{student.note}</p>}</td><td>{student.manager ?? "Təyin edilməyib"}</td></tr>)}</tbody></table></div>}
       {report.pages > 1 && <div className="students-attendance-pagination"><Button variant="outline" disabled={page === 1} onClick={() => setPage(page - 1)}>Əvvəlki</Button><span>{page} / {report.pages}</span><Button variant="outline" disabled={page >= report.pages} onClick={() => setPage(page + 1)}>Növbəti</Button></div>}
     </div>}
-    <p className="retention-method">Tələbə itkisi = seçilmiş dövrdə donduran və ya dayandıran unikal tələbələr / dövrün sonunadək qeydiyyatdan keçən tələbələr (registered_at). İmtina edənlər daxil deyil. Eyni tələbə iki statusda olsa da ümumi sayda bir dəfə sayılır. Dövr ərzində geri qayıdan tələbənin dondurma və ya dayandırma hadisəsi tarixçədə qalır. Şirkət satış/KPI cəmi üçün course_sales.qualified_at istifadə olunur — bu panel ilə qarışdırılmamalıdır.</p>
+    <p className="retention-method">Tələbə itkisi = seçilmiş dövrdə donduran və ya dayandıran unikal tələbələr / dövrün sonunadək qeydiyyatdan keçən tələbələr (registered_at). İmtina edənlər daxil deyil. Eyni tələbə iki statusda olsa da ümumi sayda bir dəfə sayılır. Dövr ərzində geri qayıdan tələbənin dondurma və ya dayandırma hadisəsi tarixçədə qalır. Şirkət satış/KPI cəmi üçün yeni qeydiyyat və ödənişli geri dönüş istifadə olunur — bu panel ilə qarışdırılmamalıdır.</p>
   </section>;
 }
