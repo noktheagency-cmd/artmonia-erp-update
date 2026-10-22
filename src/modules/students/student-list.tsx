@@ -134,7 +134,10 @@ export function StudentList({ data }: { data: StudentListData }) {
       params.delete("attention");
       params.delete("from");
       params.delete("to");
+      params.delete("program");
+      params.delete("teacher");
       params.delete("q");
+      params.set("dates", "all");
     }
     if (value) {
       params.set(key, value);
@@ -154,6 +157,9 @@ export function StudentList({ data }: { data: StudentListData }) {
     params.delete("page");
     params.delete("from");
     params.delete("to");
+    // Default ay filtrinin yenidən tətbiq olunmaması üçün
+    params.set("dates", "all");
+    params.set("tab", "list");
     navigate(`/students?${params.toString()}`);
   }
 
@@ -309,8 +315,10 @@ export function StudentList({ data }: { data: StudentListData }) {
           toolbar={activeTab === "list" ? (
             <StudentListToolbar
               query={data.query}
+              status={data.filters.status}
               program={data.filters.program}
               teacher={data.filters.teacher}
+              statuses={data.filterOptions.statuses}
               programs={data.filterOptions.programs}
               teachers={data.filterOptions.teachers}
               onFilter={handleQuickFilter}
@@ -558,15 +566,19 @@ function StudentAttentionEmpty({ children }: { children: ReactNode }) {
 
 function StudentListToolbar({
   query,
+  status,
   program,
   teacher,
+  statuses,
   programs,
   teachers,
   onFilter,
 }: {
   query: string;
+  status: string;
   program: string;
   teacher: string;
+  statuses: StudentListData["filterOptions"]["statuses"];
   programs: StudentListData["filterOptions"]["programs"];
   teachers: StudentListData["filterOptions"]["teachers"];
   onFilter: (key: string, value: string) => void;
@@ -595,9 +607,9 @@ function StudentListToolbar({
     return () => window.clearTimeout(timer);
   }, [query, searchValue]);
 
-  function applySelect(key: "program" | "teacher", value: string) {
+  function applySelect(key: "status" | "program" | "teacher", value: string) {
     const next = value === EMPTY_SELECT_VALUE ? "" : value;
-    const current = key === "program" ? program : teacher;
+    const current = key === "status" ? status : key === "program" ? program : teacher;
     if (next === current) return;
     onFilter(key, next);
   }
@@ -627,6 +639,15 @@ function StudentListToolbar({
           </button>
         ) : null}
       </label>
+      <FormSelect
+        name="listStatus"
+        aria-label="Status"
+        value={status}
+        onValueChange={(value) => applySelect("status", value)}
+        emptyLabel="Bütün statuslar"
+        options={statuses}
+        icon={Activity}
+      />
       <FormSelect
         name="listProgram"
         aria-label="Proqram"
@@ -658,6 +679,7 @@ function StudentDataTable({
   total,
   metrics,
   isPreview,
+  showRiskyBadge,
   pagination,
   isPending,
   toolbar,
@@ -732,11 +754,13 @@ function StudentDataTable({
             {students.map((student) => {
               const hasDebt = student.paymentTone === "danger" || student.paymentTone === "warning";
               const hasActivationAlert = Boolean(student.activationWarning);
+              const isAtRisk = Boolean(student.isAtRisk);
               return (
                 <TableRow
                   key={student.code}
                   data-debt={hasDebt}
                   data-activation-alert={hasActivationAlert || undefined}
+                  data-risk={isAtRisk || undefined}
                 >
                   <TableCell>
                     <Link href={`/students/${student.id}` as Route} className="students-identity-link">
@@ -761,11 +785,9 @@ function StudentDataTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="students-table-stack">
+                    <div className="students-status-cell">
                       <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>
-                      {hasActivationAlert ? (
-                        <StatusChip tone="warning">İlk dərsə gəlməyib</StatusChip>
-                      ) : null}
+                      {isAtRisk ? <StatusChip tone="danger">Riskli</StatusChip> : null}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -863,6 +885,9 @@ function ActiveFilterBar({
       ) : null}
       {data.filters.payment !== "all" ? (
         <FilterChip label={`Ödəniş: ${data.filterLabels.payment}`} onRemove={() => onQuickFilter("payment", "all")} />
+      ) : null}
+      {data.filters.sale ? (
+        <FilterChip label={`Satış: ${data.filterLabels.sale}`} onRemove={() => onQuickFilter("sale", "")} />
       ) : null}
       {data.filters.attention ? (
         <FilterChip label={data.filterLabels.attention} onRemove={() => onQuickFilter("attention", "")} />

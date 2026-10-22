@@ -208,7 +208,7 @@ export function BonusWorkspace({
           ) : null}
         </div>
         {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
-        {selected.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki yeni satışlar</strong><span>Şirkət KPI ilə eyni mənbə: yeni qeydiyyat və ödənişli geri dönüş.</span></div> : null}
+        {selected.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki ödənişli satışlar</strong><span>Şirkət KPI / günlük hesabat ilə eyni mənbə: course_sales (yeni, qayıdış, birbaşa; ləğv/refund çıxılır).</span></div> : null}
         {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Sadə hesab</strong><span>Tələbə sayına uyğun bonus seçilir, sonra churn kəsintisi çıxılır.</span></div> : null}
         {selected.perUnitBonusPercent > 0 || selected.perUnitBonusAmount > 0 ? <div className="hr-bonus-method-note"><strong>Satışdan sonrakı bonus</strong><span>İlk {selected.requiredThreshold} satış məcburidir. Sonrakı hər satış üçün {selected.perUnitBonusPercent > 0 ? `${selected.perUnitBonusPercent}%` : ""}{selected.perUnitBonusPercent > 0 && selected.perUnitBonusAmount > 0 ? " + " : ""}{selected.perUnitBonusAmount > 0 ? formatMoney(selected.perUnitBonusAmount) : ""}.</span></div> : null}
       </aside>
@@ -487,7 +487,7 @@ function DeleteCampaignDialog({ open, campaign, pending, onClose, onSubmit }: { 
 function metricLabel(kind: HrBonusCampaignDto["metricKind"]) { return metricOptions.find((option) => option.value === kind)?.label ?? kind; }
 function metricDescription(kind: string) {
   if (kind === "DEPARTMENT_COLLECTED_REVENUE") return "Məsul menecerə bağlı tələbə ödənişlərindən avtomatik hesablanır.";
-  if (kind === "DEPARTMENT_SALES_COUNT") return "Departament əməkdaşlarına bağlı yeni qeydiyyatlardan hesablanır.";
+  if (kind === "DEPARTMENT_SALES_COUNT") return "Departament əməkdaşlarının ödənişli qəbul satışlarından (course_sales) hesablanır.";
   if (kind === "TEACHER_RETENTION_RATE") return "Dövrün əvvəlində müəllimdə olan tələbə sayı və dövr ərzindəki churn sayı ilə hesablanır.";
   return "Cari nəticə HR düzəlişləri ilə daxil edilir.";
 }

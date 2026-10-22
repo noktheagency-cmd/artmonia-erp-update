@@ -1,4 +1,8 @@
-import { registeredSalesCountSql } from "@/modules/students/sales-metrics-sql";
+import {
+  activeStudentsAsOfSql,
+  currentActiveStudentsSql,
+} from "@/modules/students/active-students-metrics-sql";
+import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
 import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/server/db/prisma";
@@ -140,7 +144,6 @@ type DashboardRawRow = {
   recentPayments: unknown;
   programStats: unknown;
   totalLeadsThisMonth: unknown;
-  convertedLeadsThisMonth: unknown;
   companySalesCount: unknown;
   studentStatusCounts: unknown;
   retention: { population: number; frozen: number; stopped: number; total: number };
@@ -225,12 +228,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         select jsonb_build_object('population', r.population, 'frozen', r.frozen, 'stopped', r.stopped, 'total', r.total)
         from (select ${retentionSummarySql}) r
       ) as retention,
-      coalesce((
-        select count(*)::int
-        from erp.students s
-        where s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-          and s.is_test_data = false
-      ), 0) as "activeStudents",
+      coalesce(${currentActiveStudentsSql()}, 0) as "activeStudents",
       coalesce((
         select sum(e.monthly_fee)
         from erp.enrollments e
@@ -239,23 +237,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
           and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
           and s.is_test_data = false
       ), 0) as "activeMrr",
-      coalesce((
-        select count(*)::int
-        from erp.students s
-        where s.registered_at < ${previousPeriodEndExclusive}
-          and s.is_test_data = false
-          and coalesce(
-            (
-              select h.new_status
-              from erp.student_status_history h
-              where h.student_id = s.id
-                and h.effective_at < ${previousPeriodEndExclusive}
-              order by h.effective_at desc, h.created_at desc
-              limit 1
-            ),
-            s.lifecycle_status
-          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-      ), 0) as "previousActiveStudents",
+      coalesce(${activeStudentsAsOfSql(Prisma.sql`${previousPeriodEndExclusive}`)}, 0) as "previousActiveStudents",
       coalesce((
         select sum(p.amount)
         from erp.payments p
@@ -542,14 +524,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         where l.created_at >= ${periodStart}
           and l.created_at < ${periodEndExclusive}
       ), 0) as "totalLeadsThisMonth",
-      coalesce((
-        select count(*)::int
-        from erp.leads l
-        where l.created_at >= ${periodStart}
-          and l.created_at < ${periodEndExclusive}
-          and (l.converted_student_id is not null or l.stage = 'REGISTERED'::"erp"."LeadStage")
-      ), 0) as "convertedLeadsThisMonth",
-      ${registeredSalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${periodEndExclusive}`)} as "companySalesCount",
+      ${companySalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${periodEndExclusive}`)} as "companySalesCount",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -577,21 +552,36 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         from (
           select
             coalesce(u.full_name, 'Menecer təyin edilməyib') as name,
-            count(distinct l.id)::int as leads,
-            count(distinct l.id) filter (
-              where l.converted_student_id is not null
-                or l.stage = 'REGISTERED'::"erp"."LeadStage"
-            )::int as sales,
-            coalesce(sum(p.amount), 0) as revenue
-          from erp.leads l
-          join erp.users u on u.id = l.manager_id and u.is_active = true
-          left join erp.payments p
-            on p.student_id = l.converted_student_id
-            and p.paid_at >= ${periodStart}
-            and p.paid_at < ${periodEndExclusive}
-          where l.created_at >= ${periodStart}
-            and l.created_at < ${periodEndExclusive}
-          group by u.id, coalesce(u.full_name, 'Menecer təyin edilməyib')
+            coalesce(lead_stats.leads, 0)::int as leads,
+            coalesce(sale_stats.sales, 0)::int as sales,
+            coalesce(sale_stats.revenue, 0) as revenue
+          from erp.users u
+          left join lateral (
+            select count(*)::int as leads
+            from erp.leads l
+            where l.manager_id = u.id
+              and l.created_at >= ${periodStart}
+              and l.created_at < ${periodEndExclusive}
+          ) lead_stats on true
+          left join lateral (
+            select
+              count(*)::int as sales,
+              coalesce(sum(p.amount), 0) as revenue
+            from erp.course_sales cs
+            join erp.students s on s.id = cs.student_id
+            left join erp.payments p
+              on p.course_sale_id = cs.id
+              and p.refunded_at is null
+            where cs.owner_id = u.id
+              and s.is_test_data = false
+              and cs.cancelled_at is null
+              and cs.qualified_at >= ${periodStart}::date
+              and cs.qualified_at < ${periodEndExclusive}::date
+              and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
+          ) sale_stats on true
+          where u.is_active = true
+            and (coalesce(lead_stats.leads, 0) > 0 or coalesce(sale_stats.sales, 0) > 0)
+          order by coalesce(sale_stats.sales, 0) desc, coalesce(sale_stats.revenue, 0) desc, coalesce(lead_stats.leads, 0) desc
           limit 5
         ) team_rows
       ), '[]'::jsonb) as "teamPerformance"
@@ -600,7 +590,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     fetchDashboardRawData,
     [
       "owner-dashboard-data",
-      "period-retention-sales-v2",
+      "period-retention-sales-v4",
       actor.id,
       scopeFor(actor.permissions, "student.read") ?? "none",
       scopeFor(actor.permissions, "attendance.read") ?? "none",
@@ -708,10 +698,10 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
   const totalAging = debtByBucket.reduce((sum, bucket) => sum + bucket.value, 0);
 
   const totalLeadsThisMonth = toNumber(row?.totalLeadsThisMonth);
-  const convertedLeadsThisMonth = toNumber(row?.convertedLeadsThisMonth);
   const companySalesCount = toNumber(row?.companySalesCount);
+  // Qeydiyyat = ödənişli satış (course_sales); unpaid converted lead sayılmır.
   const conversionRate = totalLeadsThisMonth > 0
-    ? `${Math.round((convertedLeadsThisMonth / totalLeadsThisMonth) * 100)}%`
+    ? `${Math.round((companySalesCount / totalLeadsThisMonth) * 100)}%`
     : "0%";
   const churnCounts = row?.retention ?? { population: 0, frozen: 0, stopped: 0, total: 0 };
   const churnRate = `${retentionRate(churnCounts.total, churnCounts.population)}%`;
@@ -857,7 +847,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
     programStats,
     teamPerformance,
     conversionRate,
-    conversionHelper: `${convertedLeadsThisMonth} qeydiyyat / ${totalLeadsThisMonth} müraciət`,
+    conversionHelper: `${companySalesCount} satış / ${totalLeadsThisMonth} müraciət`,
     salesCount: companySalesCount,
     totalLeadCount: totalLeadsThisMonth,
     churnRate,

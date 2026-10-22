@@ -1,10 +1,16 @@
 import { Prisma } from "@/generated/prisma/client";
 
 /**
- * Journal-only admission-sale count (erp.course_sales.qualified_at).
- * Use for the daily sales report and new admission flows that write the journal.
- * Do NOT use for owner KPI / CRM / company progress while historical rows live only
- * on students + status history — call registeredSalesCountSql instead.
+ * Canonical admission-sale count: erp.course_sales.qualified_at.
+ *
+ * Covers the three paid routes written by recordCourseSalePayment:
+ *   NEW  + CRM    — müraciətdən gəlib ödəniş alan
+ *   NEW  + DIRECT — tələbələr səhifəsindən birbaşa əlavə + ödəniş
+ *   RETURN + *    — STOPPED/FROZEN qayıdış + ödəniş (avans və ya tam)
+ *
+ * Cancelled / refunded deposits are excluded (cancelled_at is not null).
+ * Use everywhere owner dashboard, company KPI, daily report, bonus, and
+ * marketing "satış" must agree.
  */
 export function companySalesCountSql(from: Prisma.Sql, until: Prisma.Sql) {
   return Prisma.sql`(
@@ -19,88 +25,92 @@ export function companySalesCountSql(from: Prisma.Sql, until: Prisma.Sql) {
   )`;
 }
 
-function registeredSalesBaseSql(ownerIdSql?: Prisma.Sql) {
-  const ownerFilter = ownerIdSql
-    ? Prisma.sql`and s.manager_id = ${ownerIdSql}`
-    : Prisma.sql``;
-  return Prisma.sql`
-    select s.id, s.registered_at as sale_date
-    from erp.students s
-    where s.is_test_data = false
-      ${ownerFilter}
-    union all
-    select s.id, greatest(r.effective_at, activation.activated_at, payment.paid_at) as sale_date
-    from erp.students s
-    join (
-      select distinct student_id, effective_at
-      from erp.student_status_history
-      where event_type = 'REACTIVATED'::"erp"."StudentLifecycleEventType"
-    ) r on r.student_id = s.id and r.effective_at > s.registered_at
-    left join lateral (
-      select min(h.effective_at) as stopped_at
-      from erp.student_status_history h
-      where h.student_id = s.id and h.effective_at > r.effective_at
-        and h.new_status in ('FROZEN', 'STOPPED', 'COMPLETED', 'DECLINED')
-    ) next_stop on true
-    join lateral (
-      select min(h.effective_at) as activated_at
-      from erp.student_status_history h
-      where h.student_id = s.id and h.new_status = 'ACTIVE'
-        and h.effective_at >= r.effective_at
-        and (next_stop.stopped_at is null or h.effective_at < next_stop.stopped_at)
-    ) activation on activation.activated_at is not null
-    join lateral (
-      select min(p.paid_at) as paid_at
-      from erp.payments p
-      where p.student_id = s.id and p.amount > 0 and p.paid_at >= r.effective_at
-        and (next_stop.stopped_at is null or p.paid_at < next_stop.stopped_at)
-    ) payment on payment.paid_at is not null
-    where s.is_test_data = false
-      ${ownerFilter}
-  `;
+/**
+ * @deprecated Alias of companySalesCountSql — kept so older call sites stay on the journal.
+ */
+export function registeredSalesCountSql(from: Prisma.Sql, until: Prisma.Sql) {
+  return companySalesCountSql(from, until);
 }
 
 /**
- * Production-parity sales count: new registrations plus paid returns.
- * Canonical source for dashboard, company KPI progress, and HR sales bonus
- * until historical admissions are fully written into course_sales.
+ * Owner-scoped journal sales (course_sales.owner_id).
+ * `ownerIdSql` must be a raw SQL expression (e.g. Prisma.raw("u.id")) or a bound uuid.
  */
-export function registeredSalesCountSql(from: Prisma.Sql, until: Prisma.Sql) {
+export function ownerSalesCountSql(
+  ownerIdSql: Prisma.Sql,
+  from: Prisma.Sql | null,
+  until: Prisma.Sql | null,
+) {
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`sale_student.is_test_data = false`,
+    Prisma.sql`cs.cancelled_at is null`,
+    Prisma.sql`cs.owner_id = ${ownerIdSql}`,
+    Prisma.sql`cs.qualified_at <= (now() at time zone 'Asia/Baku')::date`,
+  ];
+
+  if (from) {
+    conditions.push(Prisma.sql`cs.qualified_at >= ${from}::date`);
+  }
+  if (until) {
+    conditions.push(Prisma.sql`cs.qualified_at < ${until}::date`);
+  }
+
   return Prisma.sql`(
-    select count(*)::int from (
-      ${registeredSalesBaseSql()}
-    ) sales
-    where sale_date >= ${from}::date and sale_date < ${until}::date
-      and sale_date <= (now() at time zone 'Asia/Baku')::date
+    select count(*)::int
+    from erp.course_sales cs
+    join erp.students sale_student on sale_student.id = cs.student_id
+    where ${Prisma.join(conditions, " AND ")}
   )`;
 }
 
 /**
- * Owner-scoped production-parity sales (student.manager_id).
- * `ownerIdSql` must be a raw SQL expression (e.g. Prisma.raw("u.id")) or a bound uuid.
+ * @deprecated Alias of ownerSalesCountSql.
  */
 export function ownerRegisteredSalesCountSql(
   ownerIdSql: Prisma.Sql,
   from: Prisma.Sql | null,
   until: Prisma.Sql | null,
 ) {
-  const conditions: Prisma.Sql[] = [
-    Prisma.sql`sale_date <= (now() at time zone 'Asia/Baku')::date`,
-  ];
-  if (from) conditions.push(Prisma.sql`sale_date >= ${from}::date`);
-  if (until) conditions.push(Prisma.sql`sale_date < ${until}::date`);
+  return ownerSalesCountSql(ownerIdSql, from, until);
+}
+
+/**
+ * Department bonus sales: journal rows whose owner belongs to the department.
+ * Inclusive end date matches HR campaign windows (starts_at..ends_at).
+ */
+export function departmentSalesCountSql(
+  departmentSql: Prisma.Sql,
+  from: Prisma.Sql,
+  untilInclusive: Prisma.Sql,
+  eligibleCampaignIdSql?: Prisma.Sql,
+) {
+  const eligibility = eligibleCampaignIdSql
+    ? Prisma.sql`and exists (
+        select 1 from erp.hr_bonus_participants participant
+        where participant.campaign_id = ${eligibleCampaignIdSql}
+          and participant.employee_id = he.id
+          and participant.is_eligible = true
+      )`
+    : Prisma.sql``;
 
   return Prisma.sql`(
-    select count(*)::int from (
-      ${registeredSalesBaseSql(ownerIdSql)}
-    ) sales
-    where ${Prisma.join(conditions, " AND ")}
+    select count(*)::int
+    from erp.course_sales cs
+    join erp.students s on s.id = cs.student_id
+    join erp.hr_employees he on he.user_id = cs.owner_id
+    where s.is_test_data = false
+      and cs.cancelled_at is null
+      and he.department = ${departmentSql}
+      and cs.qualified_at >= ${from}::date
+      and cs.qualified_at <= ${untilInclusive}::date
+      and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
+      ${eligibility}
   )`;
 }
 
 /**
  * Lead converted in production CRM sense (registered student or REGISTERED stage).
- * Prefer this for CRM conversion / role dashboards. Historical imports have no course_sales rows.
+ * Funnel metric — not a paid sale. Prefer leadHasQualifiedSaleSql for sale KPIs.
  */
 export function leadIsConvertedSql() {
   return Prisma.sql`(
@@ -110,8 +120,7 @@ export function leadIsConvertedSql() {
 }
 
 /**
- * Journal-linked qualifying sale for lead `l` (course_sales only).
- * Empty while admissions were never journaled — use leadIsConvertedSql for CRM KPIs.
+ * Paid qualifying sale for lead `l` (open course_sales on the lead or converted student).
  */
 export function leadHasQualifiedSaleSql() {
   return Prisma.sql`exists (
@@ -131,31 +140,62 @@ export function leadHasQualifiedSaleSql() {
 }
 
 /**
- * Journal-only owner sales (course_sales.owner_id). Prefer ownerRegisteredSalesCountSql for KPIs.
+ * Lead reached a consultation / trial meeting path (stage history or attended appointment).
+ * Used to split CRM paid sales: konsultasiya ilə vs follow-up shortcut.
  */
-export function ownerSalesCountSql(
-  ownerIdSql: Prisma.Sql,
-  from: Prisma.Sql | null,
-  until: Prisma.Sql | null,
+export function leadHadConsultationSql() {
+  return Prisma.sql`(
+    l.stage in (
+      'QUALIFIED'::"erp"."LeadStage",
+      'TRIAL_LESSON'::"erp"."LeadStage",
+      'TRIAL_CONSULTATION'::"erp"."LeadStage"
+    )
+    or exists (
+      select 1
+      from erp.lead_stage_history h
+      where h.lead_id = l.id
+        and h.new_stage in (
+          'QUALIFIED'::"erp"."LeadStage",
+          'TRIAL_LESSON'::"erp"."LeadStage",
+          'TRIAL_CONSULTATION'::"erp"."LeadStage"
+        )
+    )
+    or exists (
+      select 1
+      from erp.crm_appointments a
+      where a.lead_id = l.id
+        and a.outcome = 'ATTENDED'
+        and a.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
+    )
+  )`;
+}
+
+/**
+ * Period journal sales with optional route/kind filter (canonical course_sales).
+ */
+export function periodCourseSalesCountSql(
+  from: Prisma.Sql,
+  until: Prisma.Sql,
+  options?: { route?: "CRM" | "DIRECT"; kind?: "NEW" | "RETURN" },
 ) {
-  const conditions: Prisma.Sql[] = [
-    Prisma.sql`sale_student.is_test_data = false`,
+  const filters: Prisma.Sql[] = [
+    Prisma.sql`s.is_test_data = false`,
     Prisma.sql`cs.cancelled_at is null`,
-    Prisma.sql`cs.owner_id = ${ownerIdSql}`,
+    Prisma.sql`cs.qualified_at >= ${from}::date`,
+    Prisma.sql`cs.qualified_at < ${until}::date`,
+    Prisma.sql`cs.qualified_at <= (now() at time zone 'Asia/Baku')::date`,
   ];
-
-  if (from) {
-    conditions.push(Prisma.sql`cs.qualified_at >= ${from}::date`);
+  if (options?.route) {
+    filters.push(Prisma.sql`cs.route = ${options.route}`);
   }
-  if (until) {
-    conditions.push(Prisma.sql`cs.qualified_at < ${until}::date`);
+  if (options?.kind) {
+    filters.push(Prisma.sql`cs.kind = ${options.kind}`);
   }
-
   return Prisma.sql`(
     select count(*)::int
     from erp.course_sales cs
-    join erp.students sale_student on sale_student.id = cs.student_id
-    where ${Prisma.join(conditions, " AND ")}
+    join erp.students s on s.id = cs.student_id
+    where ${Prisma.join(filters, " AND ")}
   )`;
 }
 

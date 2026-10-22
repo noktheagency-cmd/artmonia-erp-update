@@ -21,6 +21,7 @@ import type {
   CompanyKpiValueKind,
 } from "@/modules/hr/company-kpi-calculations";
 import type { CompanyKpiData } from "@/modules/hr/company-kpi-data";
+import { kpiMetricHref } from "@/modules/hr/company-kpi-links";
 
 export function CompanyKpiProgressPanel({ data }: { data: CompanyKpiData }) {
   const sales = data.metrics.find((metric) => metric.key === "newSales");
@@ -41,7 +42,7 @@ export function CompanyKpiProgressPanel({ data }: { data: CompanyKpiData }) {
             <span className="owner-dashboard-company-kpi-headline">
               <span>
                 <strong>Aylıq satış</strong>
-                <small>{data.monthLabel} · yeni qeydiyyat və ödənişli geri dönüş</small>
+                <small>{data.monthLabel} · qeydiyyat + birbaşa + qayıdış</small>
               </span>
               <span className="owner-dashboard-company-kpi-result">
                 <b>{formatValue(sales.actual, sales.kind)}</b>
@@ -69,7 +70,11 @@ export function CompanyKpiProgressPanel({ data }: { data: CompanyKpiData }) {
 
         <div className="owner-dashboard-company-kpi-list">
           {data.metrics.map((metric) => (
-            <MetricRow key={metric.key} metric={metric} />
+            <MetricRow
+              key={metric.key}
+              metric={metric}
+              href={kpiMetricHref(metric.key, data.periodMonth)}
+            />
           ))}
         </div>
 
@@ -87,9 +92,19 @@ export function CompanyKpiProgressPanel({ data }: { data: CompanyKpiData }) {
   );
 }
 
-function MetricRow({ metric }: { metric: CompanyKpiMetric }) {
+function MetricRow({
+  metric,
+  href,
+}: {
+  metric: CompanyKpiMetric;
+  href: ComponentProps<typeof Link>["href"];
+}) {
   return (
-    <article className="owner-dashboard-company-kpi-metric">
+    <Link
+      href={href}
+      className="owner-dashboard-company-kpi-metric"
+      aria-label={`${metric.label} siyahısına keç`}
+    >
       <div className="owner-dashboard-company-kpi-metric-head">
         <div>
           <strong>{metric.label}</strong>
@@ -99,7 +114,10 @@ function MetricRow({ metric }: { metric: CompanyKpiMetric }) {
             Target <b>{metric.hasTarget ? formatValue(metric.target, metric.kind) : "—"}</b>
           </span>
         </div>
-        <StatusBadge tone={metric.status} label={metric.statusLabel} />
+        <div className="owner-dashboard-company-kpi-metric-side">
+          <StatusBadge tone={metric.status} label={metric.statusLabel} />
+          <ChevronRight className="owner-dashboard-company-kpi-metric-chevron" aria-hidden="true" />
+        </div>
       </div>
       <Progress
         value={progressValue(metric)}
@@ -112,7 +130,7 @@ function MetricRow({ metric }: { metric: CompanyKpiMetric }) {
         <span>Proqnoz: {formatValue(metric.projected, metric.kind)}</span>
         <span>{metric.paceLabel}: {formatValue(metric.requiredDaily, metric.requiredDailyKind)}</span>
       </div>
-    </article>
+    </Link>
   );
 }
 

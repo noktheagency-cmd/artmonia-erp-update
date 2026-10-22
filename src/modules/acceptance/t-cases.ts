@@ -17,7 +17,7 @@ export type AcceptanceCase = {
 };
 
 export const acceptanceCases: AcceptanceCase[] = [
-  { id: "T-01", section: "admission", event: "Ödənişsiz ilkin kart yaradılır", expected: "Slot gözləyir; satış 0, aktiv 0", mode: "automated", bk: "BK-01" },
+  { id: "T-01", section: "admission", event: "Ödənişsiz ilkin kart (hədiyyə istisna)", expected: "Ödənişsiz qeydiyyat bloklanır; satış yalnız ödənişlə", mode: "automated", bk: "BK-01" },
   { id: "T-02", section: "admission", event: "Müqavilə var, qəbul ödənişi 19 AZN", expected: "Uyğun satış yaranmır", mode: "automated", bk: "BK-02" },
   { id: "T-03", section: "admission", event: "Müqavilə yoxdur, 20 AZN ödənib", expected: "Pul görünür; tamamlanmış qəbul satışı yoxdur", mode: "automated", bk: "BK-02" },
   { id: "T-04", section: "admission", event: "Müqavilə və bir qəbul ödənişi 20 AZN", expected: "Bir satış; aktivlik və dövr başlamır (yalnız PRESENT sonrası)", mode: "automated", bk: "BK-02/BK-06" },
@@ -52,7 +52,7 @@ export const acceptanceCases: AcceptanceCase[] = [
   { id: "T-31", section: "billing", event: "Dondurmada ödəniş alınmır", expected: "Borc yaranır, pul ödənilmiş göstərilmir", mode: "manual", bk: "BK-10" },
   { id: "T-32", section: "billing", event: "14 gündən çox gecikmə var", expected: "Avtomatik dayandırma yoxdur", mode: "automated", bk: "BK-11" },
   { id: "T-33", section: "billing", event: "Menecer manual dayandırır", expected: "Yer azad olur; borc/tarixçə qalır", mode: "automated", bk: "BK-12" },
-  { id: "T-34", section: "billing", event: "FROZEN bərpası və ödəniş", expected: "Yeni satış yoxdur; əvvəlki aylıq gün qalır", mode: "automated", bk: "BK-13" },
+  { id: "T-34", section: "billing", event: "FROZEN bərpası və ödəniş", expected: "RETURN sale (course_sales); avans/tam ödəniş uyğunlaşır", mode: "automated", bk: "BK-13" },
   { id: "T-35", section: "billing", event: "STOPPED tələbə uyğun yeni qəbulla qayıdır", expected: "Təkrar satış/KPI +1; eyni profil", mode: "automated", bk: "BK-13" },
   { id: "T-36", section: "billing", event: "Qayıdan tələbə yalnız köhnə borcu ödəyir", expected: "Özü yeni qəbul satışı yaratmır", mode: "automated", bk: "BK-13" },
   { id: "T-37", section: "billing", event: "İlk ay ortasında paket yüksəltmə", expected: "Ümumi qaydada bloklanır", mode: "automated", bk: "BK-15" },

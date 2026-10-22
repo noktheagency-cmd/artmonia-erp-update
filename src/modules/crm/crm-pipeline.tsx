@@ -15,6 +15,7 @@ import {
   Filter,
   Layers3,
   List,
+  Search,
   SlidersHorizontal,
   Sparkles,
   TrendingUp,
@@ -28,7 +29,7 @@ import { FormSelect, type SelectOption } from "@/components/ui/select";
 import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
 import {
   CrmConversionDialog,
-  type CrmConversionFunnelStep,
+  type CrmConversionNavTarget,
 } from "@/modules/crm/crm-conversion-dialog";
 import { CrmOverview } from "@/modules/crm/crm-overview";
 import { OverviewLeadDialog } from "@/modules/crm/overview-lead-dialog";
@@ -41,6 +42,7 @@ import {
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
 import { consultationTrialLabel, consultationTrialStage, leadStageLabels, leadStageSelectOptions } from "@/modules/crm/stage";
+import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 
 const followUpLabels = {
   all: "İzləmə",
@@ -126,20 +128,56 @@ export function CrmPipeline({ data }: { data: CrmData }) {
     router.replace(href as Route, { scroll: false });
   }
 
-  function handleFunnelStepSelect(step: CrmConversionFunnelStep) {
+  function handleConversionNavigate(target: CrmConversionNavTarget) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("salesDetails");
     params.delete("followUp");
     params.delete("q");
-    if (step === "leads") {
-      params.delete("stage");
-    } else if (step === "contacted") {
-      params.set("stage", "CONTACTED");
-    } else if (step === "consultation") {
-      params.set("stage", consultationTrialStage);
+
+    const studentsParams = new URLSearchParams();
+    studentsParams.set("tab", "list");
+    if (data.filters.saleFrom) studentsParams.set("from", data.filters.saleFrom);
+    if (data.filters.saleTo) studentsParams.set("to", data.filters.saleTo);
+
+    if (target.kind === "funnel") {
+      if (target.step === "leads") {
+        params.delete("stage");
+      } else if (target.step === "contacted") {
+        // Funnel əlaqə = əlaqə qurulmuş və ondan irəli gedənlər; siyahıda cari “Əlaqə quruldu”
+        params.set("stage", "CONTACTED");
+      } else if (target.step === "consultation") {
+        // Konsultasiya yolu: təyin olunmuş + sınaq (bir addım)
+        params.set("stage", consultationTrialStage);
+      } else {
+        // Qeydiyyat → ödənişli + slot gözləyən tələbələr (follow-upda qalmır)
+        studentsParams.set("status", "SLOT_WAITING");
+        studentsParams.set("sale", "crm_new");
+        setConversionDetailsOpen(false);
+        router.push(`/students?${studentsParams.toString()}` as Route);
+        return;
+      }
+    } else if (target.key === "trial") {
+      params.set("stage", "TRIAL_LESSON");
+    } else if (target.key === "lost") {
+      params.set("stage", "LOST");
+    } else if (target.key === "return") {
+      studentsParams.set("sale", "return");
+      setConversionDetailsOpen(false);
+      router.push(`/students?${studentsParams.toString()}` as Route);
+      return;
+    } else if (target.key === "direct") {
+      studentsParams.set("sale", "direct");
+      setConversionDetailsOpen(false);
+      router.push(`/students?${studentsParams.toString()}` as Route);
+      return;
     } else {
-      params.set("stage", "REGISTERED");
+      // Satış bölgüsü → Qeydiyyat (dövr CRM NEW); funnel isə yalnız slot gözləyənlər
+      studentsParams.set("sale", "crm_new");
+      setConversionDetailsOpen(false);
+      router.push(`/students?${studentsParams.toString()}` as Route);
+      return;
     }
+
     params.set("tab", "list");
     setConversionDetailsOpen(false);
     navigate(params);
@@ -230,7 +268,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
               <Button type="button" variant="outline"><Filter /> Filtrlər{data.filters.activeCount > 0 ? ` (${data.filters.activeCount})` : ""}</Button>
             </DialogTrigger>
             <DialogContent className="crm-filter-dialog" aria-describedby={undefined}>
-              <DialogHeader><DialogTitle>Follow-up filtrləri</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Müraciət filtrləri</DialogTitle></DialogHeader>
               <CrmFilterPanel
                 key={searchParams.toString()}
                 data={data}
@@ -290,7 +328,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
         onOpenChange={handleConversionOpenChange}
         totalLeads={data.metrics[0]?.value ?? "0"}
         stats={data.dashboardStats}
-        onFunnelStepSelect={handleFunnelStepSelect}
+        onNavigate={handleConversionNavigate}
       />
 
       <div className="crm-view-toolbar crm-enter" style={{ animationDelay: "230ms" }}>
@@ -346,16 +384,144 @@ export function CrmPipeline({ data }: { data: CrmData }) {
           />
           <CrmLeadsTable
             data={data}
+            preview
+            onShowAll={() => handleTabChange("list")}
             onClearFilters={handleClearFilters}
           />
         </>
       ) : (
         <div className="crm-list-view">
+          <CrmListToolbar
+            query={data.query}
+            stage={data.filters.stage}
+            priority={data.filters.priority}
+            owner={data.filters.owner}
+            managers={data.managers}
+            onFilter={handleQuickFilter}
+            onOpenFilters={() => setFiltersOpen(true)}
+          />
           <ActiveFiltersBar data={data} onClear={handleClearFilters} onRemove={handleQuickFilter} />
           <CrmLeadsTable data={data} onClearFilters={handleClearFilters} />
         </div>
       )}
     </section>
+  );
+}
+
+function CrmListToolbar({
+  query,
+  stage,
+  priority,
+  owner,
+  managers,
+  onFilter,
+  onOpenFilters,
+}: {
+  query: string;
+  stage: CrmData["filters"]["stage"];
+  priority: CrmData["filters"]["priority"];
+  owner: string;
+  managers: CrmData["managers"];
+  onFilter: (key: string, value: string) => void;
+  onOpenFilters: () => void;
+}) {
+  const [searchValue, setSearchValue] = useState(query);
+  const onFilterRef = useRef(onFilter);
+  const searchValueRef = useRef(searchValue);
+  const submittedQueryRef = useRef(query);
+  onFilterRef.current = onFilter;
+  searchValueRef.current = searchValue;
+
+  useEffect(() => {
+    const typed = searchValueRef.current.trim();
+    if (typed !== submittedQueryRef.current && typed !== query) return;
+    submittedQueryRef.current = query;
+    setSearchValue(query);
+  }, [query]);
+
+  useEffect(() => {
+    const next = searchValue.trim();
+    if (next === query) return;
+    const timer = window.setTimeout(() => {
+      submittedQueryRef.current = next;
+      onFilterRef.current("q", next);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query, searchValue]);
+
+  function applySelect(key: "stage" | "priority" | "owner", value: string) {
+    const next = value === EMPTY_SELECT_VALUE || value === "all" ? "" : value;
+    const current = key === "stage" ? stage : key === "priority" ? priority : owner;
+    if (next === current) return;
+    onFilter(key, next);
+  }
+
+  const stageOptions = leadStageSelectOptions.flatMap((option): SelectOption[] => {
+    if (option.value === "TRIAL_LESSON") return [];
+    if (option.value === "REGISTERED") return [];
+    if (option.value === "QUALIFIED") return [{ value: consultationTrialStage, label: consultationTrialLabel }];
+    return [option];
+  });
+
+  return (
+    <div className="crm-list-toolbar" role="search">
+      <label className="crm-list-search">
+        <Search aria-hidden="true" />
+        <span className="sr-only">Müraciət axtar</span>
+        <input
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          placeholder="Ad, telefon və ya mənbə üzrə axtar"
+        />
+        {searchValue ? (
+          <button
+            type="button"
+            className="crm-list-search-clear"
+            aria-label="Axtarışı təmizlə"
+            onClick={() => {
+              setSearchValue("");
+              submittedQueryRef.current = "";
+              onFilterRef.current("q", "");
+            }}
+          >
+            <X aria-hidden="true" />
+          </button>
+        ) : null}
+      </label>
+      <FormSelect
+        name="listStage"
+        aria-label="Status"
+        value={stage}
+        onValueChange={(value) => applySelect("stage", value)}
+        emptyLabel="Status"
+        options={stageOptions}
+        icon={Activity}
+      />
+      <FormSelect
+        name="listPriority"
+        aria-label="Prioritet"
+        value={priority}
+        onValueChange={(value) => applySelect("priority", value)}
+        emptyLabel="Prioritet"
+        options={leadPrioritySelectOptions}
+        icon={SlidersHorizontal}
+      />
+      <FormSelect
+        name="listOwner"
+        aria-label="Məsul şəxs"
+        value={owner}
+        onValueChange={(value) => applySelect("owner", value)}
+        emptyLabel="Məsul"
+        options={managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
+        icon={UserRound}
+        searchable
+        searchPlaceholder="Məsul axtar..."
+      />
+      <Button type="button" variant="outline" size="sm" className="crm-list-toolbar-more" onClick={onOpenFilters}>
+        <Filter data-icon="inline-start" />
+        Daha çox
+      </Button>
+    </div>
   );
 }
 
@@ -385,6 +551,8 @@ function CrmFilterPanel({
             emptyLabel="Status"
             options={leadStageSelectOptions.flatMap((option): SelectOption[] => {
               if (option.value === "TRIAL_LESSON") return [];
+              // Qeydiyyat follow-updan çıxır — tələbələr / slot gözləyir siyahısına düşür
+              if (option.value === "REGISTERED") return [];
               if (option.value === "QUALIFIED") return [{ value: consultationTrialStage, label: consultationTrialLabel }];
               return [option];
             })}
@@ -455,6 +623,7 @@ function ActiveFiltersBar({
   if (data.filters.activeCount === 0) return null;
 
   const chips = [
+    data.query ? { key: "q", label: `Axtarış: ${data.query}` } : null,
     data.filters.stage
       ? { key: "stage", label: `Status: ${data.filters.stage === consultationTrialStage ? consultationTrialLabel : leadStageLabels[data.filters.stage]}` }
       : null,

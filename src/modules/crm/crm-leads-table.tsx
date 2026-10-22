@@ -36,13 +36,9 @@ export function CrmLeadsTable({
       <header className="crm-table-heading">
         <div>
           <h2>Müraciət siyahısı</h2>
-          <p>
-            {data.listTotalCount > data.leads.length
-              ? `${data.leads.length} / ${data.listTotalCount} müraciət göstərilir (seçilmiş filtr)`
-              : `${data.listTotalCount} müraciət seçilmiş görünüşə uyğundur`}
-          </p>
+          <p>{data.metrics[0]?.value ?? data.listTotalCount} müraciət</p>
         </div>
-        {preview && data.leads.length > 0 ? (
+        {preview && onShowAll ? (
           <Button type="button" variant="outline" size="sm" onClick={onShowAll}>
             Tam siyahı
             <ArrowRight data-icon="inline-end" />

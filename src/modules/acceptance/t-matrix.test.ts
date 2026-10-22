@@ -38,11 +38,15 @@ test("catalog covers T-01…T-54 exactly once", () => {
 });
 
 test("T-01: unpaid card is not an admission sale cycle", () => {
-  // Creating a card without payment never calls assertAdmissionPayment;
-  // admission cycle for a tracked student is NEW key only when sale path runs.
+  // Paid registration is required in UI/API; sale journal only opens when
+  // assertAdmissionPayment succeeds. Cycle kind alone is still NEW.
   const cycle = admissionCycle({ studentId: "s1", admissionTracking: true });
   assert.equal(cycle.kind, "NEW");
   assert.equal(isBillingPausedStatus(StudentLifecycleStatus.SLOT_WAITING), true);
+  assert.throws(
+    () => assertAdmissionPayment(new Prisma.Decimal(0), true),
+    (error: unknown) => error instanceof PublicActionError,
+  );
 });
 
 test("T-02: 19 AZN with contract does not qualify", () => {
@@ -111,10 +115,14 @@ test("T-14 / T-16 / T-19 / T-20: unified MEETING kind + subtypes; direct allowed
 });
 
 test("T-28: renewal path is not RETURN sale", () => {
-  // Renewals do not pass returnId; RETURN only from STOPPED + returnId.
+  // Package / completed moves are not paid return sales; STOPPED/FROZEN are.
   assert.throws(
-    () => admissionCycle({ studentId: "s1", admissionTracking: true, returnId: "r1", oldStatus: "FROZEN" }),
+    () => admissionCycle({ studentId: "s1", admissionTracking: true, returnId: "r1", oldStatus: "COMPLETED" }),
     (error: unknown) => error instanceof PublicActionError,
+  );
+  assert.equal(
+    admissionCycle({ studentId: "s1", admissionTracking: true }).kind,
+    "NEW",
   );
 });
 
@@ -144,16 +152,15 @@ test("T-33: STOPPED frees seat (enrollment paused) and pauses billing", () => {
   );
 });
 
-test("T-34: freeze return is not a sale", () => {
-  assert.throws(
-    () => admissionCycle({
-      studentId: "s1",
-      admissionTracking: true,
-      returnId: "freeze-return",
-      oldStatus: "FROZEN",
-    }),
-    (error: unknown) => error instanceof PublicActionError,
-  );
+test("T-34: freeze return with payment creates RETURN sale", () => {
+  const cycle = admissionCycle({
+    studentId: "s1",
+    admissionTracking: true,
+    returnId: "freeze-return",
+    oldStatus: "FROZEN",
+  });
+  assert.equal(cycle.kind, "RETURN");
+  assert.equal(cycle.key, "return:freeze-return");
 });
 
 test("T-35: STOPPED return creates RETURN cycle", () => {

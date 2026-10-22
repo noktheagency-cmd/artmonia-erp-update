@@ -6,11 +6,15 @@ test("sale requires a signed contract and one qualifying payment, including the 
  assert.throws(()=>assertAdmissionPayment(new Prisma.Decimal(20),false));
  assert.doesNotThrow(()=>assertAdmissionPayment(new Prisma.Decimal(20),true));
 });
-test("only STOPPED returns create a new admission cycle; legacy admissions are not inferred",()=>{
+test("STOPPED and FROZEN returns create admission cycles; package moves do not",()=>{
  const input={studentId:"student",admissionTracking:true};
  assert.equal(admissionCycle(input).key,"new:student");
+ assert.equal(admissionCycle(input).kind,"NEW");
  assert.equal(admissionCycle({...input,returnId:"return",oldStatus:"STOPPED"}).key,"return:return");
- for(const status of ["FROZEN","COMPLETED","DECLINED","ACTIVE"])assert.throws(()=>admissionCycle({...input,returnId:"return",oldStatus:status}));
+ assert.equal(admissionCycle({...input,returnId:"return",oldStatus:"STOPPED"}).kind,"RETURN");
+ assert.equal(admissionCycle({...input,returnId:"freeze",oldStatus:"FROZEN"}).key,"return:freeze");
+ assert.equal(admissionCycle({...input,returnId:"freeze",oldStatus:"FROZEN"}).kind,"RETURN");
+ for(const status of ["COMPLETED","DECLINED","ACTIVE"])assert.throws(()=>admissionCycle({...input,returnId:"return",oldStatus:status}));
  assert.throws(()=>admissionCycle({...input,admissionTracking:false}));
 });
 test("cancellation stops at the first full fee, retaining decimal boundaries",()=>{

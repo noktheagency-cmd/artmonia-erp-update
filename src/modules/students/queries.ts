@@ -47,6 +47,7 @@ import {
   type StudentReminderKind,
 } from "@/modules/students/student-reminders";
 import { resolveFirstLessonActivationWarning } from "@/modules/students/activation-from-attendance";
+import { loadAtRiskStudentIds } from "@/modules/students/attendance-risk-for-students";
 import { earliestPackageUpgradeMonth } from "@/modules/students/package-upgrade-policy";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 import { programJourneyImageUrl } from "@/server/storage/erp-files";
@@ -54,6 +55,8 @@ import { programJourneyImageUrl } from "@/server/storage/erp-files";
 type SummaryTone = "blue" | "coral" | "yellow" | "mint";
 type StudentTone = "success" | "warning" | "danger" | "neutral" | "info";
 type StudentPaymentFilter = "all" | "paid" | "open" | "overdue" | "archive";
+/** Course-sale route/kind shortcut used by CRM conversion deep-links. */
+type StudentSaleFilter = "" | "crm_new" | "direct" | "return";
 type FilterOption = { value: string; label: string };
 
 export type StudentListFilters = {
@@ -63,10 +66,13 @@ export type StudentListFilters = {
   program?: string;
   teacher?: string;
   payment?: string;
+  sale?: string;
   attention?: string;
   ids?: string;
   from?: string;
   to?: string;
+  /** `all` = istifadəçi ay filtrini silib; default cari ay tətbiq olunmur. */
+  dates?: string;
   page?: string;
   pageSize?: string;
   tab?: string;
@@ -183,6 +189,7 @@ export type StudentListData = {
     program: string;
     teacher: string;
     payment: StudentPaymentFilter;
+    sale: StudentSaleFilter;
     attention: StudentAttentionFilter;
     ids: string[];
     activeCount: number;
@@ -194,6 +201,7 @@ export type StudentListData = {
     program: string;
     teacher: string;
     payment: string;
+    sale: string;
     attention: string;
     ids: string;
   };
@@ -244,6 +252,8 @@ export type StudentListData = {
     freezeReserved: boolean;
     lifecycleStatus: string;
     lifecycleTone: StudentTone;
+    /** Derived from attendance streak; not a lifecycle status. */
+    isAtRisk: boolean;
     activationWarning: string | null;
     paymentStatus: string;
     paymentStatusCode: string;
@@ -343,6 +353,7 @@ type StudentListCacheInput = {
   programFilter: string;
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
+  saleFilter: StudentSaleFilter;
   attentionFilter: StudentAttentionFilter;
   studentIds: string[] | null;
   today: string;
@@ -454,6 +465,12 @@ const paymentOptions: Array<FilterOption & { value: StudentPaymentFilter }> = [
   { value: "archive", label: "Arxiv borcu" },
 ];
 
+const saleFilterLabels: Record<Exclude<StudentSaleFilter, "">, string> = {
+  crm_new: "Qeydiyyat (CRM)",
+  direct: "Birbaşa satış",
+  return: "Qayıdış",
+};
+
 const invoiceStatusMeta: Record<InvoiceStatus, { label: string; tone: StudentTone }> = {
   [InvoiceStatus.DRAFT]: { label: "Qaralama", tone: "neutral" },
   [InvoiceStatus.OPEN]: { label: "Açıq", tone: "warning" },
@@ -473,6 +490,7 @@ export async function getStudentListData(
   const programFilter = formFilterString(input.program);
   const teacherFilter = formFilterString(input.teacher);
   const paymentFilter = normalizePaymentFilter(input.payment);
+  const saleFilter = normalizeSaleFilter(input.sale);
   const attentionFilter = normalizeAttentionFilter(input.attention);
   const studentIds = normalizeStudentIdsFilter(input.ids);
   const activeTab = normalizeStudentTab(input.tab);
@@ -483,16 +501,18 @@ export async function getStudentListData(
     || paymentFilter === "overdue"
     || paymentFilter === "archive";
   const hasExplicitDateRange = Boolean(input.from?.trim() || input.to?.trim());
+  const allDatesMode = !hasExplicitDateRange && formFilterString(input.dates) === "all";
   const statusListMode = Boolean(statusFilter)
     || churnOnly
     || Boolean(search)
     || Boolean(programFilter)
     || Boolean(teacherFilter)
+    || Boolean(saleFilter)
     || Boolean(attentionFilter)
     || studentIds !== null;
   const defaultDateFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const dateFromFilter = normalizeDateFilter(
-    debtListMode
+    debtListMode || allDatesMode
       ? undefined
       : hasExplicitDateRange
         ? input.from
@@ -501,7 +521,7 @@ export async function getStudentListData(
           : defaultDateFrom.toISOString().slice(0, 10)
   );
   const dateToFilter = normalizeDateFilter(
-    debtListMode
+    debtListMode || allDatesMode
       ? undefined
       : hasExplicitDateRange
         ? input.to
@@ -517,6 +537,7 @@ export async function getStudentListData(
       programFilter,
       teacherFilter,
       paymentFilter,
+      saleFilter,
       attentionFilter,
       studentIds,
       today: today.toISOString(),
@@ -535,6 +556,7 @@ export async function getStudentListData(
         programFilter,
         teacherFilter,
         paymentFilter,
+        saleFilter,
         attentionFilter,
         studentIds,
         today: today.toISOString(),
@@ -547,6 +569,7 @@ export async function getStudentListData(
   if (rawData !== initialRawData) page = 1;
   const { rows, options, clv, paymentSummary, operations } = rawData;
   const { programs, teachers, leads: convertibleLeads, sources, campaigns, discountTypes } = options;
+  const atRiskIds = await loadAtRiskStudentIds(rows.map((row) => row.id));
 
   const summaryCounts = new Map(
     Object.entries(options.summaryCounts).map(([status, count]) => [
@@ -586,6 +609,7 @@ export async function getStudentListData(
     programFilter,
     teacherFilter,
     paymentFilter !== "all" ? paymentFilter : "",
+    saleFilter,
     attentionFilter,
     studentIds !== null ? "ids" : "",
     dateFromFilter.input,
@@ -605,10 +629,12 @@ export async function getStudentListData(
       program: programFilter,
       teacher: teacherFilter,
       payment: paymentFilter,
+      sale: saleFilter,
       attention: attentionFilter,
       ids: studentIds,
       from: dateFromFilter.input,
       to: dateToFilter.input,
+      dates: allDatesMode ? "all" : "",
       page,
       pageSize,
       tab: activeTab,
@@ -671,6 +697,7 @@ export async function getStudentListData(
       program: programFilter,
       teacher: teacherFilter,
       payment: paymentFilter,
+      sale: saleFilter,
       attention: attentionFilter,
       ids: studentIds ?? [],
       activeCount,
@@ -688,11 +715,10 @@ export async function getStudentListData(
       payment:
         paymentOptions.find((option) => option.value === paymentFilter)?.label ??
         "Bütün ödənişlər",
+      sale: saleFilter ? saleFilterLabels[saleFilter] : "",
       attention: attentionFilter === "first_lesson" ? "İlk dərsə gəlməyənlər" : "Bütün xatırlatmalar",
       ids: studentIds !== null
-        ? studentIds.length
-          ? `Riskli tələbələr (${studentIds.length})`
-          : "Riskli tələbələr"
+        ? `Riskli tələbələr (${total})`
         : "",
     },
     filterOptions: {
@@ -807,6 +833,7 @@ export async function getStudentListData(
         freezeReserved: student.freezeReserved,
         lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
         lifecycleTone: lifecycleStatus.tone,
+        isAtRisk: atRiskIds.has(student.id),
         activationWarning: resolveFirstLessonActivationWarning({
           lifecycleStatus: student.lifecycleStatus,
           plannedFirstLessonAt: student.firstLessonAt ? new Date(student.firstLessonAt) : null,
@@ -1212,6 +1239,7 @@ async function getStudentRows(
     programFilter: string;
     teacherFilter: string;
     paymentFilter: StudentPaymentFilter;
+    saleFilter: StudentSaleFilter;
     attentionFilter: StudentAttentionFilter;
     studentIds: string[] | null;
     today: Date;
@@ -1249,8 +1277,15 @@ async function getStudentRows(
       join erp.contacts c on c.id = s.contact_id
       left join erp.users u on u.id = s.manager_id
       order by
+        -- Follow-up növbəsi kimi: ilk dərs buraxanlar → bu gün qeydiyyat → ən yenilər
         case when ${firstLessonMissedSql} then 0 else 1 end,
-        s.registered_at desc,
+        case
+          when s.registered_at >= ${input.today}::date
+            and s.registered_at < (${input.today}::date + interval '1 day')
+          then 0
+          else 1
+        end,
+        s.registered_at desc nulls last,
         s.created_at desc
       limit ${input.pageSize}
       offset ${(input.page - 1) * input.pageSize}
@@ -1547,6 +1582,7 @@ async function getStudentListRawData(
     programFilter: input.programFilter,
     teacherFilter: input.teacherFilter,
     paymentFilter: input.paymentFilter,
+    saleFilter: input.saleFilter,
     attentionFilter: input.attentionFilter,
     studentIds: input.studentIds,
     today: new Date(input.today),
@@ -2125,6 +2161,8 @@ async function getStudentCreateOptions(
 ): Promise<StudentCreateOptionRows> {
   const [row] = await prisma.$queryRaw<StudentCreateOptionsRawRow[]>(Prisma.sql`
     select
+      -- ACTIVE card count must stay aligned with currentActiveStudentsSql()
+      -- (owner dashboard + company KPI live actual use the same definition).
       coalesce((
         select jsonb_object_agg(summary.lifecycle_status, summary.total_count)
         from (
@@ -2436,6 +2474,7 @@ function buildStudentWhereSql({
   programFilter,
   teacherFilter,
   paymentFilter,
+  saleFilter,
   attentionFilter,
   studentIds,
   today,
@@ -2448,6 +2487,7 @@ function buildStudentWhereSql({
   programFilter: string;
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
+  saleFilter: StudentSaleFilter;
   attentionFilter: StudentAttentionFilter;
   studentIds: string[] | null;
   today: Date;
@@ -2557,7 +2597,28 @@ function buildStudentWhereSql({
     conditions.push(outstandingBalanceSql);
   }
 
-  if (dateFrom || dateTo) {
+  if (saleFilter) {
+    const saleRoute =
+      saleFilter === "crm_new" || saleFilter === "direct"
+        ? saleFilter === "crm_new"
+          ? "CRM"
+          : "DIRECT"
+        : null;
+    const saleKind = saleFilter === "return" ? "RETURN" : saleFilter === "crm_new" ? "NEW" : null;
+    const saleConds: Prisma.Sql[] = [
+      Prisma.sql`cs.student_id = s.id`,
+      Prisma.sql`cs.cancelled_at is null`,
+    ];
+    if (saleRoute) saleConds.push(Prisma.sql`cs.route = ${saleRoute}`);
+    if (saleKind) saleConds.push(Prisma.sql`cs.kind = ${saleKind}`);
+    if (dateFrom) saleConds.push(Prisma.sql`cs.qualified_at >= ${dateFrom}::date`);
+    if (dateTo) saleConds.push(Prisma.sql`cs.qualified_at <= ${dateTo}::date`);
+    conditions.push(Prisma.sql`exists (
+      select 1
+      from erp.course_sales cs
+      where ${Prisma.join(saleConds, " AND ")}
+    )`);
+  } else if (dateFrom || dateTo) {
     const fromCond = dateFrom ? Prisma.sql`s.registered_at >= ${dateFrom}::date` : Prisma.sql`true`;
     const toCond = dateTo ? Prisma.sql`s.registered_at <= ${dateTo}::date` : Prisma.sql`true`;
     conditions.push(Prisma.sql`(${fromCond} AND ${toCond})`);
@@ -2708,6 +2769,13 @@ function normalizePaymentFilter(value: string | undefined): StudentPaymentFilter
     : "all";
 }
 
+function normalizeSaleFilter(value: string | undefined): StudentSaleFilter {
+  const normalized = formFilterString(value);
+  return normalized === "crm_new" || normalized === "direct" || normalized === "return"
+    ? normalized
+    : "";
+}
+
 function normalizeChurnFilter(value: string | undefined) {
   return value === "1" || value === "true";
 }
@@ -2785,10 +2853,12 @@ function buildStudentsUrl({
   program,
   teacher,
   payment,
+  sale,
   attention,
   ids,
   from,
   to,
+  dates,
   page,
   pageSize,
   tab,
@@ -2799,10 +2869,12 @@ function buildStudentsUrl({
   program: string;
   teacher: string;
   payment: StudentPaymentFilter;
+  sale?: StudentSaleFilter;
   attention?: StudentAttentionFilter;
   ids?: string[] | null;
   from?: string;
   to?: string;
+  dates?: string;
   page?: number;
   pageSize?: number;
   tab?: "overview" | "list" | "programs";
@@ -2837,6 +2909,10 @@ function buildStudentsUrl({
     params.set("payment", payment);
   }
 
+  if (sale) {
+    params.set("sale", sale);
+  }
+
   if (attention) {
     params.set("attention", attention);
   }
@@ -2851,6 +2927,10 @@ function buildStudentsUrl({
 
   if (to) {
     params.set("to", to);
+  }
+
+  if (dates === "all" && !from && !to) {
+    params.set("dates", "all");
   }
 
   if (tab === "list" && page && page > 1) {

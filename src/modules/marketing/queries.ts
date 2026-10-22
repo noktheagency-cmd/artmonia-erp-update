@@ -143,21 +143,26 @@ export async function getMarketingData(filters?: { from?: string; to?: string })
         and lead.created_at < ${businessRangeEndExclusive}
     ) lead_summary on true
     left join lateral (
-      -- Production parity: campaign sales from student registration (course_sales journal is empty for imports).
+      -- Paid admissions linked to the campaign student (canonical course_sales journal).
       select count(*)::int as count
-      from erp.students student
+      from erp.course_sales cs
+      join erp.students student on student.id = cs.student_id
       where student.campaign_id = campaign.id
         and student.is_test_data = false
-        and student.registered_at >= ${businessRangeStart}
-        and student.registered_at < ${businessRangeEndExclusive}
-        and student.registered_at <= (now() at time zone 'Asia/Baku')::date
+        and cs.cancelled_at is null
+        and cs.qualified_at >= ${businessRangeStart}::date
+        and cs.qualified_at < ${businessRangeEndExclusive}::date
+        and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
     ) sale_summary on true
     left join lateral (
       select coalesce(sum(payment.amount), 0)::float8 as revenue
-      from erp.students student
-      join erp.payments payment on payment.student_id = student.id
+      from erp.course_sales cs
+      join erp.students student on student.id = cs.student_id
+      join erp.payments payment on payment.course_sale_id = cs.id
       where student.campaign_id = campaign.id
         and student.is_test_data = false
+        and cs.cancelled_at is null
+        and payment.refunded_at is null
         and payment.paid_at >= ${businessRangeStart}
         and payment.paid_at < ${businessRangeEndExclusive}
     ) payment_summary on true

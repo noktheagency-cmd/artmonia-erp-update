@@ -458,10 +458,10 @@ function AttentionGroup({
                 {item.name.slice(0, 2).toUpperCase()}
               </span>
               <span className="crm-attention-person">
-                <strong>
-                  {item.name}
+                <span className="crm-attention-name-row">
+                  <strong>{item.name}</strong>
                   {item.isNewToday ? <span className="crm-new-badge">Yeni</span> : null}
-                </strong>
+                </span>
                 <small>{item.phone} · {item.manager}</small>
               </span>
               <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>

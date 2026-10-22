@@ -181,15 +181,23 @@ export function StudentCreateDialogClient({
   }
 
   function removePayment() {
+    // Payment stays required for paid admissions; clearing only resets the draft amounts.
     setAcceptPayment(false);
     setValues((current) => ({
       ...current,
-      paymentAmount: "",
+      paymentAmount: current.monthlyFee || "",
       paymentNote: "",
     }));
   }
 
   async function createStudent(formData: FormData) {
+    if (!isGift && !acceptPayment) {
+      notifyCaughtError(
+        new Error("Əvvəl «Ödəniş qəbul et» ilə ilkin ödənişi əlavə edin."),
+        "Ödəniş məcburidir.",
+      );
+      return;
+    }
     if (
       acceptPayment
       && !confirmPaymentMonthMismatch(formData, {
@@ -252,16 +260,18 @@ export function StudentCreateDialogClient({
           <input name="paymentMethod" type="hidden" value={values.paymentMethod} />
           <input name="paymentScheduleType" type="hidden" value={values.paymentScheduleType} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
-          {acceptPayment ? (
+          {isGift ? (
+            <p className="student-create-gift-note">Hədiyyə güzəşti — ilkin ödəniş və satış jurnalı tətbiq olunmur.</p>
+          ) : acceptPayment ? (
             <label className="contract-confirm-field">
               <Checkbox name="contractConfirmed" required />
               <span className="contract-confirm-copy">
                 <strong>Müqavilə imzalanıb</strong>
-                <small>İlkin qəbul ödənişi ən azı 20 AZN olmalıdır.</small>
+                <small>İlkin qəbul ödənişi ən azı 20 AZN olmalıdır və satış sayılır.</small>
               </span>
             </label>
           ) : (
-            <p>Ödənişsiz yaradılan profil satış hesabatına daxil edilmir.</p>
+            <p className="student-create-payment-required">Qeydiyyat üçün yuxarıdan «Ödəniş qəbul et» ilə ilkin ödənişi əlavə edin — bu satış jurnalına düşür.</p>
           )}
 
           <label className="form-field student-create-lead-field">
@@ -517,12 +527,15 @@ export function StudentCreateDialogClient({
               </DialogClose>
               <Button
                 type="submit"
-                disabled={!canCreateStudent || (Boolean(selectedLeadId) && !canConvertLead)}
+                disabled={
+                  !canCreateStudent
+                  || (Boolean(selectedLeadId) && !canConvertLead)
+                  || (!isGift && !acceptPayment)
+                  || (!isGift && !canRecordPayment)
+                }
               >
                 <Plus data-icon="inline-start" />
-                {acceptPayment
-                  ? "Yarat və ödənişi qəbul et"
-                  : "Tələbəni yarat"}
+                {isGift ? "Tələbəni yarat" : "Yarat və ödənişi qəbul et"}
               </Button>
             </DialogFooter>
           </div>

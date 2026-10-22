@@ -4,12 +4,14 @@ import { useEffect, useState, useTransition } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
+  Banknote,
   BookOpen,
   CheckCircle2,
   CircleUserRound,
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -22,9 +24,17 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MonthPicker, normalizeMonthValue } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { convertLeadToStudentAction, listRegistrationPackageOptions } from "@/modules/crm/actions";
+import {
+  ADMISSION_PAYMENT_MIN_MESSAGE,
+  isAdmissionAmountBelowMinimum,
+} from "@/modules/students/admission-payment-amount";
+import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
+import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
 import { isGiftDiscount } from "@/modules/students/student-create-rules";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import type { CrmData } from "@/modules/crm/queries";
@@ -55,11 +65,19 @@ export function LeadRegistrationDialog({
   const [discountType, setDiscountType] = useState("");
   const [monthlyFee, setMonthlyFee] = useState("");
   const [lessonsPerMonth, setLessonsPerMonth] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(currentBakuDateValue());
+  const [paymentMonth, setPaymentMonth] = useState(normalizeMonthValue(currentBakuDateValue()));
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [paymentScheduleType, setPaymentScheduleType] = useState("MONTHLY");
   const [teachers, setTeachers] = useState<{ id: string; fullName: string }[]>([]);
   const [discountTypes, setDiscountTypes] = useState<{ value: string; label: string }[]>([]);
   const [programTerms, setProgramTerms] = useState<Record<string, { monthlyFee: string; lessonsPerMonth: string }>>({});
   const enabled = lead.canConvert && canConvert;
   const gift = isGiftDiscount(discountType);
+  const paymentAmountError = !gift && isAdmissionAmountBelowMinimum(paymentAmount, "ADMISSION")
+    ? ADMISSION_PAYMENT_MIN_MESSAGE
+    : "";
 
   function handleOpenChange(nextOpen: boolean) {
     if (isPending) return;
@@ -92,6 +110,7 @@ export function LeadRegistrationDialog({
     if (!terms) return;
     setMonthlyFee((current) => current || terms.monthlyFee);
     setLessonsPerMonth((current) => current || terms.lessonsPerMonth);
+    setPaymentAmount((current) => current || terms.monthlyFee);
   }, [programId, programTerms]);
 
   function handleProgramChange(value: string) {
@@ -100,6 +119,18 @@ export function LeadRegistrationDialog({
     if (!terms) return;
     setMonthlyFee(terms.monthlyFee);
     setLessonsPerMonth(terms.lessonsPerMonth);
+    if (!gift) setPaymentAmount(terms.monthlyFee);
+  }
+
+  function handleDiscountChange(value: string) {
+    const next = value === EMPTY_SELECT_VALUE ? "" : value;
+    setDiscountType(next);
+    if (isGiftDiscount(next)) {
+      setPaymentAmount("");
+      return;
+    }
+    const terms = programTerms[programId];
+    if (terms) setPaymentAmount((current) => current || terms.monthlyFee);
   }
 
   function registerLead(formData: FormData) {
@@ -239,7 +270,11 @@ export function LeadRegistrationDialog({
                 </Field>
                 <Field>
                   <FieldLabel>Cari paket üzrə ilk dərs</FieldLabel>
-                  <DatePicker name="firstLessonDate" aria-label="Cari paket üzrə ilk dərs" />
+                  <DatePicker
+                    name="firstLessonDate"
+                    aria-label="Cari paket üzrə ilk dərs"
+                    required={!gift}
+                  />
                 </Field>
                 <Field>
                   <FieldLabel>Güzəşt növü</FieldLabel>
@@ -247,7 +282,7 @@ export function LeadRegistrationDialog({
                     aria-label="Güzəşt növü"
                     name="discountType"
                     value={discountType}
-                    onValueChange={(value) => setDiscountType(value === EMPTY_SELECT_VALUE ? "" : value)}
+                    onValueChange={handleDiscountChange}
                     emptyLabel="Güzəşt yoxdur"
                     options={discountTypes}
                     searchable
@@ -285,6 +320,93 @@ export function LeadRegistrationDialog({
               </FieldGroup>
             </section>
 
+            {gift ? (
+              <section className="crm-dialog-section">
+                <header><Banknote aria-hidden="true" /><h3>İlkin ödəniş</h3></header>
+                <p>Hədiyyə güzəşti — ödəniş və satış jurnalı tətbiq olunmur.</p>
+              </section>
+            ) : (
+              <section className="crm-dialog-section">
+                <header><Banknote aria-hidden="true" /><h3>İlkin ödəniş (satış)</h3></header>
+                <p className="crm-register-payment-note">
+                  Qeydiyyat ödənişlə tamamlanır — avans və ya tam məbləğ satış jurnalına düşür (ən azı 20 AZN).
+                </p>
+                <FieldGroup className="crm-dialog-fields">
+                  <Field data-invalid={Boolean(paymentAmountError) || undefined}>
+                    <FieldLabel htmlFor={`register-pay-amount-${lead.id}`}>Məbləğ</FieldLabel>
+                    <Input
+                      id={`register-pay-amount-${lead.id}`}
+                      name="paymentAmount"
+                      value={paymentAmount}
+                      onChange={(event) => setPaymentAmount(event.target.value)}
+                      inputMode="decimal"
+                      required
+                      aria-invalid={Boolean(paymentAmountError)}
+                    />
+                    {paymentAmountError ? (
+                      <small className="form-field-error" role="alert">{paymentAmountError}</small>
+                    ) : null}
+                  </Field>
+                  <Field>
+                    <FieldLabel>Metod</FieldLabel>
+                    <FormSelect
+                      aria-label="Ödəniş metodu"
+                      name="paymentMethod"
+                      value={paymentMethod}
+                      onValueChange={setPaymentMethod}
+                      options={studentPaymentMethodOptions}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Ödəniş növü</FieldLabel>
+                    <FormSelect
+                      aria-label="Ödəniş növü"
+                      name="paymentScheduleType"
+                      value={paymentScheduleType}
+                      onValueChange={setPaymentScheduleType}
+                      options={studentPaymentScheduleTypeOptions}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Ödəniş tarixi</FieldLabel>
+                    <DatePicker
+                      name="paymentDate"
+                      value={paymentDate}
+                      onValueChange={setPaymentDate}
+                      maxValue={currentBakuDateValue()}
+                      allowClear={false}
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Aid olduğu ay</FieldLabel>
+                    <MonthPicker
+                      name="paymentMonth"
+                      value={paymentMonth}
+                      onValueChange={setPaymentMonth}
+                      allowClear={false}
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor={`register-pay-note-${lead.id}`}>Ödəniş qeydi</FieldLabel>
+                    <Input
+                      id={`register-pay-note-${lead.id}`}
+                      name="paymentNote"
+                      maxLength={240}
+                    />
+                  </Field>
+                </FieldGroup>
+                <label className="contract-confirm-field">
+                  <Checkbox name="contractConfirmed" required />
+                  <span className="contract-confirm-copy">
+                    <strong>Müqavilə imzalanıb</strong>
+                    <small>Bu ödəniş CRM satışına yazılır.</small>
+                  </span>
+                </label>
+              </section>
+            )}
+
             {lead.needsMeetingAttendanceConfirm ? (
               <section className="crm-dialog-section">
                 <header><CheckCircle2 aria-hidden="true" /><h3>Görüş iştirakı</h3></header>
@@ -305,9 +427,13 @@ export function LeadRegistrationDialog({
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isPending}>Ləğv et</Button>
             </DialogClose>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || (!gift && Boolean(paymentAmountError))}>
               <CheckCircle2 data-icon="inline-start" />
-              {isPending ? "Qeydiyyata alınır..." : "Təsdiqlə və qeydiyyata al"}
+              {isPending
+                ? "Qeydiyyata alınır..."
+                : gift
+                  ? "Təsdiqlə və qeydiyyata al"
+                  : "Ödənişlə qeydiyyata al"}
             </Button>
           </DialogFooter>
         </form>

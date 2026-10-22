@@ -7,13 +7,38 @@ export { receiptPurposes, receiptPurposeLabels } from "./receipt-purpose";
 export const receiptPurposeSchema = z.enum(receiptPurposes).default("UNCLASSIFIED");
 export const contractConfirmationSchema = z.preprocess((value) => value === "on" || value === "true", z.boolean());
 
-export function admissionCycle(input: { studentId: string; admissionTracking: boolean; returnId?: string | null; oldStatus?: string | null }) {
+const returnSaleStatuses = new Set(["STOPPED", "FROZEN"]);
+
+/**
+ * Admission cycle for a qualifying payment.
+ * RETURN = STOPPED or FROZEN reactivation + paid admission (avans / tam).
+ * NEW = first tracked admission (CRM lead or birbaşa tələbə əlavəsi).
+ * COMPLETED / DECLINED package moves do not invent a sale here.
+ */
+export function admissionCycle(input: {
+  studentId: string;
+  admissionTracking: boolean;
+  returnId?: string | null;
+  oldStatus?: string | null;
+}) {
   if (input.returnId) {
-    if (input.oldStatus !== "STOPPED") throw new PublicActionError("Dondurma bərpası və paket keçidi yeni satış yaratmır.");
-    return { key: `return:${input.returnId}`, kind: "RETURN" };
+    if (!input.oldStatus || !returnSaleStatuses.has(input.oldStatus)) {
+      throw new PublicActionError(
+        "Yalnız dayandırılmış və ya dondurulmuş tələbənin ödənişli qayıdışı yeni satış yaradır.",
+      );
+    }
+    return { key: `return:${input.returnId}`, kind: "RETURN" as const };
   }
-  if (!input.admissionTracking) throw new PublicActionError("Köhnə qəbulun uyğunluğu ayrıca yoxlanmalıdır; yeni satış kimi təxmin edilmir.");
-  return { key: `new:${input.studentId}`, kind: "NEW" };
+  if (!input.admissionTracking) {
+    throw new PublicActionError(
+      "Köhnə qəbulun uyğunluğu ayrıca yoxlanmalıdır; yeni satış kimi təxmin edilmir.",
+    );
+  }
+  return { key: `new:${input.studentId}`, kind: "NEW" as const };
+}
+
+export function isReturnSaleStatus(oldStatus: string | null | undefined) {
+  return Boolean(oldStatus && returnSaleStatuses.has(oldStatus));
 }
 
 export function assertAdmissionPayment(amount: Prisma.Decimal, contractConfirmed: boolean) {

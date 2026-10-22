@@ -2,11 +2,19 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
-import { LeadStage, StudentLifecycleStatus } from "@/generated/prisma/client";
+import { randomUUID } from "node:crypto";
+import { LeadStage, PaymentMethod, StudentLifecycleStatus } from "@/generated/prisma/client";
 import type { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireMutationActor } from "@/server/auth/actor";
 import { writeAuditLog } from "@/modules/audit/audit-service";
+import { contractConfirmationSchema } from "@/modules/students/course-sale-policy";
+import { recordCourseSalePayment } from "@/modules/students/course-sale-service";
+import { parseBillingMonthInput } from "@/modules/students/payment-billing-period";
+import { parsePaymentDateInput } from "@/modules/students/payment-date-policy";
+import { studentPaymentMethodValues } from "@/modules/students/payment-method";
+import { studentPaymentScheduleTypeValues } from "@/modules/students/payment-schedule-type";
+import { PublicActionError } from "@/server/actions/public-action-error";
 import {
   assertCanAccessLead,
   assertCanEditLead,
@@ -36,7 +44,10 @@ import {
   enrollmentStatusForStudentLifecycle,
   isBillingPausedStatus,
 } from "@/modules/students/lifecycle-service";
-import { resolveStudentMonthlyFee } from "@/modules/students/student-create-rules";
+import {
+  isGiftDiscount,
+  resolveStudentMonthlyFee,
+} from "@/modules/students/student-create-rules";
 import { getBakuDateInput } from "@/modules/students/student-reminders";
 import {
   safeServerAction,
@@ -130,11 +141,41 @@ const convertLeadSchema = z.object({
   discountType: optionalText(80),
   monthlyFee: optionalAmount,
   lessonsPerMonth: optionalLessonCount,
+  contractConfirmed: contractConfirmationSchema,
+  paymentAmount: optionalAmount,
+  paymentDate: optionalText(20),
+  paymentMonth: optionalText(7),
+  paymentMethod: z.enum(studentPaymentMethodValues).default("CASH"),
+  paymentScheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
+  paymentNote: optionalText(240),
   confirmMeetingAttended: z.preprocess(
     (value) => value === "on" || value === "true" || value === true,
     z.boolean(),
   ).default(false),
   returnTo: optionalText(260),
+}).superRefine((value, context) => {
+  if (isGiftDiscount(value.discountType)) return;
+  if (!value.paymentAmount || value.paymentAmount <= 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["paymentAmount"],
+      message: "Qeydiyyat üçün ilkin ödəniş məbləği məcburidir.",
+    });
+  }
+  if (!value.paymentDate) {
+    context.addIssue({
+      code: "custom",
+      path: ["paymentDate"],
+      message: "Ödəniş tarixi seçilməlidir.",
+    });
+  }
+  if (!value.paymentMonth) {
+    context.addIssue({
+      code: "custom",
+      path: ["paymentMonth"],
+      message: "Ödənişin aid olduğu ay seçilməlidir.",
+    });
+  }
 });
 
 const deleteLeadSchema = z.object({
@@ -525,10 +566,22 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
   const today = new Date();
   const registeredAt = new Date(`${getBakuDateInput()}T00:00:00.000Z`);
   const phoneNormalized = normalizePhone(input.phone);
+  const giftAdmission = isGiftDiscount(input.discountType);
 
   if (!phoneNormalized) {
     throw new Error("Telefon düzgün deyil");
   }
+
+  if (!giftAdmission && !actor.permissions.has("billing.payment.create")) {
+    throw new PublicActionError("Ödəniş qəbul etmək icazəsi yoxdur.", "FORBIDDEN");
+  }
+
+  const paymentDate = !giftAdmission && input.paymentDate
+    ? parsePaymentDateInput(input.paymentDate)
+    : null;
+  const paymentMonth = paymentDate
+    ? parseBillingMonthInput(input.paymentMonth, paymentDate)
+    : null;
 
   await prisma.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({
@@ -717,6 +770,37 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
 
     await closeConvertedLeadFollowUp(tx, lead.id);
 
+    if (!giftAdmission && input.paymentAmount && paymentDate && paymentMonth) {
+      if (!input.firstLessonDate) {
+        throw new PublicActionError(
+          "İlkin ödəniş üçün cari paket üzrə ilk dərs tarixini seçin.",
+        );
+      }
+      const payment = await tx.payment.create({
+        data: {
+          studentId: student.id,
+          amount: input.paymentAmount,
+          paidAt: paymentDate,
+          paymentMonth,
+          nextPaymentAt: null,
+          scheduleType: input.paymentScheduleType,
+          method: input.paymentMethod as PaymentMethod,
+          note: input.paymentNote ?? `CRM qeydiyyat ödənişi: ${lead.id}`,
+          idempotencyKey: randomUUID(),
+          createdById: actor.id,
+        },
+        select: { id: true },
+      });
+      await recordCourseSalePayment(tx, {
+        studentId: student.id,
+        paymentId: payment.id,
+        purpose: "ADMISSION",
+        contractConfirmed: input.contractConfirmed,
+        actorId: actor.id,
+        admissionLeadId: lead.id,
+      });
+    }
+
     await writeAuditLog(tx, {
       actorUserId: actor.id,
       action: "lead.convert_to_student",
@@ -743,6 +827,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
           fullName: input.fullName,
           phoneDisplay: input.phone,
         },
+        admissionPayment: giftAdmission ? null : input.paymentAmount ?? null,
       },
       reason: "CRM çevirmə əməliyyatı",
     });

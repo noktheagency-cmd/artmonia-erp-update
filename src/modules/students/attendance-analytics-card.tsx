@@ -85,7 +85,7 @@ export function AttendanceAnalyticsCard() {
     ...retentionOptions.groups.filter((group) => !teacherId || group.teacherId === teacherId).map((group) => [group.id, group.name] as const),
   ]).entries()];
   const riskyIds = riskyStudentIds(filtered);
-  const riskyStudentsHref = `/students?tab=list&ids=${riskyIds.length ? riskyIds.join(",") : "none"}`;
+  const riskyStudentsHref = `/students?tab=list&dates=all&ids=${riskyIds.length ? riskyIds.join(",") : "none"}`;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

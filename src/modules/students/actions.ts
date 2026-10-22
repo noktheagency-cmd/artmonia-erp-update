@@ -271,6 +271,12 @@ async function createStudentActionImpl(formData: FormData) {
     throw new Error("Müraciəti tələbəyə çevirmək icazəsi yoxdur");
   }
 
+  const giftAdmission = isGiftDiscount(input.discountType);
+
+  if (!giftAdmission && !input.acceptPayment) {
+    throw new PublicActionError("Qeydiyyat üçün ilkin ödəniş məcburidir (avans və ya tam).");
+  }
+
   if (input.acceptPayment && !actor.permissions.has("billing.payment.create")) {
     throw new Error("Ödəniş qəbul etmək icazəsi yoxdur");
   }
@@ -279,7 +285,7 @@ async function createStudentActionImpl(formData: FormData) {
     throw new Error("Ödənişi qəbul etmək üçün məbləğ yazın");
   }
 
-  if (isGiftDiscount(input.discountType) && input.acceptPayment) {
+  if (giftAdmission && input.acceptPayment) {
     throw new PublicActionError("Hədiyyə güzəşti seçilən tələbə üçün ilkin ödəniş qəbul edilə bilməz.");
   }
 

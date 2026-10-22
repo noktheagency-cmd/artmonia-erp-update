@@ -11,6 +11,7 @@ import {
   splitBonusPool,
 } from "@/modules/hr/bonus-rules";
 import { getTeacherPayrollPreviews } from "@/modules/hr/teacher-payroll";
+import { departmentSalesCountSql } from "@/modules/students/sales-metrics-sql";
 import { getPrisma } from "@/server/db/prisma";
 
 type NumericRow = { value: Prisma.Decimal | number | string | null };
@@ -66,51 +67,12 @@ export async function calculateBonusCampaignValues(
             and student.is_test_data = false
         )
         when 'DEPARTMENT_SALES_COUNT'::"erp"."HrBonusMetricKind" then (
-          select count(*)::numeric
-          from (
-            select s.id, s.registered_at as sale_date, s.manager_id as owner_id
-            from erp.students s
-            where s.is_test_data = false
-            union all
-            select s.id, greatest(r.effective_at, activation.activated_at, payment.paid_at) as sale_date, s.manager_id as owner_id
-            from erp.students s
-            join (
-              select distinct student_id, effective_at
-              from erp.student_status_history
-              where event_type = 'REACTIVATED'::"erp"."StudentLifecycleEventType"
-            ) r on r.student_id = s.id and r.effective_at > s.registered_at
-            left join lateral (
-              select min(h.effective_at) as stopped_at
-              from erp.student_status_history h
-              where h.student_id = s.id and h.effective_at > r.effective_at
-                and h.new_status in ('FROZEN', 'STOPPED', 'COMPLETED', 'DECLINED')
-            ) next_stop on true
-            join lateral (
-              select min(h.effective_at) as activated_at
-              from erp.student_status_history h
-              where h.student_id = s.id and h.new_status = 'ACTIVE'
-                and h.effective_at >= r.effective_at
-                and (next_stop.stopped_at is null or h.effective_at < next_stop.stopped_at)
-            ) activation on activation.activated_at is not null
-            join lateral (
-              select min(p.paid_at) as paid_at
-              from erp.payments p
-              where p.student_id = s.id and p.amount > 0 and p.paid_at >= r.effective_at
-                and (next_stop.stopped_at is null or p.paid_at < next_stop.stopped_at)
-            ) payment on payment.paid_at is not null
-            where s.is_test_data = false
-          ) sales
-          join erp.hr_employees employee on employee.user_id = sales.owner_id
-          where employee.department = campaign.department
-            and exists (
-              select 1 from erp.hr_bonus_participants participant
-              where participant.campaign_id = campaign.id
-                and participant.employee_id = employee.id
-                and participant.is_eligible = true
-            )
-            and sales.sale_date >= campaign.starts_at::date
-            and sales.sale_date <= campaign.ends_at::date
-            and sales.sale_date <= (now() at time zone 'Asia/Baku')::date
+          select ${departmentSalesCountSql(
+            Prisma.sql`campaign.department`,
+            Prisma.sql`campaign.starts_at`,
+            Prisma.sql`campaign.ends_at`,
+            Prisma.sql`campaign.id`,
+          )}::numeric
         )
         when 'TEACHER_RETENTION_RATE'::"erp"."HrBonusMetricKind" then (
           select coalesce(round(avg(teacher_students.student_count), 2), 0)
@@ -174,51 +136,12 @@ export async function calculateBonusCampaignValue(campaignId: string) {
     baseValue = Number(row?.value ?? 0);
   } else if (campaign.metricKind === "DEPARTMENT_SALES_COUNT") {
     const [row] = await prisma.$queryRaw<NumericRow[]>(Prisma.sql`
-      select count(*)::int as value
-      from (
-        select s.id, s.registered_at as sale_date, s.manager_id as owner_id
-        from erp.students s
-        where s.is_test_data = false
-        union all
-        select s.id, greatest(r.effective_at, activation.activated_at, payment.paid_at) as sale_date, s.manager_id as owner_id
-        from erp.students s
-        join (
-          select distinct student_id, effective_at
-          from erp.student_status_history
-          where event_type = 'REACTIVATED'::"erp"."StudentLifecycleEventType"
-        ) r on r.student_id = s.id and r.effective_at > s.registered_at
-        left join lateral (
-          select min(h.effective_at) as stopped_at
-          from erp.student_status_history h
-          where h.student_id = s.id and h.effective_at > r.effective_at
-            and h.new_status in ('FROZEN', 'STOPPED', 'COMPLETED', 'DECLINED')
-        ) next_stop on true
-        join lateral (
-          select min(h.effective_at) as activated_at
-          from erp.student_status_history h
-          where h.student_id = s.id and h.new_status = 'ACTIVE'
-            and h.effective_at >= r.effective_at
-            and (next_stop.stopped_at is null or h.effective_at < next_stop.stopped_at)
-        ) activation on activation.activated_at is not null
-        join lateral (
-          select min(p.paid_at) as paid_at
-          from erp.payments p
-          where p.student_id = s.id and p.amount > 0 and p.paid_at >= r.effective_at
-            and (next_stop.stopped_at is null or p.paid_at < next_stop.stopped_at)
-        ) payment on payment.paid_at is not null
-        where s.is_test_data = false
-      ) sales
-      join erp.hr_employees he on he.user_id = sales.owner_id
-      where he.department = ${campaign.department}
-        and exists (
-          select 1 from erp.hr_bonus_participants participant
-          where participant.campaign_id = ${campaign.id}::uuid
-            and participant.employee_id = he.id
-            and participant.is_eligible = true
-        )
-        and sales.sale_date >= ${campaign.startsAt}::date
-        and sales.sale_date <= ${campaign.endsAt}::date
-        and sales.sale_date <= (now() at time zone 'Asia/Baku')::date
+      select ${departmentSalesCountSql(
+        Prisma.sql`${campaign.department}`,
+        Prisma.sql`${campaign.startsAt}`,
+        Prisma.sql`${campaign.endsAt}`,
+        Prisma.sql`${campaign.id}::uuid`,
+      )}::int as value
     `);
     baseValue = Number(row?.value ?? 0);
   } else if (campaign.metricKind === "TEACHER_RETENTION_RATE") {
@@ -523,48 +446,18 @@ async function calculateParticipantSalesValues(campaignId: string) {
       participant.id::text as "participantId",
       coalesce((
         select count(*)::int
-        from (
-          select s.id, s.registered_at as sale_date
-          from erp.students s
-          where s.is_test_data = false
-            and s.manager_id = employee.user_id
-          union all
-          select s.id, greatest(r.effective_at, activation.activated_at, payment.paid_at) as sale_date
-          from erp.students s
-          join (
-            select distinct student_id, effective_at
-            from erp.student_status_history
-            where event_type = 'REACTIVATED'::"erp"."StudentLifecycleEventType"
-          ) r on r.student_id = s.id and r.effective_at > s.registered_at
-          left join lateral (
-            select min(h.effective_at) as stopped_at
-            from erp.student_status_history h
-            where h.student_id = s.id and h.effective_at > r.effective_at
-              and h.new_status in ('FROZEN', 'STOPPED', 'COMPLETED', 'DECLINED')
-          ) next_stop on true
-          join lateral (
-            select min(h.effective_at) as activated_at
-            from erp.student_status_history h
-            where h.student_id = s.id and h.new_status = 'ACTIVE'
-              and h.effective_at >= r.effective_at
-              and (next_stop.stopped_at is null or h.effective_at < next_stop.stopped_at)
-          ) activation on activation.activated_at is not null
-          join lateral (
-            select min(p.paid_at) as paid_at
-            from erp.payments p
-            where p.student_id = s.id and p.amount > 0 and p.paid_at >= r.effective_at
-              and (next_stop.stopped_at is null or p.paid_at < next_stop.stopped_at)
-          ) payment on payment.paid_at is not null
-          where s.is_test_data = false
-            and s.manager_id = employee.user_id
-        ) sales
-        where sales.sale_date >= (
+        from erp.course_sales cs
+        join erp.students s on s.id = cs.student_id
+        where s.is_test_data = false
+          and cs.cancelled_at is null
+          and cs.owner_id = employee.user_id
+          and cs.qualified_at >= (
             select campaign.starts_at::date from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
           )
-          and sales.sale_date <= (
+          and cs.qualified_at <= (
             select campaign.ends_at::date from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
           )
-          and sales.sale_date <= (now() at time zone 'Asia/Baku')::date
+          and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
       ), 0)::int as value
     from erp.hr_bonus_participants participant
     left join erp.hr_employees employee on employee.id = participant.employee_id

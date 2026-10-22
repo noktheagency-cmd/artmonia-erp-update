@@ -92,3 +92,12 @@ test("actualRegistrationSql remains available for acquisition bonuses", () => {
   assert.match(fragment.text, /registered_at/);
   assert.match(fragment.text, /Asia\/Baku/);
 });
+
+test("registeredSalesCountSql aliases the course_sales journal helper", async () => {
+  const { registeredSalesCountSql } = await import("./sales-metrics-sql");
+  const journal = companySalesCountSql(Prisma.sql`${"2026-10-01"}`, Prisma.sql`${"2026-11-01"}`);
+  const alias = registeredSalesCountSql(Prisma.sql`${"2026-10-01"}`, Prisma.sql`${"2026-11-01"}`);
+  assert.equal(alias.text, journal.text);
+  assert.match(journal.text, /course_sales/);
+  assert.doesNotMatch(journal.text, /registered_at as sale_date/);
+});

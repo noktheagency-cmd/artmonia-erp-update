@@ -1,4 +1,8 @@
-import { registeredSalesCountSql } from "@/modules/students/sales-metrics-sql";
+import {
+  activeStudentsActualSql,
+  activeStudentsAsOfSql,
+} from "@/modules/students/active-students-metrics-sql";
+import { companySalesCountSql } from "@/modules/students/sales-metrics-sql";
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
@@ -164,47 +168,19 @@ async function getActualsForMonth(periodStart: Date, todayKey: string) {
   if (!period.hasStarted) return emptyActuals();
   const periodEnd = addUtcMonths(periodStart, 1);
   const actualEnd = period.isComplete ? periodEnd : addUtcDays(dateFromKey(todayKey), 1);
-  return getActuals(periodStart, actualEnd);
+  return getActuals(periodStart, actualEnd, period.isComplete);
 }
 
-async function getActuals(periodStart: Date, actualEnd: Date): Promise<CompanyKpiActuals> {
+async function getActuals(
+  periodStart: Date,
+  actualEnd: Date,
+  isComplete: boolean,
+): Promise<CompanyKpiActuals> {
   const [row] = await getPrisma().$queryRaw<ActualRow[]>(Prisma.sql`
     select
-      coalesce((
-        select count(*)::int
-        from erp.students s
-        where s.registered_at < ${actualEnd}
-          and s.is_test_data = false
-          and coalesce(
-            (
-              select h.new_status
-              from erp.student_status_history h
-              where h.student_id = s.id
-                and h.effective_at < ${actualEnd}
-              order by h.effective_at desc, h.created_at desc
-              limit 1
-            ),
-            s.lifecycle_status
-          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-      ), 0) as "activeStudents",
-      coalesce((
-        select count(*)::int
-        from erp.students s
-        where s.registered_at < ${periodStart}
-          and s.is_test_data = false
-          and coalesce(
-            (
-              select h.new_status
-              from erp.student_status_history h
-              where h.student_id = s.id
-                and h.effective_at < ${periodStart}
-              order by h.effective_at desc, h.created_at desc
-              limit 1
-            ),
-            s.lifecycle_status
-          ) = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-      ), 0) as "openingActiveStudents",
-      ${registeredSalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${actualEnd}`)} as "newSales",
+      coalesce(${activeStudentsActualSql(Prisma.sql`${actualEnd}`, isComplete)}, 0) as "activeStudents",
+      coalesce(${activeStudentsAsOfSql(Prisma.sql`${periodStart}`)}, 0) as "openingActiveStudents",
+      ${companySalesCountSql(Prisma.sql`${periodStart}`, Prisma.sql`${actualEnd}`)} as "newSales",
       coalesce((
         select count(distinct h.student_id)::int
         from erp.student_status_history h

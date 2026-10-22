@@ -1,7 +1,12 @@
 import { Prisma } from "@/generated/prisma/client";
 import { PublicActionError } from "@/server/actions/public-action-error";
 import { writeAuditLog } from "@/modules/audit/audit-service";
-import { admissionCycle, assertAdmissionPayment, type receiptPurposes } from "./course-sale-policy";
+import {
+  admissionCycle,
+  assertAdmissionPayment,
+  isReturnSaleStatus,
+  type receiptPurposes,
+} from "./course-sale-policy";
 
 type Purpose = (typeof receiptPurposes)[number];
 export async function recordCourseSalePayment(tx: Prisma.TransactionClient, input: {
@@ -24,16 +29,37 @@ export async function recordCourseSalePayment(tx: Prisma.TransactionClient, inpu
     await tx.payment.update({ where: { id: payment.id }, data: { receiptPurpose: input.purpose } });
     return;
   }
-  const returning = await tx.studentStatusHistory.findFirst({ where: { studentId: input.studentId, eventType: "REACTIVATED" }, orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }] });
-  const lastSale = input.purpose === "INITIAL_BALANCE" && returning?.oldStatus !== "STOPPED" ? await tx.courseSale.findFirst({ where: { studentId: input.studentId }, orderBy: [{ qualifiedAt: "desc" }, { createdAt: "desc" }] }) : null;
+  const returning = await tx.studentStatusHistory.findFirst({
+    where: { studentId: input.studentId, eventType: "REACTIVATED" },
+    orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+  });
+  // CONTINUE an open deposit only when this payment is not opening a STOPPED/FROZEN return cycle.
+  const lastSale =
+    input.purpose === "INITIAL_BALANCE" && !isReturnSaleStatus(returning?.oldStatus)
+      ? await tx.courseSale.findFirst({
+          where: { studentId: input.studentId },
+          orderBy: [{ qualifiedAt: "desc" }, { createdAt: "desc" }],
+        })
+      : null;
   const existingDeposit = lastSale?.status === "DEPOSIT" ? lastSale : null;
-  const cycle = existingDeposit ? { key: existingDeposit.cycleKey, kind: existingDeposit.kind } : admissionCycle({ studentId: input.studentId, admissionTracking: student.admissionTracking, returnId: returning?.id, oldStatus: returning?.oldStatus });
+  const cycle = existingDeposit
+    ? { key: existingDeposit.cycleKey, kind: existingDeposit.kind }
+    : admissionCycle({
+        studentId: input.studentId,
+        admissionTracking: student.admissionTracking,
+        returnId: returning?.id,
+        oldStatus: returning?.oldStatus,
+      });
   let sale = await tx.courseSale.findUnique({ where: { cycleKey: cycle.key } });
   if (sale && sale.status !== "DEPOSIT") throw new PublicActionError("Bu qəbul dövrü artıq tamamlanıb və ya ləğv edilib.");
   if (sale && sale.enrollmentId !== student.enrollments[0]?.id) throw new PublicActionError("Bu qəbul əvvəlki paketə aiddir. Cari ödənişin təyinatını yoxlayın.");
   if (!sale && input.purpose === "INITIAL_BALANCE") throw new PublicActionError("İlk dövrün qalığı üçün açıq beh satışı tapılmadı.");
   if (!sale) {
-    if (!["SLOT_WAITING", "ACTIVE"].includes(student.lifecycleStatus)) throw new PublicActionError("Əvvəl yeni qəbulu və ya dayandırılmış tələbənin qayıdışını başladın.");
+    if (!["SLOT_WAITING", "ACTIVE"].includes(student.lifecycleStatus)) {
+      throw new PublicActionError(
+        "Əvvəl yeni qəbulu və ya dayandırılmış/dondurulmuş tələbənin qayıdışını başladın.",
+      );
+    }
     assertAdmissionPayment(payment.amount, input.contractConfirmed ?? false);
     const enrollment = student.enrollments[0];
     if (!enrollment || enrollment.monthlyFee.lte(0)) throw new PublicActionError("Satış üçün uyğun ödənişli paket seçilməlidir.");
@@ -58,7 +84,12 @@ export async function recordCourseSalePayment(tx: Prisma.TransactionClient, inpu
       // Sale closes the CRM follow-up queue: stage + plan date + open work items.
       await tx.lead.update({
         where: { id: lead.id },
-        data: { stage: "REGISTERED", nextFollowUpAt: null, nextActionType: null },
+        data: {
+          stage: "REGISTERED",
+          convertedStudentId: lead.convertedStudentId ?? input.studentId,
+          nextFollowUpAt: null,
+          nextActionType: null,
+        },
       });
       if (lead.stage !== "REGISTERED") await tx.leadStageHistory.create({ data: { leadId: lead.id, oldStage: lead.stage, newStage: "REGISTERED", changedById: input.actorId, reason: "Uyğun ödənişli qəbul tamamlandı" } });
       await tx.leadWorkItem.updateMany({ where: { leadId: lead.id, source: "PRIMARY", completedAt: null, cancelledAt: null }, data: { cancelledAt: new Date(), result: "REGISTERED" } });

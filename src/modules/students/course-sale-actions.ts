@@ -15,7 +15,7 @@ import { clearStudentPaymentSchedules } from "./payment-schedule-service";
 import { getLeadReadScope } from "@/modules/crm/access";
 export const listAdmissionLeads = safeServerAction(async(studentId:string)=>{
  const actor=await requireErpActor("crm.lead.read"),id=z.string().uuid().parse(studentId),db=getPrisma();
- const student=await db.student.findUnique({where:{id},select:{managerId:true,contact:{select:{id:true,phoneNormalized:true}},statusHistory:{where:{eventType:"REACTIVATED",oldStatus:"STOPPED"},orderBy:{effectiveAt:"desc"},take:1}}});
+ const student=await db.student.findUnique({where:{id},select:{managerId:true,contact:{select:{id:true,phoneNormalized:true}},statusHistory:{where:{eventType:"REACTIVATED",oldStatus:{in:["STOPPED","FROZEN"]}},orderBy:{effectiveAt:"desc"},take:1}}});
  if(!student || !actor.permissions.has("billing.payment.create") || !actor.permissions.has("crm.lead.convert") || (scopeFor(actor.permissions,"billing.payment.create")!=="ALL"&&student.managerId!==actor.id))throw new PublicActionError("Bu tələbəyə giriş icazəniz yoxdur.","FORBIDDEN");
  const rows=await db.lead.findMany({where:{AND:[getLeadReadScope(actor),{managerId:student.managerId,stage:{notIn:["REGISTERED","LOST"]},createdAt:student.statusHistory[0]?{gte:student.statusHistory[0].effectiveAt}:undefined,OR:[{contactId:student.contact.id},...(student.contact.phoneNormalized?[{contact:{phoneNormalized:student.contact.phoneNormalized}}]:[])]}]},take:30,orderBy:{createdAt:"desc"},select:{id:true,createdAt:true,contact:{select:{fullName:true}}}});
  return rows.map(r=>({id:r.id,name:r.contact.fullName+" · "+r.createdAt.toISOString().slice(0,10)}));

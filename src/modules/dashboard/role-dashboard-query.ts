@@ -5,6 +5,7 @@ import {
   Prisma,
   StudentLifecycleStatus,
 } from "@/generated/prisma/client";
+import { ownerSalesCountSql } from "@/modules/students/sales-metrics-sql";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 
@@ -59,10 +60,7 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
           and l.stage in ('NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL_LESSON', 'TRIAL_CONSULTATION', 'NURTURE')
           and (l.next_follow_up_at is null or l.next_follow_up_at <= now() + interval '1 day')
       )::int as "followUps",
-      count(*) filter (
-        where l.converted_student_id is not null
-          or l.stage = 'REGISTERED'::"erp"."LeadStage"
-      )::int as converted,
+      ${ownerSalesCountSql(Prisma.sql`${actorId}::uuid`, null, null)}::int as converted,
       coalesce((
         select jsonb_agg(jsonb_build_object('stage', grouped.stage::text, 'count', grouped.count) order by grouped.stage)
         from (select stage, count(*)::int as count from erp.leads where manager_id = ${actorId}::uuid group by stage) grouped
@@ -95,7 +93,7 @@ async function salesDashboard(actorId: string, actorName: string): Promise<RoleD
     kpis: [
       { label: "Mənim lead-lərim", value: String(leadCount), helper: "Sizə assign olunan bütün müraciətlər", tone: "blue" },
       { label: "Bugünkü follow-up", value: String(followUps), helper: "Əlaqə gözləyən prioritetlər", tone: "orange" },
-      { label: "Konvertasiya", value: leadCount ? `${Math.round(converted / leadCount * 100)}%` : "0%", helper: `${converted} uğurlu qeydiyyat`, tone: "green" },
+      { label: "Ödənişli satış", value: String(converted), helper: leadCount ? `${Math.round(converted / leadCount * 100)}% lead → satış` : "course_sales jurnalı", tone: "green" },
       { label: "Mənim tələbələrim", value: String(studentCount), helper: "Satışdan tələbəyə çevrilən portfel", tone: "violet" },
     ],
     breakdown: stages.map((item) => ({ label: stageLabel(item.stage), value: item.count, total: maxStage })),

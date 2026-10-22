@@ -14,10 +14,12 @@ export default async function StudentsPage({
     program?: string;
     teacher?: string;
     payment?: string;
+    sale?: string;
     attention?: string;
     ids?: string;
     from?: string;
     to?: string;
+    dates?: string;
     page?: string;
     pageSize?: string;
     tab?: string;

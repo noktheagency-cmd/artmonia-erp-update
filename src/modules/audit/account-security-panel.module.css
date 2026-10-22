@@ -8,7 +8,7 @@
   margin-bottom: 12px;
   padding: 11px 14px;
   border-radius: 12px;
-  font-size: 12.5px;
+  font-size: 14.5px;
 }
 .success { border: 1px solid #b7dfc7; background: #f1fbf5; color: #267148; }
 .error { border: 1px solid #f0c1c1; background: #fff5f5; color: #a63c3c; }
@@ -29,7 +29,7 @@
   border-radius: 14px;
   background: linear-gradient(100deg, #f3f8ff 0%, #f8fbff 58%, #fff 100%);
   color: #2a4c72;
-  font-size: 12px;
+  font-size: 14px;
 }
 .securityBanner > svg {
   width: 18px;
@@ -84,7 +84,7 @@
   border-radius: 99px;
   background: #eef4ff;
   color: #2d62c4;
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 750;
 }
 
@@ -100,7 +100,7 @@
   padding: 10px 16px;
   background: #f7f9fc;
   color: #7d8b9e;
-  font-size: 10px;
+  font-size: 12.5px;
   font-weight: 750;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -136,7 +136,7 @@
   background: var(--avatar-bg, #eaf2ff);
   color: var(--avatar-ink, #1d5cc4);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--avatar-ink, #1d5cc4) 16%, transparent);
-  font-size: 12px;
+  font-size: 14px;
   font-style: normal;
   font-weight: 800;
 }
@@ -157,12 +157,12 @@
 .person > span { min-width: 0; }
 .person strong,
 .person small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.person strong { color: #1b2940; font-size: 13px; }
-.person small { margin-top: 3px; color: #7d8b9c; font-size: 11px; }
+.person strong { color: #1b2940; font-size: 14.5px; }
+.person small { margin-top: 3px; color: #7d8b9c; font-size: 13.5px; }
 .email {
   overflow: hidden;
   color: #526074;
-  font-size: 12px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -178,7 +178,7 @@
   border-radius: 99px;
   background: var(--chip-bg, #eaf2ff);
   color: var(--chip-ink, #1a56c4);
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 750;
   line-height: 1.35;
 }
@@ -225,7 +225,7 @@
   border-radius: 99px;
   background: #eef2f6;
   color: #6b788a;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
 }
 .sessionCell[data-live="true"] { background: #e5f8ee; color: #15824c; }
@@ -239,7 +239,7 @@
   border-radius: 99px;
   background: #fff4e6;
   color: #b86a08;
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 800;
 }
 .status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
@@ -271,11 +271,11 @@
   overflow: hidden;
   margin: 5px 0 3px;
   color: #526074;
-  font-size: 12px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.identity small { color: #7d8b9c; font-size: 11px; }
+.identity small { color: #7d8b9c; font-size: 13.5px; }
 
 .facts {
   display: grid;
@@ -299,7 +299,7 @@
   align-items: center;
   gap: 6px;
   color: #7b8aa0;
-  font-size: 11px;
+  font-size: 13.5px;
 }
 .facts dt svg {
   width: 13px;
@@ -317,7 +317,7 @@
 .facts dd {
   margin: 0;
   color: #1c2b3f;
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 750;
   overflow-wrap: anywhere;
 }
@@ -347,10 +347,10 @@
 .actionCard header span { flex: 1; }
 .actionCard header strong,
 .actionCard header small { display: block; }
-.actionCard header strong { color: #1b2940; font-size: 13px; }
-.actionCard header small { margin-top: 3px; color: #7d8b9c; font-size: 11px; line-height: 1.45; }
+.actionCard header strong { color: #1b2940; font-size: 14.5px; }
+.actionCard header small { margin-top: 3px; color: #7d8b9c; font-size: 13.5px; line-height: 1.45; }
 .actionCard > label,
-.twoColumns label { display: grid; gap: 5px; color: #314056; font-size: 11.5px; font-weight: 750; }
+.twoColumns label { display: grid; gap: 5px; color: #314056; font-size: 14px; font-weight: 750; }
 .actionCard fieldset {
   margin: 0;
   padding: 12px;
@@ -358,8 +358,8 @@
   border-radius: 12px;
   background: #f8fafc;
 }
-.actionCard legend { padding: 0 6px; color: #24344c; font-size: 11.5px; font-weight: 800; }
-.actionCard fieldset > small { display: block; margin-top: 8px; color: #9a6418; font-size: 11px; line-height: 1.4; }
+.actionCard legend { padding: 0 6px; color: #24344c; font-size: 14px; font-weight: 800; }
+.actionCard fieldset > small { display: block; margin-top: 8px; color: #9a6418; font-size: 13.5px; line-height: 1.4; }
 
 .roleGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .roleGrid label {
@@ -372,7 +372,7 @@
   border-radius: 10px;
   background: var(--chip-bg, #e8f2ff);
   color: var(--chip-ink, #1a5fd0);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease;
@@ -413,10 +413,10 @@
 .roleGrid span { min-width: 0; }
 
 .twoColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.formError { margin: 0; color: #b53d3d; font-size: 12px; }
+.formError { margin: 0; color: #b53d3d; font-size: 14px; }
 .dangerCard { border-color: #f3d0d4; }
 .dangerCard > header > svg { background: #fff0f2; color: #c34444; }
-.selfNote { color: #9c692a; font-size: 11px; }
+.selfNote { color: #9c692a; font-size: 13.5px; }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -430,8 +430,8 @@
   text-align: center;
 }
 .empty svg { width: 30px; margin-bottom: 8px; color: #7ea0d4; }
-.empty strong { color: #24344c; font-size: 13px; }
-.empty p { max-width: 300px; margin: 6px 0; font-size: 12px; line-height: 1.5; }
+.empty strong { color: #24344c; font-size: 14.5px; }
+.empty p { max-width: 300px; margin: 6px 0; font-size: 14px; line-height: 1.5; }
 
 :global(html.dark) .securityBanner {
   border-color: #2a4060;

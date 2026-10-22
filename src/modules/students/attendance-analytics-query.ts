@@ -39,6 +39,7 @@ export async function getAttendanceReport(input: unknown): Promise<AttendanceRep
     ) history on true
     where ss.session_date between ${period.previousFrom}::date and ${period.to}::date
       and ss.status <> 'CANCELLED'
+      and s.is_test_data = false
       and (ss.session_date + ss.end_time::time) at time zone 'Asia/Baku' <= now()
       and coalesce(history.new_status::text, 'ACTIVE') not in ('FROZEN', 'STOPPED', 'DECLINED', 'COMPLETED')
       and not coalesce(history.freeze_reserved, false)

@@ -28,7 +28,7 @@
   border-radius: 9px;
   color: var(--log-muted);
   background: #fff;
-  font-size: 10px;
+  font-size: 12.5px;
 }
 
 .auditStats svg { width: 16px; color: var(--log-accent); }
@@ -65,7 +65,7 @@
   padding-left: 31px;
   border-color: #d8dfe8;
   border-radius: 8px;
-  font-size: 10.5px;
+  font-size: 13px;
 }
 
 .auditToolbar select {
@@ -77,16 +77,16 @@
   color: #4f5d70;
   background: #fff;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 12.5px;
 }
 
 .auditTableWrap { overflow-x: auto; }
 .auditTable { width: 100%; min-width: 860px; border-collapse: collapse; }
-.auditTable th { height: 40px; padding: 0 14px; color: #7c8798; background: #f8fafc; font-size: 9px; text-align: left; text-transform: uppercase; letter-spacing: .035em; }
-.auditTable td { min-height: 58px; padding: 10px 14px; border-top: 1px solid #edf0f4; color: #596578; font-size: 10.5px; vertical-align: middle; }
+.auditTable th { height: 40px; padding: 0 14px; color: #7c8798; background: #f8fafc; font-size: 11.5px; text-align: left; text-transform: uppercase; letter-spacing: .035em; }
+.auditTable td { min-height: 58px; padding: 10px 14px; border-top: 1px solid #edf0f4; color: #596578; font-size: 13px; vertical-align: middle; }
 .auditTable td strong, .auditTable td small { display: block; }
-.auditTable td strong { color: #344055; font-size: 10.5px; }
-.auditTable td small { max-width: 210px; margin-top: 2px; overflow: hidden; color: #9099a6; font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+.auditTable td strong { color: #344055; font-size: 13px; }
+.auditTable td small { max-width: 210px; margin-top: 2px; overflow: hidden; color: #9099a6; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .auditTable td > span { display: -webkit-box; max-width: 260px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 
 .empty {
@@ -94,7 +94,7 @@
   min-height: 170px;
   place-items: center;
   color: #8a94a2;
-  font-size: 10.5px;
+  font-size: 13px;
 }
 
 .auditDialog {
@@ -141,8 +141,8 @@
 }
 
 .auditDialogHeader :global(.ui-dialog-title) { color: var(--detail-text); font-size: 22px; font-weight: 720; line-height: 1.2; letter-spacing: -.02em; }
-.auditDialogHeader :global(.ui-dialog-description) { color: var(--detail-muted); font-size: 12.5px; }
-.auditDialogEyebrow, .auditSectionEyebrow { color: var(--detail-accent); font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.auditDialogHeader :global(.ui-dialog-description) { color: var(--detail-muted); font-size: 14.5px; }
+.auditDialogEyebrow, .auditSectionEyebrow { color: var(--detail-accent); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .auditDialogEyebrow { display: flex; align-items: center; gap: 7px; }
 .auditDialogEyebrow svg { width: 14px; height: 14px; }
 
@@ -160,40 +160,40 @@
 .auditActorCard { display: flex; align-items: center; gap: 13px; padding: 16px; }
 .auditActorAvatar { display: grid; width: 46px; height: 46px; flex: 0 0 46px; place-items: center; color: #fff; background: var(--detail-accent); border-radius: 14px; font-size: 13px; font-weight: 800; letter-spacing: .03em; }
 .auditActorCard > div { display: grid; min-width: 0; gap: 2px; }
-.auditActorCard > div > span, .auditFacts span { color: var(--detail-muted); font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.auditActorCard > div > span, .auditFacts span { color: var(--detail-muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .auditActorCard strong, .auditActorCard small, .auditFacts strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .auditActorCard strong { color: var(--detail-text); font-size: 14px; }
-.auditActorCard small { color: var(--detail-muted); font-size: 10.5px; }
+.auditActorCard small { color: var(--detail-muted); font-size: 13px; }
 .auditFacts { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .auditFacts > div { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; align-items: center; padding: 10px 12px; }
 .auditFacts svg { grid-row: 1 / 3; width: 16px; height: 16px; justify-self: center; color: var(--detail-accent); }
-.auditFacts strong { color: var(--detail-text); font-size: 11px; font-weight: 680; }
+.auditFacts strong { color: var(--detail-text); font-size: 13.5px; font-weight: 680; }
 
 .auditReason { padding: 14px 16px; background: var(--detail-accent-soft); border: 1px solid color-mix(in srgb, var(--detail-accent) 18%, var(--detail-border)); border-radius: 14px; }
-.auditReason > span { display: flex; align-items: center; gap: 7px; color: var(--detail-accent); font-size: 10px; font-weight: 800; }
+.auditReason > span { display: flex; align-items: center; gap: 7px; color: var(--detail-accent); font-size: 12.5px; font-weight: 800; }
 .auditReason svg { width: 14px; height: 14px; }
-.auditReason p { margin: 7px 0 0; color: var(--detail-text); font-size: 12px; line-height: 1.55; }
+.auditReason p { margin: 7px 0 0; color: var(--detail-text); font-size: 14px; line-height: 1.55; }
 
 .auditChanges > header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .auditChanges > header > div { display: grid; gap: 3px; }
 .auditChanges h3 { margin: 0; color: var(--detail-text); font-size: 17px; line-height: 1.25; }
-.auditSectionDescription { margin: 5px 0 12px; color: var(--detail-muted); font-size: 11px; line-height: 1.45; }
-.auditChangeCount { padding: 5px 9px; color: var(--detail-accent); background: var(--detail-accent-soft); border-radius: 999px; font-size: 9.5px; font-weight: 800; white-space: nowrap; }
+.auditSectionDescription { margin: 5px 0 12px; color: var(--detail-muted); font-size: 13.5px; line-height: 1.45; }
+.auditChangeCount { padding: 5px 9px; color: var(--detail-accent); background: var(--detail-accent-soft); border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .auditChangeList { display: grid; gap: 8px; }
 .auditChangeRow { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 11px; padding: 13px 14px; background: var(--detail-surface); border: 1px solid var(--detail-border); border-radius: 13px; }
 .auditChangeIcon { display: grid; width: 30px; height: 30px; place-items: center; color: var(--detail-accent); background: var(--detail-accent-soft); border-radius: 9px; }
 .auditChangeIcon svg { width: 15px; height: 15px; }
 .auditChangeContent { display: grid; min-width: 0; gap: 7px; }
 .auditChangeHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.auditChangeHeading strong { color: var(--detail-text); font-size: 11.5px; }
-.auditChangeHeading > span { color: var(--detail-muted); font-size: 9px; font-weight: 700; }
+.auditChangeHeading strong { color: var(--detail-text); font-size: 14px; }
+.auditChangeHeading > span { color: var(--detail-muted); font-size: 11.5px; font-weight: 700; }
 .auditValueFlow { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr); gap: 8px; align-items: center; }
-.auditValueFlow > span, .auditValueFlow > strong, .auditSingleValue > strong { min-width: 0; overflow-wrap: anywhere; font-size: 11px; line-height: 1.45; }
+.auditValueFlow > span, .auditValueFlow > strong, .auditSingleValue > strong { min-width: 0; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.45; }
 .auditValueFlow > span { padding: 7px 9px; color: var(--detail-muted); background: var(--detail-soft); border-radius: 8px; text-decoration: line-through; }
 .auditValueFlow > strong { padding: 7px 9px; color: var(--detail-positive); background: var(--detail-positive-soft); border-radius: 8px; font-weight: 750; }
 .auditValueFlow svg { width: 14px; height: 14px; justify-self: center; color: var(--detail-muted); }
 .auditSingleValue { display: grid; gap: 3px; }
-.auditSingleValue span { color: var(--detail-muted); font-size: 9px; }
+.auditSingleValue span { color: var(--detail-muted); font-size: 11.5px; }
 .auditSingleValue strong { color: var(--detail-text); font-weight: 680; }
 .auditChangeAdded .auditChangeIcon { color: var(--detail-positive); background: var(--detail-positive-soft); }
 .auditChangeRemoved .auditChangeIcon { color: var(--detail-danger); background: var(--detail-danger-soft); }
@@ -202,8 +202,8 @@
 .auditNoChanges { display: flex; align-items: center; gap: 12px; padding: 16px; color: var(--detail-positive); background: var(--detail-positive-soft); border: 1px solid color-mix(in srgb, var(--detail-positive) 20%, var(--detail-border)); border-radius: 13px; }
 .auditNoChanges > svg { width: 20px; height: 20px; flex: 0 0 20px; }
 .auditNoChanges > div { display: grid; gap: 2px; }
-.auditNoChanges strong { color: var(--detail-text); font-size: 11.5px; }
-.auditNoChanges p { margin: 0; color: var(--detail-muted); font-size: 10.5px; }
+.auditNoChanges strong { color: var(--detail-text); font-size: 14px; }
+.auditNoChanges p { margin: 0; color: var(--detail-muted); font-size: 13px; }
 
 :global(html.dark) .auditPanel { --log-border: #26354a; --log-muted: #93a1b4; background: #101b2b; }
 :global(html.dark) .auditStats, :global(html.dark) .auditTable th { background: #142135; }

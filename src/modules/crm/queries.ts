@@ -1,6 +1,11 @@
 import { LeadStage, Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { getCrmScopeLabel, getLeadReadScope } from "@/modules/crm/access";
+import {
+  leadHadConsultationSql,
+  leadHasQualifiedSaleSql,
+  periodCourseSalesCountSql,
+} from "@/modules/students/sales-metrics-sql";
 import { getPrisma } from "@/server/db/prisma";
 import {
   isPrivilegedActor,
@@ -85,6 +90,9 @@ export type CrmData = {
     period: CrmPeriodValue;
     dateFrom: string;
     dateTo: string;
+    /** Resolved sale-window bounds for conversion → students deep-links */
+    saleFrom: string;
+    saleTo: string;
     activeCount: number;
   };
   access: {
@@ -117,6 +125,7 @@ export type CrmData = {
   attentionFocus: CrmLeadFocusRow[];
   createdTodayFocus: CrmLeadFocusRow[];
   dashboardStats: {
+    /** Funnel qeydiyyat = ödənişli CRM NEW + SLOT_WAITING tələbələr */
     salesCount: string;
     conversionRate: string;
     contactedCount: string;
@@ -132,9 +141,17 @@ export type CrmData = {
     consultationToSaleRate: string;
     trialLessonLeads: string;
     trialLessonCount: string;
+    /** course_sales.route = DIRECT — tələbələr səhifəsindən, follow-up xaric */
     directSales: string;
+    /** course_sales.route = CRM + kind = NEW — follow-up/müraciətdən ödənişli satış */
     consultationSales: string;
     meetingSales: string;
+    /** course_sales.kind = RETURN */
+    returnSales: string;
+    /** Dövr üzrə bütün ödənişli satışlar (dashboard / KPI ilə eyni): NEW+RETURN, CRM+DIRECT */
+    periodSalesTotal: string;
+    /** Lead-linked ödənişli satış (funnel qeydiyyat) */
+    crmLeadSales: string;
     lossRate: string;
     teamPerformance: Array<{
       manager: string;
@@ -254,6 +271,11 @@ type CrmRawRow = {
   openFollowUps: unknown;
   qualifiedCount: unknown;
   conversionStats: unknown;
+  periodSalesTotal: unknown;
+  periodDirectSales: unknown;
+  periodReturnSales: unknown;
+  periodCrmNewSales: unknown;
+  slotWaitingCrmSales: unknown;
   teamPerformance: unknown;
   sourceStats: unknown;
   programStats: unknown;
@@ -273,6 +295,7 @@ type CrmAttentionRawRow = {
   nextActionType: string | null;
   nextFollowUpAt: string | null;
   createdAt?: string;
+  isNewToday?: boolean | null;
   fullName: string;
   phone: string | null;
   managerName: string | null;
@@ -286,6 +309,8 @@ type CrmLeadRawRow = {
   nextActionType: string | null;
   trialLessonCount: number | null;
   createdAt: string;
+  /** Bakı günü: yalnız yaradıldığı gün true (növbəti gün false). */
+  isNewToday?: boolean | null;
   nextFollowUpAt: string | null;
   contactId: string;
   managerId: string | null;
@@ -311,8 +336,8 @@ type CrmConversionStatsRaw = {
   consultationCount: unknown;
   trialLessonLeads: unknown;
   trialLessonCount: unknown;
-  directSales: unknown;
   consultationSales: unknown;
+  crmLeadSales: unknown;
   lostCount: unknown;
 };
 
@@ -404,15 +429,24 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const campaigns = asJsonArray<{ id: string; name: string }>(row?.campaigns);
   const sourceValues = asJsonArray<string>(row?.sources);
   const formattedLeads = leadRows.map((lead) => formatLeadRow(lead));
-  const salesCount = toNumber(conversionStats?.salesCount);
+  // Funnel qeydiyyat = slot gözləyən ödənişli CRM NEW. Period totals = canonical journal.
+  const crmLeadSales = toNumber(conversionStats?.crmLeadSales ?? conversionStats?.salesCount);
+  const consultationPathSales = toNumber(conversionStats?.consultationSales);
   const contactedCount = toNumber(conversionStats?.contactedCount);
   const consultationCount = toNumber(conversionStats?.consultationCount);
   const trialLessonLeads = toNumber(conversionStats?.trialLessonLeads);
   const trialLessonCount = toNumber(conversionStats?.trialLessonCount);
-  const directSales = toNumber(conversionStats?.directSales);
-  const consultationSales = toNumber(conversionStats?.consultationSales);
   const lostCount = toNumber(conversionStats?.lostCount);
+  const periodSalesTotal = toNumber(row?.periodSalesTotal);
+  const directSales = toNumber(row?.periodDirectSales);
+  const returnSales = toNumber(row?.periodReturnSales);
+  const crmNewSales = toNumber(row?.periodCrmNewSales);
+  const slotWaitingCrmSales = toNumber(row?.slotWaitingCrmSales);
+  // Qeydiyyat (bölgü) = CRM NEW journal; funnel Qeydiyyat = hələ slot gözləyənlər.
+  const followUpSales = crmNewSales > 0 ? crmNewSales : crmLeadSales;
+  const salesCount = slotWaitingCrmSales;
   const activeCount = [
+    search,
     stageFilter,
     ownerFilter,
     programFilter,
@@ -450,6 +484,15 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       period: periodFilter,
       dateFrom: dateFromFilter.input,
       dateTo: dateToFilter.input,
+      saleFrom: (periodRange?.gte ?? new Date("2000-01-01T00:00:00.000Z"))
+        .toISOString()
+        .slice(0, 10),
+      saleTo: (() => {
+        const until = periodRange?.lt
+          ?? new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const endInclusive = new Date(until.getTime() - 24 * 60 * 60 * 1000);
+        return endInclusive.toISOString().slice(0, 10);
+      })(),
       activeCount,
     },
     access: {
@@ -484,8 +527,8 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       },
       {
         label: "Satış sayı",
-        value: formatCount(salesCount),
-        helper: `Konversiya ${formatPercent(salesCount, totalLeads)} · ${formatCount(salesCount)} satış / ${formatCount(totalLeads)} müraciət`,
+        value: formatCount(periodSalesTotal),
+        helper: `Dövr: ${formatCount(followUpSales)} qeydiyyat · ${formatCount(directSales)} birbaşa · ${formatCount(returnSales)} qayıdış`,
         tone: "yellow",
       },
     ],
@@ -531,15 +574,24 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       meetingCount: formatCount(consultationCount),
       meetingAttendedCount: formatCount(consultationCount),
       contactToMeetingRate: formatPercent(consultationCount, contactedCount),
-      meetingToSaleRate: formatPercent(consultationSales, consultationCount),
+      meetingToSaleRate: formatPercent(
+        consultationPathSales > 0 ? consultationPathSales : followUpSales,
+        consultationCount,
+      ),
       consultationCount: formatCount(consultationCount),
       contactToConsultationRate: formatPercent(consultationCount, contactedCount),
-      consultationToSaleRate: formatPercent(consultationSales, consultationCount),
+      consultationToSaleRate: formatPercent(
+        consultationPathSales > 0 ? consultationPathSales : followUpSales,
+        consultationCount,
+      ),
       trialLessonLeads: formatCount(trialLessonLeads),
       trialLessonCount: formatCount(trialLessonCount),
       directSales: formatCount(directSales),
-      consultationSales: formatCount(consultationSales),
-      meetingSales: formatCount(consultationSales),
+      consultationSales: formatCount(followUpSales),
+      meetingSales: formatCount(followUpSales),
+      returnSales: formatCount(returnSales),
+      periodSalesTotal: formatCount(periodSalesTotal),
+      crmLeadSales: formatCount(crmLeadSales),
       lossRate: formatPercent(lostCount, totalLeads),
       teamPerformance: teamPerformanceRows.map((item) => {
         const leads = toNumber(item.leads);
@@ -629,11 +681,7 @@ function getCrmRawData(
   const listWhereSql = buildCrmListWhereSql(input);
   const managerScopeSql = buildManagerScopeSql(input.actor);
   const teamMemberScopeSql = buildTeamMemberScopeSql(input.actor, input.ownerFilter);
-  const teamSalesWhereSql = buildCrmListWhereSql({
-    ...input,
-    periodRange: null,
-  });
-  const teamConversionPeriodSql = buildLeadConversionPeriodSql(input.periodRange);
+  const teamSalePeriodSql = buildLeadSalePeriodSql(input.periodRange);
   const leadNeedsAttendSql = leadNeedsMeetingAttendanceConfirmSql();
   const teamHrStatusSql = Prisma.join(
     crmTeamVisibleHrStatuses.map(
@@ -642,13 +690,35 @@ function getCrmRawData(
   );
   const createdTodayFrom = new Date(input.todayStart.getTime() - 4 * 60 * 60 * 1000);
   const createdTodayUntil = new Date(input.tomorrowStart.getTime() - 4 * 60 * 60 * 1000);
+  const saleWindowFrom = input.periodRange?.gte ?? new Date("2000-01-01T00:00:00.000Z");
+  const saleWindowUntil = input.periodRange?.lt
+    ?? new Date(Date.UTC(input.today.getUTCFullYear(), input.today.getUTCMonth() + 1, 1));
+  const periodSalesTotalSql = periodCourseSalesCountSql(
+    Prisma.sql`${saleWindowFrom}`,
+    Prisma.sql`${saleWindowUntil}`,
+  );
+  const periodDirectSalesSql = periodCourseSalesCountSql(
+    Prisma.sql`${saleWindowFrom}`,
+    Prisma.sql`${saleWindowUntil}`,
+    { route: "DIRECT" },
+  );
+  const periodReturnSalesSql = periodCourseSalesCountSql(
+    Prisma.sql`${saleWindowFrom}`,
+    Prisma.sql`${saleWindowUntil}`,
+    { kind: "RETURN" },
+  );
+  const periodCrmNewSalesSql = periodCourseSalesCountSql(
+    Prisma.sql`${saleWindowFrom}`,
+    Prisma.sql`${saleWindowUntil}`,
+    { route: "CRM", kind: "NEW" },
+  );
 
   function leadQueueOrderSql(tableAlias: "l" | "lead_rows" | "attention_rows") {
     const createdAt = Prisma.raw(`${tableAlias}.created_at`);
     const priority = Prisma.raw(`${tableAlias}.priority`);
     const id = Prisma.raw(`${tableAlias}.id`);
 
-    // Növbə: bu günkü yeni müraciətlər → kritik → digərləri; sonra ən yeni üstə.
+    // Növbə: ən yeni (bu gün) → kritik → digərləri; hər qrupda ən yeni üstə.
     return Prisma.sql`
       case
         when ${createdAt} >= ${createdTodayFrom} and ${createdAt} < ${createdTodayUntil} then 0
@@ -719,61 +789,16 @@ function getCrmRawData(
       ), 0) as "qualifiedCount",
       coalesce((
         select jsonb_build_object(
+          -- Funnel "Qeydiyyat" = ödənişli lead satışları (qeydiyyat = satış)
           'salesCount', count(*) filter (
-            where stat_leads.converted_student_id is not null
-              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
+            where ${leadHasQualifiedSaleSql()}
           ),
+          'crmLeadSales', count(*) filter (
+            where ${leadHasQualifiedSaleSql()}
+          ),
+          -- Funnel kumulyativ: əlaqə → onun içindən konsultasiya (əlaqə ≥ konsultasiya)
           'contactedCount', count(*) filter (
-            where stat_leads.had_contact
-          ),
-          'consultationCount', count(*) filter (
-            where stat_leads.had_consultation
-              or stat_leads.stage in (
-                'QUALIFIED'::"erp"."LeadStage",
-                'TRIAL_LESSON'::"erp"."LeadStage",
-                'TRIAL_CONSULTATION'::"erp"."LeadStage"
-              )
-          ),
-          'trialLessonLeads', count(*) filter (
-            where stat_leads.trial_lesson_count is not null
-              or stat_leads.stage = 'TRIAL_LESSON'::"erp"."LeadStage"
-          ),
-          'trialLessonCount', coalesce(sum(stat_leads.trial_lesson_count), 0),
-          'directSales', count(*) filter (
-            where (
-              stat_leads.converted_student_id is not null
-              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
-            )
-              and not stat_leads.had_consultation
-          ),
-          'consultationSales', count(*) filter (
-            where (
-              stat_leads.converted_student_id is not null
-              or stat_leads.stage = 'REGISTERED'::"erp"."LeadStage"
-            )
-              and stat_leads.had_consultation
-          ),
-          'lostCount', count(*) filter (
-            where stat_leads.stage = 'LOST'::"erp"."LeadStage"
-          )
-        )
-        from (
-          select
-            l.id,
-            l.stage,
-            l.converted_student_id,
-            l.trial_lesson_count,
-            exists (
-              select 1
-              from erp.lead_stage_history h
-              where h.lead_id = l.id
-                and h.new_stage in (
-                  'QUALIFIED'::"erp"."LeadStage",
-                  'TRIAL_LESSON'::"erp"."LeadStage",
-                  'TRIAL_CONSULTATION'::"erp"."LeadStage"
-                )
-            ) as had_consultation,
-            (
+            where
               l.stage in (
                 'CONTACTED'::"erp"."LeadStage",
                 'QUALIFIED'::"erp"."LeadStage",
@@ -797,11 +822,46 @@ function getCrmRawData(
                     'NURTURE'::"erp"."LeadStage"
                   )
               )
-            ) as had_contact
-          from erp.leads l
-          where ${summarySql}
-        ) stat_leads
+              or ${leadHadConsultationSql()}
+          ),
+          'consultationCount', count(*) filter (
+            where ${leadHadConsultationSql()}
+          ),
+          'trialLessonLeads', count(*) filter (
+            where l.trial_lesson_count is not null
+              or l.stage = 'TRIAL_LESSON'::"erp"."LeadStage"
+          ),
+          'trialLessonCount', coalesce(sum(l.trial_lesson_count), 0),
+          -- Konsultasiya yolu + ödəniş (lead funnel)
+          'consultationSales', count(*) filter (
+            where ${leadHasQualifiedSaleSql()}
+              and ${leadHadConsultationSql()}
+          ),
+          'lostCount', count(*) filter (
+            where l.stage = 'LOST'::"erp"."LeadStage"
+          )
+        )
+        from erp.leads l
+        where ${summarySql}
       ), '{}'::jsonb) as "conversionStats",
+      coalesce(${periodSalesTotalSql}, 0) as "periodSalesTotal",
+      coalesce(${periodDirectSalesSql}, 0) as "periodDirectSales",
+      coalesce(${periodReturnSalesSql}, 0) as "periodReturnSales",
+      coalesce(${periodCrmNewSalesSql}, 0) as "periodCrmNewSales",
+      coalesce((
+        -- Funnel Qeydiyyat = ödənişli CRM NEW + hələ slot gözləyən tələbələr
+        select count(*)::int
+        from erp.course_sales cs
+        join erp.students s on s.id = cs.student_id
+        where s.is_test_data = false
+          and cs.cancelled_at is null
+          and cs.route = 'CRM'
+          and cs.kind = 'NEW'
+          and cs.qualified_at >= ${saleWindowFrom}::date
+          and cs.qualified_at < ${saleWindowUntil}::date
+          and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
+          and s.lifecycle_status = 'SLOT_WAITING'::"erp"."StudentLifecycleStatus"
+      ), 0) as "slotWaitingCrmSales",
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -822,12 +882,8 @@ function getCrmRawData(
             select
               count(*) filter (where ${listWhereSql})::int as total_count,
               count(*) filter (
-                where ${teamSalesWhereSql}
-                  and (
-                    l.converted_student_id is not null
-                    or l.stage = 'REGISTERED'::"erp"."LeadStage"
-                  )
-                  and ${teamConversionPeriodSql}
+                where ${leadHasQualifiedSaleSql()}
+                  and ${teamSalePeriodSql}
               )::int as sales_count
             from erp.leads l
             join erp.contacts c on c.id = l.contact_id
@@ -905,6 +961,7 @@ function getCrmRawData(
             'nextActionType', attention_rows.next_action_type::text,
             'nextFollowUpAt', attention_rows.next_follow_up_at,
             'createdAt', attention_rows.created_at,
+            'isNewToday', attention_rows.is_new_today,
             'fullName', attention_rows.full_name,
             'phone', attention_rows.phone_display,
             'managerName', attention_rows.manager_name
@@ -919,6 +976,10 @@ function getCrmRawData(
             l.next_action_type,
             l.next_follow_up_at,
             l.created_at,
+            (
+              l.created_at >= ${createdTodayFrom}
+              and l.created_at < ${createdTodayUntil}
+            ) as is_new_today,
             c.full_name,
             c.phone_display,
             m.full_name as manager_name
@@ -949,6 +1010,7 @@ function getCrmRawData(
             'nextActionType', l.next_action_type::text,
             'nextFollowUpAt', l.next_follow_up_at,
             'createdAt', l.created_at,
+            'isNewToday', true,
             'fullName', c.full_name,
             'phone', c.phone_display,
             'managerName', m.full_name
@@ -971,6 +1033,7 @@ function getCrmRawData(
             'nextActionType', lead_rows.next_action_type::text,
             'trialLessonCount', lead_rows.trial_lesson_count,
             'createdAt', lead_rows.created_at,
+            'isNewToday', lead_rows.is_new_today,
             'nextFollowUpAt', lead_rows.next_follow_up_at,
             'contactId', lead_rows.contact_id::text,
             'managerId', lead_rows.manager_id::text,
@@ -1000,6 +1063,10 @@ function getCrmRawData(
             l.next_action_type,
             l.trial_lesson_count,
             l.created_at,
+            (
+              l.created_at >= ${createdTodayFrom}
+              and l.created_at < ${createdTodayUntil}
+            ) as is_new_today,
             l.next_follow_up_at,
             l.contact_id,
             l.manager_id,
@@ -1217,6 +1284,35 @@ function buildLeadConversionPeriodSql(periodRange: CrmPeriodRange) {
   return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
 }
 
+/** Paid sale window for CRM team cards — course_sales.qualified_at (Baku calendar). */
+function buildLeadSalePeriodSql(periodRange: CrmPeriodRange) {
+  const saleDateSql = Prisma.sql`(
+    select min(cs.qualified_at)
+    from erp.course_sales cs
+    join erp.students sale_student on sale_student.id = cs.student_id
+    where sale_student.is_test_data = false
+      and cs.cancelled_at is null
+      and (
+        cs.lead_id = l.id
+        or (
+          l.converted_student_id is not null
+          and cs.student_id = l.converted_student_id
+        )
+      )
+  )`;
+  const conditions: Prisma.Sql[] = [Prisma.sql`true`];
+
+  if (periodRange?.gte) {
+    conditions.push(Prisma.sql`${saleDateSql} >= ${periodRange.gte}::date`);
+  }
+
+  if (periodRange?.lt) {
+    conditions.push(Prisma.sql`${saleDateSql} < ${periodRange.lt}::date`);
+  }
+
+  return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
+}
+
 function buildCrmListWhereSql(input: {
   actor: CrmCacheActor;
   search: string;
@@ -1239,6 +1335,8 @@ function buildCrmListWhereSql(input: {
   const conditions: Prisma.Sql[] = [
     buildLeadScopeSql(input.actor),
     Prisma.sql`l.converted_student_id is null`,
+    // Ödənişli qeydiyyat follow-updan çıxır — tələbələr siyahısında (slot gözləyir) görünür.
+    Prisma.sql`l.stage <> 'REGISTERED'::"erp"."LeadStage"`,
     Prisma.sql`(
       (${periodSql})
       or (
@@ -1461,7 +1559,8 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
     nextFollowUpIso: convertedStudentCode || !lead.nextFollowUpAt
       ? null
       : new Date(lead.nextFollowUpAt).toISOString(),
-    isNewToday: isLeadCreatedToday(lead.createdAt),
+    // Yalnız Bakı üzrə yaradıldığı təqvim günü — növbəti gün badge yox olur.
+    isNewToday: resolveIsNewToday(lead.isNewToday, lead.createdAt),
     latestNote: formatLeadHistoryReason(timeline[0]?.reason),
     canConvert:
       Boolean(programId) &&
@@ -1608,7 +1707,7 @@ function formatAttentionRow(
     nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),
     nextFollowUpAt: lead.nextFollowUpAt ? formatShortDate(lead.nextFollowUpAt) : "Planlanmayıb",
     manager: lead.managerName ?? "Təyin edilməyib",
-    isNewToday: isLeadCreatedToday(lead.createdAt),
+    isNewToday: resolveIsNewToday(lead.isNewToday, lead.createdAt),
     category:
       source.includes("workshop") ||
       source.includes("masterclass") ||
@@ -1618,6 +1717,14 @@ function formatAttentionRow(
         ? "workshop_masterclass"
         : "general",
   };
+}
+
+function resolveIsNewToday(
+  sqlFlag: boolean | null | undefined,
+  createdAt: string | Date | null | undefined,
+) {
+  if (typeof sqlFlag === "boolean") return sqlFlag;
+  return isLeadCreatedToday(createdAt);
 }
 
 function isLeadCreatedToday(createdAt: string | Date | null | undefined, reference = new Date()) {

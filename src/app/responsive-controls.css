@@ -200,7 +200,7 @@ html body .erp-range-trigger {
   text-align: left;
 }
 
-html body .erp-frame :is(.students-attention-person, .students-attention-action, .crm-attention-person, .crm-attention-action) :is(strong, small, a, span) {
+html body .erp-frame :is(.students-attention-person, .students-attention-action, .crm-attention-person, .crm-attention-action) :is(strong, small, a, span):not(.crm-new-badge):not(.crm-attention-name-row) {
   white-space: normal;
   overflow: visible;
   overflow-wrap: anywhere;
@@ -440,7 +440,7 @@ html body .erp-frame .crm-focus-top {
 }
 html body .erp-frame .crm-focus-name-wrap {
   display: flex;
-  gap: 6px;
+  gap: 0;
   align-items: center;
   min-width: 0;
   overflow: hidden;

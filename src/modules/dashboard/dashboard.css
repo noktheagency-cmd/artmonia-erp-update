@@ -267,9 +267,23 @@
   display: grid;
   gap: 8px;
   padding: 12px;
+  color: inherit;
   background: var(--background);
   border: 1px solid var(--border);
   border-radius: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.owner-dashboard-company-kpi-metric:hover {
+  border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+  box-shadow: 0 6px 18px rgb(15 23 42 / 6%);
+}
+
+.owner-dashboard-company-kpi-metric:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--primary) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .owner-dashboard-company-kpi-metric-head {
@@ -277,6 +291,27 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.owner-dashboard-company-kpi-metric-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.owner-dashboard-company-kpi-metric-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  transition: opacity 160ms ease, transform 160ms ease, color 160ms ease;
+}
+
+.owner-dashboard-company-kpi-metric:hover .owner-dashboard-company-kpi-metric-chevron {
+  color: var(--primary);
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .owner-dashboard-company-kpi-metric-head > div {
