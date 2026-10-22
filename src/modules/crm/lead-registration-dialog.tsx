@@ -34,7 +34,12 @@ import {
 } from "@/modules/students/admission-payment-amount";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
-import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
+import {
+  AVANS_DEFAULT_AMOUNT,
+  AVANS_PAYMENT_KIND,
+  storedScheduleTypeForPaymentKind,
+  studentPaymentKindOptions,
+} from "@/modules/students/payment-schedule-type";
 import { isGiftDiscount } from "@/modules/students/student-create-rules";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import type { CrmData } from "@/modules/crm/queries";
@@ -69,7 +74,7 @@ export function LeadRegistrationDialog({
   const [paymentDate, setPaymentDate] = useState(currentBakuDateValue());
   const [paymentMonth, setPaymentMonth] = useState(normalizeMonthValue(currentBakuDateValue()));
   const [paymentMethod, setPaymentMethod] = useState("CASH");
-  const [paymentScheduleType, setPaymentScheduleType] = useState("MONTHLY");
+  const [paymentKind, setPaymentKind] = useState("MONTHLY");
   const [teachers, setTeachers] = useState<{ id: string; fullName: string }[]>([]);
   const [discountTypes, setDiscountTypes] = useState<{ value: string; label: string }[]>([]);
   const [programTerms, setProgramTerms] = useState<Record<string, { monthlyFee: string; lessonsPerMonth: string }>>({});
@@ -127,10 +132,18 @@ export function LeadRegistrationDialog({
     setDiscountType(next);
     if (isGiftDiscount(next)) {
       setPaymentAmount("");
-      return;
+      setPaymentKind("MONTHLY");
     }
-    const terms = programTerms[programId];
-    if (terms) setPaymentAmount((current) => current || terms.monthlyFee);
+  }
+
+  function handlePaymentKindChange(kind: string) {
+    setPaymentKind(kind);
+    if (kind === AVANS_PAYMENT_KIND) {
+      setPaymentAmount(AVANS_DEFAULT_AMOUNT);
+    } else {
+      const terms = programTerms[programId];
+      if (terms) setPaymentAmount(terms.monthlyFee);
+    }
   }
 
   function registerLead(formData: FormData) {
@@ -187,7 +200,7 @@ export function LeadRegistrationDialog({
                 <strong>{lead.name}</strong>
                 <small>{lead.program} · {lead.manager}</small>
               </div>
-              <em>Slot gözləyir</em>
+              <em>Qeydiyyat gözləyir</em>
             </div>
 
             <section className="crm-dialog-section">
@@ -328,10 +341,14 @@ export function LeadRegistrationDialog({
             ) : (
               <section className="crm-dialog-section">
                 <header><Banknote aria-hidden="true" /><h3>İlkin ödəniş (satış)</h3></header>
-                <p className="crm-register-payment-note">
-                  Qeydiyyat ödənişlə tamamlanır — avans və ya tam məbləğ satış jurnalına düşür (ən azı 20 AZN).
-                </p>
                 <FieldGroup className="crm-dialog-fields">
+                  <input name="scheduleType" type="hidden" value={storedScheduleTypeForPaymentKind(paymentKind)} />
+                  {paymentKind === AVANS_PAYMENT_KIND ? (
+                    <>
+                      <input name="receiptPurpose" type="hidden" value="ADMISSION" />
+                      <input name="contractConfirmed" type="hidden" value="on" />
+                    </>
+                  ) : null}
                   <Field data-invalid={Boolean(paymentAmountError) || undefined}>
                     <FieldLabel htmlFor={`register-pay-amount-${lead.id}`}>Məbləğ</FieldLabel>
                     <Input
@@ -361,10 +378,10 @@ export function LeadRegistrationDialog({
                     <FieldLabel>Ödəniş növü</FieldLabel>
                     <FormSelect
                       aria-label="Ödəniş növü"
-                      name="paymentScheduleType"
-                      value={paymentScheduleType}
-                      onValueChange={setPaymentScheduleType}
-                      options={studentPaymentScheduleTypeOptions}
+                      name="paymentKind"
+                      value={paymentKind}
+                      onValueChange={handlePaymentKindChange}
+                      options={studentPaymentKindOptions}
                     />
                   </Field>
                   <Field>
@@ -397,13 +414,15 @@ export function LeadRegistrationDialog({
                     />
                   </Field>
                 </FieldGroup>
-                <label className="contract-confirm-field">
-                  <Checkbox name="contractConfirmed" required />
-                  <span className="contract-confirm-copy">
-                    <strong>Müqavilə imzalanıb</strong>
-                    <small>Bu ödəniş CRM satışına yazılır.</small>
-                  </span>
-                </label>
+                {paymentKind !== AVANS_PAYMENT_KIND ? (
+                  <label className="contract-confirm-field">
+                    <Checkbox name="contractConfirmed" required />
+                    <span className="contract-confirm-copy">
+                      <strong>Müqavilə imzalanıb</strong>
+                      <small>Bu ödəniş CRM satışına yazılır.</small>
+                    </span>
+                  </label>
+                ) : null}
               </section>
             )}
 

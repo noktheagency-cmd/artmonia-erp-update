@@ -13,7 +13,12 @@ import { recordCourseSalePayment } from "@/modules/students/course-sale-service"
 import { parseBillingMonthInput } from "@/modules/students/payment-billing-period";
 import { parsePaymentDateInput } from "@/modules/students/payment-date-policy";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
-import { studentPaymentScheduleTypeValues } from "@/modules/students/payment-schedule-type";
+import {
+  AVANS_PAYMENT_KIND,
+  storedScheduleTypeForPaymentKind,
+  studentPaymentKindOptions,
+  studentPaymentScheduleTypeValues,
+} from "@/modules/students/payment-schedule-type";
 import { PublicActionError } from "@/server/actions/public-action-error";
 import {
   assertCanAccessLead,
@@ -146,7 +151,7 @@ const convertLeadSchema = z.object({
   paymentDate: optionalText(20),
   paymentMonth: optionalText(7),
   paymentMethod: z.enum(studentPaymentMethodValues).default("CASH"),
-  paymentScheduleType: z.enum(studentPaymentScheduleTypeValues).default("MONTHLY"),
+  paymentKind: z.enum([...studentPaymentScheduleTypeValues, AVANS_PAYMENT_KIND] as const).default("MONTHLY"),
   paymentNote: optionalText(240),
   confirmMeetingAttended: z.preprocess(
     (value) => value === "on" || value === "true" || value === true,
@@ -776,6 +781,9 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
           "İlkin ödəniş üçün cari paket üzrə ilk dərs tarixini seçin.",
         );
       }
+      const scheduleType = storedScheduleTypeForPaymentKind(input.paymentKind);
+      const contractConfirmed = input.paymentKind === AVANS_PAYMENT_KIND ? true : input.contractConfirmed;
+
       const payment = await tx.payment.create({
         data: {
           studentId: student.id,
@@ -783,7 +791,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
           paidAt: paymentDate,
           paymentMonth,
           nextPaymentAt: null,
-          scheduleType: input.paymentScheduleType,
+          scheduleType,
           method: input.paymentMethod as PaymentMethod,
           note: input.paymentNote ?? `CRM qeydiyyat ödənişi: ${lead.id}`,
           idempotencyKey: randomUUID(),
@@ -795,7 +803,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         studentId: student.id,
         paymentId: payment.id,
         purpose: "ADMISSION",
-        contractConfirmed: input.contractConfirmed,
+        contractConfirmed,
         actorId: actor.id,
         admissionLeadId: lead.id,
       });

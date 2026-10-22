@@ -1,5 +1,6 @@
 "use client";
 
+import "@/modules/crm/crm.css";
 import { useEffect, useRef, useState } from "react";
 import { LeadAppointments } from "./lead-appointments";
 import { LeadContactPanel } from "./lead-contact-panel";

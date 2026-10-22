@@ -5334,7 +5334,7 @@ html body .ui-checkbox:disabled {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
   align-items: start;
-  margin: 0;
+  margin: 10px 0 0 0;
   padding: 14px 14px 14px 12px;
   color: #334155;
   cursor: pointer;
