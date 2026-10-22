@@ -103,16 +103,38 @@ export function StudentList({ data }: { data: StudentListData }) {
     if (key === "status" && value) {
       params.delete("churn");
       params.delete("payment");
+      params.delete("attention");
+      params.delete("ids");
       params.delete("from");
       params.delete("to");
     }
     if (key === "payment" && value) {
       params.delete("status");
       params.delete("churn");
+      params.delete("attention");
+      params.delete("ids");
       if (["open", "overdue", "archive"].includes(value)) {
         params.delete("from");
         params.delete("to");
       }
+    }
+    if (key === "attention" && value) {
+      params.delete("status");
+      params.delete("churn");
+      params.delete("payment");
+      params.delete("ids");
+      params.delete("from");
+      params.delete("to");
+      params.delete("q");
+    }
+    if (key === "ids" && value) {
+      params.delete("status");
+      params.delete("churn");
+      params.delete("payment");
+      params.delete("attention");
+      params.delete("from");
+      params.delete("to");
+      params.delete("q");
     }
     if (value) {
       params.set(key, value);
@@ -263,6 +285,7 @@ export function StudentList({ data }: { data: StudentListData }) {
           <StudentAttentionAudit
             data={data}
             onOverdue={() => handleQuickFilter("payment", "overdue")}
+            onFirstLessonMissed={() => handleQuickFilter("attention", "first_lesson")}
             onUnassigned={() => handleQuickFilter("teacher", "unassigned")}
           />
         </>
@@ -306,17 +329,21 @@ export function StudentList({ data }: { data: StudentListData }) {
 function StudentAttentionAudit({
   data,
   onOverdue,
+  onFirstLessonMissed,
   onUnassigned,
 }: {
   data: StudentListData;
   onOverdue: () => void;
+  onFirstLessonMissed: () => void;
   onUnassigned: () => void;
 }) {
   const operations = data.operations;
   const reminders = data.todayReminders.items;
   const dueTodayStudents = operations.dueTodayStudents ?? [];
   const overdueStudents = operations.overdueStudents ?? [];
+  const firstLessonMissedStudents = operations.firstLessonMissedStudents ?? [];
   const todayAttentionCount = operations.dueTodayCount + reminders.length;
+  const attentionTotal = todayAttentionCount + operations.overdueCount + operations.firstLessonMissedCount;
 
   return (
     <section className="students-attention-audit students-enter" aria-labelledby="students-attention-title">
@@ -329,9 +356,50 @@ function StudentAttentionAudit({
           <p>{data.todayReminders.dateLabel} üçün tələbə əməliyyatları</p>
         </div>
         <span className="students-attention-meta">
-          <i aria-hidden="true" /> Canlı · {todayAttentionCount + operations.overdueCount} qeyd
+          <i aria-hidden="true" /> Canlı · {attentionTotal} qeyd
         </span>
       </header>
+
+      <section className="students-first-lesson-alert" aria-labelledby="students-first-lesson-title">
+        <header className="students-first-lesson-alert-head">
+          <span aria-hidden="true"><AlertTriangle /></span>
+          <div>
+            <h3 id="students-first-lesson-title">İlk dərsə gəlməyənlər</h3>
+            <p>Slot gözləyir statusunda qalıb — aktivləşmə üçün müəllim “Gəldi” qeyd etməlidir</p>
+          </div>
+          <strong>{operations.firstLessonMissedCount}</strong>
+        </header>
+        <div className="students-first-lesson-alert-list">
+          {firstLessonMissedStudents.map((student) => (
+            <Link
+              key={student.id}
+              href={`/students/${student.id}` as Route}
+              className="students-first-lesson-alert-row"
+              aria-label={`${student.name}: ilk dərsə gəlməyib`}
+            >
+              <span className="students-attention-avatar" aria-hidden="true">{getInitials(student.name)}</span>
+              <span className="students-attention-person">
+                <strong>{student.name}</strong>
+                <small>{student.code} · {student.program}</small>
+              </span>
+              <StatusChip tone="warning">İlk dərsə gəlməyib</StatusChip>
+              <span className="students-attention-action">
+                <strong><AlertTriangle aria-hidden="true" /> {student.reasonLabel}</strong>
+                <small><CalendarClock aria-hidden="true" /> İlk dərs: {student.firstLessonDate} · {student.teacher}</small>
+              </span>
+              <ArrowRight className="students-attention-open" aria-hidden="true" />
+            </Link>
+          ))}
+          {operations.firstLessonMissedCount === 0 ? (
+            <StudentAttentionEmpty>Bu gün ilk dərs buraxan tələbə yoxdur</StudentAttentionEmpty>
+          ) : null}
+        </div>
+        {operations.firstLessonMissedCount > 0 ? (
+          <button type="button" className="students-attention-more is-amber" onClick={onFirstLessonMissed}>
+            Bütün ilk dərs buraxanları aç <ArrowRight aria-hidden="true" />
+          </button>
+        ) : null}
+      </section>
 
       <div className="students-attention-groups">
         <StudentAttentionGroup
@@ -545,7 +613,16 @@ function StudentListToolbar({
           placeholder="Ad, kod və ya telefon üzrə axtar"
         />
         {searchValue ? (
-          <button type="button" aria-label="Axtarışı təmizlə" onClick={() => setSearchValue("")}>
+          <button
+            type="button"
+            className="students-list-search-clear"
+            aria-label="Axtarışı təmizlə"
+            onClick={() => {
+              setSearchValue("");
+              submittedQueryRef.current = "";
+              onFilterRef.current("q", "");
+            }}
+          >
             <X aria-hidden="true" />
           </button>
         ) : null}
@@ -654,14 +731,26 @@ function StudentDataTable({
           <TableBody>
             {students.map((student) => {
               const hasDebt = student.paymentTone === "danger" || student.paymentTone === "warning";
+              const hasActivationAlert = Boolean(student.activationWarning);
               return (
-                <TableRow key={student.code} data-debt={hasDebt}>
+                <TableRow
+                  key={student.code}
+                  data-debt={hasDebt}
+                  data-activation-alert={hasActivationAlert || undefined}
+                >
                   <TableCell>
                     <Link href={`/students/${student.id}` as Route} className="students-identity-link">
-                      <span className="students-avatar" aria-hidden="true">{getInitials(student.name)}</span>
+                      <span className="students-avatar" data-alert={hasActivationAlert || undefined} aria-hidden="true">
+                        {hasActivationAlert ? <AlertTriangle /> : getInitials(student.name)}
+                      </span>
                       <span>
                         <strong>{student.name}</strong>
                         <small>{student.code} · {student.phone}</small>
+                        {hasActivationAlert ? (
+                          <small className="students-activation-warning" title={student.activationWarning ?? undefined}>
+                            İlk dərsə gəlməyib
+                          </small>
+                        ) : null}
                       </span>
                     </Link>
                   </TableCell>
@@ -672,7 +761,12 @@ function StudentDataTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>
+                    <div className="students-table-stack">
+                      <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>
+                      {hasActivationAlert ? (
+                        <StatusChip tone="warning">İlk dərsə gəlməyib</StatusChip>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="students-payment-cell">
@@ -769,6 +863,12 @@ function ActiveFilterBar({
       ) : null}
       {data.filters.payment !== "all" ? (
         <FilterChip label={`Ödəniş: ${data.filterLabels.payment}`} onRemove={() => onQuickFilter("payment", "all")} />
+      ) : null}
+      {data.filters.attention ? (
+        <FilterChip label={data.filterLabels.attention} onRemove={() => onQuickFilter("attention", "")} />
+      ) : null}
+      {data.filterLabels.ids ? (
+        <FilterChip label={data.filterLabels.ids} onRemove={() => onQuickFilter("ids", "")} />
       ) : null}
       {data.filters.program ? (
         <FilterChip label={`Proqram: ${data.filterLabels.program}`} onRemove={() => onQuickFilter("program", "")} />

@@ -9,9 +9,10 @@ import { retentionInput, localizeAttendanceGroup, type RetentionOptions } from "
 import { ArrowLeft, ArrowUpRight, CalendarCheck2, CheckCheck, ChevronRight, CircleHelp, RefreshCw, ShieldAlert, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { FormSelect } from "@/components/ui/select";
 import { todayInBaku } from "@/modules/groups/shared";
 import { loadAttendanceReport } from "./attendance-analytics-action";
-import { attendanceStats, attendanceTeachers, consecutiveAbsences, type AttendanceEntry, type AttendanceReport } from "./attendance-analytics";
+import { attendanceStats, attendanceTeachers, consecutiveAbsences, isAtRiskStreak, riskyStudentIds, type AttendanceEntry, type AttendanceReport } from "./attendance-analytics";
 
 const percent = (value: number | null) => value === null ? "—" : `${value}%`;
 const markLabels = { PRESENT: "İştirak", ABSENT: "Qaib", EXCUSED: "Üzrlü" };
@@ -38,7 +39,7 @@ export function AttendanceAnalyticsCard() {
   async function load(start: string, end: string) {
     const id = ++request.current;
     setAppliedPeriod({ from: start, to: end });
-    setTeacherId(""); setGroupId("");
+    setTeacherId(""); setGroupId(""); setSelectedTeacher("");
     setLoading(true);
     setError("");
     try {
@@ -83,6 +84,8 @@ export function AttendanceAnalyticsCard() {
     ...entries.filter((entry) => !teacherId || entry.teacherId === teacherId).map((entry) => [entry.groupId, localizeAttendanceGroup(entry.group)] as const),
     ...retentionOptions.groups.filter((group) => !teacherId || group.teacherId === teacherId).map((group) => [group.id, group.name] as const),
   ]).entries()];
+  const riskyIds = riskyStudentIds(filtered);
+  const riskyStudentsHref = `/students?tab=list&ids=${riskyIds.length ? riskyIds.join(",") : "none"}`;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -112,30 +115,65 @@ export function AttendanceAnalyticsCard() {
         <DialogHeader className="attendance-dialog-header">
           <span className="attendance-dialog-eyebrow"><CalendarCheck2 size={16} /> TƏLƏBƏ ANALİTİKASI</span>
           <DialogTitle>Tələbələrin saxlanması və itkisi</DialogTitle>
-          <DialogDescription>Davamiyyəti, dondurma və dayandırma hallarını seçilmiş dövr üzrə izləyin.</DialogDescription>
+          <DialogDescription visible>Seçilmiş dövr üzrə itki, saxlanma və davamiyyət.</DialogDescription>
         </DialogHeader>
         <div className="attendance-dialog-scroll">
           <form className="students-attendance-filters" onSubmit={(event) => { event.preventDefault(); void load(from, to); }}>
             <label>Başlanğıc<DatePicker name="attendanceFrom" aria-label="Başlanğıc tarixi" value={from} maxValue={to} allowClear={false} onValueChange={setFrom} /></label>
             <label>Bitmə<DatePicker name="attendanceTo" aria-label="Bitmə tarixi" value={to} maxValue={todayInBaku()} allowClear={false} onValueChange={setTo} /></label>
-            <label>Müəllim<select aria-label="Müəllim" disabled={loading} value={teacherId} onChange={(event) => { setTeacherId(event.target.value); setGroupId(""); setSelectedTeacher(""); }}><option value="">Bütün müəllimlər</option>{teacherOptions.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.name}</option>)}</select></label>
-            <label>Qrup / dərs vaxtı<select aria-label="Qrup / dərs vaxtı" disabled={loading} value={groupId} onChange={(event) => { setGroupId(event.target.value); setSelectedTeacher(""); }}><option value="">Bütün qruplar</option>{groups.map(([id, name]) => <option value={id} key={id}>{name}</option>)}</select></label>
+            <label>Müəllim
+              <FormSelect
+                name="attendanceTeacher"
+                aria-label="Müəllim"
+                disabled={loading}
+                value={teacherId || "all"}
+                onValueChange={(value) => { setTeacherId(value === "all" ? "" : value); setGroupId(""); setSelectedTeacher(""); setShowRisky(false); }}
+                emptyLabel="Bütün müəllimlər"
+                emptyValue="all"
+                searchable
+                searchPlaceholder="Müəllim axtar..."
+                options={teacherOptions.map((teacher) => ({ value: teacher.id, label: teacher.name }))}
+              />
+            </label>
+            <label>Qrup / dərs vaxtı
+              <FormSelect
+                name="attendanceGroup"
+                aria-label="Qrup / dərs vaxtı"
+                disabled={loading}
+                value={groupId || "all"}
+                onValueChange={(value) => { setGroupId(value === "all" ? "" : value); setSelectedTeacher(""); setShowRisky(false); }}
+                emptyLabel="Bütün qruplar"
+                emptyValue="all"
+                searchable
+                searchPlaceholder="Qrup axtar..."
+                options={groups.map(([id, name]) => ({ value: id, label: name }))}
+              />
+            </label>
             <Button className="attendance-apply" type="submit" disabled={loading}><RefreshCw size={15} />{loading ? "Yüklənir…" : "Yenilə"}</Button>
           </form>
           <RetentionAnalyticsPanel key={`${appliedPeriod.from}:${appliedPeriod.to}:${teacherId}:${groupId}`} from={appliedPeriod.from} to={appliedPeriod.to} teacherId={teacherId} groupId={groupId} onOptions={setRetentionOptions} />
           {loading ? <div className="attendance-state" role="status"><RefreshCw size={26} /><strong>Davamiyyət yüklənir…</strong><span>Göstəricilər hazırlanır.</span></div> : error ? <div className="attendance-state is-error" role="alert"><ShieldAlert size={26} /><strong>Məlumat yüklənmədi</strong><span>{error}</span><Button variant="outline" onClick={() => void load(from, to)}>Yenidən cəhd et</Button></div> : report && <>
-            <div className="attendance-period"><span><CalendarCheck2 size={14} />{displayDate(report.from)} — {displayDate(report.to)}</span><span>{filteredStats.students} tələbə · {attendanceTeachers(filtered).length} müəllim</span></div>
-            <div className="attendance-kpis">
-              <div className="attendance-kpi is-primary"><span><CalendarCheck2 size={17} />Ümumi davamiyyət</span><strong>{percent(filteredStats.rate)}</strong><small>{filteredStats.present} iştirak / {filteredStats.present + filteredStats.absent} qeydə alınmış dərs</small></div>
-              <div className="attendance-kpi"><span><ShieldAlert size={17} />Riskli tələbə</span><strong>{filteredStats.risky}</strong><small>Ardıcıl ən azı 3 qaib</small></div>
-              <div className="attendance-kpi"><span><UsersRound size={17} />Natamam dərs</span><strong>{filteredStats.missingSessions}</strong><small>{filteredStats.missing} tələbə üçün qeyd yoxdur</small></div>
-              <div className="attendance-kpi"><span><CheckCheck size={17} />Qeyd tamlığı</span><strong>{percent(filteredStats.completeness)}</strong><small>{filteredStats.excused} üzrlü · {filteredStats.absent} qaib</small></div>
-            </div>
-            {filtered.length === 0 ? <div className="attendance-state"><CalendarCheck2 size={28} /><strong>Hələ dərs məlumatı yoxdur</strong><span>Bu dövr və filtrlər üçün bitmiş dərs məlumatı yoxdur.</span></div> : selectedTeacher ? <>
+            <section className="attendance-block" aria-label="Davamiyyət">
+              <div className="attendance-section-heading">
+                <div><h3>Davamiyyət</h3><p>{displayDate(report.from)} — {displayDate(report.to)}</p></div>
+                <span>{filteredStats.students} tələbə · {attendanceTeachers(filtered).length} müəllim</span>
+              </div>
+              <div className="attendance-kpis">
+                <div className="attendance-kpi is-primary"><span><CalendarCheck2 size={17} />Ümumi davamiyyət</span><strong>{percent(filteredStats.rate)}</strong><small>{filteredStats.present} iştirak / {filteredStats.present + filteredStats.absent} dərs</small></div>
+                <Link href={riskyStudentsHref} className="attendance-kpi is-action" onClick={() => setOpen(false)} aria-label="Riskli tələbələri siyahıda göstər">
+                  <span><ShieldAlert size={17} />Riskli tələbə</span>
+                  <strong>{filteredStats.risky}</strong>
+                  <small className="attendance-kpi-action">Ətraflı <ChevronRight size={14} /></small>
+                </Link>
+                <div className="attendance-kpi"><span><UsersRound size={17} />Natamam dərs</span><strong>{filteredStats.missingSessions}</strong><small>{filteredStats.missing} tələbə üçün qeyd yoxdur</small></div>
+                <div className="attendance-kpi"><span><CheckCheck size={17} />Qeyd tamlığı</span><strong>{percent(filteredStats.completeness)}</strong><small>{filteredStats.excused} üzrlü · {filteredStats.absent} qaib</small></div>
+              </div>
+            </section>
+            {filtered.length === 0 ? <div className="attendance-state"><CalendarCheck2 size={28} /><strong>Hələ dərs məlumatı yoxdur</strong><span>Bu dövr və filtrlər üçün bitmiş dərs məlumatı yoxdur.</span></div> : selectedTeacher ? <div className="attendance-block">
               <button type="button" className="attendance-back" onClick={() => setSelectedTeacher("")}><ArrowLeft size={16} /> Bütün müəllimlərə qayıt</button>
               <TeacherAttendanceDetail key={`${selectedTeacher}:${groupId}`} entries={filtered.filter((entry) => entry.teacherId === selectedTeacher)} />
-            </> : <section className="attendance-teacher-section">
-              <div className="attendance-section-heading"><div><h3>Müəllimlər</h3><p>Tələbə detallarını görmək üçün müəllimi seçin.</p></div><span>{attendanceTeachers(filtered).length} müəllim</span></div>
+            </div> : <section className="attendance-teacher-section attendance-block">
+              <div className="attendance-section-heading"><div><h3>Müəllimlər</h3><p>Detallar üçün müəllimi seçin</p></div><span>{attendanceTeachers(filtered).length} müəllim</span></div>
               <div className="students-attendance-table-wrap"><table className="students-attendance-table">
                 <thead><tr><th>Müəllim</th><th>Davamiyyət</th><th>İştirak / gözlənilən</th><th>Riskli tələbə</th><th>Natamam dərs</th></tr></thead>
                 <tbody>{attendanceTeachers(filtered).map((teacher) => <tr key={teacher.id}>
@@ -147,7 +185,15 @@ export function AttendanceAnalyticsCard() {
                 </tr>)}</tbody>
               </table></div>
             </section>}
-            <details className="attendance-method"><summary><CircleHelp size={15} />Göstəricilər necə hesablanır?</summary><div><p>Davamiyyət = iştirak / (iştirak + qaib). Üzrlü və qeyd edilməmiş dərslər faizdən çıxarılır. İştirak / gözlənilən tələbə-dərs sayıdır.</p><p>Risk: seçilmiş dövrün sonunda eyni müəllimlə ardıcıl ən azı 3 qaib. Qeyd edilməmiş və üzrlü dərs ardıcıllığı kəsir. Dondurulmuş dövrlər və ləğv edilmiş dərslər daxil deyil.</p><p>Müqayisə dövrü: {displayDate(report.previousFrom)} — {displayDate(report.previousTo)}.</p></div></details>
+            <details className="attendance-method">
+              <summary><CircleHelp size={15} />Göstəricilər necə hesablanır?</summary>
+              <div>
+                <p><strong>Saxlanma və itki.</strong> Tələbə itkisi = seçilmiş dövrdə donduran və ya dayandıran unikal tələbələr / dövrün sonunadək qeydiyyatdan keçən tələbələr. İmtina edənlər daxil deyil. Bu panel satış KPI-sı deyil.</p>
+                <p><strong>Davamiyyət.</strong> İştirak / (iştirak + qaib). Üzrlü və qeyd edilməmiş dərslər faizdən çıxarılır.</p>
+                <p><strong>Risk.</strong> Dövrün sonunda eyni müəllimlə ardıcıl ən azı 3 qaib; tələbənin cari statusu aktiv qalmalıdır. Dayandırılmış, dondurulmuş, imtina və tamamlanmış tələbələr riskə düşmür.</p>
+                <p>Müqayisə dövrü: {displayDate(report.previousFrom)} — {displayDate(report.previousTo)}.</p>
+              </div>
+            </details>
           </>}
         </div>
       </DialogContent>
@@ -162,15 +208,16 @@ function TeacherAttendanceDetail({ entries }: { entries: AttendanceEntry[] }) {
   useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, []);
   const students = [...new Map(entries.map((entry) => [entry.studentId, entry.student])).entries()].map(([id, name]) => {
     const history = entries.filter((entry) => entry.studentId === id).sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
-    return { id, name, history, lastPresent: history.find((entry) => entry.status === "PRESENT")?.date, streak: consecutiveAbsences(history), stats: attendanceStats(history) };
-  }).filter((student) => !riskOnly || student.streak >= 3).sort((a, b) => b.streak - a.streak || a.name.localeCompare(b.name, "az"));
+    const streak = consecutiveAbsences(history);
+    return { id, name, history, lastPresent: history.find((entry) => entry.status === "PRESENT")?.date, streak, atRisk: isAtRiskStreak(history), stats: attendanceStats(history) };
+  }).filter((student) => !riskOnly || student.atRisk).sort((a, b) => b.streak - a.streak || a.name.localeCompare(b.name, "az"));
   const groups = [...new Map(entries.map((entry) => [entry.groupId, entry.group])).entries()];
   return <section className="students-attendance-detail">
     <div className="attendance-section-heading"><div><h3 ref={headingRef} tabIndex={-1}>{entries[0]?.teacher}</h3><p>Qruplar və tələbələrin iştirak tarixçəsi</p></div><span>{students.length} tələbə</span></div>
     <div className="students-attendance-group-list">{groups.map(([id, name]) => <span key={id}>{localizeAttendanceGroup(name)}<strong>{percent(attendanceStats(entries.filter((entry) => entry.groupId === id)).rate)}</strong></span>)}</div>
     <label className="attendance-risk-toggle"><input type="checkbox" checked={riskOnly} onChange={(event) => { setRiskOnly(event.target.checked); setPage(1); }} /><ShieldAlert size={15} /> Yalnız riskli tələbələr</label>
     {students.length === 0 ? <div className="attendance-state"><CheckCheck size={26} /><strong>Riskli tələbə yoxdur.</strong></div> : students.slice((page - 1) * 20, page * 20).map((student) => <details key={student.id} className="students-attendance-student">
-      <summary><span className="attendance-avatar" aria-hidden="true">{initials(student.name)}</span><span className="attendance-student-name"><strong>{student.name}</strong><small>{student.stats.absent} qaib · ardıcıl {student.streak} qaib</small></span><span className={`attendance-badge ${student.streak >= 3 ? "is-risk" : "is-neutral"}`}>{percent(student.stats.rate)}</span><ChevronRight size={16} /></summary>
+      <summary><span className="attendance-avatar" aria-hidden="true">{initials(student.name)}</span><span className="attendance-student-name"><strong>{student.name}</strong><small>{student.stats.absent} qaib · ardıcıl {student.streak} qaib</small></span><span className={`attendance-badge ${student.atRisk ? "is-risk" : "is-neutral"}`}>{percent(student.stats.rate)}</span><ChevronRight size={16} /></summary>
       <div className="attendance-student-history"><div className="attendance-history-heading"><span>Son iştirak: <strong>{student.lastPresent ? displayDate(student.lastPresent) : "Seçilmiş dövrdə yoxdur"}</strong></span><Link href={`/students/${student.id}`}>Tələbə profilini aç <ArrowUpRight size={14} /></Link></div>
         <ul>{student.history.map((entry) => <li key={`${entry.sessionId}:${entry.enrollmentId}`}><span><strong>{displayDate(entry.date)}</strong><small>{entry.time} · {localizeAttendanceGroup(entry.group)}</small></span><span className="attendance-badge" data-mark={entry.status ?? "UNKNOWN"}>{entry.status ? markLabels[entry.status] : "Qeyd edilməyib"}</span></li>)}</ul>
       </div>

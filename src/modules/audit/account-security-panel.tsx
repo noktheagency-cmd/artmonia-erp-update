@@ -80,11 +80,11 @@ export function AccountSecurityPanel({
           <div className={styles.rows}>
             {visible.map((account) => (
               <button type="button" key={accountKey(account)} className={accountKey(account) === (selected ? accountKey(selected) : "") ? styles.activeRow : styles.row} onClick={() => { setSelectedProfileKey(accountKey(account)); setFeedback(null); }}>
-                <span className={styles.person}><i>{initials(account.fullName)}</i><span><strong>{account.fullName}</strong><small>{account.profileType === "CORPORATE_CONTACT" ? "Korporativ əlaqə" : "Əməkdaş"} · {account.position} · {account.department}</small></span></span>
+                <span className={styles.person}><i data-tone={avatarTone(account.fullName)}>{initials(account.fullName)}</i><span><strong>{account.fullName}</strong><small>{account.profileType === "CORPORATE_CONTACT" ? "Korporativ əlaqə" : "Əməkdaş"} · {account.position} · {account.department}</small></span></span>
                 <span className={styles.email}>{account.loginEmail ?? "—"}</span>
-                <span className={styles.roles}>{account.roles.slice(0, 2).map((role) => <small key={role.id}>{role.name}</small>)}{account.roles.length > 2 ? <small>+{account.roles.length - 2}</small> : null}</span>
+                <span className={styles.roles}>{account.roles.slice(0, 2).map((role) => <small key={role.id} data-tone={roleTone(role)}>{role.name}</small>)}{account.roles.length > 2 ? <small data-tone="slate">+{account.roles.length - 2}</small> : null}</span>
                 <AccountStatus status={account.status} />
-                <span className={styles.sessionCell}>{account.activeSessionCount}</span>
+                <span className={styles.sessionCell} data-live={account.activeSessionCount > 0 ? "true" : "false"}>{account.activeSessionCount}</span>
               </button>
             ))}
             {!visible.length ? <div className={styles.empty}><UsersRound /><strong>Nəticə tapılmadı</strong><p>Axtarış sözünü dəyişib yenidən yoxlayın.</p></div> : null}
@@ -95,14 +95,14 @@ export function AccountSecurityPanel({
           {selected ? (
             <>
               <header className={styles.identity}>
-                <i>{initials(selected.fullName)}</i>
+                <i data-tone={avatarTone(selected.fullName)}>{initials(selected.fullName)}</i>
                 <div><span><h2>{selected.fullName}</h2><AccountStatus status={selected.status} /></span><p>{selected.loginEmail ?? selected.contactEmail ?? "E-poçt qeyd edilməyib"}</p><small>{selected.position} · {selected.department}</small></div>
               </header>
               <dl className={styles.facts}>
-                <div><dt><Clock3 /> Son fəaliyyət</dt><dd>{selected.lastSeenAt ? formatDateTime(selected.lastSeenAt) : "Aktivlik yoxdur"}</dd></div>
-                <div><dt><UsersRound /> Aktiv sessiyalar</dt><dd>{selected.activeSessionCount}</dd></div>
-                <div><dt><ShieldCheck /> Rollar</dt><dd>{selected.roles.map((role) => role.name).join(", ") || "Rol yoxdur"}</dd></div>
-                <div><dt><Clock3 /> Hesab tarixi</dt><dd>{formatDate(selected.createdAt)}</dd></div>
+                <div data-tone="blue"><dt><Clock3 /> Son fəaliyyət</dt><dd>{selected.lastSeenAt ? formatDateTime(selected.lastSeenAt) : "Aktivlik yoxdur"}</dd></div>
+                <div data-tone="mint"><dt><UsersRound /> Aktiv sessiyalar</dt><dd>{selected.activeSessionCount}</dd></div>
+                <div data-tone="violet"><dt><ShieldCheck /> Rollar</dt><dd className={styles.factRoles}>{selected.roles.length ? selected.roles.map((role) => <small key={role.id} data-tone={roleTone(role)}>{role.name}</small>) : "Rol yoxdur"}</dd></div>
+                <div data-tone="amber"><dt><Clock3 /> Hesab tarixi</dt><dd>{formatDate(selected.createdAt)}</dd></div>
               </dl>
 
               {selected.status === "NOT_CREATED" ? (
@@ -166,7 +166,7 @@ function CredentialForm({ mode, account, roleOptions, pending, onSubmit }: FormP
     <header>{mode === "create" ? <UserPlus /> : <Mail />}<span><strong>{mode === "create" ? "ERP hesabı yarat" : "Login məlumatları"}</strong><small>{mode === "create" ? "İlkin giriş və səlahiyyət rollarını təyin edin." : "E-poçtu və təyin edilən rolları yeniləyin."}</small></span></header>
     <ProfileFields account={account} />
     <label><span>Login e-poçtu</span><Input name="loginEmail" type="email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required autoComplete="off" /></label>
-    <fieldset><legend>Sistem rolları</legend><div className={styles.roleGrid}>{roleOptions.map((role) => <label key={role.id}><input type="checkbox" checked={roleIds.includes(role.id)} onChange={() => setRoleIds((current) => current.includes(role.id) ? current.filter((id) => id !== role.id) : [...current, role.id])} /><span>{role.name}</span></label>)}</div>{account.protectedRole ? <small>Qorunan Super Admin/Admin rolu bu paneldə saxlanılır və dəyişdirilmir.</small> : null}</fieldset>
+    <fieldset><legend>Sistem rolları</legend><div className={styles.roleGrid}>{roleOptions.map((role) => <label key={role.id} data-tone={roleTone(role)}><input type="checkbox" checked={roleIds.includes(role.id)} onChange={() => setRoleIds((current) => current.includes(role.id) ? current.filter((id) => id !== role.id) : [...current, role.id])} /><span>{role.name}</span></label>)}</div>{account.protectedRole ? <small>Qorunan Super Admin/Admin rolu bu paneldə saxlanılır və dəyişdirilmir.</small> : null}</fieldset>
     {mode === "create" ? <div className={styles.twoColumns}><label><span>İlkin parol</span><Input name="password" type="password" minLength={16} maxLength={72} required autoComplete="new-password" /></label><label><span>Parolu təsdiqlə</span><Input name="confirmation" type="password" minLength={16} maxLength={72} required autoComplete="new-password" /></label></div> : null}
     {error ? <p className={styles.formError}>{error}</p> : null}
     <Button type="submit" disabled={pending || !roleOptions.length}>{pending ? <LoaderCircle className={styles.spin} /> : mode === "create" ? <UserPlus /> : <Check />}{mode === "create" ? "Hesab yarat" : "Dəyişiklikləri saxla"}</Button>
@@ -191,6 +191,31 @@ function profileFormData(account: SecurityAccountDto) {
 }
 
 function accountKey(account: Pick<SecurityAccountDto, "profileType" | "profileId">) { return `${account.profileType}:${account.profileId}`; }
+
+type ChipTone = "blue" | "mint" | "violet" | "amber" | "rose" | "teal" | "indigo";
+const chipTones: ChipTone[] = ["blue", "mint", "violet", "amber", "rose", "teal", "indigo"];
+
+function roleTone(role: { code: string | null; name: string }): ChipTone {
+  const key = `${role.code ?? ""} ${role.name}`.toLocaleUpperCase("az");
+  if (/(TEACHER|MÜƏLL|MUELL)/.test(key)) return "violet";
+  if (/(SALES|SATIŞ|SATIS|TƏMSİL|TEMSIL)/.test(key)) return "amber";
+  if (/MARKET/.test(key)) return "rose";
+  if (/(LAW|LEGAL|HÜQUQ|HUQUQ)/.test(key)) return "indigo";
+  if (/(ACCOUNT|MÜHAS|MUHAS|FINAN|MALİY|MALIY)/.test(key)) return "teal";
+  if (/EVENT/.test(key)) return "mint";
+  if (/(ADMIN|OWNER)/.test(key)) return "blue";
+  return chipTones[toneIndex(key)];
+}
+
+function avatarTone(name: string): ChipTone {
+  return chipTones[toneIndex(name)];
+}
+
+function toneIndex(value: string) {
+  let hash = 0;
+  for (const char of value) hash = (hash + char.charCodeAt(0)) % chipTones.length;
+  return hash;
+}
 
 function AccountStatus({ status }: { status: SecurityAccountDto["status"] }) {
   const label = status === "ACTIVE" ? "Aktiv" : status === "DISABLED" ? "Deaktiv" : "Yaradılmayıb";

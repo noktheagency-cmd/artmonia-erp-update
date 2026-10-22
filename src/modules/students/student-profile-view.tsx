@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, BellRing, CheckCheck, GraduationCap } from "lucide-react";
+import { AlertTriangle, ChevronLeft, BellRing, CheckCheck, GraduationCap } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompleteStudentReminderButton } from "./student-reminders-client";
@@ -41,7 +41,10 @@ export function StudentProfileView({ student, actions, mobileAccount, freezePeri
           {actions}
         </div>
         {student.activationWarning ? (
-          <p className="sp-activation-warning" role="status">{student.activationWarning}</p>
+          <p className="sp-activation-warning" role="status">
+            <AlertTriangle aria-hidden="true" size={16} />
+            <span>{student.activationWarning}</span>
+          </p>
         ) : null}
         <dl className="sp-summary">
           <div><dt>Əlaqə</dt><dd>{student.phone}</dd></div>

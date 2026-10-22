@@ -119,7 +119,10 @@ function CrmLeadRow({
           </span>
           <div>
             <button className="crm-lead-open-button" type="button" onClick={() => openLead(null)}>
-              <strong>{lead.name}</strong>
+              <span className="crm-lead-name-row">
+                <strong>{lead.name}</strong>
+                {lead.isNewToday ? <span className="crm-new-badge">Yeni</span> : null}
+              </span>
               <span>Profili aç</span>
             </button>
             <span>

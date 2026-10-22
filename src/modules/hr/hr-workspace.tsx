@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   Trash2,
   UsersRound,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -276,7 +278,7 @@ export function HrWorkspace({
         </TabsList>
         {view !== "bonus" && view !== "company-kpi" && view !== "corporate" ? <div className="hr-filter-band">
           <label className="hr-search">
-            <Search />
+            <Search aria-hidden="true" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -286,6 +288,16 @@ export function HrWorkspace({
                   : "Ad, vəzifə və ya e-poçt axtar..."
               }
             />
+            {query ? (
+              <button
+                type="button"
+                className="hr-search-clear"
+                aria-label="Axtarışı təmizlə"
+                onClick={() => setQuery("")}
+              >
+                <X aria-hidden="true" />
+              </button>
+            ) : null}
           </label>
           {view !== "teachers" ? (
             <>
@@ -488,32 +500,13 @@ export function HrWorkspace({
                 lakin iş və maliyyə tarixçəsi komanda arxivində qorunacaq.
               </DialogDescription>
             </DialogHeader>
-            <form
-              className="hr-archive-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                form.set("id", deleting.id);
-                run(() => actions.remove(form), "İşçi komanda arxivinə göndərildi.");
-              }}
-            >
-              <label>
-                <span>İşdən çıxma tarixi</span>
-                <Input name="employmentEndedAt" type="date" defaultValue={employeeData.today} required />
-              </label>
-              <label>
-                <span>Səbəb</span>
-                <textarea name="exitReason" rows={3} minLength={3} maxLength={500} required placeholder="Məsələn: əmək müqaviləsinə xitam verildi" />
-              </label>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDeleting(null)}>
-                  Ləğv et
-                </Button>
-                <Button type="submit" variant="destructive" disabled={pending}>
-                  Arxivə göndər
-                </Button>
-              </DialogFooter>
-            </form>
+            <ArchiveEmployeeForm
+              employeeId={deleting.id}
+              today={employeeData.today}
+              pending={pending}
+              onCancel={() => setDeleting(null)}
+              onSubmit={(form) => run(() => actions.remove(form), "İşçi komanda arxivinə göndərildi.")}
+            />
           </DialogContent>
         </Dialog>
       ) : null}
@@ -1122,6 +1115,7 @@ function EmployeeDialog({
   const [salaryMode, setSalaryMode] = useState<"STATIC" | "PERCENT">(
     employee?.salaryMode ?? "STATIC",
   );
+  const [hireDate, setHireDate] = useState(employee?.hireDate ?? today);
   const [photoPreview, setPhotoPreview] = useState(employee?.profilePhotoUrl ?? "");
   const [photoError, setPhotoError] = useState("");
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -1181,16 +1175,16 @@ function EmployeeDialog({
           </div>
           <label className="is-wide">
             <span>Əməkdaş tipi</span>
-            <select
+            <FormSelect
               name="staffType"
               value={staffType}
-              onChange={(event) =>
-                changeStaffType(event.target.value as "EMPLOYEE" | "TEACHER")
-              }
-            >
-              <option value="EMPLOYEE">İşçi / inzibati əməkdaş</option>
-              <option value="TEACHER">Müəllim</option>
-            </select>
+              onValueChange={(value) => changeStaffType(value as "EMPLOYEE" | "TEACHER")}
+              options={[
+                { value: "EMPLOYEE", label: "İşçi / inzibati əməkdaş" },
+                { value: "TEACHER", label: "Müəllim" },
+              ]}
+              required
+            />
           </label>
           <label>
             <span>Ad soyad</span>
@@ -1203,6 +1197,16 @@ function EmployeeDialog({
           <label>
             <span>Telefon</span>
             <Input name="phone" type="tel" defaultValue={employee?.phone} />
+          </label>
+          <label>
+            <span>İşə başlama</span>
+            <DatePicker
+              name="hireDate"
+              aria-label="İşə başlama"
+              value={hireDate}
+              allowClear={false}
+              onValueChange={setHireDate}
+            />
           </label>
           <label className="is-wide">
             <span>Ünvan</span>
@@ -1251,52 +1255,45 @@ function EmployeeDialog({
             </>
           )}
           <label>
-            <span>İşə başlama</span>
-            <Input
-              name="hireDate"
-              type="date"
-              defaultValue={
-                employee?.hireDate ?? today
-              }
+            <span>Status</span>
+            <FormSelect
+              name="status"
+              defaultValue={employee?.status ?? "ACTIVE"}
+              options={Object.entries(statusMeta).map(([value, meta]) => ({
+                value,
+                label: meta.label,
+              }))}
               required
             />
           </label>
           <label>
-            <span>Status</span>
-            <select name="status" defaultValue={employee?.status ?? "ACTIVE"}>
-              {Object.entries(statusMeta).map(([value, meta]) => (
-                <option value={value} key={value}>
-                  {meta.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
             <span>Müqavilə</span>
-            <select
+            <FormSelect
               name="contractType"
               defaultValue={
                 employee?.contractType ??
                 (staffType === "TEACHER" ? "PART_TIME" : "FULL_TIME")
               }
-            >
-              <option value="FULL_TIME">Tam ştat</option>
-              <option value="PART_TIME">Yarım ştat</option>
-              <option value="CONTRACTOR">Müqaviləli</option>
-            </select>
+              options={[
+                { value: "FULL_TIME", label: "Tam ştat" },
+                { value: "PART_TIME", label: "Yarım ştat" },
+                { value: "CONTRACTOR", label: "Müqaviləli" },
+              ]}
+              required
+            />
           </label>
           <label>
             <span>Maaş növü</span>
-            <select
+            <FormSelect
               name="salaryMode"
               value={salaryMode}
-              onChange={(event) =>
-                setSalaryMode(event.target.value as "STATIC" | "PERCENT")
-              }
-            >
-              <option value="STATIC">Statik maaş</option>
-              <option value="PERCENT">Faizlə maaş</option>
-            </select>
+              onValueChange={(value) => setSalaryMode(value as "STATIC" | "PERCENT")}
+              options={[
+                { value: "STATIC", label: "Statik maaş" },
+                { value: "PERCENT", label: "Faizlə maaş" },
+              ]}
+              required
+            />
           </label>
           {salaryMode === "STATIC" ? (
             <label>
@@ -1370,6 +1367,58 @@ function CreatableLookup({
         required
       />
     </label>
+  );
+}
+
+function ArchiveEmployeeForm({
+  employeeId,
+  today,
+  pending,
+  onCancel,
+  onSubmit,
+}: {
+  employeeId: string;
+  today: string;
+  pending: boolean;
+  onCancel: () => void;
+  onSubmit: (form: FormData) => void;
+}) {
+  const [endedAt, setEndedAt] = useState(today);
+  return (
+    <form
+      className="hr-archive-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        form.set("id", employeeId);
+        form.set("employmentEndedAt", endedAt);
+        onSubmit(form);
+      }}
+    >
+      <label>
+        <span>İşdən çıxma tarixi</span>
+        <DatePicker
+          name="employmentEndedAt"
+          aria-label="İşdən çıxma tarixi"
+          value={endedAt}
+          allowClear={false}
+          onValueChange={setEndedAt}
+          maxValue={today}
+        />
+      </label>
+      <label>
+        <span>Səbəb</span>
+        <textarea name="exitReason" rows={3} minLength={3} maxLength={500} required placeholder="Məsələn: əmək müqaviləsinə xitam verildi" />
+      </label>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Ləğv et
+        </Button>
+        <Button type="submit" variant="destructive" disabled={pending}>
+          Arxivə göndər
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 

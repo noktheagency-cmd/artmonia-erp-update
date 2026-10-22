@@ -3,7 +3,6 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import {
-  AppRole,
   EnrollmentStatus,
   InvoiceStatus,
   LeadStage,
@@ -391,11 +390,8 @@ async function createStudentActionImpl(formData: FormData) {
     const studentCode = await generateStudentCode(tx);
     const managerId = lead?.managerId ?? actor.id;
 
-    const campaignId = input.campaignId ?? lead?.campaignId ?? null;
-    if (campaignId) {
-      const campaign = await tx.marketingCampaign.findUnique({ where: { id: campaignId }, select: { id: true } });
-      if (!campaign) throw new Error("Kampaniya tapılmadı");
-    }
+    // Campaign is never chosen in student UI; inherit from converted lead when present.
+    const campaignId = lead?.campaignId ?? null;
     const student = await tx.student.create({
       data: {
         code: studentCode,
@@ -861,11 +857,11 @@ async function updateStudentProfileActionImpl(formData: FormData) {
     const effectiveRegisteredAt = isReactivation ? current.registeredAt : registeredAt;
     const effectiveTeacherId = isReactivation ? null : input.teacherId ?? null;
 
-    const managerId = canManageAllStudents
-      ? input.managerId ?? null
-      : current.managerId;
+    // Manager and campaign are set at create time and are not editable from the student form.
+    const managerId = current.managerId;
+    const campaignId = current.campaignId;
 
-    const [program, teacher, manager, campaign, educationLevel, discountType] = await Promise.all([
+    const [program, teacher, educationLevel, discountType] = await Promise.all([
       tx.program.findUnique({
         where: {
           id: input.programId,
@@ -875,25 +871,6 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       }),
       effectiveTeacherId
         ? tx.teacher.findUnique({ where: { id: effectiveTeacherId }, select: { id: true } })
-        : Promise.resolve(null),
-      managerId
-        ? tx.user.findFirst({
-            where: managerId === current.managerId
-              ? { id: managerId }
-              : {
-                  id: managerId,
-                  isActive: true,
-                  roles: {
-                    some: {
-                      role: { code: { in: [AppRole.OWNER, AppRole.ADMIN, AppRole.SALES] } },
-                    },
-                  },
-                },
-            select: { id: true },
-          })
-        : Promise.resolve(null),
-      input.campaignId
-        ? tx.marketingCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true } })
         : Promise.resolve(null),
       input.educationLevel
         ? tx.dropdownCatalogOption.findUnique({
@@ -921,8 +898,6 @@ async function updateStudentProfileActionImpl(formData: FormData) {
 
     if (!program) throw new PublicActionError("Proqram tapılmadı.");
     if (effectiveTeacherId && !teacher) throw new PublicActionError("Müəllim tapılmadı.");
-    if (managerId && !manager) throw new PublicActionError("Məsul şəxs tapılmadı.");
-    if (input.campaignId && !campaign) throw new PublicActionError("Kampaniya tapılmadı.");
     if (
       input.educationLevel
       && (!educationLevel || (!educationLevel.isActive && input.educationLevel !== current.educationLevel))
@@ -985,7 +960,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       where: { id: current.id },
       data: {
         managerId,
-        campaignId: input.campaignId ?? null,
+        campaignId,
         educationLevel: educationLevel?.value ?? null,
         registeredAt: effectiveRegisteredAt,
         originalFirstLessonAt:
@@ -1160,7 +1135,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
         source: input.source ?? null,
         educationLevel: educationLevel?.value ?? null,
         managerId,
-        campaignId: input.campaignId ?? null,
+        campaignId,
         registeredAt: effectiveRegisteredAt.toISOString(),
         enrollmentId: currentEnrollment.id,
         programId: input.programId,

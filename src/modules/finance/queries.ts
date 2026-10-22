@@ -83,6 +83,13 @@ export type FinanceData = {
     expenseCount: string;
     debtors: string;
   };
+  counts: {
+    overview: number;
+    payments: number;
+    debts: number;
+    expenses: number;
+    payroll: number;
+  };
   previousMonthProfit: { amount: string; periodLabel: string } | null;
   receivableSummary: {
     periodLabel: string;
@@ -288,6 +295,7 @@ type FinanceSummaryRow = {
   financingOut: unknown;
   legacyLiability: unknown;
   expenseCount: unknown;
+  payrollCount: unknown;
   payroll: unknown;
   debt: unknown;
   debtors: unknown;
@@ -440,6 +448,7 @@ type WorkshopDebtRow = {
 };
 
 type FinanceReceivableSummaryRow = {
+  studentReceivableCount: unknown;
   studentOutstandingCount: unknown;
   studentOutstandingAmount: unknown;
   studentOverdueCount: unknown;
@@ -507,11 +516,12 @@ export async function getFinanceData(
   const needsExpenses = normalizedFilters.type === "overview" || normalizedFilters.type === "expenses";
   const needsPayroll = normalizedFilters.type === "overview" || normalizedFilters.type === "payroll";
   const needsDebts = normalizedFilters.type === "overview" || normalizedFilters.type === "debts";
-  const expenseModeSql = normalizedFilters.type === "expenses"
+  const expenseModeSql = normalizedFilters.type === "payroll"
+    ? Prisma.sql`and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode" and fec.code is distinct from 'OP_MANAGEMENT_COMP'`
+    : Prisma.empty;
+  const expenseListSalarySql = normalizedFilters.type === "overview"
     ? Prisma.sql`and (fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode" or fec.code = 'OP_MANAGEMENT_COMP')`
-    : normalizedFilters.type === "payroll"
-      ? Prisma.sql`and fe.salary_mode <> 'NONE'::"erp"."FinanceSalaryMode" and fec.code is distinct from 'OP_MANAGEMENT_COMP'`
-      : Prisma.empty;
+    : Prisma.empty;
   const studentReceivableCtes = Prisma.sql`
     current_enrollment as (
       select
@@ -737,6 +747,11 @@ export async function getFinanceData(
           select count(*)::int from filtered_expenses
         ), 0) as "expenseCount",
         coalesce((
+          select count(*)::int from filtered_expenses
+          where salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"
+            and category_code is distinct from 'OP_MANAGEMENT_COMP'
+        ), 0) as "payrollCount",
+        coalesce((
           select sum(amount) from filtered_expenses
           where salary_mode <> 'NONE'::"erp"."FinanceSalaryMode"
             and category_code is distinct from 'OP_MANAGEMENT_COMP'
@@ -785,6 +800,7 @@ export async function getFinanceData(
           ${searchSql.workshopDebts}
       )
       select
+        (select count(*)::int from student_receivables) as "studentReceivableCount",
         (select count(*)::int from student_receivables where next_due_date <= ${today}::date) as "studentOutstandingCount",
         coalesce((select sum(balance_due) from student_receivables where next_due_date <= ${today}::date), 0) as "studentOutstandingAmount",
         (select count(*)::int from student_receivables where next_due_date < ${today}::date) as "studentOverdueCount",
@@ -1021,7 +1037,6 @@ export async function getFinanceData(
         ${studentSourceSql}
         ${searchSql.payments}
       order by p.paid_at desc, p.created_at desc
-      limit 70
     `) : Promise.resolve([] as PaymentRow[]),
     needsPayments ? prisma.$queryRaw<WorkshopPaymentRow[]>(Prisma.sql`
       select
@@ -1048,7 +1063,6 @@ export async function getFinanceData(
         ${workshopSourceSql}
         ${searchSql.workshopPayments}
       order by wp.paid_at desc, wp.created_at desc
-      limit 70
     `) : Promise.resolve([] as WorkshopPaymentRow[]),
     needsExpenses ? prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
       select
@@ -1087,12 +1101,11 @@ export async function getFinanceData(
       where fe.expense_date >= ${fromDate}
         and fe.expense_date < ${endDateExclusive}
         and fe.voided_at is null
-        and (fe.salary_mode = 'NONE'::"erp"."FinanceSalaryMode" or fec.code = 'OP_MANAGEMENT_COMP')
+        ${expenseListSalarySql}
         ${expenseSourceSql}
         ${categorySql}
         ${searchSql.expenses}
       order by fe.expense_date desc, fe.created_at desc
-      limit 70
     `) : Promise.resolve([] as ExpenseRow[]),
     needsPayroll ? prisma.$queryRaw<ExpenseRow[]>(Prisma.sql`
       select
@@ -1136,7 +1149,6 @@ export async function getFinanceData(
         ${categorySql}
         ${searchSql.expenses}
       order by fe.expense_date desc, fe.created_at desc
-      limit 70
     `) : Promise.resolve([] as ExpenseRow[]),
     needsDebts ? prisma.$queryRaw<DebtRow[]>(Prisma.sql`
       with ${studentReceivableCtes}
@@ -1159,7 +1171,6 @@ export async function getFinanceData(
         coalesce(next_due_date >= ${fromDate}::date and next_due_date < ${endDateExclusive}::date, false) as "isInSelectedPeriod"
       from student_receivables
       order by next_due_date asc nulls first, balance_due desc
-      limit 70
     `) : Promise.resolve([] as DebtRow[]),
     needsDebts ? prisma.$queryRaw<WorkshopDebtRow[]>(Prisma.sql`
       select
@@ -1188,7 +1199,6 @@ export async function getFinanceData(
         ${workshopSourceSql}
         ${searchSql.workshopDebts}
       order by we.event_date asc, "balanceDue" desc
-      limit 70
     `) : Promise.resolve([] as WorkshopDebtRow[]),
     prisma.hrCorporateCustomer.findMany({
       where: { status: "ACTIVE" },
@@ -1214,6 +1224,7 @@ export async function getFinanceData(
     financingOut: 0,
     legacyLiability: 0,
     expenseCount: 0,
+    payrollCount: 0,
     payroll: 0,
     debt: 0,
     debtors: 0,
@@ -1233,6 +1244,7 @@ export async function getFinanceData(
   const legacyLiability = toNumber(summary.legacyLiability);
   const payroll = toNumber(summary.payroll);
   const receivableSummary = receivableSummaryRows[0] ?? {
+    studentReceivableCount: 0,
     studentOutstandingCount: 0,
     studentOutstandingAmount: 0,
     studentOverdueCount: 0,
@@ -1252,6 +1264,20 @@ export async function getFinanceData(
     toNumber(receivableSummary.studentOutstandingCount) +
     toNumber(receivableSummary.workshopCount) +
     toNumber(receivableSummary.masterclassCount);
+  const paymentCountValue = toNumber(summary.paymentCount);
+  const expenseCountValue = toNumber(summary.expenseCount);
+  const payrollCountValue = toNumber(summary.payrollCount);
+  const debtCountValue =
+    toNumber(receivableSummary.studentReceivableCount) +
+    toNumber(receivableSummary.workshopCount) +
+    toNumber(receivableSummary.masterclassCount);
+  const counts = {
+    payments: paymentCountValue,
+    debts: debtCountValue,
+    expenses: expenseCountValue,
+    payroll: payrollCountValue,
+    overview: paymentCountValue + (expenseCountValue - payrollCountValue) + debtCountValue,
+  };
   const { grossProfit, operatingProfit, netProfit, netCash } = calculateFinanceStatement({
     operatingIncome: income,
     directCost,
@@ -1342,10 +1368,11 @@ export async function getFinanceData(
       legacyLiability: formatAmount(legacyLiability),
       payroll: formatAmount(payroll),
       debt: formatAmount(debt),
-      paymentCount: formatCount(toNumber(summary.paymentCount)),
-      expenseCount: formatCount(toNumber(summary.expenseCount)),
+      paymentCount: formatCount(paymentCountValue),
+      expenseCount: formatCount(expenseCountValue),
       debtors: formatCount(debtorCount),
     },
+    counts,
     receivableSummary: {
       periodLabel,
       studentOutstanding: {
@@ -1947,6 +1974,7 @@ async function getLimitedFinanceData({
       financingIn: emptyAmount, financingOut: emptyAmount, legacyLiability: emptyAmount,
       payroll: emptyAmount, debt: emptyAmount, paymentCount: "0", expenseCount: "0", debtors: "0",
     },
+    counts: { overview: 0, payments: 0, debts: 0, expenses: 0, payroll: 0 },
     receivableSummary: {
       periodLabel: "Cari ay",
       studentOutstanding: { count: 0, amount: emptyAmount, amountValue: 0 },

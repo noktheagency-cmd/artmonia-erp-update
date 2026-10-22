@@ -1,6 +1,7 @@
 import { bonusProgress } from "@/modules/hr/bonus-rules";
 import {
   calculateBonusCampaignValues,
+  calculateCampaignParticipantMetrics,
 } from "@/modules/hr/bonus-service";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
@@ -34,6 +35,16 @@ export type HrBonusStageDto = {
   awards: HrBonusAwardDto[];
 };
 
+export type HrBonusParticipantDto = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  currentValue: number;
+  progress: number;
+  awardTotal: number;
+  isActor: boolean;
+};
+
 export type HrBonusCampaignDto = {
   id: string;
   name: string;
@@ -56,6 +67,7 @@ export type HrBonusCampaignDto = {
   totalBonusPool: number;
   participantCount: number;
   ownAwardTotal: number;
+  participants: HrBonusParticipantDto[];
   stages: HrBonusStageDto[];
 };
 
@@ -144,9 +156,12 @@ export async function getHrBonusData(): Promise<HrBonusData> {
   });
 
   const values = await calculateBonusCampaignValues(campaigns);
+  const participantMetricMaps = await Promise.all(
+    campaigns.map((campaign) => calculateCampaignParticipantMetrics(campaign.id, campaign.metricKind)),
+  );
   return {
     asOf: new Date().toISOString(),
-    campaigns: campaigns.map((campaign) => {
+    campaigns: campaigns.map((campaign, campaignIndex) => {
       const value = values.get(campaign.id) ?? {
         baseValue: 0,
         adjustmentValue: 0,
@@ -154,7 +169,26 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         scheduledValue: 0,
       };
       const maxThreshold = Number(campaign.stages.at(-1)?.threshold ?? 0);
+      const participantMetrics = participantMetricMaps[campaignIndex] ?? new Map<string, number>();
       const ownParticipant = campaign.participants.find((participant) => participant.employeeId === actorEmployee?.id);
+      const eligibleParticipants = campaign.participants.filter((participant) => participant.isEligible);
+      const participants = eligibleParticipants
+        .map((participant) => {
+          const currentValue = participantMetrics.get(participant.id) ?? 0;
+          const awardTotal = participant.awards
+            .filter((award) => award.status !== "VOIDED")
+            .reduce((sum, award) => sum + Number(award.amount), 0);
+          return {
+            id: participant.id,
+            employeeId: participant.employeeId ?? "",
+            employeeName: participant.employeeName,
+            currentValue,
+            progress: bonusProgress(currentValue, maxThreshold),
+            awardTotal,
+            isActor: participant.employeeId === actorEmployee?.id,
+          };
+        })
+        .sort((left, right) => right.progress - left.progress || left.employeeName.localeCompare(right.employeeName, "az"));
       return {
         id: campaign.id,
         name: campaign.name,
@@ -175,10 +209,11 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         maxThreshold,
         progress: bonusProgress(value.currentValue, maxThreshold),
         totalBonusPool: campaign.stages.reduce((sum, stage) => sum + Number(stage.bonusPool), 0),
-        participantCount: campaign.participants.filter((participant) => participant.isEligible).length,
+        participantCount: eligibleParticipants.length,
         ownAwardTotal: ownParticipant?.awards
           .filter((award) => award.status !== "VOIDED")
           .reduce((sum, award) => sum + Number(award.amount), 0) ?? 0,
+        participants,
         stages: campaign.stages.map((stage) => ({
           id: stage.id,
           sortOrder: stage.sortOrder,

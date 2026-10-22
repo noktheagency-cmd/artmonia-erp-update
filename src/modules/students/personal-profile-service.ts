@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AppRole, Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { normalizePhone } from "@/modules/crm/duplicate-phone";
 import { writeAuditLog } from "@/modules/audit/audit-service";
@@ -36,20 +36,15 @@ export async function updatePersonalStudentProfile(
   if (!actor.canManageAllStudents && current.managerId !== actor.id) {
     throw new PublicActionError("Bu tələbəni redaktə etmək icazəniz yoxdur.", "FORBIDDEN");
   }
-  const managerId = actor.canManageAllStudents ? input.managerId ?? null : current.managerId;
-  const [manager, campaign, educationLevel] = await Promise.all([
-    managerId ? tx.user.findFirst({ where: managerId === current.managerId ? { id: managerId } : {
-      id: managerId, isActive: true,
-      roles: { some: { role: { code: { in: [AppRole.OWNER, AppRole.ADMIN, AppRole.SALES] } } } },
-    }, select: { id: true } }) : null,
-    input.campaignId ? tx.marketingCampaign.findUnique({ where: { id: input.campaignId }, select: { id: true } }) : null,
-    input.educationLevel ? tx.dropdownCatalogOption.findUnique({
-      where: { catalog_value: { catalog: "STUDENT_EDUCATION_LEVEL", value: input.educationLevel } },
-      select: { value: true, isActive: true },
-    }) : null,
-  ]);
-  if (managerId && !manager) throw new PublicActionError("Məsul şəxs tapılmadı.");
-  if (input.campaignId && !campaign) throw new PublicActionError("Kampaniya tapılmadı.");
+  // Manager and campaign are set at create time and are not editable from the student form.
+  const managerId = current.managerId;
+  const campaignId = current.campaignId;
+  const educationLevel = input.educationLevel
+    ? await tx.dropdownCatalogOption.findUnique({
+        where: { catalog_value: { catalog: "STUDENT_EDUCATION_LEVEL", value: input.educationLevel } },
+        select: { value: true, isActive: true },
+      })
+    : null;
   if (input.educationLevel && (!educationLevel || (!educationLevel.isActive && input.educationLevel !== current.educationLevel))) {
     throw new PublicActionError("Təhsil səviyyəsi tapılmadı və ya artıq aktiv deyil.");
   }
@@ -58,7 +53,7 @@ export async function updatePersonalStudentProfile(
     email: input.email ?? null, source: input.source ?? null,
   };
   const studentData = {
-    managerId, campaignId: input.campaignId ?? null, educationLevel: input.educationLevel ?? null,
+    managerId, campaignId, educationLevel: input.educationLevel ?? null,
     registeredAt, notes: input.notes ?? null,
   };
   await tx.contact.update({ where: { id: current.contactId }, data: contactData });

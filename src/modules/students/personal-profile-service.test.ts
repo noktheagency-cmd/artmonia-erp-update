@@ -56,6 +56,17 @@ test("scoped employee cannot reassign their student via injected managerId", asy
   assert.equal(writes[1].data.managerId, actorId);
 });
 
+test("admin cannot reassign manager or campaign from the student edit form", async () => {
+  const { tx, writes } = mockTx("ACTIVE", actorId);
+  await updatePersonalStudentProfile(tx, {
+    ...input,
+    managerId: "00000000-0000-4000-8000-000000000002",
+    campaignId: "00000000-0000-4000-8000-000000000003",
+  }, { id: actorId, canManageAllStudents: true });
+  assert.equal(writes[1].data.managerId, actorId);
+  assert.equal(writes[1].data.campaignId, null);
+});
+
 test("impossible calendar date is rejected before writes", async () => {
   const { tx, writes } = mockTx("COMPLETED");
   await assert.rejects(updatePersonalStudentProfile(tx, { ...input, registeredDate: "2026-02-31" }, { id: actorId, canManageAllStudents: true }), /tarixi düzgün deyil/);

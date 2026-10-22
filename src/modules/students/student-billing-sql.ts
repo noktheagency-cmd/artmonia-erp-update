@@ -31,6 +31,30 @@ export function buildStudentDueDebtValueSql({
   ), 0)`;
 }
 
+/**
+ * Remaining first-period fee after avans/deposit payments on an open course sale.
+ * Shown as Cari borc when no due invoice exists yet (SLOT_WAITING admissions).
+ */
+export function buildStudentAdvanceRemainingValueSql({ studentId }: StudentAmountSqlInput) {
+  return Prisma.sql`coalesce((
+    select greatest(
+      cs.initial_fee - coalesce((
+        select sum(p.amount)
+        from erp.payments p
+        where p.course_sale_id = cs.id
+          and p.refunded_at is null
+      ), 0),
+      0
+    )
+    from erp.course_sales cs
+    where cs.student_id = ${studentId}
+      and cs.status = 'DEPOSIT'
+      and cs.cancelled_at is null
+    order by cs.created_at desc
+    limit 1
+  ), 0)`;
+}
+
 /** Unpaid invoices that are scheduled after the reporting date. */
 export function buildStudentFutureReceivableValueSql({
   studentId,

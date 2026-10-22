@@ -58,7 +58,6 @@ function buildInitialStudentValues(createOptions: CreateOptions) {
     educationLevel: "",
     programId: "",
     teacherId: "",
-    campaignId: "",
     discountType: "",
     lifecycleStatus: "SLOT_WAITING",
     registeredDate: createOptions.defaultRegisteredDate,
@@ -123,7 +122,6 @@ export function StudentCreateDialogClient({
         educationLevel: "",
         programId: "",
         teacherId: "",
-        campaignId: "",
         monthlyFee: "",
         lessonsPerMonth: "",
         paymentAmount: "",
@@ -141,7 +139,6 @@ export function StudentCreateDialogClient({
       source: lead.source,
       educationLevel: lead.educationLevel,
       programId: lead.programId,
-      campaignId: lead.campaignId,
       monthlyFee: isGiftDiscount(current.discountType) ? "0" : program?.monthlyFee ?? "",
       lessonsPerMonth: program?.lessonsPerMonth ?? "",
       notes: lead.note,
@@ -386,18 +383,6 @@ export function StudentCreateDialogClient({
                 </div>
               </label>
               <label className="form-field">
-                <span>Kampaniya</span>
-                <FormSelect
-                  name="campaignId"
-                  value={values.campaignId}
-                  onValueChange={(value) => updateValue("campaignId", cleanSelectValue(value))}
-                  emptyLabel="Kampaniya seçilməyib"
-                  options={createOptions.campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))}
-                  searchable
-                  searchPlaceholder="Kampaniya axtar..."
-                />
-              </label>
-              <label className="form-field">
                 <span>Müəllim</span>
                 <FormSelect
                   name="teacherId"
@@ -442,7 +427,6 @@ export function StudentCreateDialogClient({
                   placeholder="telebe@example.com"
                 />
               </label>
-              <p className="form-field">Mobil hesab tətbiqdə yaradılır. Təsdiqlənmiş e-poçt və uyğun telefonla tələbə bağlantısı avtomatik yoxlanılır.</p>
               <label className="form-field">
                 <span>İlk dərs tarixi</span>
                 <FormSelect

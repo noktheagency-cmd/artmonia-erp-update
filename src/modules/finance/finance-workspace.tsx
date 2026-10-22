@@ -490,20 +490,7 @@ function FinanceOperationToast({
 }
 
 function getTabCount(tabValue: FinanceTab, data: FinanceData): number {
-  switch (tabValue) {
-    case "overview":
-      return data.payments.length + data.expenses.length + data.debtors.length;
-    case "payments":
-      return data.payments.length;
-    case "debts":
-      return data.debtors.length;
-    case "expenses":
-      return data.expenses.length;
-    case "payroll":
-      return data.payrollItems.length;
-    default:
-      return 0;
-  }
+  return data.counts[tabValue] ?? 0;
 }
 
 function FinanceTabs({ data }: { data: FinanceData }) {
@@ -1609,7 +1596,7 @@ function ExpenseBreakdownBarChart({
           accessibilityLayer
           data={slices}
           layout="vertical"
-          margin={{ top: 4, right: 20, bottom: 4, left: 8 }}
+          margin={{ top: 4, right: 10, bottom: 4, left: 2 }}
         >
           <CartesianGrid horizontal={false} strokeDasharray="3 3" />
           <XAxis
@@ -1624,8 +1611,8 @@ function ExpenseBreakdownBarChart({
             dataKey="label"
             axisLine={false}
             tickLine={false}
-            tickMargin={9}
-            width={compact ? 108 : 124}
+            tickMargin={6}
+            width={compact ? 138 : 172}
           />
           <ChartTooltip
             cursor={{ fill: "rgb(89 116 222 / 6%)" }}
@@ -1640,7 +1627,7 @@ function ExpenseBreakdownBarChart({
             dataKey="value"
             fill="var(--color-value)"
             radius={[0, 9, 9, 0]}
-            maxBarSize={compact ? 22 : 26}
+            maxBarSize={compact ? 18 : 22}
             isAnimationActive={!reduceMotion}
             animationDuration={850}
           />
@@ -2554,6 +2541,7 @@ function ExpenseLedger({
                         {expense.sourceKind === "EVENT"
                           ? `${expense.category} · ${expense.workshopEventTitle}`
                           : `${expense.category} · ${getFinancialClassLabel(expense.financialClass)}`}
+                        {expense.staffName && expense.staffName !== "-" ? ` · ${expense.staffName}` : ""}
                       </span>
                       {expense.classificationReviewRequired ? <StatusChip tone="warning">Təsnifat yoxlanmalıdır</StatusChip> : null}
                     </div>

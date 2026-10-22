@@ -477,16 +477,76 @@
   max-height: calc(100vh - 24px);
   overflow-y: auto;
 }
-.staff-edit-dialog {
-  width: min(790px, calc(100vw - 28px));
-  max-width: 790px;
-  max-height: calc(100vh - 24px);
-  overflow-y: auto;
+.staff-edit-dialog.ui-dialog-content {
+  width: min(980px, calc(100vw - 32px)) !important;
+  max-width: 980px !important;
+  max-height: min(92vh, calc(100dvh - 40px));
+  padding: 26px 22px 20px 28px !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.staff-edit-dialog > .ui-dialog-close {
+  top: 18px;
+  right: 18px;
+  z-index: 6;
+  width: 34px;
+  height: 34px;
+  color: #5d6678;
+  background: #fff;
+  border: 1px solid #dde3ee;
+  border-radius: 11px;
+  box-shadow: 0 4px 12px rgb(40 52 78 / 8%);
+}
+.staff-edit-dialog > .ui-dialog-close:hover {
+  transform: none;
+  color: #4f5fd4;
+  background: #f3f5ff;
+  border-color: #c9d0f5;
+}
+.staff-edit-dialog .ui-dialog-header {
+  flex: 0 0 auto;
+  padding-right: 48px;
 }
 .staff-edit-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2px 18px 8px 2px;
+  margin-right: 2px;
+  scrollbar-gutter: stable;
+}
+.staff-edit-form .date-picker-trigger {
+  width: 100%;
+  min-height: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.staff-edit-form .ui-select-trigger {
+  min-height: 42px;
+  height: 42px;
+  padding: 0 14px;
+  color: #2f3748;
+  background: #fff;
+  border: 1px solid #d8deea;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.staff-edit-form .ui-select-trigger:hover {
+  border-color: #b8c2f0;
+  background: #fbfbff;
+}
+.staff-edit-form .ui-select-trigger:focus-visible,
+.staff-edit-form .ui-select-trigger[data-state="open"] {
+  border-color: #7b86e8;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(101 87 217 / 12%);
 }
 .staff-edit-form > label,
 .staff-edit-photo > label {
@@ -502,31 +562,27 @@
 .staff-edit-form .is-wide {
   grid-column: 1 / -1;
 }
-.staff-edit-form select,
 .staff-edit-form textarea {
   width: 100%;
+  min-height: 82px;
+  padding: 10px;
   color: #3f475a;
   background: #fff;
   border: 1px solid #dfe3eb;
-  border-radius: 10px;
+  border-radius: 12px;
   font: inherit;
   font-size: 11px;
   outline: none;
-}
-.staff-edit-form select {
-  height: 40px;
-  padding: 0 32px 0 10px;
-}
-.staff-edit-form textarea {
-  min-height: 82px;
-  padding: 10px;
   resize: vertical;
   line-height: 1.55;
 }
-.staff-edit-form select:focus,
 .staff-edit-form textarea:focus {
   border-color: #9187df;
   box-shadow: 0 0 0 3px rgba(105, 88, 217, 0.1);
+}
+.staff-edit-form :is(.ui-input, input:not([type="hidden"]):not([type="file"])) {
+  min-height: 42px;
+  border-radius: 12px;
 }
 .staff-edit-photo {
   display: flex;

@@ -462,6 +462,61 @@ export async function syncBonusCampaign(campaignId: string, actorUserId?: string
   return progress;
 }
 
+export async function calculateCampaignParticipantMetrics(
+  campaignId: string,
+  metricKind: "DEPARTMENT_COLLECTED_REVENUE" | "DEPARTMENT_SALES_COUNT" | "TEACHER_RETENTION_RATE" | "MANUAL_KPI",
+) {
+  if (metricKind === "DEPARTMENT_SALES_COUNT") {
+    return calculateParticipantSalesValues(campaignId);
+  }
+  if (metricKind === "DEPARTMENT_COLLECTED_REVENUE") {
+    return calculateParticipantRevenueValues(campaignId);
+  }
+  if (metricKind === "TEACHER_RETENTION_RATE") {
+    return calculateParticipantTeacherValues(campaignId);
+  }
+  return new Map<string, number>();
+}
+
+async function calculateParticipantRevenueValues(campaignId: string) {
+  const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
+    select
+      participant.id::text as "participantId",
+      coalesce((
+        select sum(payment.amount)
+        from erp.payments payment
+        join erp.students student on student.id = payment.student_id
+        where student.manager_id = employee.user_id
+          and student.is_test_data = false
+          and payment.paid_at >= campaign.starts_at
+          and payment.paid_at <= campaign.ends_at
+      ), 0) as value
+    from erp.hr_bonus_participants participant
+    join erp.hr_bonus_campaigns campaign on campaign.id = participant.campaign_id
+    left join erp.hr_employees employee on employee.id = participant.employee_id
+    where participant.campaign_id = ${campaignId}::uuid
+      and participant.is_eligible = true
+  `);
+  return new Map(rows.map((row) => [row.participantId, Number(row.value)]));
+}
+
+async function calculateParticipantTeacherValues(campaignId: string) {
+  const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
+    select
+      participant.id::text as "participantId",
+      coalesce((
+        select count(*)::int
+        from erp.hr_bonus_teacher_cohorts cohort
+        where cohort.campaign_id = participant.campaign_id
+          and cohort.participant_id = participant.id
+      ), 0)::int as value
+    from erp.hr_bonus_participants participant
+    where participant.campaign_id = ${campaignId}::uuid
+      and participant.is_eligible = true
+  `);
+  return new Map(rows.map((row) => [row.participantId, Number(row.value)]));
+}
+
 async function calculateParticipantSalesValues(campaignId: string) {
   const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
     select

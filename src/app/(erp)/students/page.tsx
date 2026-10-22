@@ -14,6 +14,8 @@ export default async function StudentsPage({
     program?: string;
     teacher?: string;
     payment?: string;
+    attention?: string;
+    ids?: string;
     from?: string;
     to?: string;
     page?: string;

@@ -390,11 +390,20 @@ html body .erp-frame :is(.finance-entity-cell strong, .finance-entity-cell span,
   }
 }
 
+html body .erp-frame .crm-attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 html body .erp-frame .crm-focus-row {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: 32px minmax(0, 1fr) 14px;
   align-items: center;
   min-width: 0;
+  min-height: 52px;
+  height: auto;
+  overflow: visible;
 }
 html body .erp-frame .crm-focus-row .crm-person-avatar {
   display: grid;
@@ -404,17 +413,44 @@ html body .erp-frame .crm-focus-row .crm-person-avatar {
   height: 32px;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   border-radius: 9px;
   font-size: 10px;
   font-weight: 740;
   line-height: 1;
   letter-spacing: 0;
+  white-space: nowrap;
 }
-html body .erp-frame .crm-focus-body { display: grid; gap: 2px; min-width: 0; }
-html body .erp-frame .crm-focus-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; }
-html body .erp-frame .crm-focus-name {
+html body .erp-frame .crm-focus-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow: visible;
+  color: inherit;
+  white-space: normal;
+}
+html body .erp-frame .crm-focus-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: visible;
+  white-space: normal;
+}
+html body .erp-frame .crm-focus-name-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
   min-width: 0;
   overflow: hidden;
+  white-space: normal;
+}
+html body .erp-frame .crm-focus-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--crm-ink, var(--ink));
   font-size: 12.5px;
   font-weight: 720;
   line-height: 1.25;
@@ -435,8 +471,11 @@ html body .erp-frame .crm-focus-sub {
   overflow-wrap: normal;
 }
 html body .erp-frame .crm-focus-sub > span {
+  display: inline;
   min-width: 0;
   overflow: hidden;
+  color: inherit;
+  font-size: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

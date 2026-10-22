@@ -238,6 +238,45 @@ async function deleteArticleActionImpl(articleId: string): Promise<MutationResul
   return finishMutation({ selectedCategoryId: current.categoryId });
 }
 
+const orderSchema = z.array(z.string().uuid()).min(1).max(200);
+
+function sameIdSet(current: string[], next: string[]) {
+  if (current.length !== next.length || new Set(next).size !== next.length) return false;
+  const known = new Set(current);
+  return next.every((id) => known.has(id));
+}
+
+async function reorderCategoriesActionImpl(ids: string[]): Promise<MutationResult> {
+  const actor = await requireKnowledgeAdmin();
+  const parsed = orderSchema.parse(ids);
+  const section = await requireCompanySection();
+  const items = await getPrisma().knowledgeCategory.findMany({
+    where: { sectionId: section.id },
+    select: { id: true },
+  });
+  if (!sameIdSet(items.map(({ id }) => id), parsed)) {
+    throw new PublicActionError("Kateqoriya sırası yenilənmədi.", "VALIDATION");
+  }
+  await persistCategoryOrder(parsed, actor.id);
+  return finishMutation();
+}
+
+async function reorderArticlesActionImpl(categoryId: string, ids: string[]): Promise<MutationResult> {
+  const actor = await requireKnowledgeAdmin();
+  const parsedCategoryId = idSchema.parse(categoryId);
+  const parsed = orderSchema.parse(ids);
+  const category = await requireCompanyCategory(parsedCategoryId);
+  const items = await getPrisma().knowledgeArticle.findMany({
+    where: { categoryId: category.id },
+    select: { id: true },
+  });
+  if (!sameIdSet(items.map(({ id }) => id), parsed)) {
+    throw new PublicActionError("Məqalə sırası yenilənmədi.", "VALIDATION");
+  }
+  await persistArticleOrder(parsed, actor.id);
+  return finishMutation({ selectedCategoryId: category.id });
+}
+
 async function moveArticleActionImpl(articleId: string, direction: "up" | "down"): Promise<MutationResult> {
   const actor = await requireKnowledgeAdmin();
   const parsed = moveSchema.parse({ id: articleId, direction });
@@ -365,7 +404,9 @@ export const createKnowledgeCategoryAction = safeServerAction(createCategoryActi
 export const updateKnowledgeCategoryAction = safeServerAction(updateCategoryActionImpl, "Kateqoriya yenilənmədi.");
 export const deleteKnowledgeCategoryAction = safeServerAction(deleteCategoryActionImpl, "Kateqoriya silinmədi.");
 export const moveKnowledgeCategoryAction = safeServerAction(moveCategoryActionImpl, "Kateqoriya sıralanmadı.");
+export const reorderKnowledgeCategoriesAction = safeServerAction(reorderCategoriesActionImpl, "Kateqoriya sırası yenilənmədi.");
 export const createKnowledgeArticleAction = safeServerAction(createArticleActionImpl, "Məqalə yaradılmadı.");
 export const updateKnowledgeArticleAction = safeServerAction(updateArticleActionImpl, "Məqalə yenilənmədi.");
 export const deleteKnowledgeArticleAction = safeServerAction(deleteArticleActionImpl, "Məqalə silinmədi.");
 export const moveKnowledgeArticleAction = safeServerAction(moveArticleActionImpl, "Məqalə sıralanmadı.");
+export const reorderKnowledgeArticlesAction = safeServerAction(reorderArticlesActionImpl, "Məqalə sırası yenilənmədi.");

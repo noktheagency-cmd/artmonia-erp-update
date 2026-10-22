@@ -614,6 +614,11 @@
   font-weight: 550;
 }
 
+.finance-command-page .finance-expense-bars-chart .recharts-yAxis .recharts-cartesian-axis-tick text {
+  font-size: 10.5px;
+  font-weight: 580;
+}
+
 .finance-command-page .finance-cost-center-chip {
   display: inline-flex;
   min-height: 24px;

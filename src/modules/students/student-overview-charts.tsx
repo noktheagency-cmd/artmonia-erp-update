@@ -3,17 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AttendanceAnalyticsCard } from "./attendance-analytics-card";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  LabelList,
-  Pie,
-  PieChart,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Cell, Pie, PieChart } from "recharts";
 import { Layers3, UsersRound, type LucideIcon } from "lucide-react";
 import {
   type ChartConfig,
@@ -38,10 +28,6 @@ const distributionColors = [
   "var(--students-chart-violet)",
   "var(--students-chart-cyan)",
 ] as const;
-
-const programChartConfig = {
-  count: { label: "Tələbə sayı", color: "var(--students-chart-blue)" },
-} satisfies ChartConfig;
 
 const teacherChartConfig = {
   count: { label: "Tələbə sayı", color: "var(--students-chart-violet)" },
@@ -78,62 +64,7 @@ export function StudentOverviewCharts({
           tone="blue"
         />
         {programData.length > 0 ? (
-          <div className="students-program-scroll" tabIndex={0} aria-label="Bütün təhsil proqramları">
-            <ChartContainer config={programChartConfig} className="students-chart students-program-chart" style={{ height: Math.max(178, programData.length * 36) }}>
-              <BarChart
-                accessibilityLayer
-                data={programData}
-                layout="vertical"
-                margin={{ top: 5, right: 38, bottom: 0, left: 0 }}
-              >
-                <CartesianGrid horizontal={false} strokeDasharray="3 7" />
-                <XAxis type="number" allowDecimals={false} hide domain={[0, "dataMax + 1"]} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tickMargin={9}
-                  width={94}
-                  tickFormatter={shortenLabel}
-                  interval={0}
-                />
-                <ChartTooltip
-                  cursor={{ fill: "var(--students-chart-hover)", radius: 8 }}
-                  content={
-                    <ChartTooltipContent
-                      hideLabel
-                      indicator="line"
-                      formatter={(value, _name, item) => (
-                        <div className="students-tooltip-value">
-                          <span>{String(item.payload?.name ?? "Proqram")}</span>
-                          <strong>{Number(value)} tələbə</strong>
-                        </div>
-                      )}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="count"
-                  radius={[0, 8, 8, 0]}
-                  barSize={13}
-                  isAnimationActive={canAnimate}
-                  animationDuration={850}
-                  animationEasing="ease-out"
-                >
-                  {programData.map((item) => (
-                    <Cell key={item.name} fill={item.fill} />
-                  ))}
-                  <LabelList
-                    dataKey="count"
-                    position="right"
-                    formatter={(value) => String(Number(value ?? 0))}
-                    className="students-chart-value-label"
-                  />
-                </Bar>
-              </BarChart>
-            </ChartContainer>
-          </div>
+          <ProgramBars rows={programData} canAnimate={canAnimate} />
         ) : (
           <ChartEmptyState text="Proqram məlumatı yoxdur" />
         )}
@@ -236,12 +167,39 @@ function AnalyticsHeading({
   );
 }
 
-function ChartEmptyState({ text }: { text: string }) {
-  return <div className="students-chart-empty">{text}</div>;
+function ProgramBars({
+  rows,
+  canAnimate,
+}: {
+  rows: Array<DistributionItem & { fill: string }>;
+  canAnimate: boolean;
+}) {
+  const maxCount = Math.max(...rows.map((row) => row.count), 1);
+  return (
+    <div className="students-program-scroll" tabIndex={0} aria-label="Bütün təhsil proqramları">
+      <ul className="students-program-bars">
+        {rows.map((item) => {
+          const width = Math.max(6, Math.round((item.count / maxCount) * 100));
+          return (
+            <li className="students-program-row" key={item.name} title={`${item.name}: ${item.count} tələbə`}>
+              <span className="students-program-label">{item.name}</span>
+              <div className="students-program-track" aria-hidden="true">
+                <span
+                  className={`students-program-fill${canAnimate ? " is-animated" : ""}`}
+                  style={{ width: `${width}%`, backgroundColor: item.fill }}
+                />
+              </div>
+              <strong className="students-program-count">{item.count}</strong>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
-function shortenLabel(value: string) {
-  return value.length > 16 ? `${value.slice(0, 15)}…` : value;
+function ChartEmptyState({ text }: { text: string }) {
+  return <div className="students-chart-empty">{text}</div>;
 }
 
 function useChartAnimation() {

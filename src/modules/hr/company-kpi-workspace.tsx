@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition, type FormEvent } from "react";
-import { CalendarRange, Equal, LoaderCircle, Save } from "lucide-react";
+import type { Route } from "next";
+import { CalendarRange, ChevronRight, Equal, LoaderCircle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MonthPicker } from "@/components/ui/month-picker";
@@ -71,12 +73,14 @@ export function CompanyKpiWorkspace({
     runSave(saveAction, new FormData(event.currentTarget), "Aylıq hədəflər yadda saxlanıldı");
   }
 
+  const [panel, setPanel] = useState<"month" | "plan">("month");
+
   return (
     <div className="company-kpi-workspace">
       <div className="company-kpi-toolbar">
         <div>
           <h2>Şirkət KPI</h2>
-          <p>{data.monthLabel} üzrə hədəf, faktiki nəticə və avtomatik kompensasiya</p>
+          <p>{data.monthLabel} · hədəf və faktiki nəticə</p>
         </div>
         <label>
           <span>Ay</span>
@@ -89,40 +93,66 @@ export function CompanyKpiWorkspace({
         </label>
       </div>
 
-      {data.permissions.canManage ? (
-        <PlanEditor data={data} pending={pending} onSave={(formData) => runSave(savePlanAction, formData, "KPI planı yadda saxlanıldı")} />
-      ) : data.plan ? (
-        <PlanSummary data={data} />
-      ) : null}
+      <div className="company-kpi-panel-switch" role="tablist" aria-label="KPI bölmələri">
+        <button type="button" role="tab" aria-selected={panel === "month"} className={panel === "month" ? "is-active" : ""} onClick={() => setPanel("month")}>
+          Bu ayın nəticələri
+        </button>
+        {data.permissions.canManage || data.plan ? (
+          <button type="button" role="tab" aria-selected={panel === "plan"} className={panel === "plan" ? "is-active" : ""} onClick={() => setPanel("plan")}>
+            Uzunmüddətli plan
+          </button>
+        ) : null}
+      </div>
 
-      {data.permissions.canManage && !data.plan ? (
-        <form className="company-kpi-target-form" key={data.periodMonth} onSubmit={submitTargets}>
-          <input type="hidden" name="periodMonth" value={data.periodMonth} />
-          {targetFields.map((field) => (
-            <label key={field.name}>
-              <span>{field.label}</span>
-              <Input name={field.name} type="number" min="0" max={field.name === "conversion" ? "100" : undefined} step={field.step} defaultValue={data.targets?.[field.name] ?? ""} required />
-            </label>
-          ))}
-          <Button type="submit" disabled={pending}>
-            {pending ? <LoaderCircle className="company-kpi-spinner" data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-            {pending ? "Yadda saxlanır..." : "Hədəfləri saxla"}
-          </Button>
-        </form>
-      ) : null}
+      {panel === "month" ? (
+        <>
+          {data.permissions.canManage && !data.plan ? (
+            <form className="company-kpi-target-form" key={data.periodMonth} onSubmit={submitTargets}>
+              <div className="company-kpi-target-form-head">
+                <strong>Aylıq hədəflər</strong>
+                <span>Plan yoxdursa bu ay üçün hədəfləri birbaşa daxil edin</span>
+              </div>
+              <div className="company-kpi-target-form-grid">
+                <input type="hidden" name="periodMonth" value={data.periodMonth} />
+                {targetFields.map((field) => (
+                  <label key={field.name}>
+                    <span>{field.label}</span>
+                    <Input name={field.name} type="number" min="0" max={field.name === "conversion" ? "100" : undefined} step={field.step} defaultValue={data.targets?.[field.name] ?? ""} required />
+                  </label>
+                ))}
+              </div>
+              <div className="company-kpi-target-form-actions">
+                <Button type="submit" size="sm" disabled={pending}>
+                  {pending ? <LoaderCircle className="company-kpi-spinner" data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+                  {pending ? "Yadda saxlanır..." : "Hədəfləri saxla"}
+                </Button>
+              </div>
+            </form>
+          ) : null}
 
-      {data.plan ? <CompensationNotice data={data} /> : null}
+          {data.plan ? <CompensationNotice data={data} /> : null}
 
-      <section className="company-kpi-list" aria-label="Şirkət KPI göstəriciləri">
-        {data.metrics.map((metric) => (
-          <KpiProgressRow
-            key={metric.key}
-            metric={metric}
-            baseTarget={data.baseTargets?.[metric.key] ?? null}
-            carryIn={data.carryIn?.[metric.key] ?? null}
-          />
-        ))}
-      </section>
+          <section className="company-kpi-list" aria-label="Şirkət KPI göstəriciləri">
+            {data.metrics.map((metric) => (
+              <KpiProgressRow
+                key={metric.key}
+                metric={metric}
+                baseTarget={data.baseTargets?.[metric.key] ?? null}
+                carryIn={data.carryIn?.[metric.key] ?? null}
+                href={kpiMetricHref(metric.key, data.periodMonth)}
+              />
+            ))}
+          </section>
+        </>
+      ) : (
+        <>
+          {data.permissions.canManage ? (
+            <PlanEditor data={data} pending={pending} onSave={(formData) => runSave(savePlanAction, formData, "KPI planı yadda saxlanıldı")} />
+          ) : data.plan ? (
+            <PlanSummary data={data} />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
@@ -180,7 +210,7 @@ function PlanEditor({ data, pending, onSave }: { data: CompanyKpiData; pending: 
   return (
     <form className="company-kpi-plan" onSubmit={submit}>
       <div className="company-kpi-plan-head">
-        <div><CalendarRange /><span><strong>Uzunmüddətli plan</strong><small>6 aylıq və ya illik hədəfi aylara manual bölün</small></span></div>
+        <div><CalendarRange /><span><strong>Uzunmüddətli plan</strong><small>Ümumi hədəfi aylara bölün — cədvəl ikinci addımdır</small></span></div>
         <div className="company-kpi-plan-duration" role="group" aria-label="Plan müddəti">
           <button type="button" className={duration === 6 ? "is-active" : ""} onClick={() => changeDuration(6)}>6 ay</button>
           <button type="button" className={duration === 12 ? "is-active" : ""} onClick={() => changeDuration(12)}>İllik</button>
@@ -201,14 +231,17 @@ function PlanEditor({ data, pending, onSave }: { data: CompanyKpiData; pending: 
         <Button type="button" variant="outline" onClick={() => redistribute()}><Equal data-icon="inline-start" /> Bərabər böl</Button>
       </div>
 
+      <div className="company-kpi-plan-section-label">1. Ümumi hədəflər</div>
       <div className="company-kpi-plan-totals">
         {targetFields.map((field) => (
           <label key={field.name}>
-            <span>{field.label} · ümumi</span>
+            <span>{field.label}</span>
             <Input type="number" min="0" step={field.step} value={totals[field.name]} onChange={(event) => changeTotal(field.name, Number(event.target.value))} />
           </label>
         ))}
       </div>
+
+      <div className="company-kpi-plan-section-label">2. Aylıq bölgü</div>
 
       <div className="company-kpi-plan-table-wrap" data-erp-table-scroll="">
         <table className="company-kpi-plan-table">
@@ -242,21 +275,75 @@ function CompensationNotice({ data }: { data: CompanyKpiData }) {
   return <div className="company-kpi-compensation"><strong>Avtomatik kompensasiya</strong>{adjustments.length ? <span>{adjustments.map((field) => `${field.shortLabel}: ${signedValue(data.carryIn?.[field.name] ?? 0, field.kind)}`).join(" · ")}</span> : <span>Əvvəlki tamamlanmış aydan qalıq yoxdur; baza bölgüsü qüvvədədir.</span>}</div>;
 }
 
-function KpiProgressRow({ metric, baseTarget, carryIn }: { metric: CompanyKpiMetric; baseTarget: number | null; carryIn: number | null }) {
+function KpiProgressRow({
+  metric,
+  baseTarget,
+  carryIn,
+  href,
+}: {
+  metric: CompanyKpiMetric;
+  baseTarget: number | null;
+  carryIn: number | null;
+  href: Route;
+}) {
   const progress = Math.min(metric.completion, 100);
   return (
-    <article className={`company-kpi-row is-${metric.status}`}>
+    <Link
+      href={href}
+      className={`company-kpi-row is-${metric.status}`}
+      aria-label={`${metric.label} səhifəsinə keç`}
+    >
       <div className="company-kpi-row-head">
-        <div><strong>{metric.label}</strong><span className="company-kpi-status">{metric.statusLabel}</span></div>
-        <div className="company-kpi-values"><span>Actual <b>{formatValue(metric.actual, metric.kind)}</b></span><span>Target <b>{formatValue(metric.target, metric.kind)}</b></span></div>
+        <div>
+          <strong>{metric.label}</strong>
+          <span className="company-kpi-status">{metric.statusLabel}</span>
+        </div>
+        <div className="company-kpi-values">
+          <span>Actual <b>{formatValue(metric.actual, metric.kind)}</b></span>
+          <span>Target <b>{formatValue(metric.target, metric.kind)}</b></span>
+          <ChevronRight className="company-kpi-row-chevron" aria-hidden="true" />
+        </div>
       </div>
       <Progress value={progress} aria-label={`${metric.label}: ${metric.progressLabel}`} />
       <div className="company-kpi-row-foot">
-        <span>{metric.progressLabel}</span><span>{differenceLabel(metric)}</span><span>Proqnoz: {formatValue(metric.projected, metric.kind)}</span><span>{metric.paceLabel}: {formatValue(metric.requiredDaily, metric.requiredDailyKind)}</span>
-        {baseTarget !== null && carryIn !== null ? <span>Baza: {formatValue(baseTarget, metric.kind)} · kompensasiya {signedValue(carryIn, metric.kind)}</span> : null}
+        <span>{metric.progressLabel}</span>
+        <span>{differenceLabel(metric)}</span>
+        <span>Proqnoz: {formatValue(metric.projected, metric.kind)}</span>
+        <span>{metric.paceLabel}: {formatValue(metric.requiredDaily, metric.requiredDailyKind)}</span>
+        {baseTarget !== null && carryIn !== null ? (
+          <span>Baza: {formatValue(baseTarget, metric.kind)} · kompensasiya {signedValue(carryIn, metric.kind)}</span>
+        ) : null}
       </div>
-    </article>
+    </Link>
   );
+}
+
+function kpiMetricHref(key: CompanyKpiKey, periodMonth: string): Route {
+  const { from, to } = monthDateRange(periodMonth);
+  switch (key) {
+    case "activeStudents":
+      return `/students?tab=list&status=ACTIVE` as Route;
+    case "newSales":
+      return `/students?tab=list&from=${from}&to=${to}` as Route;
+    case "churn":
+      return `/students?tab=list&churn=1` as Route;
+    case "leads":
+    case "conversion":
+      return `/crm?from=${from}&to=${to}` as Route;
+    case "revenue":
+      return `/finance?type=payments&from=${from}&to=${to}` as Route;
+    default:
+      return "/hr?view=company-kpi" as Route;
+  }
+}
+
+function monthDateRange(periodMonth: string) {
+  const [year, month] = periodMonth.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    from: `${periodMonth}-01`,
+    to: `${periodMonth}-${String(lastDay).padStart(2, "0")}`,
+  };
 }
 
 function distributePlan(startMonth: string, duration: 6 | 12, totals: CompanyKpiTargets) {

@@ -9,7 +9,6 @@ import {
   CircleDollarSign,
   Eye,
   EyeOff,
-  FileText,
   Info,
   LayoutGrid,
   LockKeyhole,
@@ -67,7 +66,11 @@ export function RolePermissionsWorkspace({
     Object.fromEntries(initialData.roles.map((role) => [role.id, grantsToRecord(role.grants)])),
   );
   const [query, setQuery] = useState("");
-  const [activeModule, setActiveModule] = useState("ALL");
+  const [panel, setPanel] = useState<"permissions" | "people">("permissions");
+  const [openModules, setOpenModules] = useState<string[]>(() => {
+    const firstModule = initialData.definitions[0]?.module;
+    return firstModule ? [firstModule] : [];
+  });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -123,12 +126,11 @@ export function RolePermissionsWorkspace({
   );
   const visibleModules = useMemo(() => {
     const matchingDefinitions = initialData.definitions.filter((definition) => {
-      if (activeModule !== "ALL" && definition.module !== activeModule) return false;
       if (!deferredQuery) return true;
       return permissionSearchText(definition).includes(deferredQuery);
     });
     return groupDefinitions(matchingDefinitions);
-  }, [activeModule, deferredQuery, initialData.definitions]);
+  }, [deferredQuery, initialData.definitions]);
   const createModules = useMemo(
     () =>
       groupDefinitions(
@@ -141,6 +143,12 @@ export function RolePermissionsWorkspace({
   );
 
   if (!selectedRole) return <div className={styles.empty}>Rol məlumatı yoxdur.</div>;
+
+  function toggleModule(key: string) {
+    setOpenModules((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
+  }
 
   function updateDraft(updater: (draft: PermissionDraft) => PermissionDraft) {
     setDrafts((current) => ({
@@ -411,15 +419,8 @@ export function RolePermissionsWorkspace({
       <div className={styles.permissionShell}>
             <aside className={styles.roleRail} aria-label="Rollar">
               <div className={styles.roleRailHeader}>
-                <div>
-                  <strong>Rollar</strong>
-                  <span>{roles.length} rol</span>
-                </div>
-                {initialData.canManage ? (
-                  <button type="button" aria-label="Yeni rol yarat" onClick={() => setCreateOpen(true)}>
-                    <Plus />
-                  </button>
-                ) : null}
+                <strong>Rollar</strong>
+                <span>{roles.length}</span>
               </div>
               <div className={styles.roleList}>
                 {roles.map((role) => {
@@ -433,56 +434,48 @@ export function RolePermissionsWorkspace({
                         setSelectedRoleId(role.id);
                         setFeedback(null);
                         setQuery("");
-                        setActiveModule("ALL");
+                        setPanel("permissions");
+                        setOpenModules(allModules[0] ? [allModules[0].key] : []);
                       }}
                     >
-                      <span className={styles.roleAvatar}>{initials(role.name)}</span>
                       <span className={styles.roleCopy}>
                         <strong>{role.name}</strong>
-                        <small>
-                          {role.code === "SUPER_ADMIN"
-                            ? "Bütün icazələr aktivdir"
-                            : `${role.grants.length} icazə aktivdir`}
-                        </small>
                       </span>
-                      {role.code === "SUPER_ADMIN" ? <LockKeyhole /> : <ChevronRight />}
+                      <small>{role.code === "SUPER_ADMIN" ? "Tam" : role.grants.length}</small>
                     </button>
                   );
                 })}
-              </div>
-              <div className={styles.protectedNote}>
-                <ShieldCheck />
-                <p>
-                  <strong>Super Admin qorunur</strong>
-                  <span>Bu rolun tam giriş hüququ dəyişdirilə bilməz.</span>
-                </p>
               </div>
             </aside>
 
             <div className={styles.permissionEditor}>
               <div className={styles.editorHeader}>
                 <div className={styles.selectedRole}>
-                  <span className={styles.selectedRoleAvatar}>{initials(selectedRole.name)}</span>
                   <div>
-                    <div className={styles.roleTitleLine}>
-                      <h2>{selectedRole.name}</h2>
-                      {!selectedRole.isSystem ? <span>Fərdi rol</span> : null}
-                    </div>
+                    <h2>{selectedRole.name}</h2>
                     <p>
-                      {Object.keys(currentDraft).length} icazə aktivdir
+                      {Object.keys(currentDraft).length} icazə
                       <span aria-hidden="true">·</span>
                       {selectedRole.userCount} istifadəçi
+                      {selectedRole.code === "SUPER_ADMIN" ? (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          Dəyişdirilə bilməz
+                        </>
+                      ) : null}
                     </p>
                   </div>
                 </div>
                 <div className={styles.editorActions}>
                   {changedCodes.length ? (
-                    <span className={styles.pendingState}>{changedCodes.length} dəyişiklik</span>
-                  ) : (
-                    <span className={styles.savedState}>
-                      <Check /> Dəyişiklik yoxdur
-                    </span>
-                  )}
+                    <Button
+                      className={styles.primaryAction}
+                      disabled={readOnly || isPending}
+                      onClick={() => setConfirmOpen(true)}
+                    >
+                      <ShieldCheck /> Saxla ({changedCodes.length})
+                    </Button>
+                  ) : null}
                   {initialData.canManage && !selectedRole.isSystem ? (
                     <Button
                       variant="outline"
@@ -496,152 +489,131 @@ export function RolePermissionsWorkspace({
                 </div>
               </div>
 
-              <section className={styles.roleMembers}>
-                <div className={styles.roleMembersHeader}>
-                  <div>
-                    <Users />
-                    <span>
-                      <strong>Bu roldakı profil və əməkdaşlar</strong>
-                      <small>{selectedRoleUsers.length} istifadəçi</small>
-                    </span>
-                  </div>
-                </div>
-                {selectedRoleUsers.length > 0 ? (
-                  <div className={styles.roleMemberList}>
-                    {selectedRoleUsers.map((user) => (
-                      <article className={styles.roleMember} key={user.id}>
-                        <span className={styles.roleMemberAvatar}>{initials(user.fullName)}</span>
-                        <div>
-                          <strong>{user.fullName}</strong>
-                          <small>{user.position} · {user.department}</small>
-                        </div>
-                        <span className={styles.roleCount}>
-                          {user.isProtected ? "Qorunan profil" : user.kind === "EMPLOYEE" ? "Əməkdaş" : "Profil"} · {user.roleIds.length} rol
-                        </span>
-                        {(initialData.canManageUsers || initialData.canManage) && selectedRole.code !== "SUPER_ADMIN" && !user.isProtected ? (
-                          <Button type="button" variant="ghost" size="icon-sm" aria-label="Profil məlumatlarını dəyiş" onClick={() => openUserProfile(user)}>
-                            <Pencil />
-                          </Button>
-                        ) : null}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.roleMembersEmpty}>Bu rola təyin edilmiş profil və ya əməkdaş yoxdur.</p>
-                )}
-              </section>
-
-              <div className={styles.permissionTools}>
-                <label className={styles.searchBox}>
-                  <Search />
-                  <Input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="İcazələrdə axtar"
-                  />
-                </label>
-                <div className={styles.moduleFilters} aria-label="Bölmə filtri">
-                  <button
-                    type="button"
-                    className={activeModule === "ALL" ? styles.activeFilter : styles.moduleFilter}
-                    onClick={() => setActiveModule("ALL")}
-                  >
-                    <LayoutGrid /> Bütün bölmələr
-                  </button>
-                  {allModules.map((module) => (
-                    <button
-                      type="button"
-                      key={module.key}
-                      className={activeModule === module.key ? styles.activeFilter : styles.moduleFilter}
-                      onClick={() => setActiveModule(module.key)}
-                    >
-                      {module.label}
-                    </button>
-                  ))}
-                </div>
+              <div className={styles.panelTabs} role="tablist" aria-label="Rol bölmələri">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={panel === "permissions"}
+                  className={panel === "permissions" ? styles.activePanel : styles.panelTab}
+                  onClick={() => setPanel("permissions")}
+                >
+                  İcazələr
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={panel === "people"}
+                  className={panel === "people" ? styles.activePanel : styles.panelTab}
+                  onClick={() => setPanel("people")}
+                >
+                  İstifadəçilər
+                  <span>{selectedRoleUsers.length}</span>
+                </button>
               </div>
 
-              <div className={styles.dependencyNote}>
-                <Info />
-                <span>
-                  Əsas icazəni seçin — ona bağlı baxış icazələri avtomatik əlavə olunur.
-                </span>
-              </div>
-
-              <div className={styles.moduleList}>
-                {visibleModules.length ? (
-                  visibleModules.map((module) => {
-                    const definitions = module.definitions;
-                    const editableDefinitions = definitions.filter(
-                      (definition) => !isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions),
-                    );
-                    const activeCount = definitions.filter((item) => currentDraft[item.code]).length;
-                    const allEditableSelected = editableDefinitions.every((item) => currentDraft[item.code]);
-                    return (
-                      <section className={styles.moduleSection} key={module.key}>
-                        <header className={styles.moduleHeader}>
+              {panel === "people" ? (
+                <section className={styles.peoplePanel} role="tabpanel">
+                  {selectedRoleUsers.length > 0 ? (
+                    <ul className={styles.peopleList}>
+                      {selectedRoleUsers.map((user) => (
+                        <li key={user.id}>
                           <div>
-                            <span className={styles.moduleIcon}>
-                              <ModuleIcon module={module.key} />
-                            </span>
-                            <div>
-                              <h3>{module.label}</h3>
-                              <p>{activeCount}/{definitions.length} aktivdir</p>
-                            </div>
+                            <strong>{user.fullName}</strong>
+                            <span>{user.position} · {user.department}</span>
                           </div>
-                          {!readOnly && editableDefinitions.length ? (
-                            <label className={styles.selectAll}>
-                              <span>Hamısını seç</span>
-                              <input
-                                type="checkbox"
-                                checked={allEditableSelected}
-                                onChange={(event) => setModule(editableDefinitions, event.target.checked)}
-                              />
-                            </label>
+                          <em>
+                            {user.isProtected ? "Qorunan profil" : user.kind === "EMPLOYEE" ? "Əməkdaş" : "Profil"}
+                          </em>
+                          {(initialData.canManageUsers || initialData.canManage) && selectedRole.code !== "SUPER_ADMIN" && !user.isProtected ? (
+                            <Button type="button" variant="ghost" size="icon-sm" aria-label="Profil məlumatlarını dəyiş" onClick={() => openUserProfile(user)}>
+                              <Pencil />
+                            </Button>
                           ) : null}
-                        </header>
-                        <div className={styles.permissionRows}>
-                          {definitions.map((definition) => (
-                            <PermissionRow
-                              key={definition.code}
-                              definition={definition}
-                              checked={Boolean(currentDraft[definition.code])}
-                              scope={currentDraft[definition.code]}
-                              changed={currentDraft[definition.code] !== original[definition.code]}
-                              readOnly={readOnly || isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions)}
-                              onToggle={(checked) => togglePermission(definition, checked)}
-                              onScope={(scope) =>
-                                updateDraft((draft) => ({ ...draft, [definition.code]: scope }))
-                              }
-                            />
-                          ))}
-                        </div>
-                      </section>
-                    );
-                  })
-                ) : (
-                  <div className={styles.empty}>Axtarışa uyğun icazə tapılmadı.</div>
-                )}
-              </div>
-
-              {changedCodes.length ? (
-                <footer className={styles.saveBar}>
-                  <div>
-                    <span className={styles.saveStatusIcon}>{changedCodes.length}</span>
-                    <div>
-                      <strong>Dəyişikliklər saxlanılmayıb</strong>
-                      <span>Yalnız “Saxla” düyməsindən sonra tətbiq olunacaq.</span>
-                    </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className={styles.peopleEmpty}>Bu rolda istifadəçi yoxdur.</p>
+                  )}
+                </section>
+              ) : (
+                <section role="tabpanel">
+                  <div className={styles.permissionTools}>
+                    <label className={styles.searchBox}>
+                      <Search />
+                      <Input
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="İcazə axtar"
+                      />
+                    </label>
+                    <p className={styles.hint}>
+                      <Info />
+                      Əsas icazə seçiləndə bağlı baxış icazələri özü əlavə olunur.
+                    </p>
                   </div>
-                  <Button
-                    className={styles.primaryAction}
-                    disabled={readOnly || isPending}
-                    onClick={() => setConfirmOpen(true)}
-                  >
-                    <ShieldCheck /> Dəyişiklikləri saxla
-                  </Button>
-                </footer>
-              ) : null}
+
+                  <div className={styles.moduleList}>
+                    {visibleModules.length ? (
+                      visibleModules.map((module) => {
+                        const definitions = module.definitions;
+                        const editableDefinitions = definitions.filter(
+                          (definition) => !isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions),
+                        );
+                        const activeCount = definitions.filter((item) => currentDraft[item.code]).length;
+                        const allEditableSelected = editableDefinitions.length > 0 && editableDefinitions.every((item) => currentDraft[item.code]);
+                        const open = deferredQuery.length > 0 || openModules.includes(module.key);
+                        return (
+                          <section className={styles.moduleSection} data-open={open} key={module.key}>
+                            <header className={styles.moduleHeader}>
+                              <button
+                                type="button"
+                                className={styles.moduleToggle}
+                                aria-expanded={open}
+                                onClick={() => toggleModule(module.key)}
+                              >
+                                <ChevronRight />
+                                <h3>{module.label}</h3>
+                                <span>{activeCount}/{definitions.length}</span>
+                              </button>
+                              {!readOnly && editableDefinitions.length ? (
+                                <label className={styles.selectAll}>
+                                  <span>Hamısı</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={allEditableSelected}
+                                    onChange={(event) => setModule(editableDefinitions, event.target.checked)}
+                                  />
+                                </label>
+                              ) : null}
+                            </header>
+                            {open ? (
+                              <div className={styles.permissionRows}>
+                                {definitions.map((definition) => (
+                                  <PermissionRow
+                                    key={definition.code}
+                                    definition={definition}
+                                    checked={Boolean(currentDraft[definition.code])}
+                                    scope={currentDraft[definition.code]}
+                                    changed={currentDraft[definition.code] !== original[definition.code]}
+                                    readOnly={readOnly || isPermissionLocked(definition, currentDraft, initialData.definitions, initialData.canManageSuperAdminPermissions)}
+                                    onToggle={(checked) => togglePermission(definition, checked)}
+                                    onScope={(scope) =>
+                                      updateDraft((draft) => ({ ...draft, [definition.code]: scope }))
+                                    }
+                                  />
+                                ))}
+                              </div>
+                            ) : null}
+                          </section>
+                        );
+                      })
+                    ) : (
+                      <div className={styles.empty}>Axtarışa uyğun icazə tapılmadı.</div>
+                    )}
+                  </div>
+                </section>
+              )}
             </div>
       </div>
 
@@ -1127,39 +1099,25 @@ function PermissionRow({
           disabled={readOnly}
           onChange={(event) => onToggle(event.target.checked)}
         />
-        <span aria-hidden="true"><Check /></span>
+        <span className={styles.permissionCopy} title={definition.description}>
+          <strong>{definition.tabLabel}</strong>
+          <em>{definition.actionLabel}</em>
+          {definition.sensitive ? <small>Həssas</small> : null}
+          {definition.superAdminOnly ? <small>Yalnız Super Admin</small> : definition.superAdminManaged ? <small>Super Admin</small> : null}
+        </span>
       </label>
-      <span className={styles.actionIcon}><ActionIcon action={definition.action} /></span>
-      <div className={styles.permissionCopy}>
-        <div>
-          <strong>{definition.actionLabel}</strong>
-          {definition.sensitive ? <span>Həssas</span> : null}
-          {definition.superAdminOnly ? <span>Yalnız Super Admin</span> : definition.superAdminManaged ? <span>Super Admin idarə edir</span> : null}
-        </div>
-        <p><b>{definition.tabLabel}</b> — {definition.description}</p>
-      </div>
       {checked && definition.supportsScope ? (
-        <div className={styles.scopeControl} aria-label={`${definition.actionLabel} məlumat əhatəsi`}>
-          <button
-            type="button"
-            className={scope === "ALL" ? styles.activeScope : undefined}
-            disabled={readOnly}
-            onClick={() => onScope("ALL")}
-          >
-            Bütün məlumatlar
-          </button>
-          <button
-            type="button"
-            className={scope === "ASSIGNED" ? styles.activeScope : undefined}
-            disabled={readOnly}
-            onClick={() => onScope("ASSIGNED")}
-          >
-            Yalnız təyin olunanlar
-          </button>
-        </div>
-      ) : (
-        <span className={styles.scopeSpacer} />
-      )}
+        <select
+          className={styles.scopeSelect}
+          aria-label={`${definition.actionLabel} məlumat əhatəsi`}
+          value={scope ?? "ALL"}
+          disabled={readOnly}
+          onChange={(event) => onScope(event.target.value as PermissionScope)}
+        >
+          <option value="ALL">Bütün məlumatlar</option>
+          <option value="ASSIGNED">Yalnız təyin olunanlar</option>
+        </select>
+      ) : null}
     </div>
   );
 }
@@ -1181,15 +1139,6 @@ function Step({
       <strong>{label}</strong>
     </div>
   );
-}
-
-function ActionIcon({ action }: { action: PermissionDefinitionDto["action"] }) {
-  if (action === "read") return <Eye />;
-  if (action === "create") return <Plus />;
-  if (action === "update") return <Pencil />;
-  if (action === "delete") return <Trash2 />;
-  if (action === "export") return <FileText />;
-  return <ShieldCheck />;
 }
 
 function ModuleIcon({ module }: { module: string }) {

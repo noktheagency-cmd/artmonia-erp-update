@@ -4,7 +4,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import {
   activateStudentFromFirstPresent,
   assertFirstPeriodFullyPaidForAttendance,
+  FIRST_LESSON_ABSENT_WARNING,
+  FIRST_LESSON_MISSED_PLAN_WARNING,
   hasMissedPlannedFirstLesson,
+  resolveFirstLessonActivationWarning,
 } from "./activation-from-attendance";
 import { syncActivationBilling } from "./lifecycle-service";
 
@@ -40,6 +43,27 @@ test("BK-08: planned first lesson in the past while still SLOT_WAITING is missed
       asOf: utcDate("2026-10-18"),
     }),
     false,
+  );
+});
+
+test("BK-08: absent mark gets a stronger activation warning than date-only miss", () => {
+  assert.equal(
+    resolveFirstLessonActivationWarning({
+      lifecycleStatus: "SLOT_WAITING",
+      plannedFirstLessonAt: utcDate("2026-10-20"),
+      firstLessonAbsent: true,
+      asOf: utcDate("2026-10-22"),
+    }),
+    FIRST_LESSON_ABSENT_WARNING,
+  );
+  assert.equal(
+    resolveFirstLessonActivationWarning({
+      lifecycleStatus: "SLOT_WAITING",
+      plannedFirstLessonAt: utcDate("2026-10-20"),
+      firstLessonAbsent: false,
+      asOf: utcDate("2026-10-22"),
+    }),
+    FIRST_LESSON_MISSED_PLAN_WARNING,
   );
 });
 

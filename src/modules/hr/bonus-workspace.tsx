@@ -33,7 +33,7 @@ import {
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
-import type { HrBonusCampaignDto, HrBonusData, HrBonusStageDto } from "@/modules/hr/bonus-data";
+import type { HrBonusCampaignDto, HrBonusData, HrBonusParticipantDto, HrBonusStageDto } from "@/modules/hr/bonus-data";
 import { notifyCaughtError } from "@/lib/app-notifications";
 import { unwrapActionResult } from "@/lib/action-result";
 import "./bonus.css";
@@ -60,11 +60,11 @@ const distributionOptions = [
 ] as const;
 
 const statusMeta = {
-  SCHEDULED: { label: "Planlaşdırılıb", variant: "secondary" as const },
-  ACTIVE: { label: "Aktiv", variant: "default" as const },
-  ACHIEVED: { label: "Hədəf tamamlandı", variant: "default" as const },
-  EXPIRED: { label: "Dövr bitib", variant: "outline" as const },
-  CANCELLED: { label: "Ləğv edilib", variant: "destructive" as const },
+  SCHEDULED: { label: "Planlaşdırılıb", tone: "scheduled" as const },
+  ACTIVE: { label: "Aktiv", tone: "active" as const },
+  ACHIEVED: { label: "Hədəf tamamlandı", tone: "achieved" as const },
+  EXPIRED: { label: "Dövr bitib", tone: "expired" as const },
+  CANCELLED: { label: "Ləğv edilib", tone: "cancelled" as const },
 };
 
 export function BonusWorkspace({
@@ -159,50 +159,59 @@ export function BonusWorkspace({
 
       {notice ? <div className="hr-bonus-notice" role="status"><Sparkles />{notice}<button type="button" onClick={() => setNotice("")} aria-label="Bildirişi bağla">×</button></div> : null}
 
-      <div className="hr-bonus-stage-layout">
-        <section className="hr-bonus-stage-main" aria-labelledby="bonus-scene-title">
-          <div className="hr-bonus-scene-heading">
-            <div><span>Komanda səhnəsi</span><h2 id="bonus-scene-title">Van Gogh-un emalatxanası</h2></div>
-            <Badge variant={status.variant}>{status.label}</Badge>
-          </div>
-          <div className="hr-bonus-scene-wrap">
-            <VanGoghBonusIllustration progress={selected.progress} reachedCount={reachedStages.length} celebrationKey={`${selected.id}:${latestStage?.id ?? "start"}`} replayToken={replayToken} />
-            <div className="hr-bonus-progress-float">
-              <span>{selected.department} komandası</span>
-              <strong>{Math.round(selected.progress)}%</strong>
-              <b>{formatMetric(selected.currentValue, unit)} <i>/ {formatMetric(selected.maxThreshold, unit)}</i></b>
-              <div><span style={{ width: `${selected.progress}%` }} /></div>
-              <small>{metricLabel(selected.metricKind)}</small>
-            </div>
-          </div>
-          <MilestoneRail campaign={selected} unit={unit} />
-        </section>
-
-        <aside className="hr-bonus-inspector">
-          <div className="hr-bonus-inspector-title">
-            <div><span>Kampaniya</span><h2>{selected.name}</h2></div>
-            <Flag />
-          </div>
-          <dl>
-            <div><dt><UsersRound /> Departament</dt><dd>{selected.department}</dd></div>
-            <div><dt><CalendarDays /> Dövr</dt><dd>{formatDate(selected.startsAt)} – {formatDate(selected.endsAt)}</dd></div>
-            <div><dt><RefreshCw /> Davam etmə</dt><dd>{selected.recursMonthly ? "Hər ay avtomatik" : "Yalnız bu dövr"}</dd></div>
-            <div><dt><CircleDollarSign /> Maksimum bonus qaydası</dt><dd>{formatStageRule(selected.stages.at(-1), selected)}</dd></div>
-            <div><dt><Target /> Növbəti etap</dt><dd>{nextStage ? `${formatMetric(nextStage.threshold, unit)} → ${formatStageRule(nextStage, selected)}` : "Bütün etaplar tamamlandı"}</dd></div>
-            <div><dt><UsersRound /> İştirak edən əməkdaşlar</dt><dd>{selected.participantCount} nəfər</dd></div>
-          </dl>
-          <div className="hr-bonus-inspector-progress">
-            <div><span>Komanda tərəqqisi</span><strong>{Math.round(selected.progress)}%</strong></div>
-            <div className="hr-bonus-track"><span style={{ width: `${selected.progress}%` }} /></div>
-            <small>{formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</small>
-          </div>
-          {selected.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki yeni satışlar</strong><span>Şirkət KPI ilə eyni mənbə: yeni qeydiyyat və ödənişli geri dönüş. Sayım tələbə menecerinə görədir.</span></div> : null}
-          {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
-          {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Sadə hesab</strong><span>Tələbə sayına uyğun bonus seçilir, sonra həmin pillə üçün churn kəsintisi çıxılır.</span></div> : null}
-          {selected.perUnitBonusPercent > 0 || selected.perUnitBonusAmount > 0 ? <div className="hr-bonus-method-note"><strong>Satışdan sonrakı bonus</strong><span>İlk {selected.requiredThreshold} satış məcburidir. Sonrakı hər satış üçün {selected.perUnitBonusPercent > 0 ? `${selected.perUnitBonusPercent}%` : ""}{selected.perUnitBonusPercent > 0 && selected.perUnitBonusAmount > 0 ? " + " : ""}{selected.perUnitBonusAmount > 0 ? formatMoney(selected.perUnitBonusAmount) : ""} hesablanır.</span></div> : null}
-          {data.permissions.canManage ? <div className="hr-bonus-inspector-actions">{selected.metricKind !== "TEACHER_RETENTION_RATE" ? <Button variant="outline" onClick={() => setAdjustOpen(true)}>Nəticəyə düzəliş</Button> : null}<Button variant="ghost" onClick={() => setCancelOpen(true)}>Kampaniyanı ləğv et</Button><Button variant="destructive" onClick={() => setDeleteOpen(true)}><Trash2 data-icon="inline-start" /> Birdəfəlik sil</Button></div> : null}
-        </aside>
+      <div className="hr-bonus-summary-strip">
+        <div><span>Kampaniya</span><strong>{selected.name}</strong></div>
+        <div><span>Departament</span><strong>{selected.department}</strong></div>
+        <div><span>Dövr</span><strong>{formatDate(selected.startsAt)} – {formatDate(selected.endsAt)}</strong></div>
+        <div><span>Komanda</span><strong>{Math.round(selected.progress)}% · {formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</strong></div>
+        <div><span>Status</span><span className={`hr-bonus-status is-${status.tone}`}>{status.label}</span></div>
       </div>
+
+      <section className="hr-bonus-stage-main" aria-labelledby="bonus-scene-title">
+        <div className="hr-bonus-scene-heading">
+          <div><span>Komanda səhnəsi</span><h2 id="bonus-scene-title">Van Gogh-un emalatxanası</h2></div>
+          <span className={`hr-bonus-status is-${status.tone}`}>{status.label}</span>
+        </div>
+        <div className="hr-bonus-scene-wrap">
+          <VanGoghBonusIllustration progress={selected.progress} reachedCount={reachedStages.length} celebrationKey={`${selected.id}:${latestStage?.id ?? "start"}`} replayToken={replayToken} />
+          <div className="hr-bonus-progress-float">
+            <span>{selected.department} komandası</span>
+            <strong>{Math.round(selected.progress)}%</strong>
+            <b>{formatMetric(selected.currentValue, unit)} <i>/ {formatMetric(selected.maxThreshold, unit)}</i></b>
+            <div><span style={{ width: `${selected.progress}%` }} /></div>
+            <small>{metricLabel(selected.metricKind)}</small>
+          </div>
+        </div>
+        <MilestoneRail campaign={selected} unit={unit} />
+      </section>
+
+      <ParticipantProgressBoard campaign={selected} unit={unit} />
+
+      <aside className="hr-bonus-inspector">
+        <div className="hr-bonus-inspector-title">
+          <div><span>Qısa məlumat</span><h2>Kampaniya detalları</h2></div>
+          <Flag />
+        </div>
+        <div className="hr-bonus-inspector-body">
+          <dl>
+            <div><dt><Target /> Növbəti etap</dt><dd>{nextStage ? `${formatMetric(nextStage.threshold, unit)} → ${formatStageRule(nextStage, selected)}` : "Bütün etaplar tamamlandı"}</dd></div>
+            <div><dt><CircleDollarSign /> Maksimum bonus</dt><dd>{formatStageRule(selected.stages.at(-1), selected)}</dd></div>
+            <div><dt><UsersRound /> İştirakçılar</dt><dd>{selected.participantCount} nəfər</dd></div>
+            <div><dt><CalendarDays /> Davam etmə</dt><dd>{selected.recursMonthly ? "Hər ay avtomatik" : "Yalnız bu dövr"}</dd></div>
+          </dl>
+          {data.permissions.canManage ? (
+            <div className="hr-bonus-inspector-actions">
+              {selected.metricKind !== "TEACHER_RETENTION_RATE" ? <Button variant="outline" onClick={() => setAdjustOpen(true)}>Nəticəyə düzəliş</Button> : null}
+              <Button variant="ghost" onClick={() => setCancelOpen(true)}>Kampaniyanı ləğv et</Button>
+              <Button variant="destructive" onClick={() => setDeleteOpen(true)}><Trash2 data-icon="inline-start" /> Birdəfəlik sil</Button>
+            </div>
+          ) : null}
+        </div>
+        {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
+        {selected.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki yeni satışlar</strong><span>Şirkət KPI ilə eyni mənbə: yeni qeydiyyat və ödənişli geri dönüş.</span></div> : null}
+        {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Sadə hesab</strong><span>Tələbə sayına uyğun bonus seçilir, sonra churn kəsintisi çıxılır.</span></div> : null}
+        {selected.perUnitBonusPercent > 0 || selected.perUnitBonusAmount > 0 ? <div className="hr-bonus-method-note"><strong>Satışdan sonrakı bonus</strong><span>İlk {selected.requiredThreshold} satış məcburidir. Sonrakı hər satış üçün {selected.perUnitBonusPercent > 0 ? `${selected.perUnitBonusPercent}%` : ""}{selected.perUnitBonusPercent > 0 && selected.perUnitBonusAmount > 0 ? " + " : ""}{selected.perUnitBonusAmount > 0 ? formatMoney(selected.perUnitBonusAmount) : ""}.</span></div> : null}
+      </aside>
 
       <section className="hr-bonus-history">
         <div className="hr-bonus-history-title"><div><Star /><span>Kampaniya tarixçəsi</span></div><small>{reachedStages.length}/{selected.stages.length} etap açılıb</small></div>
@@ -215,6 +224,80 @@ export function BonusWorkspace({
       <DeleteCampaignDialog open={deleteOpen} campaign={selected} pending={pending} onClose={() => setDeleteOpen(false)} onSubmit={(formData) => run(() => actions.remove(formData), "Kampaniya birdəfəlik silindi.", () => { setDeleteOpen(false); setSelectedId(""); })} />
     </section>
   );
+}
+
+function ParticipantProgressBoard({ campaign, unit }: { campaign: HrBonusCampaignDto; unit: string }) {
+  const participants = campaign.participants;
+  if (!participants.length) {
+    return (
+      <section className="hr-bonus-people">
+        <div className="hr-bonus-people-head">
+          <div><UsersRound /><span>Əməkdaş irəliləyişi</span></div>
+          <small>İştirakçı yoxdur</small>
+        </div>
+        <div className="hr-bonus-people-empty">Bu kampaniyaya hələ əməkdaş əlavə edilməyib.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="hr-bonus-people" aria-label="Əməkdaş irəliləyişi">
+      <div className="hr-bonus-people-head">
+        <div><UsersRound /><span>Əməkdaş irəliləyişi</span></div>
+        <small>{participants.length} nəfər · hər işçi öz nəticəsi ilə</small>
+      </div>
+      <div className="hr-bonus-people-list">
+        {participants.map((participant) => (
+          <ParticipantProgressRow
+            key={participant.id}
+            participant={participant}
+            unit={unit}
+            maxThreshold={campaign.maxThreshold}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ParticipantProgressRow({
+  participant,
+  unit,
+  maxThreshold,
+}: {
+  participant: HrBonusParticipantDto;
+  unit: string;
+  maxThreshold: number;
+}) {
+  const progress = Math.round(participant.progress);
+  return (
+    <article className={`hr-bonus-person-row${participant.isActor ? " is-actor" : ""}`}>
+      <div className="hr-bonus-person-identity">
+        <span aria-hidden="true">{initials(participant.employeeName)}</span>
+        <div>
+          <strong>{participant.employeeName}{participant.isActor ? " · Siz" : ""}</strong>
+          <small>{formatMetric(participant.currentValue, unit)} / {formatMetric(maxThreshold, unit)}</small>
+        </div>
+      </div>
+      <div className="hr-bonus-person-meter">
+        <div className="hr-bonus-track"><span style={{ width: `${progress}%` }} /></div>
+        <b>{progress}%</b>
+      </div>
+      <div className="hr-bonus-person-award">
+        <span>Bonus payı</span>
+        <strong>{participant.awardTotal > 0 ? formatMoney(participant.awardTotal) : "—"}</strong>
+      </div>
+    </article>
+  );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 function MilestoneRail({ campaign, unit }: { campaign: HrBonusCampaignDto; unit: string }) {

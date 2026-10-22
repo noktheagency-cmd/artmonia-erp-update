@@ -771,21 +771,6 @@ export function StudentDetailActions({
                   )}
                 </label>
                 <label className="form-field">
-                  <span>Status tarixi (status dəyişərsə)</span>
-                  {permissions.canChangeStatus ? (
-                    <DatePicker
-                      name="statusEffectiveDate"
-                      defaultValue={student.detail.paymentDefaultDate}
-                    />
-                  ) : (
-                    <Input
-                      name="statusEffectiveDate"
-                      defaultValue={student.detail.paymentDefaultDate}
-                      readOnly
-                    />
-                  )}
-                </label>
-                <label className="form-field">
                   <span>Güzəşt növü</span>
                   <FormSelect
                     name="discountType"
@@ -882,36 +867,13 @@ export function StudentDetailActions({
               <div className="student-create-grid">
                 <label className="form-field">
                   <span>Məsul şəxs</span>
-                  {permissions.canAssignStudentManager ? (
-                    <FormSelect
-                      name="managerId"
-                      defaultValue={student.detail.managerId}
-                      emptyLabel="Məsul şəxs seçilməyib"
-                      options={editOptions.managers.map((manager) => ({ value: manager.id, label: manager.fullName }))}
-                      searchable
-                      searchPlaceholder="Məsul şəxs axtar..."
-                    />
-                  ) : (
-                    <>
-                      <input name="managerId" type="hidden" value={student.detail.managerId} />
-                      <Input value={student.detail.manager} readOnly aria-label="Məsul şəxs" />
-                    </>
-                  )}
-                </label>
-                <label className="form-field">
-                  <span>Kampaniya</span>
-                  <FormSelect
-                    name="campaignId"
-                    defaultValue={student.detail.campaignId}
-                    emptyLabel="Kampaniya seçilməyib"
-                    options={editOptions.campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }))}
-                    searchable
-                    searchPlaceholder="Kampaniya axtar..."
-                  />
+                  <input name="managerId" type="hidden" value={student.detail.managerId} />
+                  <Input value={student.detail.manager} readOnly aria-label="Məsul şəxs" />
                 </label>
                 <label className="form-field">
                   <span>Qeydiyyat tarixi</span>
                   <DatePicker
+                    key={`registered-${student.id}-${student.detail.registeredDate}-${editOpen}`}
                     name="registeredDate"
                     defaultValue={student.detail.registeredDate}
                     allowClear={false}
@@ -937,10 +899,12 @@ export function StudentDetailActions({
               </label>
             </section>
 
-            <div className="premium-edit-notice">
-              <span className="sparkle">✨</span>
-              <span>{editingEnrollment ? "Qiymət və ya dərs sayı dəyişirsə tətbiq ayını və səbəbi seçin. Tamamlanmış paketi başqa proqramla əvəz etməyin; yeni paket əlavə edin." : "Bu rejimdə yalnız şəxsi məlumatlar yenilənir. Status, dərs tarixi, paket, ödəniş və borc dəyişmir."}</span>
-            </div>
+            {!editingEnrollment ? (
+              <div className="premium-edit-notice">
+                <span className="sparkle">✨</span>
+                <span>Bu rejimdə yalnız şəxsi məlumatlar yenilənir. Status, dərs tarixi, paket, ödəniş və borc dəyişmir.</span>
+              </div>
+            ) : null}
 
             <DialogFooter>
               <Button

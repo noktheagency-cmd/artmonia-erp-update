@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attendancePeriod, attendanceStats, attendanceTeachers, consecutiveAbsences, type AttendanceEntry } from "./attendance-analytics";
+import { attendancePeriod, attendanceStats, attendanceTeachers, consecutiveAbsences, riskyStudentIds, type AttendanceEntry } from "./attendance-analytics";
 import { attendanceAnalyticsScope } from "./attendance-analytics-scope";
 
 function entry(status: AttendanceEntry["status"], date = "2026-09-01", extra: Partial<AttendanceEntry> = {}): AttendanceEntry {
-  return { sessionId: date, date, time: "10:00", teacherId: "teacher-1", teacher: "Müəllim A", groupId: "group-1", group: "Qrup A", studentId: "student-1", student: "Tələbə A", enrollmentId: "enrollment-1", status, ...extra };
+  return { sessionId: date, date, time: "10:00", teacherId: "teacher-1", teacher: "Müəllim A", groupId: "group-1", group: "Qrup A", studentId: "student-1", student: "Tələbə A", enrollmentId: "enrollment-1", status, lifecycleStatus: "ACTIVE", ...extra };
 }
 
 test("unknown and excused attendance are not treated as absences or included in the rate", () => {
@@ -28,10 +28,21 @@ test("three most recent confirmed absences flag risk; presence, excused and unkn
   const rows = [entry("ABSENT", "2026-09-03"), entry("ABSENT", "2026-09-01"), entry("ABSENT", "2026-09-02")];
   assert.equal(consecutiveAbsences(rows), 3);
   assert.equal(attendanceStats(rows).risky, 1);
+  assert.deepEqual(riskyStudentIds(rows), ["student-1"]);
   for (const status of ["PRESENT", "EXCUSED", null] as const) {
     assert.equal(consecutiveAbsences([...rows, entry(status, "2026-09-04")]), 0);
   }
   assert.equal(attendanceStats(rows.map((row, index) => ({ ...row, teacherId: `teacher-${index}` }))).risky, 0);
+  assert.deepEqual(riskyStudentIds(rows.map((row, index) => ({ ...row, teacherId: `teacher-${index}` }))), []);
+});
+
+test("stopped, frozen, declined and completed students are not counted as at-risk", () => {
+  const absences = [entry("ABSENT", "2026-09-03"), entry("ABSENT", "2026-09-01"), entry("ABSENT", "2026-09-02")];
+  for (const lifecycleStatus of ["STOPPED", "FROZEN", "DECLINED", "COMPLETED"]) {
+    assert.equal(attendanceStats(absences.map((row) => ({ ...row, lifecycleStatus }))).risky, 0);
+  }
+  assert.equal(attendanceStats(absences.map((row) => ({ ...row, lifecycleStatus: "ACTIVE" }))).risky, 1);
+  assert.equal(attendanceStats(absences.map((row) => ({ ...row, lifecycleStatus: "SLOT_WAITING" }))).risky, 1);
 });
 
 test("counts incomplete sessions and students once across multiple records", () => {

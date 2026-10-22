@@ -651,7 +651,17 @@
 .owner-dashboard-insight-copy > span { display: flex; gap: 5px; align-items: center; color: var(--dashboard-muted); font-size: 9.5px; font-weight: 700; letter-spacing: 0.01em; }
 .owner-dashboard-insight-copy > span svg { color: #7160dc; }
 .owner-dashboard-insight-copy strong { margin-top: 4px; color: #45389c; font-size: 23px; font-weight: 720; line-height: 1; letter-spacing: -0.045em; }
-.owner-dashboard-insight-copy small { display: -webkit-box; margin-top: 5px; overflow: hidden; color: #687386; font-size: 9.5px; line-height: 1.32; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.owner-dashboard-insight-copy small {
+  display: -webkit-box;
+  margin-top: 5px;
+  overflow: hidden;
+  color: #687386;
+  font-size: 9.5px;
+  line-height: 1.32;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
 
 .owner-dashboard-insight-ring { width: 64px; height: 64px; flex: 0 0 64px; padding: 3px; background: rgb(255 255 255 / 72%); border: 1px solid rgb(255 255 255 / 80%); border-radius: 50%; box-shadow: 0 6px 14px rgb(35 43 67 / 7%); }
 .owner-dashboard-insight-ring.is-conversion { --chart-violet: #735fe0; }

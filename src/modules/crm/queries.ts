@@ -167,6 +167,8 @@ export type CrmData = {
     createdAt: string;
     nextFollowUpAt: string;
     nextFollowUpIso: string | null;
+    /** Bakı günü üzrə bu gün yaradılıbsa true; sabah avtomatik false olur. */
+    isNewToday: boolean;
     latestNote: string;
     canConvert: boolean;
     conversionLabel: string;
@@ -216,6 +218,8 @@ type CrmLeadFocusRow = {
   manager: string;
   category: "general" | "workshop_masterclass";
   createdAt?: string;
+  /** Bakı günü üzrə bu gün yaradılıbsa true; sabah avtomatik false olur. */
+  isNewToday: boolean;
 };
 
 type CrmPeriodRange = { gte?: Date; lt?: Date } | null;
@@ -639,11 +643,12 @@ function getCrmRawData(
   const createdTodayFrom = new Date(input.todayStart.getTime() - 4 * 60 * 60 * 1000);
   const createdTodayUntil = new Date(input.tomorrowStart.getTime() - 4 * 60 * 60 * 1000);
 
-  function leadQueueOrderSql(tableAlias: "l" | "lead_rows") {
+  function leadQueueOrderSql(tableAlias: "l" | "lead_rows" | "attention_rows") {
     const createdAt = Prisma.raw(`${tableAlias}.created_at`);
     const priority = Prisma.raw(`${tableAlias}.priority`);
     const id = Prisma.raw(`${tableAlias}.id`);
 
+    // Növbə: bu günkü yeni müraciətlər → kritik → digərləri; sonra ən yeni üstə.
     return Prisma.sql`
       case
         when ${createdAt} >= ${createdTodayFrom} and ${createdAt} < ${createdTodayUntil} then 0
@@ -899,11 +904,12 @@ function getCrmRawData(
             'priority', attention_rows.priority::text,
             'nextActionType', attention_rows.next_action_type::text,
             'nextFollowUpAt', attention_rows.next_follow_up_at,
+            'createdAt', attention_rows.created_at,
             'fullName', attention_rows.full_name,
             'phone', attention_rows.phone_display,
             'managerName', attention_rows.manager_name
           )
-          order by attention_rows.next_follow_up_at asc, attention_rows.full_name asc
+          order by ${leadQueueOrderSql("attention_rows")}, attention_rows.next_follow_up_at asc nulls last
         )
         from (
           select
@@ -912,6 +918,7 @@ function getCrmRawData(
             l.priority,
             l.next_action_type,
             l.next_follow_up_at,
+            l.created_at,
             c.full_name,
             c.phone_display,
             m.full_name as manager_name
@@ -930,7 +937,7 @@ function getCrmRawData(
             )
             and l.next_follow_up_at is not null
             and l.next_follow_up_at < ${input.dayAfterTomorrowStart}
-          order by l.next_follow_up_at asc, c.full_name asc
+          order by ${leadQueueOrderSql("l")}, l.next_follow_up_at asc nulls last
         ) attention_rows
       ), '[]'::jsonb) as "attentionLeads",
       coalesce((
@@ -1454,6 +1461,7 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
     nextFollowUpIso: convertedStudentCode || !lead.nextFollowUpAt
       ? null
       : new Date(lead.nextFollowUpAt).toISOString(),
+    isNewToday: isLeadCreatedToday(lead.createdAt),
     latestNote: formatLeadHistoryReason(timeline[0]?.reason),
     canConvert:
       Boolean(programId) &&
@@ -1600,6 +1608,7 @@ function formatAttentionRow(
     nextActionTypeLabel: formatNextActionTypeLabel(nextActionType),
     nextFollowUpAt: lead.nextFollowUpAt ? formatShortDate(lead.nextFollowUpAt) : "Planlanmayıb",
     manager: lead.managerName ?? "Təyin edilməyib",
+    isNewToday: isLeadCreatedToday(lead.createdAt),
     category:
       source.includes("workshop") ||
       source.includes("masterclass") ||
@@ -1609,6 +1618,11 @@ function formatAttentionRow(
         ? "workshop_masterclass"
         : "general",
   };
+}
+
+function isLeadCreatedToday(createdAt: string | Date | null | undefined, reference = new Date()) {
+  if (!createdAt) return false;
+  return getBakuBusinessDate(new Date(createdAt)).getTime() === getBakuBusinessDate(reference).getTime();
 }
 
 function getBakuBusinessDate(reference: Date) {

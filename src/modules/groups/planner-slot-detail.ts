@@ -13,7 +13,7 @@ import type {
   PlannerSlot,
   PlannerStudentDetail,
 } from "@/modules/groups/planner-queries";
-import { hasMissedPlannedFirstLesson } from "@/modules/students/activation-from-attendance";
+import { resolveFirstLessonActivationWarning } from "@/modules/students/activation-from-attendance";
 import { formatAmount } from "@/modules/shared/format";
 import { requireErpActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
@@ -22,9 +22,6 @@ import {
   resolvePlannerAccessScope,
 } from "@/modules/groups/planner-scope";
 import { getPrisma } from "@/server/db/prisma";
-
-const MISSED_FIRST_LESSON_WARNING =
-  "Planlaşdırılmış ilk dərs baş tutmayıb — aylıq dövr hələ başlamayıb. Yeni plan təyin edin.";
 
 export type PlannerSlotDetailPayload = {
   slotId: string;
@@ -293,12 +290,10 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
         lessonsPerMonth: assignment.enrollment.lessonsPerMonth,
         managerName: assignment.enrollment.student.manager?.fullName ?? null,
         notes: assignment.enrollment.student.notes,
-        activationWarning: hasMissedPlannedFirstLesson({
+        activationWarning: resolveFirstLessonActivationWarning({
           lifecycleStatus: assignment.enrollment.student.lifecycleStatus,
           plannedFirstLessonAt: assignment.enrollment.firstLessonAt,
-        })
-          ? MISSED_FIRST_LESSON_WARNING
-          : null,
+        }),
         relatedContacts: assignment.enrollment.student.relationships.map((relationship) => ({
           id: relationship.id,
           name: relationship.relatedContact.fullName,

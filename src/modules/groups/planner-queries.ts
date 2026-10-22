@@ -7,7 +7,7 @@ import {
   type GroupWeekdayCode,
 } from "@/modules/groups/shared";
 import { canEditAttendanceToday, recentScheduledDates } from "@/modules/groups/planner-journal";
-import { hasMissedPlannedFirstLesson } from "@/modules/students/activation-from-attendance";
+import { resolveFirstLessonActivationWarning } from "@/modules/students/activation-from-attendance";
 import { formatAmount } from "@/modules/shared/format";
 import { requireErpActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
@@ -17,8 +17,6 @@ import {
 } from "@/modules/groups/planner-scope";
 import { getPrisma } from "@/server/db/prisma";
 
-const MISSED_FIRST_LESSON_WARNING =
-  "Planlaşdırılmış ilk dərs baş tutmayıb — aylıq dövr hələ başlamayıb. Yeni plan təyin edin.";
 
 export type PlannerMember = {
   assignmentId: string;
@@ -516,12 +514,10 @@ export async function getPlannerWorkspaceData(input?: {
         lessonsPerMonth: assignment.enrollment.lessonsPerMonth,
         managerName: assignment.enrollment.student.manager?.fullName ?? null,
         notes: assignment.enrollment.student.notes,
-        activationWarning: hasMissedPlannedFirstLesson({
+        activationWarning: resolveFirstLessonActivationWarning({
           lifecycleStatus: assignment.enrollment.student.lifecycleStatus,
           plannedFirstLessonAt: assignment.enrollment.firstLessonAt,
-        })
-          ? MISSED_FIRST_LESSON_WARNING
-          : null,
+        }),
         relatedContacts: assignment.enrollment.student.relationships.map((relationship) => ({
           id: relationship.id,
           name: relationship.relatedContact.fullName,
@@ -627,12 +623,10 @@ export async function getPlannerWorkspaceData(input?: {
       lessonsPerMonth: enrollment.lessonsPerMonth,
       firstLessonDate: enrollment.firstLessonAt ? toDateInput(enrollment.firstLessonAt) : null,
       slotIds: [...new Set(enrollment.scheduleAssignments.map((assignment) => assignment.slotId))],
-      activationWarning: hasMissedPlannedFirstLesson({
+      activationWarning: resolveFirstLessonActivationWarning({
         lifecycleStatus: enrollment.student.lifecycleStatus,
         plannedFirstLessonAt: enrollment.firstLessonAt,
-      })
-        ? MISSED_FIRST_LESSON_WARNING
-        : null,
+      }),
     })),
     slotDetail: {
       slotId: selectedSlotId,

@@ -14,14 +14,21 @@
 .student-profile-page h1 { margin: 0 0 9px; color: var(--sp-text); font-size: 25px; font-weight: 650; line-height: 1.2; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .sp-identity-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .sp-activation-warning {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
   margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: #fff5dc;
-  color: #93651b;
-  font-size: 12px;
+  padding: 12px 14px;
+  border: 1px solid #efcf91;
+  border-radius: 8px;
+  background: linear-gradient(118deg, #fff4dc, #fff9ed);
+  color: #7a5410;
+  font-size: 12.5px;
+  font-weight: 550;
   line-height: 1.45;
+  box-shadow: 0 6px 16px rgb(157 111 28 / 8%);
 }
+.sp-activation-warning svg { flex: 0 0 auto; margin-top: 1px; color: #b07d1f; }
 .sp-identity-meta > span:last-child:not(.status-chip) { padding-left: 5px; color: var(--sp-muted); font-size: 11px; }
 .student-profile-page .status-chip { min-height: 23px; padding: 3px 7px; border: 0; border-radius: 5px; font-size: 11px; line-height: 1.4; font-weight: 550; box-shadow: none; white-space: normal; }
 .student-profile-page .status-success { background: #eaf6ef; color: #23734e; }

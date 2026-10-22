@@ -239,6 +239,23 @@ async function assertTeacherCanBeRemoved(tx: Prisma.TransactionClient, teacherId
 
 function currentMonth() { const now = new Date(); return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); }
 
+/** Mirrors teacher-directory active seat count used in HR UI. */
+async function countTeacherActiveStudents(teacherId: string) {
+  const rows = await getPrisma().$queryRaw<Array<{ count: number }>>(Prisma.sql`
+    select count(distinct s.id)::int as count
+    from erp.student_schedule_assignments ssa
+    join erp.class_slots cs on cs.id = ssa.slot_id
+    join erp.enrollments e on e.id = ssa.enrollment_id
+    join erp.students s on s.id = e.student_id
+    where cs.teacher_id = ${teacherId}::uuid
+      and ssa.valid_to is null
+      and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
+      and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
+      and s.is_test_data = false
+  `);
+  return Number(rows[0]?.count ?? 0);
+}
+
 async function deleteEmployeeActionImpl(formData: FormData) {
   const actor = await requireMutationActor("hr.employee.manage");
   const input = z.object({
@@ -257,20 +274,12 @@ async function deleteEmployeeActionImpl(formData: FormData) {
   if (before.archivedAt) throw new PublicActionError("İşçi artıq arxivdədir", "CONFLICT");
 
   if (before.teacherId) {
-    const [activeEnrollments, activeAssignments] = await Promise.all([
-      getPrisma().enrollment.count({
-        where: { teacherId: before.teacherId, status: { in: ["ACTIVE", "PAUSED"] } },
-      }),
-      getPrisma().studentScheduleAssignment.count({
-        where: {
-          validTo: null,
-          slot: { teacherId: before.teacherId },
-        },
-      }),
-    ]);
-    if (activeEnrollments || activeAssignments) {
+    // Same definition as teacher-directory activeStudentCount: open slot seat +
+    // ACTIVE enrollment + ACTIVE student. Historical/paused/stopped leftovers must not block archive.
+    const activeStudentCount = await countTeacherActiveStudents(before.teacherId);
+    if (activeStudentCount > 0) {
       throw new PublicActionError(
-        "Müəllimi arxivləməzdən əvvəl aktiv tələbə və slot təyinatlarını başqa müəllimə keçirin.",
+        `Müəllimi arxivləməzdən əvvəl aktiv tələbələri başqa müəllimə keçirin (${activeStudentCount} aktiv tələbə qalıb).`,
         "CONFLICT",
       );
     }

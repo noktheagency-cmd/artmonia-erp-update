@@ -69,6 +69,7 @@ html {
   width: 100%;
   background: var(--workspace);
   overflow-x: hidden;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -85,6 +86,34 @@ body {
   letter-spacing: 0;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Smooth, fluid scroll on every scrollport (pages, dialogs, tables, side panels). */
+@media (prefers-reduced-motion: no-preference) {
+  html,
+  body,
+  * {
+    scroll-behavior: smooth;
+  }
+
+  .nav-stack,
+  .global-search-results,
+  .ui-dialog-content,
+  .ui-table-container,
+  [class*="-scroll"],
+  [class*="scroll-"] {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  * {
+    scroll-behavior: auto !important;
+  }
 }
 
 body::before {
@@ -4190,36 +4219,7 @@ html body .ui-checkbox:disabled {
   margin-top: 14px;
 }
 
-.crm-focus-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 12px 14px;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-}
-
-.crm-focus-row strong,
-.crm-focus-row span {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.crm-focus-row strong {
-  font-size: 13px;
-}
-
-.crm-focus-row span,
-.crm-focus-row small {
-  color: var(--muted);
-  font-size: 11px;
-}
+/* Legacy flat focus-row styles removed: nested CRM attention rows own their layout in crm.css. */
 
 .crm-focus-meta {
   display: grid;
@@ -9458,7 +9458,7 @@ html body .ui-checkbox:disabled {
 }
 
 /* Dialog Form Custom styles to match premium */
-.hr-employee-dialog,
+.hr-employee-dialog:not(.hr-unified-staff-dialog),
 .hr-data-dialog {
   max-width: 550px !important;
   border-radius: 24px !important;
@@ -22228,7 +22228,7 @@ body .erp-frame th {
 .hr-compact-heading h1 {
   margin: 0;
   color: #17231e;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 760;
   letter-spacing: -0.035em;
   white-space: nowrap;
@@ -22236,17 +22236,17 @@ body .erp-frame th {
 
 .hr-compact-tabs {
   gap: 3px;
-  min-height: 34px;
+  min-height: 38px;
   padding: 0 !important;
   border: 0;
 }
 
 .hr-compact-tabs [data-slot="tabs-trigger"] {
-  height: 34px;
+  height: 38px;
   flex: 0 0 auto;
-  padding: 0 9px;
+  padding: 0 11px;
   color: #6a7771;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 650;
 }
 
@@ -22273,9 +22273,9 @@ body .erp-frame th {
 }
 
 .hr-compact-actions [data-slot="button"] {
-  min-height: 32px;
+  min-height: 36px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 

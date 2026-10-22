@@ -14,35 +14,54 @@ export function attendancePeriod(input: unknown, today: string) {
   return { ...period, previousFrom: new Date(Date.parse(period.from) - days * day).toISOString().slice(0, 10), previousTo: new Date(Date.parse(period.from) - day).toISOString().slice(0, 10) };
 }
 
+/** Terminal / paused statuses are churn outcomes, not early-warning risk. */
+const RISK_EXCLUDED_LIFECYCLES = new Set(["FROZEN", "STOPPED", "DECLINED", "COMPLETED"]);
+
 export type AttendanceEntry = {
   sessionId: string; date: string; time: string;
   teacherId: string; teacher: string; groupId: string; group: string;
   studentId: string; student: string; enrollmentId: string;
   status: "PRESENT" | "ABSENT" | "EXCUSED" | null;
+  /** Current lifecycle on the student card; used to keep risk actionable. */
+  lifecycleStatus: string;
 };
+
+export function isRiskEligibleLifecycle(lifecycleStatus: string | null | undefined) {
+  return !lifecycleStatus || !RISK_EXCLUDED_LIFECYCLES.has(lifecycleStatus);
+}
+
+export function isAtRiskStreak(entries: AttendanceEntry[]) {
+  return consecutiveAbsences(entries) >= 3 && isRiskEligibleLifecycle(entries[0]?.lifecycleStatus);
+}
+
+/** Unique student IDs with a qualifying consecutive-absence streak (per teacher pair). */
+export function riskyStudentIds(entries: AttendanceEntry[]) {
+  const byPair = new Map<string, AttendanceEntry[]>();
+  for (const entry of entries) {
+    const key = `${entry.teacherId}:${entry.studentId}`;
+    const history = byPair.get(key) ?? [];
+    history.push(entry);
+    byPair.set(key, history);
+  }
+  const risky = new Set<string>();
+  for (const history of byPair.values()) {
+    if (isAtRiskStreak(history)) risky.add(history[0].studentId);
+  }
+  return [...risky];
+}
 
 export function attendanceStats(entries: AttendanceEntry[]) {
   const present = entries.filter((e) => e.status === "PRESENT").length;
   const absent = entries.filter((e) => e.status === "ABSENT").length;
   const excused = entries.filter((e) => e.status === "EXCUSED").length;
   const missing = entries.filter((e) => e.status === null);
-  const students = new Map<string, AttendanceEntry[]>();
-  for (const entry of entries) {
-    const key = `${entry.teacherId}:${entry.studentId}`;
-    const history = students.get(key) ?? [];
-    history.push(entry);
-    students.set(key, history);
-  }
-  const risky = new Set<string>();
-  for (const history of students.values()) {
-    if (consecutiveAbsences(history) >= 3) risky.add(history[0].studentId);
-  }
+  const risky = riskyStudentIds(entries).length;
   return {
     present, absent, excused, expected: entries.length,
     rate: present + absent ? Math.round(present / (present + absent) * 100) : null,
     missing: missing.length, missingSessions: new Set(missing.map((e) => e.sessionId)).size,
     completeness: entries.length ? Math.round((entries.length - missing.length) / entries.length * 100) : null,
-    students: new Set(entries.map((e) => e.studentId)).size, risky: risky.size,
+    students: new Set(entries.map((e) => e.studentId)).size, risky,
   };
 }
 

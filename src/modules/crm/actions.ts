@@ -37,6 +37,7 @@ import {
   isBillingPausedStatus,
 } from "@/modules/students/lifecycle-service";
 import { resolveStudentMonthlyFee } from "@/modules/students/student-create-rules";
+import { getBakuDateInput } from "@/modules/students/student-reminders";
 import {
   safeServerAction,
   toActionFailure,
@@ -238,7 +239,7 @@ async function createLead(formData: FormData) {
         source: input.source ?? "Manual",
         educationLevel,
         managerId,
-        campaignId: input.campaignId ?? null,
+        campaignId: null,
         programInterestId: input.programId ?? null,
         nextFollowUpAt: followUpAt,
         nextActionType: nextActionType ?? null,
@@ -522,6 +523,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
   const input = convertLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const today = new Date();
+  const registeredAt = new Date(`${getBakuDateInput()}T00:00:00.000Z`);
   const phoneNormalized = normalizePhone(input.phone);
 
   if (!phoneNormalized) {
@@ -650,7 +652,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         lifecycleStatus: StudentLifecycleStatus.SLOT_WAITING,
         educationLevel,
         billingPaused: isBillingPausedStatus(StudentLifecycleStatus.SLOT_WAITING),
-        registeredAt: today,
+        registeredAt,
         originalFirstLessonAt: firstLessonAt,
         notes: `CRM müraciətindən tələbəyə çevrildi: ${lead.id}`,
         statusHistory: {
@@ -658,7 +660,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
             newStatus: StudentLifecycleStatus.SLOT_WAITING,
             reason: "CRM müraciəti tələbəyə çevrildi",
             changedById: actor.id,
-            effectiveAt: today,
+            effectiveAt: registeredAt,
           },
         },
       },
@@ -674,7 +676,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
         programId: program.id,
         teacherId: input.teacherId ?? null,
         status: enrollmentStatusForStudentLifecycle(StudentLifecycleStatus.SLOT_WAITING),
-        startDate: today,
+        startDate: registeredAt,
         firstLessonAt,
         monthlyFee,
         discountType: input.discountType ?? null,

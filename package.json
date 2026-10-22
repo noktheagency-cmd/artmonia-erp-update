@@ -23,6 +23,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:first-lesson": "tsx prisma/seed-first-lesson-scenarios.ts",
     "db:backfill-course-sales": "node --import tsx scripts/backfill-course-sales.mjs",
     "db:backfill-course-sales:apply": "node --import tsx scripts/backfill-course-sales.mjs --apply",
     "env:prepare-staging": "node scripts/prepare-staging-env.mjs",

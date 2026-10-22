@@ -604,3 +604,12 @@ html.dark :is(.corporate-account-detail h3, .corporate-account-layout > nav stro
   .corporate-company-button,
   .corporate-row-menu summary { transition: none; }
 }
+
+.corporate-search input,
+.corporate-filter-band select,
+.corporate-filter-select.ui-select-trigger { font-size: 13.5px !important; }
+.corporate-result-count { font-size: 13px !important; }
+.corporate-kpi small { font-size: 13px !important; }
+.corporate-limit-note { font-size: 12.5px !important; }
+.corporate-company-button strong { font-size: 13.5px !important; }
+.corporate-contacts-cell small { font-size: 12px !important; }

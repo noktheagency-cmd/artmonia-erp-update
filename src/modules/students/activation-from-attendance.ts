@@ -175,6 +175,25 @@ export function hasMissedPlannedFirstLesson(input: {
   return planned.getTime() < today.getTime();
 }
 
+export const FIRST_LESSON_ABSENT_WARNING =
+  "İlk dərs gününə gəlməyib — status hələ Slot gözləyir. Gələndə müəllim “Gəldi” qeyd etməlidir; yalnız o zaman Aktiv olur.";
+
+export const FIRST_LESSON_MISSED_PLAN_WARNING =
+  "Planlaşdırılmış ilk dərs baş tutmayıb — aylıq dövr hələ başlamayıb. Yeni plan təyin edin.";
+
+/** UI copy for SLOT_WAITING students whose first lesson was missed or marked absent. */
+export function resolveFirstLessonActivationWarning(input: {
+  lifecycleStatus: StudentLifecycleStatus | string;
+  plannedFirstLessonAt: Date | null | undefined;
+  firstLessonAbsent?: boolean;
+  asOf?: Date;
+}): string | null {
+  if (input.lifecycleStatus !== StudentLifecycleStatus.SLOT_WAITING) return null;
+  if (input.firstLessonAbsent) return FIRST_LESSON_ABSENT_WARNING;
+  if (hasMissedPlannedFirstLesson(input)) return FIRST_LESSON_MISSED_PLAN_WARNING;
+  return null;
+}
+
 export const attendanceEligibleEnrollmentWhere = {
   status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
   student: {

@@ -31,6 +31,7 @@ import {
   resolveStudentPaymentStatus,
 } from "@/modules/students/student-debt-status";
 import {
+  buildStudentAdvanceRemainingValueSql,
   buildStudentDueDebtValueSql,
   buildStudentFutureReceivableValueSql,
   buildStudentNextPaymentDateSql,
@@ -45,7 +46,7 @@ import {
   studentReminderMeta,
   type StudentReminderKind,
 } from "@/modules/students/student-reminders";
-import { hasMissedPlannedFirstLesson } from "@/modules/students/activation-from-attendance";
+import { resolveFirstLessonActivationWarning } from "@/modules/students/activation-from-attendance";
 import { earliestPackageUpgradeMonth } from "@/modules/students/package-upgrade-policy";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 import { programJourneyImageUrl } from "@/server/storage/erp-files";
@@ -62,12 +63,16 @@ export type StudentListFilters = {
   program?: string;
   teacher?: string;
   payment?: string;
+  attention?: string;
+  ids?: string;
   from?: string;
   to?: string;
   page?: string;
   pageSize?: string;
   tab?: string;
 };
+
+type StudentAttentionFilter = "" | "first_lesson";
 
 type StudentPaymentAttentionItem = {
   id: string;
@@ -78,6 +83,17 @@ type StudentPaymentAttentionItem = {
   balance: string;
   dueDate: string;
   overdueDays: number;
+};
+
+type StudentFirstLessonAttentionItem = {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  program: string;
+  teacher: string;
+  firstLessonDate: string;
+  reasonLabel: string;
 };
 
 export type StudentListData = {
@@ -109,6 +125,8 @@ export type StudentListData = {
     dueTodayCount: number;
     dueTodayStudents: StudentPaymentAttentionItem[];
     overdueStudents: StudentPaymentAttentionItem[];
+    firstLessonMissedCount: number;
+    firstLessonMissedStudents: StudentFirstLessonAttentionItem[];
     activeWithoutTeacherCount: number;
     expectedAmount: string;
     collectedAmount: string;
@@ -165,6 +183,8 @@ export type StudentListData = {
     program: string;
     teacher: string;
     payment: StudentPaymentFilter;
+    attention: StudentAttentionFilter;
+    ids: string[];
     activeCount: number;
     dateFrom: string;
     dateTo: string;
@@ -174,6 +194,8 @@ export type StudentListData = {
     program: string;
     teacher: string;
     payment: string;
+    attention: string;
+    ids: string;
   };
   filterOptions: {
     statuses: FilterOption[];
@@ -222,6 +244,7 @@ export type StudentListData = {
     freezeReserved: boolean;
     lifecycleStatus: string;
     lifecycleTone: StudentTone;
+    activationWarning: string | null;
     paymentStatus: string;
     paymentStatusCode: string;
     advancePaid: string;
@@ -320,6 +343,8 @@ type StudentListCacheInput = {
   programFilter: string;
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
+  attentionFilter: StudentAttentionFilter;
+  studentIds: string[] | null;
   today: string;
   dateFrom: string;
   dateTo: string;
@@ -448,6 +473,8 @@ export async function getStudentListData(
   const programFilter = formFilterString(input.program);
   const teacherFilter = formFilterString(input.teacher);
   const paymentFilter = normalizePaymentFilter(input.payment);
+  const attentionFilter = normalizeAttentionFilter(input.attention);
+  const studentIds = normalizeStudentIdsFilter(input.ids);
   const activeTab = normalizeStudentTab(input.tab);
   let page = activeTab === "list" ? normalizeStudentPage(input.page) : 1;
   const pageSize = activeTab === "list" ? normalizeTablePageSize(input.pageSize) : DEFAULT_TABLE_PAGE_SIZE;
@@ -460,7 +487,9 @@ export async function getStudentListData(
     || churnOnly
     || Boolean(search)
     || Boolean(programFilter)
-    || Boolean(teacherFilter);
+    || Boolean(teacherFilter)
+    || Boolean(attentionFilter)
+    || studentIds !== null;
   const defaultDateFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const dateFromFilter = normalizeDateFilter(
     debtListMode
@@ -488,6 +517,8 @@ export async function getStudentListData(
       programFilter,
       teacherFilter,
       paymentFilter,
+      attentionFilter,
+      studentIds,
       today: today.toISOString(),
       dateFrom: dateFromFilter.input,
       dateTo: dateToFilter.input,
@@ -504,6 +535,8 @@ export async function getStudentListData(
         programFilter,
         teacherFilter,
         paymentFilter,
+        attentionFilter,
+        studentIds,
         today: today.toISOString(),
         dateFrom: dateFromFilter.input,
         dateTo: dateToFilter.input,
@@ -553,6 +586,8 @@ export async function getStudentListData(
     programFilter,
     teacherFilter,
     paymentFilter !== "all" ? paymentFilter : "",
+    attentionFilter,
+    studentIds !== null ? "ids" : "",
     dateFromFilter.input,
     dateToFilter.input,
   ].filter(Boolean).length;
@@ -570,6 +605,8 @@ export async function getStudentListData(
       program: programFilter,
       teacher: teacherFilter,
       payment: paymentFilter,
+      attention: attentionFilter,
+      ids: studentIds,
       from: dateFromFilter.input,
       to: dateToFilter.input,
       page,
@@ -625,8 +662,8 @@ export async function getStudentListData(
       discountTypes,
       sourceOptions: buildCrmSourceOptions(sources),
       currentManagerName: actor.fullName,
-      defaultRegisteredDate: formatDateInput(new Date()),
-      defaultPaymentDate: formatDateInput(new Date()),
+      defaultRegisteredDate: getBakuDateInput(),
+      defaultPaymentDate: getBakuDateInput(),
     },
     filters: {
       status: statusFilter,
@@ -634,6 +671,8 @@ export async function getStudentListData(
       program: programFilter,
       teacher: teacherFilter,
       payment: paymentFilter,
+      attention: attentionFilter,
+      ids: studentIds ?? [],
       activeCount,
       dateFrom: dateFromFilter.input,
       dateTo: dateToFilter.input,
@@ -649,6 +688,12 @@ export async function getStudentListData(
       payment:
         paymentOptions.find((option) => option.value === paymentFilter)?.label ??
         "Bütün ödənişlər",
+      attention: attentionFilter === "first_lesson" ? "İlk dərsə gəlməyənlər" : "Bütün xatırlatmalar",
+      ids: studentIds !== null
+        ? studentIds.length
+          ? `Riskli tələbələr (${studentIds.length})`
+          : "Riskli tələbələr"
+        : "",
     },
     filterOptions: {
       statuses: Object.values(StudentLifecycleStatus).map((status) => ({
@@ -710,7 +755,9 @@ export async function getStudentListData(
       overduePayment: formatAmount(paymentSummary.overduePayment),
     },
     students: rows.map((student) => {
-      const dueDebt = toNumber(student.dueDebt);
+      const invoiceDueDebt = toNumber(student.dueDebt);
+      const advanceRemaining = toNumber(student.advanceRemaining);
+      const dueDebt = invoiceDueDebt > 0 ? invoiceDueDebt : advanceRemaining;
       const futureReceivable = toNumber(student.futureReceivable);
       const totalPaid = toNumber(student.totalPaid);
       const currentMonthPaid = toNumber(student.currentMonthPaid);
@@ -724,7 +771,7 @@ export async function getStudentListData(
             balance: dueDebt > 0 ? dueDebt : futureReceivable,
             nextPaymentAt,
             today,
-            hasBillingRecord: student.invoices.length > 0,
+            hasBillingRecord: student.invoices.length > 0 || advanceRemaining > 0,
             advancePaid: toNumber(student.admissionPaid),
             advanceRefunded: toNumber(student.admissionRefunded),
           });
@@ -760,6 +807,12 @@ export async function getStudentListData(
         freezeReserved: student.freezeReserved,
         lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
         lifecycleTone: lifecycleStatus.tone,
+        activationWarning: resolveFirstLessonActivationWarning({
+          lifecycleStatus: student.lifecycleStatus,
+          plannedFirstLessonAt: student.firstLessonAt ? new Date(student.firstLessonAt) : null,
+          firstLessonAbsent: Boolean(student.firstLessonAbsent),
+          asOf: today,
+        }),
         paymentStatus: paymentStatus.label,
         paymentStatusCode: paymentStatus.code,
         advancePaid: formatAmount(student.admissionPaid),
@@ -779,7 +832,7 @@ export async function getStudentListData(
           notes: student.notes ?? "Qeyd yoxdur",
           billingPaused: student.billingPaused ? "Dayandırılıb" : "Aktivdir",
           paymentDefaultAmount: defaultPaymentAmount,
-          paymentDefaultDate: formatDateInput(new Date()),
+          paymentDefaultDate: getBakuDateInput(),
           paymentDefaultMonth: formatLocalMonthInput(
             student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
           ),
@@ -828,9 +881,12 @@ type StudentListQueryRow = {
   monthlyFee: unknown;
   programName: string | null;
   teacherName: string | null;
+  firstLessonAt: Date | string | null;
+  firstLessonAbsent: boolean | null;
   slotLabel: string | null;
   dueDebt: unknown;
   futureReceivable: unknown;
+  advanceRemaining: unknown;
   currentMonthPaid: unknown;
   nextDueDate: Date | string | null;
   totalPaid: unknown;
@@ -1156,6 +1212,8 @@ async function getStudentRows(
     programFilter: string;
     teacherFilter: string;
     paymentFilter: StudentPaymentFilter;
+    attentionFilter: StudentAttentionFilter;
+    studentIds: string[] | null;
     today: Date;
     dateFrom: Date | null;
     dateTo: Date | null;
@@ -1164,6 +1222,7 @@ async function getStudentRows(
   }
 ): Promise<StudentListQueryRow[]> {
   const whereSql = buildStudentWhereSql(input);
+  const firstLessonMissedSql = buildFirstLessonMissedExistsSql(Prisma.sql`s.id`, input.today);
   const rows = await prisma.$queryRaw<StudentListRawRow[]>(Prisma.sql`
     with filtered_students as (
       select s.id
@@ -1189,7 +1248,10 @@ async function getStudentRows(
       join filtered_students fs on fs.id = s.id
       join erp.contacts c on c.id = s.contact_id
       left join erp.users u on u.id = s.manager_id
-      order by s.registered_at desc, s.created_at desc
+      order by
+        case when ${firstLessonMissedSql} then 0 else 1 end,
+        s.registered_at desc,
+        s.created_at desc
       limit ${input.pageSize}
       offset ${(input.page - 1) * input.pageSize}
     )
@@ -1207,9 +1269,23 @@ async function getStudentRows(
       ae.monthly_fee as "monthlyFee",
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
+      ae.first_lesson_at as "firstLessonAt",
+      (
+        exists (
+          select 1
+          from erp.attendance_records ar
+          join erp.slot_sessions ss on ss.id = ar.session_id
+          join erp.enrollments e on e.id = ar.enrollment_id
+          where e.student_id = ps.id
+            and ar.status = 'ABSENT'::"erp"."AttendanceMark"
+            and e.first_lesson_at is not null
+            and ss.session_date = e.first_lesson_at::date
+        )
+      ) as "firstLessonAbsent",
       (select concat(t.full_name, ' · ', cs.start_time, '–', cs.end_time) from erp.student_schedule_assignments ssa join erp.class_slots cs on cs.id = ssa.slot_id join erp.teachers t on t.id = cs.teacher_id join erp.enrollments se on se.id = ssa.enrollment_id where se.student_id = ps.id and ssa.valid_to is null order by ssa.valid_from desc, ssa.created_at desc limit 1) as "slotLabel",
       inv.due_debt as "dueDebt",
       inv.future_receivable as "futureReceivable",
+      ${buildStudentAdvanceRemainingValueSql({ studentId: Prisma.sql`ps.id` })} as "advanceRemaining",
       coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and date_trunc('month', p.paid_at) = date_trunc('month', ${input.today}::date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
@@ -1232,7 +1308,8 @@ async function getStudentRows(
       select
         sum(e.monthly_fee) as monthly_fee,
         string_agg(distinct p.name, ', ' order by p.name) as program_name,
-        string_agg(distinct t.full_name, ', ' order by t.full_name) filter (where t.full_name is not null) as teacher_name
+        string_agg(distinct t.full_name, ', ' order by t.full_name) filter (where t.full_name is not null) as teacher_name,
+        min(e.first_lesson_at) as first_lesson_at
       from erp.enrollments e
       join erp.programs p on p.id = e.program_id
       left join erp.teachers t on t.id = e.teacher_id
@@ -1355,7 +1432,10 @@ async function getStudentRows(
       ) ordered
     ) hist on true
     left join erp.student_mobile_accounts ma on ma.student_id = ps.id
-    order by ps."registeredAt" desc, ps."createdAt" desc
+    order by
+      case when ${buildFirstLessonMissedExistsSql(Prisma.sql`ps.id`, input.today)} then 0 else 1 end,
+      ps."registeredAt" desc,
+      ps."createdAt" desc
   `);
 
   return rows.map((row) => ({
@@ -1435,7 +1515,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v21"],
+  ["student-list-data-v23"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -1467,6 +1547,8 @@ async function getStudentListRawData(
     programFilter: input.programFilter,
     teacherFilter: input.teacherFilter,
     paymentFilter: input.paymentFilter,
+    attentionFilter: input.attentionFilter,
+    studentIds: input.studentIds,
     today: new Date(input.today),
     dateFrom: input.dateFrom ? new Date(input.dateFrom) : null,
     dateTo: input.dateTo ? new Date(input.dateTo) : null,
@@ -1655,7 +1737,12 @@ async function getStudentPaymentSummary(
   >(Prisma.sql`
     select
       coalesce(sum(payments.total_paid), 0) as "totalPaid",
-      coalesce(sum(balance.due_debt), 0) as "expectedPayment",
+      coalesce(sum(
+        case
+          when balance.due_debt > 0 then balance.due_debt
+          else balance.advance_remaining
+        end
+      ), 0) as "expectedPayment",
       coalesce(sum(balance.future_receivable), 0) as "futurePayment",
       coalesce(sum(balance.overdue_debt), 0) as "overduePayment"
     from erp.students s
@@ -1671,6 +1758,9 @@ async function getStudentPaymentSummary(
           studentId: Prisma.sql`s.id`,
           asOfDate: input.today,
         })} as due_debt,
+        ${buildStudentAdvanceRemainingValueSql({
+          studentId: Prisma.sql`s.id`,
+        })} as advance_remaining,
         ${buildStudentFutureReceivableValueSql({
           studentId: Prisma.sql`s.id`,
           asOfDate: input.today,
@@ -1699,7 +1789,8 @@ async function getStudentOperationsOverview(
   prisma: ReturnType<typeof getPrisma>,
   today: Date,
 ): Promise<StudentListData["operations"]> {
-  const [row] = await prisma.$queryRaw<StudentOperationsRawRow[]>(Prisma.sql`
+  const [row, firstLessonMissed] = await Promise.all([
+    prisma.$queryRaw<StudentOperationsRawRow[]>(Prisma.sql`
     with current_enrollment as (
       select
         e.student_id,
@@ -1886,10 +1977,82 @@ async function getStudentOperationsOverview(
         ) grouped
       ), '[]'::jsonb) as teachers
     from student_finance
-  `);
+  `),
+    prisma.$queryRaw<Array<{
+      id: string;
+      code: string;
+      name: string;
+      phone: string | null;
+      program: string | null;
+      teacher: string | null;
+      firstLessonAt: Date;
+      reason: string;
+      totalCount: number;
+    }>>(Prisma.sql`
+      with missed as (
+        select
+          s.id,
+          s.code,
+          c.full_name as name,
+          c.phone_display as phone,
+          ce.program_name as program,
+          ce.teacher_name as teacher,
+          ce.first_lesson_at as "firstLessonAt",
+          case
+            when exists (
+              select 1
+              from erp.attendance_records ar
+              join erp.slot_sessions ss on ss.id = ar.session_id
+              where ar.enrollment_id = ce.enrollment_id
+                and ar.status = 'ABSENT'::"erp"."AttendanceMark"
+                and ss.session_date = ce.first_lesson_at::date
+            ) then 'absent'
+            else 'missed_plan'
+          end as reason,
+          count(*) over()::int as "totalCount"
+        from erp.students s
+        join erp.contacts c on c.id = s.contact_id
+        join lateral (
+          select
+            e.id as enrollment_id,
+            e.first_lesson_at,
+            p.name as program_name,
+            t.full_name as teacher_name
+          from erp.enrollments e
+          join erp.programs p on p.id = e.program_id
+          left join erp.teachers t on t.id = e.teacher_id
+          where e.student_id = s.id
+            and e.status in (
+              'ACTIVE'::"erp"."EnrollmentStatus",
+              'PAUSED'::"erp"."EnrollmentStatus"
+            )
+            and e.first_lesson_at is not null
+            and (
+              e.first_lesson_at::date < ${today}::date
+              or exists (
+                select 1
+                from erp.attendance_records ar
+                join erp.slot_sessions ss on ss.id = ar.session_id
+                where ar.enrollment_id = e.id
+                  and ar.status = 'ABSENT'::"erp"."AttendanceMark"
+                  and ss.session_date = e.first_lesson_at::date
+              )
+            )
+          order by e.first_lesson_at asc
+          limit 1
+        ) ce on true
+        where s.is_test_data = false
+          and s.lifecycle_status = 'SLOT_WAITING'::"erp"."StudentLifecycleStatus"
+        order by ce.first_lesson_at asc, c.full_name asc
+        limit 20
+      )
+      select * from missed
+    `),
+  ]);
+  const overview = row[0];
 
-  const expectedAmount = toNumber(row?.expectedAmount);
-  const collectedAmount = toNumber(row?.collectedAmount);
+  const expectedAmount = toNumber(overview?.expectedAmount);
+  const collectedAmount = toNumber(overview?.collectedAmount);
   const collectionRate = expectedAmount > 0
     ? Math.min(100, Math.round((collectedAmount / expectedAmount) * 100))
     : 100;
@@ -1901,23 +2064,36 @@ async function getStudentOperationsOverview(
       timeZone: "UTC",
     }).format(today),
     refreshSeconds: 60,
-    activeCount: toNumber(row?.activeCount),
-    slotWaitingCount: toNumber(row?.slotWaitingCount),
-    frozenOrStoppedCount: toNumber(row?.frozenOrStoppedCount),
-    actionableCount: toNumber(row?.actionableCount),
-    actionableAmount: formatAmount(row?.actionableAmount),
-    overdueCount: toNumber(row?.overdueCount),
-    overdueAmount: formatAmount(row?.overdueAmount),
-    unscheduledCount: toNumber(row?.unscheduledCount),
-    dueTodayCount: toNumber(row?.dueTodayCount),
-    dueTodayStudents: toStudentPaymentAttentionItems(row?.dueTodayStudents),
-    overdueStudents: toStudentPaymentAttentionItems(row?.overdueStudents),
-    activeWithoutTeacherCount: toNumber(row?.activeWithoutTeacherCount),
+    activeCount: toNumber(overview?.activeCount),
+    slotWaitingCount: toNumber(overview?.slotWaitingCount),
+    frozenOrStoppedCount: toNumber(overview?.frozenOrStoppedCount),
+    actionableCount: toNumber(overview?.actionableCount),
+    actionableAmount: formatAmount(overview?.actionableAmount),
+    overdueCount: toNumber(overview?.overdueCount),
+    overdueAmount: formatAmount(overview?.overdueAmount),
+    unscheduledCount: toNumber(overview?.unscheduledCount),
+    dueTodayCount: toNumber(overview?.dueTodayCount),
+    dueTodayStudents: toStudentPaymentAttentionItems(overview?.dueTodayStudents),
+    overdueStudents: toStudentPaymentAttentionItems(overview?.overdueStudents),
+    firstLessonMissedCount: firstLessonMissed[0]?.totalCount ?? 0,
+    firstLessonMissedStudents: firstLessonMissed.map((item) => ({
+      id: item.id,
+      code: item.code,
+      name: item.name,
+      phone: item.phone?.trim() || "Telefon qeyd edilməyib",
+      program: item.program?.trim() || "Proqram təyin edilməyib",
+      teacher: item.teacher?.trim() || "Müəllim təyin edilməyib",
+      firstLessonDate: formatShortDate(item.firstLessonAt),
+      reasonLabel: item.reason === "absent"
+        ? "Müəllim “Gəlmədi” qeyd edib"
+        : "İlk dərs tarixi keçib",
+    })),
+    activeWithoutTeacherCount: toNumber(overview?.activeWithoutTeacherCount),
     expectedAmount: formatAmount(expectedAmount),
     collectedAmount: formatAmount(collectedAmount),
     collectionRate,
-    programs: toOperationsDistribution(row?.programs),
-    teachers: toOperationsDistribution(row?.teachers),
+    programs: toOperationsDistribution(overview?.programs),
+    teachers: toOperationsDistribution(overview?.teachers),
   };
 }
 
@@ -2212,9 +2388,12 @@ function buildStudentDebtDueSql(today: Date, overdueOnly = false) {
     studentId: Prisma.sql`s.id`,
     asOfDate: today,
   });
+  const advanceRemainingSql = buildStudentAdvanceRemainingValueSql({
+    studentId: Prisma.sql`s.id`,
+  });
 
   if (!overdueOnly) {
-    return Prisma.sql`${dueDebtSql} > 0`;
+    return Prisma.sql`(${dueDebtSql} > 0 or ${advanceRemainingSql} > 0)`;
   }
 
   return Prisma.sql`(
@@ -2226,6 +2405,30 @@ function buildStudentDebtDueSql(today: Date, overdueOnly = false) {
   )`;
 }
 
+function buildFirstLessonMissedExistsSql(studentIdSql: Prisma.Sql, today: Date) {
+  return Prisma.sql`exists (
+    select 1
+    from erp.enrollments e
+    where e.student_id = ${studentIdSql}
+      and e.status in (
+        'ACTIVE'::"erp"."EnrollmentStatus",
+        'PAUSED'::"erp"."EnrollmentStatus"
+      )
+      and e.first_lesson_at is not null
+      and (
+        e.first_lesson_at::date < ${today}::date
+        or exists (
+          select 1
+          from erp.attendance_records ar
+          join erp.slot_sessions ss on ss.id = ar.session_id
+          where ar.enrollment_id = e.id
+            and ar.status = 'ABSENT'::"erp"."AttendanceMark"
+            and ss.session_date = e.first_lesson_at::date
+        )
+      )
+  )`;
+}
+
 function buildStudentWhereSql({
   search,
   statusFilter,
@@ -2233,6 +2436,8 @@ function buildStudentWhereSql({
   programFilter,
   teacherFilter,
   paymentFilter,
+  attentionFilter,
+  studentIds,
   today,
   dateFrom,
   dateTo,
@@ -2243,12 +2448,26 @@ function buildStudentWhereSql({
   programFilter: string;
   teacherFilter: string;
   paymentFilter: StudentPaymentFilter;
+  attentionFilter: StudentAttentionFilter;
+  studentIds: string[] | null;
   today: Date;
   dateFrom: Date | null;
   dateTo: Date | null;
 }) {
   const conditions: Prisma.Sql[] = [Prisma.sql`s.is_test_data = false`];
   const outstandingBalanceSql = buildStudentOutstandingBalanceSql();
+
+  if (studentIds !== null) {
+    if (studentIds.length === 0) {
+      conditions.push(Prisma.sql`false`);
+    } else {
+      conditions.push(
+        Prisma.sql`s.id in (${Prisma.join(
+          studentIds.map((id) => Prisma.sql`${id}::uuid`)
+        )})`
+      );
+    }
+  }
 
   if (search.length > 0) {
     const searchPattern = `%${search}%`;
@@ -2270,6 +2489,11 @@ function buildStudentWhereSql({
     conditions.push(
       Prisma.sql`s.lifecycle_status = ${statusFilter}::"erp"."StudentLifecycleStatus"`
     );
+  }
+
+  if (attentionFilter === "first_lesson") {
+    conditions.push(Prisma.sql`s.lifecycle_status = 'SLOT_WAITING'::"erp"."StudentLifecycleStatus"`);
+    conditions.push(buildFirstLessonMissedExistsSql(Prisma.sql`s.id`, today));
   }
 
   if (churnOnly) {
@@ -2534,6 +2758,26 @@ function normalizeDateValue(value: string | undefined) {
   return isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function normalizeAttentionFilter(value?: string): StudentAttentionFilter {
+  return value === "first_lesson" ? "first_lesson" : "";
+}
+
+const STUDENT_ID_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `null` = no id filter; `[]` = force empty (e.g. ids=none). */
+function normalizeStudentIdsFilter(value?: string): string[] | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === "none") return [];
+  const seen = new Set<string>();
+  for (const part of trimmed.split(/[,\s]+/)) {
+    const id = part.trim().toLowerCase();
+    if (STUDENT_ID_UUID.test(id)) seen.add(id);
+  }
+  return [...seen];
+}
+
 function buildStudentsUrl({
   q,
   status,
@@ -2541,6 +2785,8 @@ function buildStudentsUrl({
   program,
   teacher,
   payment,
+  attention,
+  ids,
   from,
   to,
   page,
@@ -2553,6 +2799,8 @@ function buildStudentsUrl({
   program: string;
   teacher: string;
   payment: StudentPaymentFilter;
+  attention?: StudentAttentionFilter;
+  ids?: string[] | null;
   from?: string;
   to?: string;
   page?: number;
@@ -2589,6 +2837,14 @@ function buildStudentsUrl({
     params.set("payment", payment);
   }
 
+  if (attention) {
+    params.set("attention", attention);
+  }
+
+  if (ids !== null && ids !== undefined) {
+    params.set("ids", ids.length ? ids.join(",") : "none");
+  }
+
   if (from) {
     params.set("from", from);
   }
@@ -2608,12 +2864,13 @@ function buildStudentsUrl({
   return params.size > 0 ? `/students?${params.toString()}` : "/students";
 }
 
+/** Calendar dates are stored as UTC midnight; expose YYYY-MM-DD for DatePicker. */
 function formatDateInput(value: Date) {
   return [
-    value.getDate().toString().padStart(2, "0"),
-    (value.getMonth() + 1).toString().padStart(2, "0"),
-    value.getFullYear().toString(),
-  ].join(".");
+    value.getUTCFullYear().toString(),
+    (value.getUTCMonth() + 1).toString().padStart(2, "0"),
+    value.getUTCDate().toString().padStart(2, "0"),
+  ].join("-");
 }
 
 function formatMonthInput(value: Date | string) {
@@ -2754,11 +3011,23 @@ export async function getStudentDetailData(studentId: string) {
       ae.discount_type as "discountType",
       ae.lessons_per_month as "lessonsPerMonth",
       ae.first_lesson_at as "firstLessonAt",
+      (
+        exists (
+          select 1
+          from erp.attendance_records ar
+          join erp.slot_sessions ss on ss.id = ar.session_id
+          where ar.enrollment_id = ae.id
+            and ar.status = 'ABSENT'::"erp"."AttendanceMark"
+            and ae.first_lesson_at is not null
+            and ss.session_date = ae.first_lesson_at::date
+        )
+      ) as "firstLessonAbsent",
       ae.program_name as "programName",
       ae.teacher_name as "teacherName",
       (select concat(t.full_name, ' · ', cs.start_time, '–', cs.end_time) from erp.student_schedule_assignments ssa join erp.class_slots cs on cs.id = ssa.slot_id join erp.teachers t on t.id = cs.teacher_id join erp.enrollments se on se.id = ssa.enrollment_id where se.student_id = ps.id and ssa.valid_to is null order by ssa.valid_from desc, ssa.created_at desc limit 1) as "slotLabel",
       inv.due_debt as "dueDebt",
       inv.future_receivable as "futureReceivable",
+      ${buildStudentAdvanceRemainingValueSql({ studentId: Prisma.sql`ps.id` })} as "advanceRemaining",
       coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
@@ -2935,7 +3204,8 @@ export async function getStudentDetailData(studentId: string) {
   }
 
   const student = rows[0];
-  const dueDebt = toNumber(student.dueDebt);
+  const invoiceDueDebt = toNumber(student.dueDebt);
+  const sqlAdvanceRemaining = toNumber(student.advanceRemaining);
   const futureReceivable = toNumber(student.futureReceivable);
   const totalPaid = toNumber(student.totalPaid);
   const currentMonthPaid = toNumber(student.currentMonthPaid);
@@ -2945,28 +3215,10 @@ export async function getStudentDetailData(studentId: string) {
     ? new Date(student.nextDueDate as Date)
     : null;
   const lifecycleStatus = lifecycleMeta[student.lifecycleStatus as StudentLifecycleStatus];
-  const paymentStatus = student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
-    ? { code: "PAID" as const, label: "Öhdəlik yoxdur", tone: "success" as const }
-    : resolveStudentPaymentStatus({
-        balance: dueDebt > 0 ? dueDebt : futureReceivable,
-        nextPaymentAt,
-        today,
-        hasBillingRecord: asJsonArray<StudentInvoiceRecord>(student.invoices).length > 0,
-        advancePaid: toNumber(student.admissionPaid),
-        advanceRefunded: toNumber(student.admissionRefunded),
-      });
   const overdueDays = getOverdueDays(
     nextPaymentAt ?? undefined,
     today
   );
-  const defaultPaymentAmount =
-    dueDebt > 0
-      ? formatDecimalInput(dueDebt)
-      : futureReceivable > 0
-        ? formatDecimalInput(futureReceivable)
-      : student.monthlyFee
-        ? formatDecimalInput(student.monthlyFee)
-        : "";
 
   const canAssignStudentManager = scopeFor(actor.permissions, "student.update") === "ALL";
   const canReadAttendance = actor.permissions.has("attendance.read");
@@ -3144,8 +3396,30 @@ export async function getStudentDetailData(studentId: string) {
     0,
   ) ?? 0;
   const openAdvanceFee = openAdvance ? toNumber(openAdvance.initialFee) : 0;
-  const openAdvanceRemaining = Math.max(0, openAdvanceFee - openAdvanceAmount);
+  const openAdvanceRemaining = openAdvance
+    ? Math.max(0, openAdvanceFee - openAdvanceAmount)
+    : sqlAdvanceRemaining;
   const canRefundAdvance = Boolean(openAdvance) && openAdvanceAmount > 0 && openAdvanceAmount < openAdvanceFee;
+  const dueDebt = invoiceDueDebt > 0 ? invoiceDueDebt : openAdvanceRemaining;
+  const paymentStatus = student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
+    ? { code: "PAID" as const, label: "Öhdəlik yoxdur", tone: "success" as const }
+    : resolveStudentPaymentStatus({
+        balance: dueDebt > 0 ? dueDebt : futureReceivable,
+        nextPaymentAt,
+        today,
+        hasBillingRecord: asJsonArray<StudentInvoiceRecord>(student.invoices).length > 0
+          || openAdvanceRemaining > 0,
+        advancePaid: toNumber(student.admissionPaid),
+        advanceRefunded: toNumber(student.admissionRefunded),
+      });
+  const defaultPaymentAmount =
+    dueDebt > 0
+      ? formatDecimalInput(dueDebt)
+      : futureReceivable > 0
+        ? formatDecimalInput(futureReceivable)
+      : student.monthlyFee
+        ? formatDecimalInput(student.monthlyFee)
+        : "";
 
   return {
     returnTo: `/students/${student.id}`,
@@ -3172,8 +3446,8 @@ export async function getStudentDetailData(studentId: string) {
       discountTypes,
       sourceOptions: buildCrmSourceOptions(options.sources),
       currentManagerName: actor.fullName,
-      defaultRegisteredDate: formatDateInput(new Date()),
-      defaultPaymentDate: formatDateInput(new Date()),
+      defaultRegisteredDate: getBakuDateInput(),
+      defaultPaymentDate: getBakuDateInput(),
     },
     student: {
       id: student.id,
@@ -3194,14 +3468,14 @@ export async function getStudentDetailData(studentId: string) {
       freezeReserved: student.freezeReserved,
       lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
       lifecycleTone: lifecycleStatus.tone,
-      activationWarning: hasMissedPlannedFirstLesson({
+      activationWarning: resolveFirstLessonActivationWarning({
         lifecycleStatus: student.lifecycleStatus,
         plannedFirstLessonAt: student.firstLessonAt
           ? new Date(student.firstLessonAt)
           : null,
-      })
-        ? "Planlaşdırılmış ilk dərs baş tutmayıb — aylıq dövr hələ başlamayıb. Yeni plan təyin edin."
-        : null,
+        firstLessonAbsent: Boolean(student.firstLessonAbsent),
+        asOf: today,
+      }),
       paymentStatus: paymentStatus.label,
       paymentTone: paymentStatus.tone,
       advanceRefund: canRefundAdvance && openAdvance
@@ -3262,7 +3536,7 @@ export async function getStudentDetailData(studentId: string) {
         reminderDefaultDate: getBakuDateInput(),
         reminders,
         paymentDefaultAmount: defaultPaymentAmount,
-        paymentDefaultDate: formatDateInput(new Date()),
+        paymentDefaultDate: getBakuDateInput(),
         paymentDefaultMonth: formatLocalMonthInput(
           student.nextDueDate ? new Date(student.nextDueDate) : new Date(),
         ),

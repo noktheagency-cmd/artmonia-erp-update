@@ -21,7 +21,8 @@ export async function getAttendanceReport(input: unknown): Promise<AttendanceRep
     select distinct ss.id::text as "sessionId", ss.session_date::text as date, ss.start_time as time,
       t.id::text as "teacherId", t.full_name as teacher, cs.id::text as "groupId",
       coalesce(cs.display_name, cs.weekday::text || ' · ' || cs.start_time) as "group",
-      s.id::text as "studentId", c.full_name as student, e.id::text as "enrollmentId", ar.status::text as status
+      s.id::text as "studentId", c.full_name as student, e.id::text as "enrollmentId", ar.status::text as status,
+      s.lifecycle_status::text as "lifecycleStatus"
     from erp.slot_sessions ss
     join erp.class_slots cs on cs.id = ss.slot_id
     join erp.student_schedule_assignments a on a.slot_id = cs.id

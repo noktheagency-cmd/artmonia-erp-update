@@ -1,26 +1,23 @@
 "use client";
 
 import {
-  ArrowDown,
-  ArrowUp,
   BookOpenText,
   Check,
-  ChevronDown,
   ChevronRight,
   Clock3,
   FilePlus2,
   FolderOpen,
   FolderPlus,
+  GripVertical,
   LoaderCircle,
   Pencil,
-  Plus,
   Search,
   Trash2,
   UserRound,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { type FormEvent, type ReactNode, useDeferredValue, useMemo, useRef, useState, useTransition } from "react";
+import { type DragEvent, type FormEvent, type ReactNode, useDeferredValue, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "@/components/ui/cx";
 import {
@@ -28,8 +25,8 @@ import {
   createKnowledgeCategoryAction,
   deleteKnowledgeArticleAction,
   deleteKnowledgeCategoryAction,
-  moveKnowledgeArticleAction,
-  moveKnowledgeCategoryAction,
+  reorderKnowledgeArticlesAction,
+  reorderKnowledgeCategoriesAction,
   updateKnowledgeArticleAction,
   updateKnowledgeCategoryAction,
 } from "@/modules/about/actions";
@@ -68,10 +65,10 @@ export function AboutWorkspace({
   const [data, setData] = useState(initialData);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(initialData.categories[0]?.id ?? null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(initialData.categories[0]?.articles[0]?.id ?? null);
-  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(initialData.categories[0]?.id ?? null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [libraryOpen, setLibraryOpen] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<{ kind: "category" | "article"; id: string } | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [categoryDialog, setCategoryDialog] = useState<CategoryDialog | null>(null);
   const [articleDialog, setArticleDialog] = useState<ArticleDialog | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -86,19 +83,22 @@ export function AboutWorkspace({
   const searchResults = useMemo(() => buildSearchResults(data, deferredSearchQuery), [data, deferredSearchQuery]);
 
   function selectCategory(category: KnowledgeCategory) {
+    const staying = selectedCategoryId === category.id;
     setSelectedCategoryId(category.id);
-    setSelectedArticleId(category.articles[0]?.id ?? null);
-    setExpandedCategoryId(category.id);
+    if (!staying) setSelectedArticleId(category.articles[0]?.id ?? null);
     setSearchQuery("");
   }
 
   function selectArticle(category: KnowledgeCategory, article: KnowledgeArticle) {
     setSelectedCategoryId(category.id);
     setSelectedArticleId(article.id);
-    setExpandedCategoryId(category.id);
     setSearchQuery("");
-    setLibraryOpen(false);
-    contentRef.current?.focus({ preventScroll: true });
+    requestAnimationFrame(() => {
+      if (window.matchMedia("(max-width: 960px)").matches) {
+        contentRef.current?.scrollIntoView({ block: "start" });
+      }
+      contentRef.current?.focus({ preventScroll: true });
+    });
   }
 
   function applyMutation(
@@ -125,7 +125,6 @@ export function AboutWorkspace({
         ?? null;
       setSelectedCategoryId(nextCategoryId);
       setSelectedArticleId(nextArticleId);
-      setExpandedCategoryId(nextCategoryId);
       setCategoryDialog(null);
       setArticleDialog(null);
       setDeleteTarget(null);
@@ -133,12 +132,77 @@ export function AboutWorkspace({
     });
   }
 
-  function moveCategory(categoryId: string, direction: "up" | "down") {
-    applyMutation(() => moveKnowledgeCategoryAction(categoryId, direction), "Kateqoriya sıralaması yeniləndi.");
+  function reorderById<T extends { id: string }>(items: T[], fromId: string, toId: string) {
+    const fromIndex = items.findIndex((item) => item.id === fromId);
+    const toIndex = items.findIndex((item) => item.id === toId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return null;
+    const next = [...items];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    return next;
   }
 
-  function moveArticle(articleId: string, direction: "up" | "down") {
-    applyMutation(() => moveKnowledgeArticleAction(articleId, direction), "Məqalə sıralaması yeniləndi.");
+  function beginDrag(event: DragEvent<HTMLElement>, kind: "category" | "article", id: string) {
+    dragRef.current = { kind, id };
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `${kind}:${id}`);
+    const row = event.currentTarget.closest("[data-drag-row]");
+    if (row instanceof HTMLElement) event.dataTransfer.setDragImage(row, 20, 18);
+  }
+
+  function allowDrop(event: DragEvent<HTMLElement>, kind: "category" | "article", id: string) {
+    if (dragRef.current?.kind !== kind) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetId(id);
+  }
+
+  function finishDrag() {
+    dragRef.current = null;
+    setDropTargetId(null);
+  }
+
+  function dropCategory(event: DragEvent<HTMLElement>, targetId: string) {
+    event.preventDefault();
+    const drag = dragRef.current;
+    finishDrag();
+    if (!drag || drag.kind !== "category" || drag.id === targetId) return;
+    const next = reorderById(data.categories, drag.id, targetId);
+    if (!next) return;
+    const previous = data;
+    setData({ ...data, categories: next });
+    startTransition(async () => {
+      const result = await reorderKnowledgeCategoriesAction(next.map((category) => category.id));
+      if (!result.ok) {
+        setData(previous);
+        setFeedback({ tone: "error", text: result.message });
+        return;
+      }
+      setData(result.data.data);
+    });
+  }
+
+  function dropArticle(event: DragEvent<HTMLElement>, targetId: string) {
+    event.preventDefault();
+    const drag = dragRef.current;
+    finishDrag();
+    if (!selectedCategory || !drag || drag.kind !== "article" || drag.id === targetId) return;
+    const nextArticles = reorderById(selectedCategory.articles, drag.id, targetId);
+    if (!nextArticles) return;
+    const previous = data;
+    setData({
+      ...data,
+      categories: data.categories.map((category) => category.id === selectedCategory.id ? { ...category, articles: nextArticles } : category),
+    });
+    startTransition(async () => {
+      const result = await reorderKnowledgeArticlesAction(selectedCategory.id, nextArticles.map((article) => article.id));
+      if (!result.ok) {
+        setData(previous);
+        setFeedback({ tone: "error", text: result.message });
+        return;
+      }
+      setData(result.data.data);
+    });
   }
 
   function confirmDelete() {
@@ -154,11 +218,8 @@ export function AboutWorkspace({
     <div className="knowledge-page">
       <header className="knowledge-header">
         <div>
-          <span className="knowledge-header-icon" aria-hidden="true"><BookOpenText size={22} /></span>
-          <div>
-            <p>Daxili bilik bazası</p>
-            <h1>Qaydalar</h1>
-          </div>
+          <h1>Qaydalar</h1>
+          <p>Şirkət qaydaları və daxili məlumatlar</p>
         </div>
         {canEdit ? (
           <div className="knowledge-header-actions">
@@ -187,7 +248,7 @@ export function AboutWorkspace({
         />
         {searchQuery ? (
           <button type="button" aria-label="Axtarışı təmizlə" onClick={() => setSearchQuery("")}><X size={16} /></button>
-        ) : <kbd>⌘ K</kbd>}
+        ) : null}
 
         {searchQuery.trim() ? (
           <div className="knowledge-search-results" role="listbox" aria-label="Axtarış nəticələri">
@@ -223,113 +284,112 @@ export function AboutWorkspace({
       ) : null}
 
       {data.categories.length ? (
-        <div className="knowledge-layout">
-          <aside className="knowledge-library" aria-label="Qaydalar kateqoriyaları">
-            <button
-              type="button"
-              className="knowledge-library-heading"
-              aria-expanded={libraryOpen}
-              aria-controls="knowledge-categories"
-              onClick={() => setLibraryOpen((open) => !open)}
-            >
-              <FolderOpen size={17} aria-hidden="true" />
-              <span>Kateqoriyalar <small>{data.categories.length}</small></span>
-              <strong>{selectedCategory?.name}</strong>
-              <ChevronDown size={16} className={cx(libraryOpen && "is-open")} aria-hidden="true" />
-            </button>
-            <div id="knowledge-categories" className="knowledge-category-list" hidden={!libraryOpen}>
-              {data.categories.map((category, categoryIndex) => {
-                const expanded = expandedCategoryId === category.id;
+        <div className="knowledge-reader">
+          <div className="knowledge-tabs-bar">
+            <div className="knowledge-tabs" role="tablist" aria-label="Kateqoriyalar">
+              {data.categories.map((category) => {
                 const active = selectedCategory?.id === category.id;
                 return (
-                  <section className={cx("knowledge-category", active && "is-active")} key={category.id}>
-                    <div className="knowledge-category-row">
-                      <button
-                        className="knowledge-category-select"
-                        type="button"
-                        aria-expanded={expanded}
-                        onClick={() => {
-                          setExpandedCategoryId(expanded ? null : category.id);
-                          if (!active) selectCategory(category);
-                        }}
+                  <div
+                    key={category.id}
+                    className={cx("knowledge-choice", active && "is-active", dropTargetId === category.id && "is-drop")}
+                    data-drag-row
+                    onDragOver={canEdit ? (event) => allowDrop(event, "category", category.id) : undefined}
+                    onDrop={canEdit ? (event) => dropCategory(event, category.id) : undefined}
+                  >
+                    {canEdit ? (
+                      <span
+                        className="knowledge-grip"
+                        draggable
+                        title="Sürüşdürərək sıranı dəyiş"
+                        aria-label={`${category.name} sırasını dəyiş`}
+                        onDragStart={(event) => beginDrag(event, "category", category.id)}
+                        onDragEnd={finishDrag}
                       >
-                        <span className="knowledge-folder-icon"><FolderOpen size={16} /></span>
-                        <span><strong>{category.name}</strong><small>{category.articles.length} məqalə</small></span>
-                        {category.status === "DRAFT" ? <StatusBadge status="DRAFT" /> : null}
-                        {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                      </button>
-                      {canEdit ? (
-                        <div className="knowledge-row-actions">
-                          <button type="button" disabled={categoryIndex === 0 || isPending} aria-label="Kateqoriyanı yuxarı daşı" onClick={() => moveCategory(category.id, "up")}><ArrowUp size={13} /></button>
-                          <button type="button" disabled={categoryIndex === data.categories.length - 1 || isPending} aria-label="Kateqoriyanı aşağı daşı" onClick={() => moveCategory(category.id, "down")}><ArrowDown size={13} /></button>
-                          <button type="button" aria-label="Kateqoriyanı redaktə et" onClick={() => setCategoryDialog({ mode: "edit", category })}><Pencil size={13} /></button>
-                        </div>
-                      ) : null}
-                    </div>
-                    {expanded ? (
-                      <div className="knowledge-article-list">
-                        {category.articles.map((article) => (
-                          <button
-                            type="button"
-                            key={article.id}
-                            className={cx(selectedArticle?.id === article.id && "is-active")}
-                            aria-current={selectedArticle?.id === article.id ? "page" : undefined}
-                            onClick={() => selectArticle(category, article)}
-                          >
-                            <BookOpenText size={14} />
-                            <span>{article.title}</span>
-                            {article.status === "DRAFT" ? <i>Draft</i> : null}
-                            <ChevronRight size={13} />
-                          </button>
-                        ))}
-                        {!category.articles.length ? <p>Bu kateqoriyada məqalə yoxdur.</p> : null}
-                        {canEdit ? (
-                          <button className="knowledge-add-article-inline" type="button" onClick={() => setArticleDialog({ mode: "create", categoryId: category.id })}>
-                            <Plus size={14} /> Yeni məqalə
-                          </button>
-                        ) : null}
-                      </div>
+                        <GripVertical size={14} />
+                      </span>
                     ) : null}
-                  </section>
+                    <button type="button" role="tab" aria-selected={active} onClick={() => selectCategory(category)}>
+                      {category.name}
+                      {category.status === "DRAFT" ? <span className="knowledge-draft-dot" title="Draft" /> : null}
+                    </button>
+                  </div>
                 );
               })}
             </div>
-          </aside>
+            {canEdit && selectedCategory ? (
+              <div className="knowledge-choice-tools">
+                <button type="button" aria-label="Kateqoriyanı redaktə et" onClick={() => setCategoryDialog({ mode: "edit", category: selectedCategory })}><Pencil size={14} /></button>
+              </div>
+            ) : null}
+          </div>
 
-          <main className="knowledge-content" ref={contentRef} tabIndex={-1} aria-label="Məqalə məzmunu">
-            {selectedArticle && selectedCategory ? (
-              <>
-                <nav className="knowledge-breadcrumb" aria-label="Breadcrumb">
-                  <span>Qaydalar</span><ChevronRight size={13} />
-                  <button type="button" onClick={() => selectCategory(selectedCategory)}>{selectedCategory.name}</button><ChevronRight size={13} />
-                  <strong>{selectedArticle.title}</strong>
-                </nav>
-                <article className="knowledge-article">
-                  <header>
-                    <div>
-                      <StatusBadge status={selectedArticle.status} />
-                      <h2>{selectedArticle.title}</h2>
+          <div className="knowledge-stage">
+            {selectedCategory ? (
+              <aside className="knowledge-article-choices" aria-label="Məqalələr">
+                {selectedCategory.articles.length ? selectedCategory.articles.map((article) => {
+                  const articleActive = selectedArticle?.id === article.id;
+                  return (
+                    <div
+                      key={article.id}
+                      className={cx("knowledge-article-row", articleActive && "is-active", dropTargetId === article.id && "is-drop")}
+                      data-drag-row
+                      onDragOver={canEdit ? (event) => allowDrop(event, "article", article.id) : undefined}
+                      onDrop={canEdit ? (event) => dropArticle(event, article.id) : undefined}
+                    >
+                      {canEdit ? (
+                        <span
+                          className="knowledge-grip"
+                          draggable
+                          title="Sürüşdürərək sıranı dəyiş"
+                          aria-label={`${article.title} sırasını dəyiş`}
+                          onDragStart={(event) => beginDrag(event, "article", article.id)}
+                          onDragEnd={finishDrag}
+                        >
+                          <GripVertical size={14} />
+                        </span>
+                      ) : null}
+                      <button type="button" aria-pressed={articleActive} onClick={() => selectArticle(selectedCategory, article)}>
+                        <span>{article.title}</span>
+                        {article.status === "DRAFT" ? <span className="knowledge-draft-dot" title="Draft" /> : null}
+                      </button>
                     </div>
-                    {canEdit ? (
-                      <div className="knowledge-article-actions">
-                        <button type="button" disabled={selectedCategory.articles[0]?.id === selectedArticle.id || isPending} aria-label="Məqaləni yuxarı daşı" title="Yuxarı daşı" onClick={() => moveArticle(selectedArticle.id, "up")}><ArrowUp size={15} /></button>
-                        <button type="button" disabled={selectedCategory.articles.at(-1)?.id === selectedArticle.id || isPending} aria-label="Məqaləni aşağı daşı" title="Aşağı daşı" onClick={() => moveArticle(selectedArticle.id, "down")}><ArrowDown size={15} /></button>
-                        <button type="button" aria-label="Məqaləni redaktə et" title="Redaktə et" onClick={() => setArticleDialog({ mode: "edit", article: selectedArticle })}><Pencil size={15} /></button>
-                        <button className="is-danger" type="button" aria-label="Məqaləni sil" title="Sil" onClick={() => setDeleteTarget({ type: "article", id: selectedArticle.id, name: selectedArticle.title })}><Trash2 size={15} /></button>
-                      </div>
-                    ) : null}
-                  </header>
+                  );
+                }) : (
+                  <p className="knowledge-picker-empty">Bu kateqoriyada məqalə yoxdur.</p>
+                )}
+              </aside>
+            ) : null}
+
+            <main className="knowledge-content" ref={contentRef} tabIndex={-1} aria-label="Məqalə məzmunu">
+            {selectedArticle && selectedCategory ? (
+              <article className="knowledge-article">
+                <header>
+                  <div>
+                    <p className="knowledge-kicker">{selectedCategory.name}</p>
+                    <div className="knowledge-title-row">
+                      <h2>{selectedArticle.title}</h2>
+                      {selectedArticle.status === "DRAFT" ? <StatusBadge status={selectedArticle.status} /> : null}
+                    </div>
+                  </div>
+                  {canEdit ? (
+                    <div className="knowledge-article-actions">
+                      <button type="button" aria-label="Məqaləni redaktə et" title="Redaktə et" onClick={() => setArticleDialog({ mode: "edit", article: selectedArticle })}><Pencil size={15} /></button>
+                      <button className="is-danger" type="button" aria-label="Məqaləni sil" title="Sil" onClick={() => setDeleteTarget({ type: "article", id: selectedArticle.id, name: selectedArticle.title })}><Trash2 size={15} /></button>
+                    </div>
+                  ) : null}
+                </header>
                   <KnowledgeRichTextViewer key={selectedArticle.id} value={selectedArticle.content} />
                   <footer>
                     <span><Clock3 size={14} /> Son yenilənmə: {formatUpdatedAt(selectedArticle.updatedAt)}</span>
                     <span><UserRound size={14} /> {selectedArticle.updatedBy ?? "Sistem"}</span>
                   </footer>
                 </article>
-              </>
             ) : selectedCategory ? (
               <EmptyArticleState canEdit={canEdit} category={selectedCategory} onCreate={() => setArticleDialog({ mode: "create", categoryId: selectedCategory.id })} />
             ) : null}
-          </main>
+            </main>
+          </div>
         </div>
       ) : (
         <EmptyKnowledgeState canEdit={canEdit} onCreate={() => setCategoryDialog({ mode: "create" })} />

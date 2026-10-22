@@ -36,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { FormSelect } from "@/components/ui/select";
 import { notifyCaughtError } from "@/lib/app-notifications";
@@ -571,18 +572,20 @@ function StaffDetailsEditor({
           </div>
           <label className="is-wide">
             <span>Əməkdaş tipi</span>
-            <select
+            <FormSelect
               name="staffType"
               value={staffType}
-              onChange={(event) => {
-                const nextType = event.target.value as "EMPLOYEE" | "TEACHER";
+              onValueChange={(value) => {
+                const nextType = value as "EMPLOYEE" | "TEACHER";
                 setStaffType(nextType);
                 if (nextType === "TEACHER") setSalaryMode("PERCENT");
               }}
-            >
-              <option value="EMPLOYEE">İşçi / inzibati əməkdaş</option>
-              <option value="TEACHER">Müəllim</option>
-            </select>
+              options={[
+                { value: "EMPLOYEE", label: "İşçi / inzibati əməkdaş" },
+                { value: "TEACHER", label: "Müəllim" },
+              ]}
+              required
+            />
           </label>
           <label>
             <span>Ad soyad</span>
@@ -598,7 +601,12 @@ function StaffDetailsEditor({
           </label>
           <label>
             <span>İşə başlama</span>
-            <Input name="hireDate" type="date" defaultValue={employee.hireDate} required />
+            <DatePicker
+              name="hireDate"
+              aria-label="İşə başlama"
+              defaultValue={employee.hireDate}
+              allowClear={false}
+            />
           </label>
           <label className="is-wide">
             <span>Ünvan</span>
@@ -648,31 +656,43 @@ function StaffDetailsEditor({
           )}
           <label>
             <span>Status</span>
-            <select name="status" defaultValue={employee.status}>
-              <option value="ACTIVE">Aktiv</option>
-              <option value="PROBATION">Sınaq müddəti</option>
-              <option value="ON_LEAVE">Məzuniyyətdə</option>
-              <option value="INACTIVE">Deaktiv</option>
-            </select>
+            <FormSelect
+              name="status"
+              defaultValue={employee.status}
+              options={[
+                { value: "ACTIVE", label: "Aktiv" },
+                { value: "PROBATION", label: "Sınaq müddəti" },
+                { value: "ON_LEAVE", label: "Məzuniyyətdə" },
+                { value: "INACTIVE", label: "Deaktiv" },
+              ]}
+              required
+            />
           </label>
           <label>
             <span>Müqavilə</span>
-            <select name="contractType" defaultValue={employee.contractType}>
-              <option value="FULL_TIME">Tam ştat</option>
-              <option value="PART_TIME">Yarım ştat</option>
-              <option value="CONTRACTOR">Müqaviləli</option>
-            </select>
+            <FormSelect
+              name="contractType"
+              defaultValue={employee.contractType}
+              options={[
+                { value: "FULL_TIME", label: "Tam ştat" },
+                { value: "PART_TIME", label: "Yarım ştat" },
+                { value: "CONTRACTOR", label: "Müqaviləli" },
+              ]}
+              required
+            />
           </label>
           <label>
             <span>Maaş növü</span>
-            <select
+            <FormSelect
               name="salaryMode"
               value={salaryMode}
-              onChange={(event) => setSalaryMode(event.target.value as "STATIC" | "PERCENT")}
-            >
-              <option value="STATIC">Statik maaş</option>
-              <option value="PERCENT">Faizlə maaş</option>
-            </select>
+              onValueChange={(value) => setSalaryMode(value as "STATIC" | "PERCENT")}
+              options={[
+                { value: "STATIC", label: "Statik maaş" },
+                { value: "PERCENT", label: "Faizlə maaş" },
+              ]}
+              required
+            />
           </label>
           {salaryMode === "STATIC" ? (
             <label>

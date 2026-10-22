@@ -427,7 +427,10 @@ function AttentionGroup({
                   </span>
                   <span className="crm-focus-body">
                     <span className="crm-focus-top">
-                      <strong className="crm-focus-name">{item.name}</strong>
+                      <span className="crm-focus-name-wrap">
+                        <strong className="crm-focus-name">{item.name}</strong>
+                        {item.isNewToday ? <span className="crm-new-badge">Yeni</span> : null}
+                      </span>
                       <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
                     </span>
                     <span className="crm-focus-sub">
@@ -455,7 +458,10 @@ function AttentionGroup({
                 {item.name.slice(0, 2).toUpperCase()}
               </span>
               <span className="crm-attention-person">
-                <strong>{item.name}</strong>
+                <strong>
+                  {item.name}
+                  {item.isNewToday ? <span className="crm-new-badge">Yeni</span> : null}
+                </strong>
                 <small>{item.phone} · {item.manager}</small>
               </span>
               <StatusChip tone={item.priorityTone}>{item.priorityLabel}</StatusChip>
