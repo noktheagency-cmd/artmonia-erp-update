@@ -277,6 +277,8 @@ async function main() {
     },
   });
   if (!slot) throw new Error("Müəllimli class slot tapılmadı — əvvəl qrup/slot yaradın");
+  if (!slot.teacherId) throw new Error("Class slot-da müəllim təyin edilməyib");
+  if (!slot.teacher) throw new Error("Class slot müəllimi tapılmadı");
 
   const monthlyFee = Number(program.defaultMonthlyFee) > 0
     ? Number(program.defaultMonthlyFee).toFixed(2)

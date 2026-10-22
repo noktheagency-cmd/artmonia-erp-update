@@ -679,7 +679,6 @@ function StudentDataTable({
   total,
   metrics,
   isPreview,
-  showRiskyBadge,
   pagination,
   isPending,
   toolbar,

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { DatePicker } from "@/components/ui/date-picker";
 import { RetentionAnalyticsPanel } from "./retention-analytics-panel";
 import { retentionInput, localizeAttendanceGroup, type RetentionOptions } from "./retention-analytics";
@@ -127,7 +128,7 @@ export function AttendanceAnalyticsCard() {
                 aria-label="Müəllim"
                 disabled={loading}
                 value={teacherId || "all"}
-                onValueChange={(value) => { setTeacherId(value === "all" ? "" : value); setGroupId(""); setSelectedTeacher(""); setShowRisky(false); }}
+                onValueChange={(value) => { setTeacherId(value === "all" ? "" : value); setGroupId(""); setSelectedTeacher(""); }}
                 emptyLabel="Bütün müəllimlər"
                 emptyValue="all"
                 searchable
@@ -141,7 +142,7 @@ export function AttendanceAnalyticsCard() {
                 aria-label="Qrup / dərs vaxtı"
                 disabled={loading}
                 value={groupId || "all"}
-                onValueChange={(value) => { setGroupId(value === "all" ? "" : value); setSelectedTeacher(""); setShowRisky(false); }}
+                onValueChange={(value) => { setGroupId(value === "all" ? "" : value); setSelectedTeacher(""); }}
                 emptyLabel="Bütün qruplar"
                 emptyValue="all"
                 searchable
@@ -160,7 +161,7 @@ export function AttendanceAnalyticsCard() {
               </div>
               <div className="attendance-kpis">
                 <div className="attendance-kpi is-primary"><span><CalendarCheck2 size={17} />Ümumi davamiyyət</span><strong>{percent(filteredStats.rate)}</strong><small>{filteredStats.present} iştirak / {filteredStats.present + filteredStats.absent} dərs</small></div>
-                <Link href={riskyStudentsHref} className="attendance-kpi is-action" onClick={() => setOpen(false)} aria-label="Riskli tələbələri siyahıda göstər">
+                <Link href={riskyStudentsHref as Route} className="attendance-kpi is-action" onClick={() => setOpen(false)} aria-label="Riskli tələbələri siyahıda göstər">
                   <span><ShieldAlert size={17} />Riskli tələbə</span>
                   <strong>{filteredStats.risky}</strong>
                   <small className="attendance-kpi-action">Ətraflı <ChevronRight size={14} /></small>

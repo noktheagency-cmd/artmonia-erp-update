@@ -80,8 +80,8 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
   if (plans.length === 0 && leadStillHasPlan) {
     plans.push({
       id: `plan-${leadPlan.createdAt.toISOString()}`,
-      kind: leadPlan.nextActionType,
-      plannedAt: leadPlan.nextFollowUpAt.toISOString(),
+      kind: leadPlan.nextActionType!,
+      plannedAt: leadPlan.nextFollowUpAt!.toISOString(),
       createdAt: leadPlan.createdAt.toISOString(),
       completedAt: null,
       cancelledAt: null,

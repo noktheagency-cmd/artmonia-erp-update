@@ -1724,12 +1724,7 @@ function resolveIsNewToday(
   createdAt: string | Date | null | undefined,
 ) {
   if (typeof sqlFlag === "boolean") return sqlFlag;
-  return isLeadCreatedToday(createdAt);
-}
-
-function isLeadCreatedToday(createdAt: string | Date | null | undefined, reference = new Date()) {
-  if (!createdAt) return false;
-  return getBakuBusinessDate(new Date(createdAt)).getTime() === getBakuBusinessDate(reference).getTime();
+  return false;
 }
 
 function getBakuBusinessDate(reference: Date) {
