@@ -153,9 +153,15 @@ export function LeadRegistrationDialog({
           redirectTo: string;
         };
         setOpen(false);
-        notifySuccess("Tələbə yaradıldı", "Redaktə edilmiş məlumatlar təsdiqləndi və tələbə qeydiyyata alındı.");
-        router.replace(result.redirectTo as Route, { scroll: false });
-        router.refresh();
+          notifySuccess(
+            "Tələbə yaradıldı",
+            "Redaktə edilmiş məlumatlar təsdiqləndi və tələbə qeydiyyata alındı."
+          );
+
+          router.replace(
+            result.redirectTo as Parameters<typeof router.replace>[0],
+            { scroll: false }
+          );
       } catch (error) {
         notifyCaughtError(error, "Müraciət tələbəyə çevrilmədi.");
       }

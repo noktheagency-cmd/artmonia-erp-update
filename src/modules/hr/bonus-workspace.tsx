@@ -167,7 +167,7 @@ export function BonusWorkspace({
         <div><span>Status</span><span className={`hr-bonus-status is-${status.tone}`}>{status.label}</span></div>
       </div>
 
-      <section className="hr-bonus-stage-main" aria-labelledby="bonus-scene-title">
+      {/* <section className="hr-bonus-stage-main" aria-labelledby="bonus-scene-title">
         <div className="hr-bonus-scene-heading">
           <div><span>Komanda səhnəsi</span><h2 id="bonus-scene-title">Van Gogh-un emalatxanası</h2></div>
           <span className={`hr-bonus-status is-${status.tone}`}>{status.label}</span>
@@ -183,7 +183,7 @@ export function BonusWorkspace({
           </div>
         </div>
         <MilestoneRail campaign={selected} unit={unit} />
-      </section>
+      </section> */}
 
       <ParticipantProgressBoard campaign={selected} unit={unit} />
 

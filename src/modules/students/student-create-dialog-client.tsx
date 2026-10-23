@@ -221,8 +221,10 @@ export function StudentCreateDialogClient({
         "Tələbə yaradıldı",
         "Yeni tələbə siyahıya əlavə olundu.",
       );
-      router.replace(result.redirectTo as Route, { scroll: false });
-      router.refresh();
+      router.replace(
+        result.redirectTo as Parameters<typeof router.replace>[0],
+        { scroll: false }
+      );
     } catch (error) {
       notifyCaughtError(error, "Tələbə yaradılmadı.");
     }
@@ -271,13 +273,22 @@ export function StudentCreateDialogClient({
           {isGift ? (
             <p className="student-create-gift-note">Hədiyyə güzəşti — ilkin ödəniş və satış jurnalı tətbiq olunmur.</p>
           ) : acceptPayment ? (
-            <label className="contract-confirm-field">
-              <Checkbox name="contractConfirmed" required />
-              <span className="contract-confirm-copy">
-                <strong>Müqavilə imzalanıb</strong>
-                <small>İlkin qəbul ödənişi ən azı 20 AZN olmalıdır və satış sayılır.</small>
-              </span>
-            </label>
+            values.paymentScheduleType === AVANS_PAYMENT_KIND ? (
+              <>
+                <input name="contractConfirmed" type="hidden" value="on" />
+                <p className="student-create-payment-required">
+                  Avans qəbul olunur: müqavilə təsdiqi tələb olunmur. Qalan məbləğ ilk dərsdən sonra cari borc kimi açılacaq.
+                </p>
+              </>
+            ) : (
+              <label className="contract-confirm-field">
+                <Checkbox name="contractConfirmed" required />
+                <span className="contract-confirm-copy">
+                  <strong>Müqavilə imzalanıb</strong>
+                  <small>İlkin qəbul ödənişi ən azı 20 AZN olmalıdır və satış sayılır.</small>
+                </span>
+              </label>
+            )
           ) : (
             <p className="student-create-payment-required">Qeydiyyat üçün yuxarıdan «Ödəniş qəbul et» ilə ilkin ödənişi əlavə edin — bu satış jurnalına düşür.</p>
           )}
