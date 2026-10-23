@@ -142,6 +142,21 @@ export function assertManualStudentStatusTransition(
   }
 }
 
+export function assertStatusChangeAllowedBeforeFirstLesson(input: {
+  currentStatus: StudentLifecycleStatus;
+  requestedStatus: string; // FROZEN_RESERVED də gələ bilər
+  firstLessonDate: string | null; // "YYYY-MM-DD"
+  todayValue: string; // currentBakuDateValue()
+}) {
+  if (!input.firstLessonDate) return;
+  if (input.requestedStatus === input.currentStatus) return;
+  if (input.requestedStatus === StudentLifecycleStatus.DECLINED) return;
+  if (input.firstLessonDate <= input.todayValue) return;
+  throw new Error(
+    "İlk dərs günü qeyd olunub və hələ gəlməyib. Bu mərhələdə tələbənin statusu yalnız “İmtina edib” kimi dəyişdirilə bilər.",
+  );
+}
+
 export async function pauseStudentLifecycleRelations(
   tx: Prisma.TransactionClient,
   input: {

@@ -194,14 +194,14 @@ export function LeadRegistrationDialog({
           <input type="hidden" name="returnTo" value={returnTo} />
 
           <div className="crm-dialog-scroll">
-            <div className="crm-register-preview" role="status">
+            {/* <div className="crm-register-preview" role="status">
               <span aria-hidden="true">{lead.name.slice(0, 2).toUpperCase()}</span>
               <div>
                 <strong>{lead.name}</strong>
                 <small>{lead.program} · {lead.manager}</small>
               </div>
               <em>Qeydiyyat gözləyir</em>
-            </div>
+            </div> */}
 
             <section className="crm-dialog-section">
               <header><CircleUserRound aria-hidden="true" /><h3>Şəxsi məlumatlar</h3></header>

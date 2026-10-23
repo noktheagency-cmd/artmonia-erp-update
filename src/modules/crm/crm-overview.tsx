@@ -139,11 +139,17 @@ export function CrmOverview({
               <button
                 type="button"
                 className={cx("crm-stage-node", `is-${stage.tone}`)}
-                onClick={() => onStageSelect(stage.stage)}
+                // onClick={() => onStageSelect(stage.stage)}
+                onClick={() => { if (stage.stage !== "REGISTERED") onStageSelect(stage.stage); }}
+                aria-label={
+                  stage.stage === "REGISTERED"
+                    ? `${stage.label}: ${stage.value}. Seçilmiş dövr üzrə satış sayı`
+                    : `${stage.label}: ${stage.value}. Siyahını filtrlə`
+                }
                 role="listitem"
                 key={stage.stage}
                 style={{ "--stage-delay": `${index * 55}ms` } as React.CSSProperties}
-                aria-label={`${stage.label}: ${stage.value}. Siyahını filtrlə`}
+                // aria-label={`${stage.label}: ${stage.value}. Siyahını filtrlə`}
               >
                 <span className="crm-stage-icon" aria-hidden="true">
                   <Icon />

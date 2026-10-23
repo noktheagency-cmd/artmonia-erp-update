@@ -51,6 +51,7 @@ import {
 } from "@/modules/students/enrollment-billing-terms";
 import {
   assertManualStudentStatusTransition,
+  assertStatusChangeAllowedBeforeFirstLesson,
   buildStudentStatusUpdateData as buildSharedStudentStatusUpdateData,
   closeCompletedStudentBilling,
   enrollmentStatusForStudentLifecycle,
@@ -638,6 +639,21 @@ async function updateStudentStatusActionImpl(formData: FormData) {
       throw new Error("Tələbə tapılmadı");
     }
 
+    const statusEnrollment = await tx.enrollment.findFirst({
+      where: {
+        studentId: current.id,
+        status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+      },
+      orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+      select: { firstLessonAt: true },
+    });
+    assertStatusChangeAllowedBeforeFirstLesson({
+      currentStatus: current.lifecycleStatus,
+      requestedStatus: input.lifecycleStatus,
+      firstLessonDate: statusEnrollment?.firstLessonAt?.toISOString().slice(0, 10) ?? null,
+      todayValue: currentBakuDateValue(),
+    });
+
     if (scopeFor(actor.permissions,"student.status.change")!=="ALL" && current.managerId!==actor.id)
       throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur", "FORBIDDEN");
     if (
@@ -846,6 +862,12 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur.");
     }
     if (statusChanged) {
+      assertStatusChangeAllowedBeforeFirstLesson({
+        currentStatus: current.lifecycleStatus,
+        requestedStatus: input.lifecycleStatus,
+        firstLessonDate: currentEnrollment.firstLessonAt?.toISOString().slice(0, 10) ?? null,
+        todayValue: currentBakuDateValue(),
+      });
       assertManualStudentStatusTransition(current.lifecycleStatus, input.lifecycleStatus);
     }
 

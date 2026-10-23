@@ -444,7 +444,9 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const slotWaitingCrmSales = toNumber(row?.slotWaitingCrmSales);
   // Qeydiyyat (bölgü) = CRM NEW journal; funnel Qeydiyyat = hələ slot gözləyənlər.
   const followUpSales = crmNewSales > 0 ? crmNewSales : crmLeadSales;
-  const salesCount = slotWaitingCrmSales;
+  // const salesCount = slotWaitingCrmSales;
+  // Qeydiyyat = satış: bütün kartlar eyni jurnal sayından oxuyur
+  const salesCount = crmNewSales;
   const activeCount = [
     search,
     stageFilter,
@@ -545,7 +547,8 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       return [{
         stage,
         label: leadStageLabels[stage],
-        value: formatCount(stageCounts[stage] ?? 0),
+        // value: formatCount(stageCounts[stage] ?? 0),
+        value: formatCount(stage === "REGISTERED" ? followUpSales : stageCounts[stage] ?? 0),
         tone: leadStageTones[stage],
       }];
     }),

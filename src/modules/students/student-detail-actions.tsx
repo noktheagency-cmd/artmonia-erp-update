@@ -157,6 +157,14 @@ export function StudentDetailActions({
   const [refundBusy, setRefundBusy] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [statusValue, setStatusValue] = useState(student.lifecycleStatusValue);
+  const firstLessonPending =
+  Boolean(student.detail.firstLessonDate)
+  && student.detail.firstLessonDate > currentBakuDateValue();
+const selectableStatusOptions = firstLessonPending
+  ? studentStatusOptions.filter(
+      (option) => option.value === "DECLINED" || option.value === student.lifecycleStatusValue,
+    )
+  : studentStatusOptions;
   const statusSelectOpen = useRef(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -346,7 +354,7 @@ export function StudentDetailActions({
                   onValueChange={(value) => {
                     if (statusSelectOpen.current) setStatusValue(value);
                   }}
-                  options={studentStatusOptions}
+                  options={selectableStatusOptions}
                 />
               </label>
               <label className="form-field">
@@ -760,7 +768,7 @@ export function StudentDetailActions({
                         onValueChange={(value) => {
                           if (lifecycleStatusOpen.current) setEditLifecycleStatus(value);
                         }}
-                        options={studentStatusOptions}
+                        options={selectableStatusOptions}
                       />
                     </>
                   ) : (
