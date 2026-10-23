@@ -61,6 +61,18 @@ export const saveAppointment = safeServerAction(async (formData: FormData) => {
       const work = await tx.leadWorkItem.create({ data: { leadId: lead.id, ownerId: lead.managerId, kind: "APPOINTMENT", source: "APPOINTMENT", plannedAt } });
       saved = await tx.crmAppointment.create({ data: { leadId: lead.id, ownerId: lead.managerId, kind: input.kind, plannedAt, teacherId: input.teacherId, reminderWorkId: work.id, idempotencyKey: input.idempotencyKey } });
     }
+    if (input.outcome === "SCHEDULED" && !before && ["NEW", "CONTACTED", "NURTURE"].includes(lead.stage)) {
+      await tx.lead.update({ where: { id: lead.id }, data: { stage: "QUALIFIED" } });
+      await tx.leadStageHistory.create({
+        data: {
+          leadId: lead.id,
+          oldStage: lead.stage,
+          newStage: "QUALIFIED",
+          reason: "Görüş təyin edildi",
+          changedById: actor.id,
+        },
+      });
+    }
     await writeAuditLog(tx, { actorUserId: actor.id, action: "lead.appointment.save", entityType: "lead", entityId: lead.id,
       before: before ? { id: before.id, plannedAt: before.plannedAt.toISOString(), outcome: before.outcome, occurredAt: before.occurredAt?.toISOString() ?? null } : null,
       after: { ...input, requestKey: input.idempotencyKey, appointmentId: saved.id } });

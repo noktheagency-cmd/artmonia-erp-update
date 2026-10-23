@@ -7,6 +7,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
+import { StudentRiskPanel } from "@/modules/students/student-risk-panel";
 import {
   Activity,
   AlertCircle,
@@ -368,46 +369,50 @@ function StudentAttentionAudit({
         </span>
       </header>
 
-      <section className="students-first-lesson-alert" aria-labelledby="students-first-lesson-title">
-        <header className="students-first-lesson-alert-head">
-          <span aria-hidden="true"><AlertTriangle /></span>
-          <div>
-            <h3 id="students-first-lesson-title">İlk dərsə gəlməyənlər</h3>
-            <p>Slot gözləyir statusunda qalıb — aktivləşmə üçün müəllim “Gəldi” qeyd etməlidir</p>
+      <div className="students-attention-split">
+        <section className="students-first-lesson-alert" aria-labelledby="students-first-lesson-title">
+          <header className="students-first-lesson-alert-head">
+            <span aria-hidden="true"><AlertTriangle /></span>
+            <div>
+              <h3 id="students-first-lesson-title">İlk dərsə gəlməyənlər</h3>
+              <p>Slot gözləyir statusunda qalıb — aktivləşmə üçün müəllim “Gəldi” qeyd etməlidir</p>
+            </div>
+            <strong>{operations.firstLessonMissedCount}</strong>
+          </header>
+          <div className="students-first-lesson-alert-list">
+            {firstLessonMissedStudents.map((student) => (
+              <Link
+                key={student.id}
+                href={`/students/${student.id}` as Route}
+                className="students-first-lesson-alert-row"
+                aria-label={`${student.name}: ilk dərsə gəlməyib`}
+              >
+                <span className="students-attention-avatar" aria-hidden="true">{getInitials(student.name)}</span>
+                <span className="students-attention-person">
+                  <strong>{student.name}</strong>
+                  <small>{student.code} · {student.program}</small>
+                </span>
+                <StatusChip tone="warning">İlk dərsə gəlməyib</StatusChip>
+                <span className="students-attention-action">
+                  <strong><AlertTriangle aria-hidden="true" /> {student.reasonLabel}</strong>
+                  <small><CalendarClock aria-hidden="true" /> İlk dərs: {student.firstLessonDate} · {student.teacher}</small>
+                </span>
+                <ArrowRight className="students-attention-open" aria-hidden="true" />
+              </Link>
+            ))}
+            {operations.firstLessonMissedCount === 0 ? (
+              <StudentAttentionEmpty>Bu gün ilk dərs buraxan tələbə yoxdur</StudentAttentionEmpty>
+            ) : null}
           </div>
-          <strong>{operations.firstLessonMissedCount}</strong>
-        </header>
-        <div className="students-first-lesson-alert-list">
-          {firstLessonMissedStudents.map((student) => (
-            <Link
-              key={student.id}
-              href={`/students/${student.id}` as Route}
-              className="students-first-lesson-alert-row"
-              aria-label={`${student.name}: ilk dərsə gəlməyib`}
-            >
-              <span className="students-attention-avatar" aria-hidden="true">{getInitials(student.name)}</span>
-              <span className="students-attention-person">
-                <strong>{student.name}</strong>
-                <small>{student.code} · {student.program}</small>
-              </span>
-              <StatusChip tone="warning">İlk dərsə gəlməyib</StatusChip>
-              <span className="students-attention-action">
-                <strong><AlertTriangle aria-hidden="true" /> {student.reasonLabel}</strong>
-                <small><CalendarClock aria-hidden="true" /> İlk dərs: {student.firstLessonDate} · {student.teacher}</small>
-              </span>
-              <ArrowRight className="students-attention-open" aria-hidden="true" />
-            </Link>
-          ))}
-          {operations.firstLessonMissedCount === 0 ? (
-            <StudentAttentionEmpty>Bu gün ilk dərs buraxan tələbə yoxdur</StudentAttentionEmpty>
+          {operations.firstLessonMissedCount > 0 ? (
+            <button type="button" className="students-attention-more is-amber" onClick={onFirstLessonMissed}>
+              Bütün ilk dərs buraxanları aç <ArrowRight aria-hidden="true" />
+            </button>
           ) : null}
-        </div>
-        {operations.firstLessonMissedCount > 0 ? (
-          <button type="button" className="students-attention-more is-amber" onClick={onFirstLessonMissed}>
-            Bütün ilk dərs buraxanları aç <ArrowRight aria-hidden="true" />
-          </button>
-        ) : null}
-      </section>
+        </section>
+
+        <StudentRiskPanel operations={operations} />
+      </div>
 
       <div className="students-attention-groups">
         <StudentAttentionGroup

@@ -80,3 +80,9 @@
 .daily-report-chip-violet { color: #6b45b8; background: #f4eefe; border-color: #ddd0f5; }
 .daily-report-chip-slate { color: #5b667a; background: #f3f5f9; border-color: #e2e7ef; }
 @media(max-width: 700px) { .daily-report-range { grid-template-columns: 1fr 1fr; } }
+
+.daily-report-accordion-nested { display: grid; gap: 8px; padding-top: 12px; }
+.daily-report-accordion-item.is-nested { border-radius: 10px; background: #fafbfd; }
+.daily-report-accordion-item.is-nested .daily-report-accordion-trigger { padding: 12px 14px; }
+.daily-report-accordion-item.is-nested .daily-report-accordion-label { font-size: 14px; font-weight: 650; }
+.daily-report-accordion-item.is-nested .daily-report-accordion-stats > strong { font-size: 17px; }

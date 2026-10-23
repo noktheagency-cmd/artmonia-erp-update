@@ -62,10 +62,12 @@ export function LeadAppointments({
   leadId,
   embedded = false,
   markedComplete = false,
+  onScheduled,
 }: {
   leadId: string;
   embedded?: boolean;
   markedComplete?: boolean;
+  onScheduled?: () => void;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
@@ -89,7 +91,8 @@ export function LeadAppointments({
   const shown = embedded || expanded;
   const scheduled = rows.find((row) => row.outcome === "SCHEDULED") ?? null;
   const attended = rows.some((row) => row.outcome === "ATTENDED");
-  const meetingComplete = markedComplete || (attended && !scheduled);
+  // const meetingComplete = markedComplete || (attended && !scheduled);
+  const meetingComplete = !scheduled && (markedComplete || attended);
 
   useEffect(() => {
     if (!embedded) return;
@@ -163,6 +166,7 @@ export function LeadAppointments({
         setMessage(result.message);
         return;
       }
+      if (form.get("outcome") === "SCHEDULED" && !form.get("appointmentId")) onScheduled?.();
       fresh();
       setMessage("Görüş saxlanıldı.");
       await load();

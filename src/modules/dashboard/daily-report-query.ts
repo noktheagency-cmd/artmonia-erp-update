@@ -9,7 +9,7 @@ import { dailyReportSummarySql, dailyReportDetailsSql, dailyReportDetailKinds } 
 export type DailyReportTotals = {
  leads:number; contacted:number; contactOps:number; newContacted:number; oldContacted:number; unanswered:number; unworked:number;
  appointmentCreated:number; scheduled:number; appointmentPeople:number; attended:number; noShow:number; appointmentCancelled:number; rescheduled:number; consultations:number; trials:number; legacyAppointments:number;
- sales:number; salesAmount:string; originalSales:number; cancelledSales:number; cancellationEvents:number; newSales:number; returnSales:number; crmSales:number; directSales:number;
+ sales:number; salesAmount:string;  crmNewSales:number; crmNewSalesAmount:string; directNewSales:number; directNewSalesAmount:string; returnSalesAmount:string; originalSales:number; cancelledSales:number; cancellationEvents:number; newSales:number; returnSales:number; crmSales:number; directSales:number;
  paymentCount:number; payments:string; deposit:string; balance:string; renewal:string; oneOff:string; other:string; unclassified:string;
  completed:number; overdue:number; tomorrow:number; overdueReplanned:number; frozen:number; stopped:number;
 };

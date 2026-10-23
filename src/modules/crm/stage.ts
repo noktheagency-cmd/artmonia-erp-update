@@ -46,7 +46,7 @@ const contactCompletedStages = new Set<LeadStageValue>([
 ]);
 
 const meetingCompletedStages = new Set<LeadStageValue>([
-  "QUALIFIED",
+  // "QUALIFIED",
   "TRIAL_LESSON",
   "TRIAL_CONSULTATION",
   "REGISTERED",

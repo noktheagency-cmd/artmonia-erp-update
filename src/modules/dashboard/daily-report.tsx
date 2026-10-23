@@ -37,13 +37,15 @@ function DetailRow({row}:{row:DailyReportDetail}) {
   </div>
  </article>;
 }
-type AccordionSection = {kind:DetailKind;label:string;count:number;detail?:string};
+// type AccordionSection = {kind:DetailKind;label:string;count:number;detail?:string};
+type AccordionSection = {kind:DetailKind;label:string;count:number;detail?:string;children?:AccordionSection[]};
 type Group = {title:string;icon:typeof UsersRound;tone:string;value:number;unit:string;detail:string;badge:string;sections:AccordionSection[]};
 export function DailyReport({data}:{data:DailyReportData}) {
  const [report,setReport]=useState(data), [from,setFrom]=useState(data.from), [to,setTo]=useState(data.to), [manager,setManager]=useState(data.managerId??"");
  const [selected,setSelected]=useState<number|null>(null), [error,setError]=useState(""), [pending,startTransition]=useTransition();
  const [details,setDetails]=useState<DailyReportDetail[]>([]),[kind,setKind]=useState<DetailKind>("leads"),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false),[detailBusy,setDetailBusy]=useState(false),[detailError,setDetailError]=useState("");
  const [openSection,setOpenSection]=useState<DetailKind|null>(null);
+ const [openParent,setOpenParent]=useState<DetailKind|null>(null);
  const request = useRef(0);
  const groups:Group[]=[
  {title:"Lead və əlaqə",icon:UsersRound,tone:"blue",value:report.leads,unit:"yeni şəxs",detail:report.contacted+" nəfərlə danışıldı",badge:report.unanswered+" cavabsız · "+report.unworked+" işlənməyib",sections:[
@@ -54,7 +56,11 @@ export function DailyReport({data}:{data:DailyReportData}) {
   {kind:"appointments",label:"Görüş",count:report.scheduled,detail:report.attended+" baş tutdu"},
  ]},
  {title:"Satış və ödəniş",icon:Wallet,tone:"green",value:report.sales,unit:"uyğun satış",detail:report.payments+" AZN",badge:"faktiki daxil olan pul",sections:[
-  {kind:"sales",label:"Satış",count:report.sales,detail:moneyLabel(report.salesAmount)},
+    {kind:"sales",label:"Satış",count:report.sales,detail:moneyLabel(report.salesAmount),children:[
+        {kind:"sales_new",label:"Yeni satış",count:report.crmNewSales,detail:moneyLabel(report.crmNewSalesAmount)},
+        {kind:"sales_direct",label:"Birbaşa satış",count:report.directNewSales,detail:moneyLabel(report.directNewSalesAmount)},
+        {kind:"sales_return",label:"Qayıdış",count:report.returnSales,detail:moneyLabel(report.returnSalesAmount)},
+    ]},
   {kind:"payments",label:"Ödəniş",count:report.paymentCount,detail:moneyLabel(report.payments)},
  ]},
  {title:"Follow-up",icon:CheckCheck,tone:"amber",value:report.completed,unit:"iş yerinə yetirilib",detail:report.overdue+" gecikmiş",badge:report.tomorrow+" növbəti günə",sections:[
@@ -88,6 +94,11 @@ export function DailyReport({data}:{data:DailyReportData}) {
   setOpenSection(next);
   void fetchDetails(next);
  }
+ function toggleParent(next:DetailKind) {
+    ++request.current;
+    setOpenSection(null);setDetails([]);setDetailBusy(false);setDetailError("");
+    setOpenParent(current=>current===next?null:next);
+   }
  function apply(nextFrom=from,nextTo=to) {
   ++request.current;setSelected(null);setOpenSection(null);setError("");startTransition(async()=>{
    try{const result=await filterDailyReport({from:nextFrom,to:nextTo,managerId:manager||undefined});
@@ -114,6 +125,31 @@ export function DailyReport({data}:{data:DailyReportData}) {
    )}
   </>
  );
+ const renderSection=(section:AccordionSection,nested=false)=>{
+    const open=openSection===section.kind;
+    return <div key={section.kind} className={"daily-report-accordion-item"+(open?" is-open":"")+(nested?" is-nested":"")}>
+     <button type="button" className="daily-report-accordion-trigger" aria-expanded={open} onClick={()=>toggleSection(section.kind)}>
+      <span className="daily-report-accordion-label">{section.label}</span>
+      <span className="daily-report-accordion-stats"><strong>{section.count}</strong>{section.detail?<span>{section.detail}</span>:null}</span>
+      <ChevronDown size={18} className="daily-report-accordion-chevron" aria-hidden="true"/>
+     </button>
+     {open?<div className="daily-report-accordion-panel">{detailList}</div>:null}
+    </div>;
+   };
+   const renderGroup=(section:AccordionSection)=>{
+    if(!section.children)return renderSection(section);
+    const open=openParent===section.kind, visible=section.children.filter(child=>child.count>0);
+    return <div key={section.kind} className={"daily-report-accordion-item"+(open?" is-open":"")}>
+     <button type="button" className="daily-report-accordion-trigger" aria-expanded={open} onClick={()=>toggleParent(section.kind)}>
+      <span className="daily-report-accordion-label">{section.label}</span>
+      <span className="daily-report-accordion-stats"><strong>{section.count}</strong>{section.detail?<span>{section.detail}</span>:null}</span>
+      <ChevronDown size={18} className="daily-report-accordion-chevron" aria-hidden="true"/>
+     </button>
+     {open?<div className="daily-report-accordion-panel daily-report-accordion-nested">
+      {visible.length===0?<p className="daily-report-detail-empty">Bu dövrdə satış yoxdur.</p>:visible.map(child=>renderSection(child,true))}
+     </div>:null}
+    </div>;
+   };
  return <section className="owner-dashboard-panel daily-report" aria-labelledby="daily-report-title">
   <header className="daily-report-header"><div className="daily-report-heading"><span className="daily-report-mark" aria-hidden="true"><ChartNoAxesCombined size={23}/></span><div><span className="daily-report-eyebrow">KOMANDANIN GÜNLÜK NƏTİCƏLƏRİ</span><h2 id="daily-report-title">Gün sonu satış hesabatı</h2><p>Bakı vaxtı · {report.managers.find(m=>m.id===report.managerId)?.name??"Bütün komanda"}</p></div></div>
   <div className="daily-report-filter" role="group" aria-label="Sürətli tarix seçimi">{report.availableDates.map((date,index)=><button type="button" key={date} aria-pressed={date===report.from&&date===report.to} disabled={pending} onClick={()=>apply(date,date)}><span>{dayLabels[index]}</span><small>{dateLabel(date).slice(0,5)}</small></button>)}</div></header>
@@ -133,7 +169,7 @@ export function DailyReport({data}:{data:DailyReportData}) {
      <DialogTitle>{active?.title}</DialogTitle>
     </DialogHeader>
     <div className="daily-report-accordions">
-     {active?.sections.map(section=>{
+     {/* {active?.sections.map(section=>{
       const open=openSection===section.kind;
       return <div key={section.kind} className={"daily-report-accordion-item"+(open?" is-open":"")}>
        <button type="button" className="daily-report-accordion-trigger" aria-expanded={open} onClick={()=>toggleSection(section.kind)}>
@@ -143,7 +179,8 @@ export function DailyReport({data}:{data:DailyReportData}) {
        </button>
        {open?<div className="daily-report-accordion-panel">{detailList}</div>:null}
       </div>;
-     })}
+     })} */}
+    {active?.sections.map(renderGroup)}
     </div>
    </DialogContent>
   </Dialog>

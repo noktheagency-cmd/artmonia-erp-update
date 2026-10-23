@@ -99,10 +99,14 @@ export function LeadDetailDialogClient({
   const contactDone =
     suggestion?.panel !== "contact" &&
     (isContactStageCompleted(stage) || isContactStageCompleted(lead.stage));
-  const meetingDone =
+    const meetingDone =
     suggestion?.panel !== "meeting" &&
     (isMeetingStageCompleted(stage) || isMeetingStageCompleted(lead.stage) || lead.meetingAttended);
-  const readyToRegister = contactDone && meetingDone && stage !== "REGISTERED" && lead.stage !== "REGISTERED" && lead.canConvert;
+  // Görüş təyin olunub (hələ baş tutmayıb): qeydiyyat pəncərəsində iştirak təsdiqlənə bilər
+  const meetingPlanned = stage === "QUALIFIED" || lead.stage === "QUALIFIED";
+  const readyToRegister =
+    contactDone && (meetingDone || meetingPlanned) &&
+    stage !== "REGISTERED" && lead.stage !== "REGISTERED" && lead.canConvert;
 
   const wasOpen = useRef(false);
   useEffect(() => {
@@ -291,7 +295,17 @@ export function LeadDetailDialogClient({
                   />
                 </div>
                 <div hidden={actionPanel !== "meeting"}>
-                  <LeadAppointments leadId={lead.id} embedded markedComplete={meetingDone} />
+                  {/* <LeadAppointments leadId={lead.id} embedded markedComplete={meetingDone} /> */}
+                  <LeadAppointments
+                    leadId={lead.id}
+                    embedded
+                    markedComplete={meetingDone}
+                    onScheduled={() =>
+                      setStage((current) =>
+                        current === "NEW" || current === "CONTACTED" || current === "NURTURE" ? "QUALIFIED" : current,
+                      )
+                    }
+                  />
                 </div>
               </div>
             ) : null}
