@@ -27,7 +27,13 @@ import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
-import { studentPaymentScheduleTypeOptions } from "@/modules/students/payment-schedule-type";
+import {
+  AVANS_PAYMENT_KIND,
+  AVANS_DEFAULT_AMOUNT,
+  studentPaymentKindOptions,
+  storedScheduleTypeForPaymentKind,
+  studentPaymentScheduleTypeOptions
+} from "@/modules/students/payment-schedule-type";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { confirmPaymentMonthMismatch } from "@/modules/students/payment-date-policy-client";
 import {
@@ -258,7 +264,9 @@ export function StudentCreateDialogClient({
           <input name="paymentDate" type="hidden" value={values.paymentDate} />
           <input name="paymentMonth" type="hidden" value={values.paymentMonth} />
           <input name="paymentMethod" type="hidden" value={values.paymentMethod} />
-          <input name="paymentScheduleType" type="hidden" value={values.paymentScheduleType} />
+          {/* <input name="paymentScheduleType" type="hidden" value={values.paymentScheduleType} /> */}
+          <input name="paymentKind" type="hidden" value={values.paymentScheduleType} />
+          <input name="paymentScheduleType" type="hidden" value={storedScheduleTypeForPaymentKind(values.paymentScheduleType)} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
           {isGift ? (
             <p className="student-create-gift-note">Hədiyyə güzəşti — ilkin ödəniş və satış jurnalı tətbiq olunmur.</p>
@@ -655,8 +663,11 @@ function InitialPaymentDialog({
             <FormSelect
               name="paymentScheduleType"
               value={values.paymentScheduleType}
-              onValueChange={(value) => onChange("paymentScheduleType", value)}
-              options={studentPaymentScheduleTypeOptions}
+              onValueChange={(value) => {
+                onChange("paymentScheduleType", value);
+                onChange("paymentAmount", value === AVANS_PAYMENT_KIND ? AVANS_DEFAULT_AMOUNT : values.monthlyFee);
+              }}
+              options={studentPaymentKindOptions}
             />
           </label>
           <label className="form-field">

@@ -703,7 +703,7 @@ function getCrmRawData(
   const periodDirectSalesSql = periodCourseSalesCountSql(
     Prisma.sql`${saleWindowFrom}`,
     Prisma.sql`${saleWindowUntil}`,
-    { route: "DIRECT" },
+    { route: "DIRECT",kind: "NEW" },
   );
   const periodReturnSalesSql = periodCourseSalesCountSql(
     Prisma.sql`${saleWindowFrom}`,
