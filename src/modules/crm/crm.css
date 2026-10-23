@@ -936,7 +936,7 @@ html.dark .crm-conversion-result:hover { background: #241e18; border-color: #4a3
 .crm-dialog-section > header h3 { margin: 0; color: #172033; font-size: 14px; font-weight: 700; letter-spacing: -.015em; }
 .crm-dialog-section:nth-of-type(2) > header { color: #18a77f; }
 .crm-dialog-section:nth-of-type(3) > header { color: #e68f12; }
-.crm-dialog-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.ui-field-group.crm-dialog-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
 .crm-dialog-fields .ui-field { display: grid; gap: 6px; min-width: 0; }
 .crm-dialog-fields .ui-field.is-full { grid-column: 1 / -1; }
 .crm-dialog-fields .ui-field-label { color: #445168; font-size: 12px; font-weight: 650; }

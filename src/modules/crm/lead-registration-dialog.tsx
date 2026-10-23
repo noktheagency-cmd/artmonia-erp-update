@@ -342,6 +342,16 @@ export function LeadRegistrationDialog({
               <section className="crm-dialog-section">
                 <header><Banknote aria-hidden="true" /><h3>İlkin ödəniş (satış)</h3></header>
                 <FieldGroup className="crm-dialog-fields">
+                <Field>
+                    <FieldLabel>Ödəniş növü</FieldLabel>
+                    <FormSelect
+                      aria-label="Ödəniş növü"
+                      name="paymentKind"
+                      value={paymentKind}
+                      onValueChange={handlePaymentKindChange}
+                      options={studentPaymentKindOptions}
+                    />
+                  </Field>
                   <input name="scheduleType" type="hidden" value={storedScheduleTypeForPaymentKind(paymentKind)} />
                   {paymentKind === AVANS_PAYMENT_KIND ? (
                     <>
@@ -374,7 +384,7 @@ export function LeadRegistrationDialog({
                       options={studentPaymentMethodOptions}
                     />
                   </Field>
-                  <Field>
+                  {/* <Field>
                     <FieldLabel>Ödəniş növü</FieldLabel>
                     <FormSelect
                       aria-label="Ödəniş növü"
@@ -383,7 +393,7 @@ export function LeadRegistrationDialog({
                       onValueChange={handlePaymentKindChange}
                       options={studentPaymentKindOptions}
                     />
-                  </Field>
+                  </Field> */}
                   <Field>
                     <FieldLabel>Ödəniş tarixi</FieldLabel>
                     <DatePicker
