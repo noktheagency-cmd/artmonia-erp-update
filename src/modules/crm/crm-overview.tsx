@@ -144,7 +144,9 @@ export function CrmOverview({
                 aria-label={
                   stage.stage === "REGISTERED"
                     ? `${stage.label}: ${stage.value}. Seçilmiş dövr üzrə satış sayı`
-                    : `${stage.label}: ${stage.value}. Siyahını filtrlə`
+                    : stage.stage === "CONTACTED"
+                      ? `${stage.label}: ${stage.value}. Xatırlatma sayı`
+                      : `${stage.label}: ${stage.value}. Siyahını filtrlə`
                 }
                 role="listitem"
                 key={stage.stage}

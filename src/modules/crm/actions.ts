@@ -262,6 +262,10 @@ async function createLead(formData: FormData) {
     (input.stage === LeadStage.TRIAL_LESSON
       ? "TRIAL_LESSON_REMINDER"
       : undefined);
+  // A consultation reminder with a date means the consultation has been scheduled,
+  // not attended. Represent it as a real SCHEDULED appointment so the history is accurate.
+  const consultationScheduled = nextActionType === "CONSULTATION_REMINDER" && Boolean(followUpAt);
+  const effectiveStage = consultationScheduled ? LeadStage.QUALIFIED : input.stage;
   let createdLeadId = "";
 
   await prisma.$transaction(async (tx) => {
@@ -281,7 +285,7 @@ async function createLead(formData: FormData) {
     const lead = await tx.lead.create({
       data: {
         contactId: contact.id,
-        stage: input.stage,
+        stage: effectiveStage,
         source: input.source ?? "Manual",
         educationLevel,
         managerId,
@@ -290,14 +294,16 @@ async function createLead(formData: FormData) {
         nextFollowUpAt: followUpAt,
         nextActionType: nextActionType ?? null,
         trialLessonCount: resolveTrialLessonCount({
-          stage: input.stage,
+          stage: effectiveStage,
           requestedCount: input.trialLessonCount,
         }),
         priority: input.priority,
         stageHistory: {
           create: {
-            newStage: input.stage,
-            reason: input.note ?? "Müraciət yaradıldı",
+            newStage: effectiveStage,
+            reason: consultationScheduled
+              ? (input.note ?? "Əlaqə quruldu, konsultasiya təyin edildi")
+              : (input.note ?? "Müraciət yaradıldı"),
             changedById: actor.id,
           },
         },
@@ -312,8 +318,30 @@ async function createLead(formData: FormData) {
       },
     });
     createdLeadId = lead.id;
-    await syncLeadWorkPlan(tx, { leadId: lead.id, ownerId: managerId, kind: nextActionType ?? null, plannedAt: followUpAt,
-      closed: input.stage === LeadStage.LOST });
+    if (consultationScheduled && followUpAt) {
+      // Use noon in Baku for a date-only consultation selection, matching the UI default.
+      const localDate = normalizeDateValue(input.nextFollowUpDate);
+      const plannedAt = new Date(`${localDate}T12:00:00+04:00`);
+      const reminderWork = await tx.leadWorkItem.create({
+        data: { leadId: lead.id, ownerId: managerId, kind: "APPOINTMENT", source: "APPOINTMENT", plannedAt },
+      });
+      await tx.crmAppointment.create({
+        data: {
+          leadId: lead.id,
+          ownerId: managerId,
+          kind: "MEETING",
+          outcome: "SCHEDULED",
+          plannedAt,
+          reminderWorkId: reminderWork.id,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      // The appointment is the follow-up record; avoid a duplicate PRIMARY reminder task.
+      await syncLeadWorkPlan(tx, { leadId: lead.id, ownerId: managerId, kind: null, plannedAt: null });
+    } else {
+      await syncLeadWorkPlan(tx, { leadId: lead.id, ownerId: managerId, kind: nextActionType ?? null, plannedAt: followUpAt,
+        closed: input.stage === LeadStage.LOST });
+    }
 
     await writeAuditLog(tx, {
       actorUserId: actor.id,

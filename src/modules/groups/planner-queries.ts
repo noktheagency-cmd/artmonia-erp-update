@@ -198,6 +198,7 @@ export async function getPlannerWorkspaceData(input?: {
                     id: true,
                     code: true,
                     lifecycleStatus: true,
+                    freezeReserved: true,
                     contact: { select: { fullName: true } },
                   },
                 },
@@ -270,9 +271,9 @@ export async function getPlannerWorkspaceData(input?: {
       studentCode: assignment.enrollment.student.code,
       studentName: assignment.enrollment.student.contact.fullName,
       program: assignment.enrollment.program.name,
-      reserved: assignment.enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
-        && toDateInput(slot.validFrom) <= today
-        && toDateInput(assignment.validFrom) <= today,
+      // "Rezerv" is only for a seat-preserving freeze. SLOT_WAITING remains
+      // "Slot gözləyir" until first-lesson attendance is marked PRESENT.
+      reserved: assignment.enrollment.student.freezeReserved,
     })),
   }));
   const selectedSlot = plannerSlots.find((slot) => slot.id === input?.slotId) ?? plannerSlots[0];
@@ -507,9 +508,7 @@ export async function getPlannerWorkspaceData(input?: {
         registeredAt: toDateInput(assignment.enrollment.student.registeredAt),
         enrollmentStartedAt: toDateInput(assignment.enrollment.startDate),
         assignmentStartedAt: toDateInput(assignment.validFrom),
-        reserved: assignment.enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
-          && (selectedSlot?.validFrom ?? "9999-99-99") <= today
-          && toDateInput(assignment.validFrom) <= today,
+        reserved: assignment.enrollment.student.freezeReserved,
         monthlyFee: formatAmount(assignment.enrollment.monthlyFee),
         lessonsPerMonth: assignment.enrollment.lessonsPerMonth,
         managerName: assignment.enrollment.student.manager?.fullName ?? null,

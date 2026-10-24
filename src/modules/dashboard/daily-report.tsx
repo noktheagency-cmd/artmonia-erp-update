@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { ArrowUpRight, CalendarDays, ChartNoAxesCombined, CheckCheck, ChevronDown, CirclePause, LoaderCircle, UsersRound, Wallet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -27,19 +28,44 @@ const chipTone=(label:string)=>{
  return "slate";
 };
 const formatDetailAt=(at:string)=>new Intl.DateTimeFormat("az-AZ",{timeZone:"Asia/Baku",dateStyle:"short",timeStyle:"short"}).format(new Date(at));
-function DetailRow({row}:{row:DailyReportDetail}) {
+function detailHref(kind: DetailKind) {
+ // Dashboard detail rows route to the relevant module. Record-specific routes
+ // are used only where this report row ID is the actual student ID.
+ switch (kind) {
+  case "leads":
+  case "contacts":
+   return "/crm";
+  case "appointments":
+   return "/bookings";
+  case "sales":
+  case "sales_new":
+  case "sales_direct":
+  case "sales_return":
+  case "statuses":
+   return "/students";
+  case "payments":
+   return "/finance";
+  case "work":
+   return "/crm";
+  default:
+   return "/dashboard";
+ }
+}
+
+function DetailRow({row,kind}:{row:DailyReportDetail;kind:DetailKind}) {
  const tokens=detailTokens(row.description);
- return <article className="daily-report-detail-item">
-  <div className="daily-report-detail-row">
+ return <Link href={detailHref(kind)} className="daily-report-detail-item daily-report-detail-link">
+  <span className="daily-report-detail-row">
    <strong className="daily-report-detail-name">{row.name}</strong>
    <time className="daily-report-detail-time" dateTime={row.at}>{formatDetailAt(row.at)}</time>
    {tokens.map((token,index)=><span key={index} className={"daily-report-chip daily-report-chip-"+chipTone(token)}>{token}</span>)}
-  </div>
- </article>;
+   <ArrowUpRight size={15} aria-hidden="true" className="daily-report-detail-open"/>
+  </span>
+ </Link>;
 }
 // type AccordionSection = {kind:DetailKind;label:string;count:number;detail?:string};
 type AccordionSection = {kind:DetailKind;label:string;count:number;detail?:string;children?:AccordionSection[]};
-type Group = {title:string;icon:typeof UsersRound;tone:string;value:number;unit:string;detail:string;badge:string;sections:AccordionSection[]};
+type Group = {title:string;icon:typeof UsersRound;tone:string;value:number|string;unit:string;detail:string;badge:string;sections:AccordionSection[]};
 export function DailyReport({data}:{data:DailyReportData}) {
  const [report,setReport]=useState(data), [from,setFrom]=useState(data.from), [to,setTo]=useState(data.to), [manager,setManager]=useState(data.managerId??"");
  const [selected,setSelected]=useState<number|null>(null), [error,setError]=useState(""), [pending,startTransition]=useTransition();
@@ -48,14 +74,14 @@ export function DailyReport({data}:{data:DailyReportData}) {
  const [openParent,setOpenParent]=useState<DetailKind|null>(null);
  const request = useRef(0);
  const groups:Group[]=[
- {title:"Lead və əlaqə",icon:UsersRound,tone:"blue",value:report.leads,unit:"yeni şəxs",detail:report.contacted+" nəfərlə danışıldı",badge:report.unanswered+" cavabsız · "+report.unworked+" işlənməyib",sections:[
+ {title:"Lead və əlaqə",icon:UsersRound,tone:"blue",value:report.leads+report.contactOps,unit:"lead və əlaqə",detail:report.contacted+" nəfərlə danışıldı",badge:report.unanswered+" cavabsız · "+report.unworked+" işlənməyib",sections:[
   {kind:"leads",label:"Yeni lead",count:report.leads},
   {kind:"contacts",label:"Əlaqə",count:report.contactOps,detail:report.contacted+" danışıldı"},
  ]},
  {title:"Görüş",icon:CalendarDays,tone:"violet",value:report.scheduled,unit:"bu dövrə planlı görüş",detail:report.attended+" baş tutdu",badge:report.noShow+" gəlmədi · "+report.rescheduled+" təxirə salındı",sections:[
   {kind:"appointments",label:"Görüş",count:report.scheduled,detail:report.attended+" baş tutdu"},
  ]},
- {title:"Satış və ödəniş",icon:Wallet,tone:"green",value:report.sales,unit:"uyğun satış",detail:report.payments+" AZN",badge:"faktiki daxil olan pul",sections:[
+ {title:"Satış və ödəniş",icon:Wallet,tone:"green",value: (Number(report.salesAmount) + Number(report.payments)).toFixed(2),unit:"satış və ödəniş",detail:report.payments+" AZN",badge:"faktiki daxil olan pul",sections:[
     {kind:"sales",label:"Satış",count:report.sales,detail:moneyLabel(report.salesAmount),children:[
         {kind:"sales_new",label:"Yeni satış",count:report.crmNewSales,detail:moneyLabel(report.crmNewSalesAmount)},
         {kind:"sales_direct",label:"Birbaşa satış",count:report.directNewSales,detail:moneyLabel(report.directNewSalesAmount)},
@@ -112,7 +138,7 @@ export function DailyReport({data}:{data:DailyReportData}) {
    {detailBusy?<p role="status">Yüklənir…</p>:(
     <>
      <div className="daily-report-detail-list">
-      {details.length===0?<p className="daily-report-detail-empty">Əməliyyat qeydi yoxdur.</p>:details.map(row=><DetailRow key={row.id} row={row}/>)}
+      {details.length===0?<p className="daily-report-detail-empty">Əməliyyat qeydi yoxdur.</p>:details.map(row=><DetailRow key={row.id} row={row} kind={kind}/>)}
      </div>
      {page>0||hasMore?(
       <div className="daily-report-detail-tabs">
@@ -161,7 +187,13 @@ export function DailyReport({data}:{data:DailyReportData}) {
   <div className="daily-report-period"><span><CalendarDays size={14}/>{dateLabel(report.from)}{report.from!==report.to?" — "+dateLabel(report.to):""}</span><span role="status">{pending?<><LoaderCircle size={14}/>Yüklənir…</>:"Ən çox 31 günlük aralıq"}</span></div>
   <p className="daily-report-history-note">Faktiki əlaqə və satış tarixçəsi yeni qeydlərdən başlayır. Köhnə qeydiyyatlar avtomatik satış sayılmır.</p>
   {error?<p className="daily-report-error" role="alert">{error}</p>:null}
-  <div className="daily-report-grid" aria-busy={pending}>{groups.map((group,index)=>{const Icon=group.icon;return <button type="button" className={"daily-report-card daily-report-"+group.tone} key={group.title} disabled={pending} onClick={()=>openGroup(index)} aria-haspopup="dialog" aria-label={group.title+" — detalları aç"}><span className="daily-report-card-top"><span className="daily-report-icon"><Icon size={19}/></span><ArrowUpRight size={17}/></span><span className="daily-report-card-title">{group.title}</span><span className="daily-report-main"><strong>{group.value}</strong><span>{group.unit}</span></span><span className="daily-report-card-bottom"><strong>{group.detail}</strong><span>{group.badge}</span></span></button>;})}</div>
+  <div className="daily-report-grid" aria-busy={pending}>{groups.map((group,index)=>{const Icon=group.icon;return <button type="button" className={"daily-report-card daily-report-"+group.tone} key={group.title} disabled={pending} onClick={()=>openGroup(index)} aria-haspopup="dialog" aria-label={group.title+" — detalları aç"}><span className="daily-report-card-top"><span className="daily-report-icon"><Icon size={19}/></span><ArrowUpRight size={17}/></span><span className="daily-report-card-title">{group.title}</span><span className="daily-report-main"><strong>{group.title === "Satış və ödəniş" ? (
+  <span className="sales-total-value">
+    {group.value} <span className="sales-total-currency">AZN</span>
+  </span>
+) : (
+  group.value
+)}</strong><span>{group.unit}</span></span><span className="daily-report-card-bottom"><strong>{group.detail}</strong><span>{group.badge}</span></span></button>;})}</div>
   <Dialog open={active!==null} onOpenChange={open=>{if(!open){setSelected(null);setOpenSection(null);}}}>
    <DialogContent className={"daily-report-dialog daily-report-"+(active?.tone??"blue")}>
     <DialogHeader>

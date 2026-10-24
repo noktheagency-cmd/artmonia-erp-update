@@ -86,3 +86,43 @@
 .daily-report-accordion-item.is-nested .daily-report-accordion-trigger { padding: 12px 14px; }
 .daily-report-accordion-item.is-nested .daily-report-accordion-label { font-size: 14px; font-weight: 650; }
 .daily-report-accordion-item.is-nested .daily-report-accordion-stats > strong { font-size: 17px; }
+
+/* Dashboard report detail rows are links to their relevant ERP module. */
+.daily-report-detail-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+/* .daily-report-detail-link:hover {
+  background: var(--muted, rgba(100, 116, 139, 0.08));
+} */
+.daily-report-detail-link:focus-visible {
+  outline: 2px solid var(--ring, #64748b);
+  outline-offset: 2px;
+}
+.daily-report-detail-open {
+  flex: 0 0 auto;
+  opacity: 0.55;
+  margin-inline-start: auto;
+}
+.daily-report-detail-link:hover .daily-report-detail-open {
+  opacity: 1;
+}
+
+.sales-total-value {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap;
+    font-size: 2.5rem;
+    line-height: 1.1;
+    letter-spacing: -0.04em;
+}
+
+.sales-total-currency {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: normal;
+}

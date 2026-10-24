@@ -84,6 +84,7 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
                   id: true,
                   code: true,
                   lifecycleStatus: true,
+                  freezeReserved: true,
                   contact: { select: { fullName: true } },
                 },
               },
@@ -122,9 +123,9 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
       studentCode: assignment.enrollment.student.code,
       studentName: assignment.enrollment.student.contact.fullName,
       program: assignment.enrollment.program.name,
-      reserved: assignment.enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
-        && toDateInput(slot.validFrom) <= today
-        && toDateInput(assignment.validFrom) <= today,
+      // Do not label SLOT_WAITING students as "Rezerv" when their planned
+      // first lesson date arrives; activation is attendance-driven.
+      reserved: assignment.enrollment.student.freezeReserved,
     })),
   };
 
@@ -283,9 +284,7 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
         registeredAt: toDateInput(assignment.enrollment.student.registeredAt),
         enrollmentStartedAt: toDateInput(assignment.enrollment.startDate),
         assignmentStartedAt: toDateInput(assignment.validFrom),
-        reserved: assignment.enrollment.student.lifecycleStatus === StudentLifecycleStatus.SLOT_WAITING
-          && plannerSlot.validFrom <= today
-          && toDateInput(assignment.validFrom) <= today,
+        reserved: assignment.enrollment.student.freezeReserved,
         monthlyFee: formatAmount(assignment.enrollment.monthlyFee),
         lessonsPerMonth: assignment.enrollment.lessonsPerMonth,
         managerName: assignment.enrollment.student.manager?.fullName ?? null,

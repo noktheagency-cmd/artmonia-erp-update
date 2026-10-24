@@ -265,6 +265,7 @@ type CrmCacheInput = {
 
 type CrmRawRow = {
   stageCounts: unknown;
+  reminderCount: unknown;
   totalLeads: unknown;
   listTotalCount: unknown;
   createdThisMonth: unknown;
@@ -546,9 +547,14 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       }
       return [{
         stage,
-        label: leadStageLabels[stage],
-        // value: formatCount(stageCounts[stage] ?? 0),
-        value: formatCount(stage === "REGISTERED" ? followUpSales : stageCounts[stage] ?? 0),
+        label: stage === "CONTACTED" ? "Xatırlatma" : leadStageLabels[stage],
+        value: formatCount(
+          stage === "CONTACTED"
+            ? toNumber(row?.reminderCount)
+            : stage === "REGISTERED"
+              ? followUpSales
+              : stageCounts[stage] ?? 0
+        ),
         tone: leadStageTones[stage],
       }];
     }),
@@ -746,6 +752,18 @@ function getCrmRawData(
           group by l.stage
         ) summary
       ), '{}'::jsonb) as "stageCounts",
+      coalesce((
+        -- CRM mərhələ kartındakı Xatırlatma sayı: növbəti addımı xatırlatma olan açıq müraciətlər.
+        select count(*)::int
+        from erp.leads l
+        where ${scopeSql}
+          and l.converted_student_id is null
+          and l.next_action_type in (
+            'CONSULTATION_REMINDER',
+            'TRIAL_LESSON_REMINDER',
+            'PAYMENT_REMINDER'
+          )
+      ), 0) as "reminderCount",
       coalesce((
         select count(*)::int
         from erp.leads l

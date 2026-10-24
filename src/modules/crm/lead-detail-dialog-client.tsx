@@ -41,7 +41,7 @@ import {
   type NextActionTypeValue,
 } from "@/modules/crm/follow-up";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
-import { isContactStageCompleted, isMeetingStageCompleted, leadStageLabels, leadStageSelectOptions, leadStageTones, type LeadStageValue } from "@/modules/crm/stage";
+import { isContactStageCompleted, leadStageLabels, leadStageSelectOptions, leadStageTones, type LeadStageValue } from "@/modules/crm/stage";
 import { DEFAULT_TRIAL_LESSON_COUNT } from "@/modules/crm/trial-lesson";
 import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
@@ -99,9 +99,9 @@ export function LeadDetailDialogClient({
   const contactDone =
     suggestion?.panel !== "contact" &&
     (isContactStageCompleted(stage) || isContactStageCompleted(lead.stage));
-    const meetingDone =
-    suggestion?.panel !== "meeting" &&
-    (isMeetingStageCompleted(stage) || isMeetingStageCompleted(lead.stage) || lead.meetingAttended);
+  // A pipeline stage (including consultation scheduled) is not proof of attendance.
+  // Only an explicit ATTENDED appointment may mark the meeting step successful.
+  const meetingDone = suggestion?.panel !== "meeting" && lead.meetingAttended;
   // Görüş təyin olunub (hələ baş tutmayıb): qeydiyyat pəncərəsində iştirak təsdiqlənə bilər
   const meetingPlanned = stage === "QUALIFIED" || lead.stage === "QUALIFIED";
   const readyToRegister =
@@ -263,7 +263,11 @@ export function LeadDetailDialogClient({
               </div>
             </div>
             {readyToRegister ? (
-              <p className="crm-ops-ready">Əlaqə və görüş tamamdır. Qeydiyyata alın.</p>
+              <p className="crm-ops-ready">
+                {meetingDone
+                  ? "Əlaqə və görüş tamamdır. Qeydiyyata alın."
+                  : "Əlaqə tamamdır, görüş planlaşdırılıb. Qeydiyyata almaq üçün görüş nəticəsini təsdiqləyin."}
+              </p>
             ) : suggestion ? (
               <button
                 type="button"
