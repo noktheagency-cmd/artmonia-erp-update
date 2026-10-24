@@ -1808,6 +1808,7 @@ function FinanceStructureChart({ data }: { data: FinanceData }) {
 }
 
 function CostCenterChart({ data }: { data: FinanceData }) {
+  const [selectedCenter, setSelectedCenter] = useState("ALL");
   const rows = useMemo(() => {
     const officialLabels = financeCostCenterOptions.map((option) => option.label);
     const officialLabelSet = new Set(officialLabels);
@@ -1838,7 +1839,7 @@ function CostCenterChart({ data }: { data: FinanceData }) {
 
   return (
     <article className="finance-panel finance-stat-panel">
-      <div className="finance-panel-head">
+      <div className="finance-panel-head finance-cost-center-head">
         <div>
           <span>Xərc nəzarəti</span>
           <h2>Xərc mərkəzləri üzrə bölgü</h2>
@@ -1848,9 +1849,73 @@ function CostCenterChart({ data }: { data: FinanceData }) {
               : "Seçilmiş dövr üzrə bölgü"}
           </small>
         </div>
+        <FormSelect
+          name="costCenterFilter"
+          aria-label="Xərc mərkəzinə görə filter"
+          className="finance-cost-center-select"
+          value={selectedCenter}
+          onValueChange={setSelectedCenter}
+          options={[
+            { value: "ALL", label: "Bütün mərkəzlər" },
+            ...rows.map((row) => ({
+              value: row.label,
+              label: row.label,
+            })),
+          ]}
+        />
       </div>
-      <HorizontalStatBars rows={rows} />
+      {selectedCenter === "ALL" ? (
+        <HorizontalStatBars rows={rows} />
+      ) : (
+        <CostCenterExpenseDetails
+          expenses={data.expenses.filter((expense) => {
+            const label = expense.sourceKind === "EVENT"
+              ? "Tədbirlər"
+              : expense.costCenter
+                ? getCostCenterLabel(expense.costCenter)
+                : "Təyin edilməyib";
+            return label === selectedCenter;
+          })}
+          centerLabel={selectedCenter}
+        />
+      )}
     </article>
+  );
+}
+
+function CostCenterExpenseDetails({
+  expenses,
+  centerLabel,
+}: {
+  expenses: FinanceData["expenses"];
+  centerLabel: string;
+}) {
+  const total = expenses.reduce((sum, expense) => sum + expense.amountValue, 0);
+  const sortedExpenses = [...expenses].sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+
+  return (
+    <div className="finance-cost-center-details">
+      <div className="finance-cost-center-summary">
+        <strong>{centerLabel}</strong>
+        <span>{formatChartAmount(total)} · {expenses.length} əməliyyat</span>
+      </div>
+      {sortedExpenses.length ? (
+        <div className="finance-cost-center-list" role="list" aria-label={`${centerLabel} xərc əməliyyatları`}>
+          {sortedExpenses.map((expense) => (
+            <div className="finance-cost-center-item" key={expense.id} role="listitem">
+              <div className="finance-cost-center-item-main">
+                <strong>{expense.category || "Xərc"}</strong>
+                <span>{expense.description || expense.vendor || expense.workshopEventTitle || "Əlavə qeyd yoxdur"}</span>
+                <small>{expense.expenseDate} · {expense.method || "Ödəniş üsulu göstərilməyib"}</small>
+              </div>
+              <strong className="finance-cost-center-amount">{formatChartAmount(expense.amountValue)}</strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="finance-overview-empty">Bu xərc mərkəzi üzrə seçilmiş dövrdə əməliyyat yoxdur.</div>
+      )}
+    </div>
   );
 }
 

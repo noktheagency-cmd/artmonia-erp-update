@@ -63,11 +63,13 @@ export function LeadAppointments({
   embedded = false,
   markedComplete = false,
   onScheduled,
+  onActionSaved,
 }: {
   leadId: string;
   embedded?: boolean;
   markedComplete?: boolean;
   onScheduled?: () => void;
+  onActionSaved?: (outcome: "scheduled" | "attended" | "missed") => void;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
@@ -206,6 +208,7 @@ export function LeadAppointments({
       setKey(crypto.randomUUID());
       setMeetingMode(null);
       setMessage("Görüş planlaşdırıldı.");
+      onActionSaved?.("scheduled");
       await load();
       router.refresh();
     } catch {
@@ -239,6 +242,7 @@ export function LeadAppointments({
       setKey(crypto.randomUUID());
       setMeetingMode(null);
       setMessage("Görüş baş tutdu kimi təsdiqləndi.");
+      onActionSaved?.("attended");
       await load();
       router.refresh();
     } catch {
@@ -277,6 +281,7 @@ export function LeadAppointments({
         outcome: "SCHEDULED",
       });
       setKey(crypto.randomUUID());
+      onActionSaved?.("missed");
       if (!plannedNext.ok) {
         setMessage(plannedNext.message);
         await load();

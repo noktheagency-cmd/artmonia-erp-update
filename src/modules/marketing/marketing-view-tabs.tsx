@@ -36,18 +36,18 @@ export function MarketingViewTabs({
         <LayoutDashboard size={16} />
         Dashboard
       </Link>
-      <Link href={hrefFor("results")} className={cx(active === "results" && "is-active")}>
+      {/* <Link href={hrefFor("results")} className={cx(active === "results" && "is-active")}>
         <BarChart3 size={16} />
         Reklam nəticələri
-      </Link>
+      </Link> */}
       <Link href={hrefFor("strategy")} className={cx(active === "strategy" && "is-active")}>
         <Target size={16} />
         Ümumi strategiya
       </Link>
-      <Link href={hrefFor("content")} className={cx(active === "content" && "is-active")}>
+      {/* <Link href={hrefFor("content")} className={cx(active === "content" && "is-active")}>
         <CalendarDays size={16} />
         Content plan
-      </Link>
+      </Link> */}
       <Link href={hrefFor("dm")} prefetch={false} className={cx(active === "dm" && "is-active")}>
         <MessagesSquare size={16} />
         DM intelligence

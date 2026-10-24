@@ -73,6 +73,26 @@ export const saveAppointment = safeServerAction(async (formData: FormData) => {
         },
       });
     }
+    // Keep the CRM follow-up queue in sync with meeting plans. The overview's
+    // “Bu gün / Sabahın planları / Gecikənlər” groups are driven by lead.nextFollowUpAt.
+    if (input.outcome === "SCHEDULED" || input.outcome === "RESCHEDULED") {
+      await tx.lead.update({
+        where: { id: lead.id },
+        data: {
+          nextActionType: "CONSULTATION_REMINDER",
+          nextFollowUpAt: plannedAt,
+        },
+      });
+    } else if (
+      before &&
+      ["ATTENDED", "NO_SHOW", "CANCELLED"].includes(input.outcome) &&
+      lead.nextFollowUpAt?.getTime() === before.plannedAt.getTime()
+    ) {
+      await tx.lead.update({
+        where: { id: lead.id },
+        data: { nextActionType: null, nextFollowUpAt: null },
+      });
+    }
     await writeAuditLog(tx, { actorUserId: actor.id, action: "lead.appointment.save", entityType: "lead", entityId: lead.id,
       before: before ? { id: before.id, plannedAt: before.plannedAt.toISOString(), outcome: before.outcome, occurredAt: before.occurredAt?.toISOString() ?? null } : null,
       after: { ...input, requestKey: input.idempotencyKey, appointmentId: saved.id } });

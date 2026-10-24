@@ -285,6 +285,9 @@ export function LeadDetailDialogClient({
                     leadId={lead.id}
                     embedded
                     markedComplete={contactDone}
+                    onActionSaved={(outcome) => {
+                      setNote((current) => current.trim() ? current : outcome === "reached" ? "Əlaqə quruldu" : "Əlaqə saxlanılmadı; növbəti əlaqə planlandı");
+                    }}
                     onReached={() => {
                       setStage((current) =>
                         current === "QUALIFIED" ||
@@ -304,6 +307,9 @@ export function LeadDetailDialogClient({
                     leadId={lead.id}
                     embedded
                     markedComplete={meetingDone}
+                    onActionSaved={(outcome) => {
+                      setNote((current) => current.trim() ? current : outcome === "scheduled" ? "Görüş təyin edildi" : outcome === "attended" ? "Görüş baş tutdu" : "Görüş baş tutmadı; nəticə qeyd edildi");
+                    }}
                     onScheduled={() =>
                       setStage((current) =>
                         current === "NEW" || current === "CONTACTED" || current === "NURTURE" ? "QUALIFIED" : current,

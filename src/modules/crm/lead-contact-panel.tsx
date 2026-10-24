@@ -86,11 +86,13 @@ export function LeadContactPanel({
   embedded = false,
   markedComplete = false,
   onReached,
+  onActionSaved,
 }: {
   leadId: string;
   embedded?: boolean;
   markedComplete?: boolean;
   onReached?: () => void;
+  onActionSaved?: (outcome: "reached" | "missed") => void;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
@@ -219,6 +221,7 @@ export function LeadContactPanel({
       setKey(crypto.randomUUID());
       setMode(null);
       if (reached) onReached?.();
+      onActionSaved?.(reached ? "reached" : "missed");
       setMessage(reached ? "Əlaqə quruldu kimi təsdiqləndi." : "Əlaqə saxlanılmadı. Növbəti plan yazıldı.");
       setMessageTone("success");
       await load();
