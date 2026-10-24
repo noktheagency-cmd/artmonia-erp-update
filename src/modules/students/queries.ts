@@ -47,7 +47,12 @@ import {
   type StudentReminderKind,
 } from "@/modules/students/student-reminders";
 import { resolveFirstLessonActivationWarning } from "@/modules/students/activation-from-attendance";
-import { loadAtRiskStudentIds } from "@/modules/students/attendance-risk-for-students";
+import {
+  loadRiskPanelStudents,
+  loadStudentRisks,
+  type StudentRiskPanelItem,
+} from "@/modules/students/attendance-risk-for-students";
+import type { AttendanceRiskLevel } from "@/modules/students/attendance-analytics";
 import { earliestPackageUpgradeMonth } from "@/modules/students/package-upgrade-policy";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 import { programJourneyImageUrl } from "@/server/storage/erp-files";
@@ -116,6 +121,11 @@ export type StudentListData = {
   todayReminders: {
     dateLabel: string;
     items: StudentReminderItem[];
+  };
+  riskPanel: {
+    dangerCount: number;
+    warningCount: number;
+    items: StudentRiskPanelItem[];
   };
   operations: {
     periodLabel: string;
@@ -254,6 +264,8 @@ export type StudentListData = {
     lifecycleTone: StudentTone;
     /** Derived from attendance streak; not a lifecycle status. */
     isAtRisk: boolean;
+    riskLevel: AttendanceRiskLevel | null;
+    riskStreak: number;
     activationWarning: string | null;
     paymentStatus: string;
     paymentStatusCode: string;
@@ -569,7 +581,12 @@ export async function getStudentListData(
   if (rawData !== initialRawData) page = 1;
   const { rows, options, clv, paymentSummary, operations } = rawData;
   const { programs, teachers, leads: convertibleLeads, sources, campaigns, discountTypes } = options;
-  const atRiskIds = await loadAtRiskStudentIds(rows.map((row) => row.id));
+  const studentRisks = await loadStudentRisks(rows.map((row) => row.id));
+  const riskPanelItems = activeTab === "overview"
+    ? await loadRiskPanelStudents({
+        managerId: scopeFor(actor.permissions, "student.read") === "ALL" ? undefined : actor.id,
+      })
+    : [];
 
   const summaryCounts = new Map(
     Object.entries(options.summaryCounts).map(([status, count]) => [
@@ -648,6 +665,11 @@ export async function getStudentListData(
       to: pageTo,
     },
     todayReminders,
+    riskPanel: {
+      dangerCount: riskPanelItems.filter((item) => item.level === "danger").length,
+      warningCount: riskPanelItems.filter((item) => item.level === "warning").length,
+      items: riskPanelItems,
+    },
     operations,
     permissions: {
       canCreateStudent: actor.permissions.has("student.create"),
@@ -833,7 +855,9 @@ export async function getStudentListData(
         freezeReserved: student.freezeReserved,
         lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
         lifecycleTone: lifecycleStatus.tone,
-        isAtRisk: atRiskIds.has(student.id),
+        isAtRisk: studentRisks.get(student.id)?.level === "danger",
+        riskLevel: studentRisks.get(student.id)?.level ?? null,
+        riskStreak: studentRisks.get(student.id)?.streak ?? 0,
         activationWarning: resolveFirstLessonActivationWarning({
           lifecycleStatus: student.lifecycleStatus,
           plannedFirstLessonAt: student.firstLessonAt ? new Date(student.firstLessonAt) : null,

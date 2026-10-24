@@ -2,20 +2,31 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { todayInBaku } from "@/modules/groups/shared";
-import { riskyStudentIds, type AttendanceEntry } from "./attendance-analytics";
+import {
+  studentAttendanceRisks,
+  type AttendanceEntry,
+  type StudentAttendanceRisk,
+} from "./attendance-analytics";
 
 const RISK_LOOKBACK_DAYS = 93;
 
-/** Current at-risk IDs among the given students (same rule as attendance analytics). */
-export async function loadAtRiskStudentIds(studentIds: string[]): Promise<Set<string>> {
-  if (studentIds.length === 0) return new Set();
+type RiskScope = {
+  studentIds?: string[];
+  managerId?: string;
+};
 
+async function loadAttendanceEntries({ studentIds, managerId }: RiskScope) {
   const today = todayInBaku();
   const from = new Date(`${today}T00:00:00.000Z`);
   from.setUTCDate(from.getUTCDate() - (RISK_LOOKBACK_DAYS - 1));
   const fromDate = from.toISOString().slice(0, 10);
 
-  const rows = await getPrisma().$queryRaw<AttendanceEntry[]>(Prisma.sql`
+  const idsSql = studentIds
+    ? Prisma.sql`and s.id in (${Prisma.join(studentIds.map((id) => Prisma.sql`${id}::uuid`))})`
+    : Prisma.empty;
+  const managerSql = managerId ? Prisma.sql`and s.manager_id = ${managerId}::uuid` : Prisma.empty;
+
+  return getPrisma().$queryRaw<AttendanceEntry[]>(Prisma.sql`
     select distinct ss.id::text as "sessionId", ss.session_date::text as date, ss.start_time as time,
       t.id::text as "teacherId", t.full_name as teacher, cs.id::text as "groupId",
       coalesce(cs.display_name, cs.weekday::text || ' · ' || cs.start_time) as "group",
@@ -35,8 +46,9 @@ export async function loadAtRiskStudentIds(studentIds: string[]): Promise<Set<st
       where h.student_id = s.id and h.effective_at <= ss.session_date
       order by h.effective_at desc, h.created_at desc, h.id desc limit 1
     ) history on true
-    where s.id in (${Prisma.join(studentIds.map((id) => Prisma.sql`${id}::uuid`))})
-      and ss.session_date between ${fromDate}::date and ${today}::date
+    where ss.session_date between ${fromDate}::date and ${today}::date
+      ${idsSql}
+      ${managerSql}
       and ss.status <> 'CANCELLED'
       and s.is_test_data = false
       and (ss.session_date + ss.end_time::time) at time zone 'Asia/Baku' <= now()
@@ -46,6 +58,31 @@ export async function loadAtRiskStudentIds(studentIds: string[]): Promise<Set<st
         and f.start_date <= ss.session_date and (f.end_date is null or f.end_date >= ss.session_date))
     order by date, time, "sessionId", "enrollmentId"
   `);
+}
 
-  return new Set(riskyStudentIds(rows));
+/** Siyahı üçün: tələbə → risk (2 qayıb = warning, 3+ = danger). */
+export async function loadStudentRisks(studentIds: string[]): Promise<Map<string, StudentAttendanceRisk>> {
+  if (studentIds.length === 0) return new Map();
+  return studentAttendanceRisks(await loadAttendanceEntries({ studentIds }));
+}
+
+export type StudentRiskPanelItem = StudentAttendanceRisk & { code: string };
+
+/** Sağ kart üçün: qırmızılar yuxarıda, sonra sarılar. */
+export async function loadRiskPanelStudents(scope: { managerId?: string } = {}): Promise<StudentRiskPanelItem[]> {
+  const risks = [...studentAttendanceRisks(await loadAttendanceEntries({ managerId: scope.managerId })).values()];
+  if (risks.length === 0) return [];
+
+  const students = await getPrisma().student.findMany({
+    where: { id: { in: risks.map((risk) => risk.studentId) } },
+    select: { id: true, code: true },
+  });
+  const codes = new Map(students.map((student) => [student.id, student.code]));
+
+  return risks
+    .map((risk) => ({ ...risk, code: codes.get(risk.studentId) ?? "—" }))
+    .sort((a, b) =>
+      Number(b.level === "danger") - Number(a.level === "danger")
+      || b.streak - a.streak
+      || a.student.localeCompare(b.student, "az"));
 }

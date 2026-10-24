@@ -292,7 +292,7 @@ export function StudentList({ data }: { data: StudentListData }) {
           <StudentAttentionAudit
             data={data}
             onOverdue={() => handleQuickFilter("payment", "overdue")}
-            onFirstLessonMissed={() => handleQuickFilter("attention", "first_lesson")}
+            // onFirstLessonMissed={() => handleQuickFilter("attention", "first_lesson")}
             onUnassigned={() => handleQuickFilter("teacher", "unassigned")}
           />
         </>
@@ -338,21 +338,22 @@ export function StudentList({ data }: { data: StudentListData }) {
 function StudentAttentionAudit({
   data,
   onOverdue,
-  onFirstLessonMissed,
+  // onFirstLessonMissed,
   onUnassigned,
 }: {
   data: StudentListData;
   onOverdue: () => void;
-  onFirstLessonMissed: () => void;
+  // onFirstLessonMissed: () => void;
   onUnassigned: () => void;
 }) {
   const operations = data.operations;
   const reminders = data.todayReminders.items;
   const dueTodayStudents = operations.dueTodayStudents ?? [];
   const overdueStudents = operations.overdueStudents ?? [];
-  const firstLessonMissedStudents = operations.firstLessonMissedStudents ?? [];
+  // const firstLessonMissedStudents = operations.firstLessonMissedStudents ?? [];
   const todayAttentionCount = operations.dueTodayCount + reminders.length;
-  const attentionTotal = todayAttentionCount + operations.overdueCount + operations.firstLessonMissedCount;
+  const attentionTotal = todayAttentionCount + operations.overdueCount
+    + data.riskPanel.dangerCount + data.riskPanel.warningCount;
 
   return (
     <section className="students-attention-audit students-enter" aria-labelledby="students-attention-title">
@@ -361,57 +362,34 @@ function StudentAttentionAudit({
           <BellRing />
         </span>
         <div>
-          <h2 id="students-attention-title">Ödəniş və xatırlatma nəzarəti</h2>
+          <h2 id="students-attention-title">Ümumi xatırlatmalar və qayıblar</h2>
           <p>{data.todayReminders.dateLabel} üçün tələbə əməliyyatları</p>
         </div>
-        <span className="students-attention-meta">
+        {/* <span className="students-attention-meta">
           <i aria-hidden="true" /> Canlı · {attentionTotal} qeyd
-        </span>
+        </span> */}
       </header>
 
       <div className="students-attention-split">
-        <section className="students-first-lesson-alert" aria-labelledby="students-first-lesson-title">
+        <section className="students-first-lesson-alert students-manual-notices" aria-labelledby="students-notices-title">
           <header className="students-first-lesson-alert-head">
-            <span aria-hidden="true"><AlertTriangle /></span>
+            <span aria-hidden="true"><BellRing /></span>
             <div>
-              <h3 id="students-first-lesson-title">İlk dərsə gəlməyənlər</h3>
-              <p>Slot gözləyir statusunda qalıb — aktivləşmə üçün müəllim “Gəldi” qeyd etməlidir</p>
+              <h3 id="students-notices-title">Manual bildirişlər</h3>
+              <p>Tələbə profilində “Bildiriş yarat” ilə əlavə edilənlər · bu günün xatırlatmaları</p>
             </div>
-            <strong>{operations.firstLessonMissedCount}</strong>
+            <strong>{reminders.length}</strong>
           </header>
           <div className="students-first-lesson-alert-list">
-            {firstLessonMissedStudents.map((student) => (
-              <Link
-                key={student.id}
-                href={`/students/${student.id}` as Route}
-                className="students-first-lesson-alert-row"
-                aria-label={`${student.name}: ilk dərsə gəlməyib`}
-              >
-                <span className="students-attention-avatar" aria-hidden="true">{getInitials(student.name)}</span>
-                <span className="students-attention-person">
-                  <strong>{student.name}</strong>
-                  <small>{student.code} · {student.program}</small>
-                </span>
-                <StatusChip tone="warning">İlk dərsə gəlməyib</StatusChip>
-                <span className="students-attention-action">
-                  <strong><AlertTriangle aria-hidden="true" /> {student.reasonLabel}</strong>
-                  <small><CalendarClock aria-hidden="true" /> İlk dərs: {student.firstLessonDate} · {student.teacher}</small>
-                </span>
-                <ArrowRight className="students-attention-open" aria-hidden="true" />
-              </Link>
+            {reminders.map((reminder) => (
+              <StudentReminderAttentionRow reminder={reminder} key={`reminder-${reminder.id}`} />
             ))}
-            {operations.firstLessonMissedCount === 0 ? (
-              <StudentAttentionEmpty>Bu gün ilk dərs buraxan tələbə yoxdur</StudentAttentionEmpty>
+            {reminders.length === 0 ? (
+              <StudentAttentionEmpty>Aktiv manual bildiriş yoxdur</StudentAttentionEmpty>
             ) : null}
           </div>
-          {operations.firstLessonMissedCount > 0 ? (
-            <button type="button" className="students-attention-more is-amber" onClick={onFirstLessonMissed}>
-              Bütün ilk dərs buraxanları aç <ArrowRight aria-hidden="true" />
-            </button>
-          ) : null}
         </section>
-
-        <StudentRiskPanel operations={operations} />
+        <StudentRiskPanel riskPanel={data.riskPanel} />
       </div>
 
       <div className="students-attention-groups">
@@ -758,13 +736,13 @@ function StudentDataTable({
             {students.map((student) => {
               const hasDebt = student.paymentTone === "danger" || student.paymentTone === "warning";
               const hasActivationAlert = Boolean(student.activationWarning);
-              const isAtRisk = Boolean(student.isAtRisk);
+              const riskLevel = student.riskLevel;
               return (
                 <TableRow
                   key={student.code}
                   data-debt={hasDebt}
                   data-activation-alert={hasActivationAlert || undefined}
-                  data-risk={isAtRisk || undefined}
+                  data-risk={riskLevel ?? undefined}
                 >
                   <TableCell>
                     <Link href={`/students/${student.id}` as Route} className="students-identity-link">
@@ -791,7 +769,11 @@ function StudentDataTable({
                   <TableCell>
                     <div className="students-status-cell">
                       <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>
-                      {isAtRisk ? <StatusChip tone="danger">Riskli</StatusChip> : null}
+                      {riskLevel ? (
+                        <span title={`Ardıcıl ${student.riskStreak} dərs qayıb`}>
+                          <StatusChip tone={riskLevel}>Riskli</StatusChip>
+                        </span>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell>

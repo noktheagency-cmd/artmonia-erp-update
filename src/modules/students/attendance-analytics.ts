@@ -34,6 +34,54 @@ export function isAtRiskStreak(entries: AttendanceEntry[]) {
   return consecutiveAbsences(entries) >= 3 && isRiskEligibleLifecycle(entries[0]?.lifecycleStatus);
 }
 
+export type AttendanceRiskLevel = "danger" | "warning";
+
+/** 2 ardıcıl qayıb = sarı, 3 və daha çox = qırmızı. */
+export const WARNING_ABSENCE_STREAK = 2;
+export const DANGER_ABSENCE_STREAK = 3;
+
+export function attendanceRiskLevel(streak: number): AttendanceRiskLevel | null {
+  if (streak >= DANGER_ABSENCE_STREAK) return "danger";
+  if (streak >= WARNING_ABSENCE_STREAK) return "warning";
+  return null;
+}
+
+export type StudentAttendanceRisk = {
+  studentId: string;
+  student: string;
+  level: AttendanceRiskLevel;
+  streak: number;
+  teacher: string;
+  group: string;
+  lastAbsentDate: string;
+};
+
+/** Hər tələbə üçün ən uzun ardıcıl qayıb seriyasına görə risk səviyyəsi. */
+export function studentAttendanceRisks(entries: AttendanceEntry[]) {
+  const byPair = new Map<string, AttendanceEntry[]>();
+  for (const entry of entries) {
+    const key = `${entry.teacherId}:${entry.studentId}`;
+    const history = byPair.get(key) ?? [];
+    history.push(entry);
+    byPair.set(key, history);
+  }
+  const risks = new Map<string, StudentAttendanceRisk>();
+  for (const history of byPair.values()) {
+    if (!isRiskEligibleLifecycle(history[0]?.lifecycleStatus)) continue;
+    const streak = consecutiveAbsences(history);
+    const level = attendanceRiskLevel(streak);
+    if (!level) continue;
+    const latest = [...history].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))[0];
+    const current = risks.get(latest.studentId);
+    if (current && current.streak >= streak) continue;
+    risks.set(latest.studentId, {
+      studentId: latest.studentId, student: latest.student, level, streak,
+      teacher: latest.teacher, group: latest.group, lastAbsentDate: latest.date,
+    });
+  }
+  return risks;
+}
+
 /** Unique student IDs with a qualifying consecutive-absence streak (per teacher pair). */
 export function riskyStudentIds(entries: AttendanceEntry[]) {
   const byPair = new Map<string, AttendanceEntry[]>();
