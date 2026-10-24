@@ -1749,7 +1749,18 @@ html.dark .students-attendance-dialog > .ui-dialog-close:hover { background: #28
 }
 
 /* ===== Ödəniş və xatırlatma nəzarəti: yuxarıda 2 kart, aşağıda tam en ===== */
-.students-attention-split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(380px, 1fr); gap: 14px; align-items: stretch; margin-top: 14px; }
+.students-attention-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+  margin-top: 14px;
+}
+@media (max-width: 768px) {
+  .students-attention-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .students-attention-split .students-first-lesson-alert { margin-top: 0; min-width: 0; }
 
 /* Siyahılar məzmun hündürlüyündə qalır: sətirlər sıxılıb üst-üstə düşmür */
@@ -1780,6 +1791,14 @@ html.dark .students-attendance-dialog > .ui-dialog-close:hover { background: #28
   border: 1px solid var(--students-line); border-radius: 16px;
   box-shadow: 0 8px 22px rgb(39 48 68 / 5%);
 }
+
+.students-first-lesson-alert,
+.students-risk-panel {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .students-risk-head, .students-risk-link, .students-risk-status, .students-risk-list { grid-column: 1 / -1; }
 .students-risk-head { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: center; }
 .students-risk-icon { display: grid; place-items: center; width: 36px; height: 36px; color: var(--students-coral); background: #fde9ec; border-radius: 12px; }

@@ -81,7 +81,7 @@ export function DailyReport({data}:{data:DailyReportData}) {
  {title:"Görüş",icon:CalendarDays,tone:"violet",value:report.scheduled,unit:"bu dövrə planlı görüş",detail:report.attended+" baş tutdu",badge:report.noShow+" gəlmədi · "+report.rescheduled+" təxirə salındı",sections:[
   {kind:"appointments",label:"Görüş",count:report.scheduled,detail:report.attended+" baş tutdu"},
  ]},
- {title:"Satış və ödəniş",icon:Wallet,tone:"green",value: (Number(report.salesAmount) + Number(report.payments)).toFixed(2),unit:"satış və ödəniş",detail:report.payments+" AZN",badge:"faktiki daxil olan pul",sections:[
+ {title: "Satış və ödəniş", icon: Wallet, tone: "green", value: report.sales, unit: "bugünkü satış sayı", detail: moneyLabel(String(Number(report.salesAmount) + Number(report.payments))), badge: "gündəlik dövriyyə", sections: [
     {kind:"sales",label:"Satış",count:report.sales,detail:moneyLabel(report.salesAmount),children:[
         {kind:"sales_new",label:"Yeni satış",count:report.crmNewSales,detail:moneyLabel(report.crmNewSalesAmount)},
         {kind:"sales_direct",label:"Birbaşa satış",count:report.directNewSales,detail:moneyLabel(report.directNewSalesAmount)},
