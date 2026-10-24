@@ -124,3 +124,5 @@
 .instagram-dm-history-scroll { overflow-x: auto; }
 .instagram-dm-history table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 12px; }
 .instagram-dm-history th, .instagram-dm-history td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--border, #e2e8f0); }
+
+.instagram-dm-error-code { color: #a04433; font-size: .78rem; white-space: nowrap; }

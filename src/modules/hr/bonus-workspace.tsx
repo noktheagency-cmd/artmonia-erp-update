@@ -84,14 +84,18 @@ export function BonusWorkspace({
 }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState(data.campaigns[0]?.id ?? "");
+  const [departmentFilter, setDepartmentFilter] = useState("ALL");
+  const [detailTab, setDetailTab] = useState<"details" | "history">("details");
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [replayToken, setReplayToken] = useState(0);
+
   const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
-  const selected = data.campaigns.find((campaign) => campaign.id === selectedId) ?? data.campaigns[0];
+  const filteredCampaigns = data.campaigns.filter((campaign) => departmentFilter === "ALL" || campaign.department === departmentFilter);
+  const selected = filteredCampaigns.find((campaign) => campaign.id === selectedId) ?? filteredCampaigns[0];
 
   function run(action: () => Promise<unknown>, success: string, close?: () => void) {
     startTransition(() => {
@@ -106,29 +110,15 @@ export function BonusWorkspace({
     });
   }
 
-  if (!selected) {
-    return (
-      <section className="hr-bonus-empty">
-        <div className="hr-bonus-empty-art"><Paintbrush /><Sparkles /></div>
-        <div>
-          <h2>İlk komanda bonusunu yaradın</h2>
-          <p>Departament hədəflərini etaplara bölün, nəticəni şəffaf göstərin və hər uğuru Van Gogh ilə qeyd edin.</p>
-        </div>
-        {data.permissions.canManage ? <Button onClick={() => setCreateOpen(true)}><Plus data-icon="inline-start" /> Bonus yarat</Button> : <p className="hr-bonus-empty-note">Sizin departament üçün aktiv kampaniya yoxdur.</p>}
-        <CreateBonusDialog open={createOpen} departments={data.departments} teacherDepartments={data.teacherDepartments} employees={data.employees} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Bonus kampaniyası yaradıldı.", () => setCreateOpen(false))} />
-      </section>
-    );
-  }
-
-  const reachedStages = selected.stages.filter((stage) => stage.reachedAt);
-  const nextStage = selected.stages.find((stage) => !stage.reachedAt);
+  const reachedStages = selected?.stages.filter((stage) => stage.reachedAt) ?? [];
+  const nextStage = selected?.stages.find((stage) => !stage.reachedAt);
   const latestStage = reachedStages.at(-1);
-  const status = statusMeta[selected.status];
-  const unit = selected.metricKind === "DEPARTMENT_SALES_COUNT"
+  const status = selected ? statusMeta[selected.status] : statusMeta.ACTIVE;
+  const unit = selected?.metricKind === "DEPARTMENT_SALES_COUNT"
     ? "satış"
-    : selected.metricKind === "TEACHER_RETENTION_RATE"
+    : selected?.metricKind === "TEACHER_RETENTION_RATE"
       ? "tələbə (orta)"
-      : selected.metricKind === "MANUAL_KPI"
+      : selected?.metricKind === "MANUAL_KPI"
         ? "xal"
         : "₼";
 
@@ -136,36 +126,34 @@ export function BonusWorkspace({
     <section className="hr-bonus-board" aria-busy={pending}>
       <div className="hr-bonus-command-row">
         <label className="hr-bonus-campaign-select">
+          <span>Departament</span>
+          <FormSelect name="departmentFilter" aria-label="Departament filtri" value={departmentFilter} onValueChange={(value) => { setDepartmentFilter(value); setSelectedId(""); setSelectedEmployeeIds([]); setCreateOpen(false); }} options={[{ value: "ALL", label: "Bütün departamentlər" }, ...data.departments.map((item) => ({ value: item, label: item }))]} />
+        </label>
+        {selected ? (
+        <label className="hr-bonus-campaign-select">
           <span>Kampaniya</span>
           <FormSelect
             name="bonusCampaign"
             aria-label="Kampaniya"
-            value={selected.id}
+            value={selected?.id ?? ""}
             onValueChange={setSelectedId}
             searchable
             searchPlaceholder="Kampaniya axtar..."
-            options={data.campaigns.map((campaign) => ({
+            options={filteredCampaigns.map((campaign) => ({
               value: campaign.id,
               label: `${campaign.name} · ${campaign.department}`,
             }))}
           />
         </label>
+        ) : null}
         <div className="hr-bonus-command-actions">
           {data.permissions.canManage ? <Button variant="outline" onClick={() => run(() => actions.refresh(new FormData()), "Bonus göstəriciləri yeniləndi.")}><RefreshCw data-icon="inline-start" /> Yenilə</Button> : null}
-          <Button variant="outline" aria-label="Animasiyanı yenidən oynat" onClick={() => setReplayToken((value) => value + 1)}><RotateCcw data-icon="inline-start" /> Yenidən oynat</Button>
-          {data.permissions.canManage ? <Button onClick={() => setCreateOpen(true)}><Plus data-icon="inline-start" /> Bonus yarat</Button> : null}
+
         </div>
       </div>
 
       {notice ? <div className="hr-bonus-notice" role="status"><Sparkles />{notice}<button type="button" onClick={() => setNotice("")} aria-label="Bildirişi bağla">×</button></div> : null}
 
-      <div className="hr-bonus-summary-strip">
-        <div><span>Kampaniya</span><strong>{selected.name}</strong></div>
-        <div><span>Departament</span><strong>{selected.department}</strong></div>
-        <div><span>Dövr</span><strong>{formatDate(selected.startsAt)} – {formatDate(selected.endsAt)}</strong></div>
-        <div><span>Komanda</span><strong>{Math.round(selected.progress)}% · {formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</strong></div>
-        <div><span>Status</span><span className={`hr-bonus-status is-${status.tone}`}>{status.label}</span></div>
-      </div>
 
       {/* <section className="hr-bonus-stage-main" aria-labelledby="bonus-scene-title">
         <div className="hr-bonus-scene-heading">
@@ -185,9 +173,35 @@ export function BonusWorkspace({
         <MilestoneRail campaign={selected} unit={unit} />
       </section> */}
 
+      {!selected ? <p className="hr-bonus-empty-note">Bu departament üçün hələ kampaniya yoxdur. Aşağıdan əməkdaş seçib bonus yarada bilərsiniz.</p> : null}
+      <section className="hr-bonus-employees-card">
+        <div className="hr-bonus-employees-heading"><div><h2>Departament əməkdaşları</h2><p>Cədvəldən əməkdaşı seçin və bonusu aşağıda təyin edin.</p></div><span>{selectedEmployeeIds.length} seçilib</span></div>
+        <div className="hr-bonus-employee-table-wrap"><table className="hr-bonus-employee-table"><thead><tr><th scope="col">Seç</th><th scope="col">Əməkdaş</th><th scope="col">Vəzifə</th><th scope="col">Departament</th></tr></thead><tbody>
+          {data.employees.filter((employee) => departmentFilter === "ALL" || employee.department === departmentFilter).map((employee) => {
+            const checked = selectedEmployeeIds.includes(employee.id);
+            return <tr key={employee.id} className={checked ? "is-selected" : ""} onClick={() => { if (!data.permissions.canManage) return; setSelectedEmployeeIds((current) => checked ? current.filter((id) => id !== employee.id) : [...current.filter((id) => data.employees.find((item) => item.id === id)?.department === employee.department), employee.id]); }}><td><input type="checkbox" aria-label={`${employee.name} seç`} checked={checked} disabled={!data.permissions.canManage} onClick={(event) => event.stopPropagation()} onChange={() => setSelectedEmployeeIds((current) => checked ? current.filter((id) => id !== employee.id) : [...current, employee.id])} /></td><td><strong>{employee.name}</strong></td><td>{employee.position}</td><td>{employee.department}</td></tr>;
+          })}
+          {!data.employees.some((employee) => departmentFilter === "ALL" || employee.department === departmentFilter) ? <tr><td colSpan={4}>Bu departamentdə əməkdaş tapılmadı.</td></tr> : null}
+        </tbody></table></div>
+        {data.permissions.canManage ? <div className="hr-bonus-inline-actions"><Button size="sm" disabled={!selectedEmployeeIds.length} onClick={() => setCreateOpen((value) => !value)}><Plus data-icon="inline-start" /> {createOpen ? "Bonus formasını gizlət" : "Seçilənlərə bonus təyin et"}</Button></div> : null}
+        <CreateBonusForm key={data.employees.find((employee) => employee.id === selectedEmployeeIds[0])?.department ?? departmentFilter} open={createOpen && selectedEmployeeIds.length > 0} departmentFilter={data.employees.find((employee) => employee.id === selectedEmployeeIds[0])?.department ?? departmentFilter} selectedEmployeeIds={selectedEmployeeIds} departments={data.departments} teacherDepartments={data.teacherDepartments} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Seçilmiş əməkdaşlar üçün bonus yaradıldı.", () => { setCreateOpen(false); setSelectedEmployeeIds([]); })} />
+      </section>
+      {selected ? (<>
       <ParticipantProgressBoard campaign={selected} unit={unit} />
 
-      <aside className="hr-bonus-inspector">
+      <section className="hr-bonus-detail-card">
+        <div className="hr-bonus-detail-tabs" role="tablist" aria-label="Kampaniya məlumatları">
+          <button type="button" role="tab" aria-selected={detailTab === "details"} className={detailTab === "details" ? "is-active" : ""} onClick={() => setDetailTab("details")}>Kampaniya detalları</button>
+          <button type="button" role="tab" aria-selected={detailTab === "history"} className={detailTab === "history" ? "is-active" : ""} onClick={() => setDetailTab("history")}>Kampaniya tarixçəsi</button>
+        </div>
+      {detailTab === "details" ? <div className="hr-bonus-detail-content">      <div className="hr-bonus-summary-strip">
+        <div><span>Kampaniya</span><strong>{selected.name}</strong></div>
+        <div><span>Departament</span><strong>{selected.department}</strong></div>
+        <div><span>Dövr</span><strong>{formatDate(selected.startsAt)} – {formatDate(selected.endsAt)}</strong></div>
+        <div><span>Komanda</span><strong>{Math.round(selected.progress)}% · {formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</strong></div>
+        <div><span>Status</span><span className={`hr-bonus-status is-${status.tone}`}>{status.label}</span></div>
+      </div>
+<div className="hr-bonus-inspector">
         <div className="hr-bonus-inspector-title">
           <div><span>Qısa məlumat</span><h2>Kampaniya detalları</h2></div>
           <Flag />
@@ -208,20 +222,19 @@ export function BonusWorkspace({
           ) : null}
         </div>
         {selected.ownAwardTotal > 0 ? <div className="hr-bonus-own-award"><PartyPopper /><div><span>Sizin açılmış bonus payınız</span><strong>{formatMoney(selected.ownAwardTotal)}</strong></div></div> : null}
-        {selected.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki ödənişli satışlar</strong><span>Şirkət KPI / günlük hesabat ilə eyni mənbə: course_sales (yeni, qayıdış, birbaşa; ləğv/refund çıxılır).</span></div> : null}
+        {selected?.metricKind === "DEPARTMENT_SALES_COUNT" ? <div className="hr-bonus-method-note"><strong>Faktiki ödənişli satışlar</strong><span>Şirkət KPI / günlük hesabat ilə eyni mənbə: course_sales (yeni, qayıdış, birbaşa; ləğv/refund çıxılır).</span></div> : null}
         {selected.metricKind === "TEACHER_RETENTION_RATE" ? <div className="hr-bonus-method-note"><strong>Sadə hesab</strong><span>Tələbə sayına uyğun bonus seçilir, sonra churn kəsintisi çıxılır.</span></div> : null}
         {selected.perUnitBonusPercent > 0 || selected.perUnitBonusAmount > 0 ? <div className="hr-bonus-method-note"><strong>Satışdan sonrakı bonus</strong><span>İlk {selected.requiredThreshold} satış məcburidir. Sonrakı hər satış üçün {selected.perUnitBonusPercent > 0 ? `${selected.perUnitBonusPercent}%` : ""}{selected.perUnitBonusPercent > 0 && selected.perUnitBonusAmount > 0 ? " + " : ""}{selected.perUnitBonusAmount > 0 ? formatMoney(selected.perUnitBonusAmount) : ""}.</span></div> : null}
-      </aside>
-
-      <section className="hr-bonus-history">
+      </div></div> : <section className="hr-bonus-history">
         <div className="hr-bonus-history-title"><div><Star /><span>Kampaniya tarixçəsi</span></div><small>{reachedStages.length}/{selected.stages.length} etap açılıb</small></div>
         {latestStage ? <StageHistoryRow stage={latestStage} campaign={selected} canApprove={data.permissions.canApprove} canPost={data.permissions.canPost} pending={pending} onApprove={() => { const form = new FormData(); form.set("stageId", latestStage.id); run(() => actions.approve(form), "Bonus payları HR tərəfindən təsdiqləndi."); }} onPost={() => { const form = new FormData(); form.set("stageId", latestStage.id); run(() => actions.post(form), "Bonus payları Maliyyə xərclərinə göndərildi."); }} /> : <div className="hr-bonus-history-empty">İlk etap açıldıqda uğur burada görünəcək.</div>}
+      </section>}
       </section>
 
-      <CreateBonusDialog open={createOpen} departments={data.departments} teacherDepartments={data.teacherDepartments} employees={data.employees} pending={pending} onClose={() => setCreateOpen(false)} onSubmit={(formData) => run(() => actions.create(formData), "Bonus kampaniyası yaradıldı.", () => setCreateOpen(false))} />
       <AdjustmentDialog open={adjustOpen} campaign={selected} pending={pending} onClose={() => setAdjustOpen(false)} onSubmit={(formData) => run(() => actions.adjust(formData), "Nəticə düzəlişi qeydə alındı.", () => setAdjustOpen(false))} />
       <CancelDialog open={cancelOpen} campaign={selected} pending={pending} onClose={() => setCancelOpen(false)} onSubmit={(formData) => run(() => actions.cancel(formData), "Kampaniya ləğv edildi.", () => setCancelOpen(false))} />
       <DeleteCampaignDialog open={deleteOpen} campaign={selected} pending={pending} onClose={() => setDeleteOpen(false)} onSubmit={(formData) => run(() => actions.remove(formData), "Kampaniya birdəfəlik silindi.", () => { setDeleteOpen(false); setSelectedId(""); })} />
+      </>) : null}
     </section>
   );
 }
@@ -313,32 +326,30 @@ function StageHistoryRow({ stage, campaign, canApprove, canPost, pending, onAppr
   return <div className="hr-bonus-history-row"><span className="hr-bonus-history-medal"><Star /></span><div><Badge variant="secondary">ETAP AÇILDI</Badge><strong>{formatMetric(stage.threshold, unit)} — {formatStageRule(stage, campaign)}</strong><p>{campaign.metricKind === "TEACHER_RETENTION_RATE" ? `${stage.awards.length} müəllim tələbə sayı pilləsinə uyğun bonus qazandı.` : `Komanda ${formatMetric(stage.threshold, unit)} hədəfini keçdi.`}</p></div><div><span>Qeydiyyat vaxtı</span><strong>{formatDateTime(stage.reachedAt)}</strong></div><div><span>Bonus statusu</span><strong>{postedCount ? "Maliyyəyə göndərilib" : approvedCount ? "HR təsdiqləyib" : "HR təsdiqi gözlənilir"}</strong></div><div className="hr-bonus-history-actions">{canApprove && pendingCount ? <Button size="sm" variant="outline" disabled={pending} onClick={onApprove}><BadgeCheck data-icon="inline-start" /> Təsdiqlə</Button> : null}{canPost && approvedCount ? <Button size="sm" disabled={pending} onClick={onPost}><Banknote data-icon="inline-start" /> Maliyyəyə göndər</Button> : null}</div></div>;
 }
 
-function CreateBonusDialog({ open, departments, teacherDepartments, employees, pending, onClose, onSubmit }: {
+function CreateBonusForm({ open, departmentFilter, selectedEmployeeIds, departments, teacherDepartments, pending, onClose, onSubmit }: {
   open: boolean;
   departments: string[];
   teacherDepartments: string[];
-  employees: HrBonusData["employees"];
+  departmentFilter: string;
+  selectedEmployeeIds: string[];
   pending: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }) {
   const initialTeacherDepartment = teacherDepartments.includes(departments[0] ?? "");
   const [targetMode, setTargetMode] = useState<"single" | "staged">("staged");
-  const [department, setDepartment] = useState(departments[0] ?? "");
+  const [department, setDepartment] = useState(departmentFilter !== "ALL" ? departmentFilter : (departments[0] ?? ""));
   const [metricKind, setMetricKind] = useState(initialTeacherDepartment ? "TEACHER_RETENTION_RATE" : "DEPARTMENT_COLLECTED_REVENUE");
   const [stages, setStages] = useState<StageDraft[]>(() => initialTeacherDepartment ? teacherStages() : salesStages());
   const [teacherPenalties, setTeacherPenalties] = useState<TeacherPenaltyDraft[]>(() => teacherPenaltyDefaults());
   const [useUniformPercent, setUseUniformPercent] = useState(false);
   const [perUnitEnabled, setPerUnitEnabled] = useState(false);
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(() => employees.filter((employee) => employee.department === (departments[0] ?? "")).map((employee) => employee.id));
   const isTeacherMetric = metricKind === "TEACHER_RETENTION_RATE";
-  const departmentEmployees = useMemo(() => employees.filter((employee) => employee.department === department && (!isTeacherMetric || employee.isTeacher)), [department, employees, isTeacherMetric]);
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = useMemo(() => { const value = new Date(); value.setDate(value.getDate() + 30); return value.toISOString().slice(0, 10); }, []);
 
   function selectDepartment(value: string) {
     setDepartment(value);
-    setSelectedEmployeeIds(employees.filter((employee) => employee.department === value).map((employee) => employee.id));
     if (teacherDepartments.includes(value)) {
       setTargetMode("staged");
       setMetricKind("TEACHER_RETENTION_RATE");
@@ -370,6 +381,7 @@ function CreateBonusDialog({ open, departments, teacherDepartments, employees, p
     const formData = new FormData(event.currentTarget);
     formData.set("department", department);
     formData.set("metricKind", metricKind);
+    if (selectedEmployeeIds.length === 0) return;
     formData.set("participantIds", JSON.stringify(selectedEmployeeIds));
     const submittedStages = (targetMode === "single" ? stages.slice(0, 1) : stages).map((stage, stageIndex) => ({
       ...stage,
@@ -412,24 +424,12 @@ function CreateBonusDialog({ open, departments, teacherDepartments, employees, p
   }
 
   return (
-    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
-      <DialogContent className="hr-bonus-drawer">
-        <DialogHeader>
-          <DialogTitle>Bonus yarat</DialogTitle>
-          <DialogDescription>Hədəfi, maaşa əlavə faizi və istəyə bağlı sabit ödənişi qurun.</DialogDescription>
-        </DialogHeader>
+    open ? <div className="hr-bonus-inline-form" id="bonus-inline-form">
+        <div className="hr-bonus-inline-form-heading"><h3>Bonus təyin et</h3><p>{selectedEmployeeIds.length} əməkdaş seçilib. Qaydaları bu səhifədə doldurun.</p></div>
         <form className="hr-bonus-create-form" onSubmit={submit}>
           <FieldGroup>
             <Field><FieldLabel htmlFor="bonus-name">Kampaniya adı</FieldLabel><Input id="bonus-name" name="name" placeholder="Məsələn: İyul satış sprinti" required minLength={3} /></Field>
-            <Field><FieldLabel>Departament</FieldLabel><FormSelect name="department" value={department} onValueChange={selectDepartment} options={departments.map((item) => ({ value: item, label: item }))} placeholder="Departament seçin" searchable searchPlaceholder="Departament axtar..." catalogKey="HR_DEPARTMENT" createLabel="Yeni departament əlavə et" required /></Field>
-            <Field>
-              <FieldLabel>İştirak edən əməkdaşlar</FieldLabel>
-              <FieldDescription>Bonusun kimlərə tətbiq olunacağını manual seçin.</FieldDescription>
-              <div className="hr-bonus-participant-list">
-                {departmentEmployees.map((employee) => { const checked = selectedEmployeeIds.includes(employee.id); return <label key={employee.id}><input type="checkbox" checked={checked} onChange={() => setSelectedEmployeeIds((current) => checked ? current.filter((id) => id !== employee.id) : [...current, employee.id])} /><span><strong>{employee.name}</strong><small>{employee.position}</small></span></label>; })}
-              </div>
-              {!departmentEmployees.length ? <FieldDescription>Bu departamentdə aktiv əməkdaş tapılmadı.</FieldDescription> : null}
-            </Field>
+            <Field><FieldLabel>Departament</FieldLabel><strong>{department}</strong><input type="hidden" name="department" value={department} /></Field>
             <div className="hr-bonus-form-grid"><Field><FieldLabel htmlFor="bonus-start">Başlama tarixi</FieldLabel><Input id="bonus-start" name="startsAt" type="date" defaultValue={today} required /></Field><Field><FieldLabel htmlFor="bonus-end">Bitmə tarixi</FieldLabel><Input id="bonus-end" name="endsAt" type="date" defaultValue={nextMonth} required /></Field></div>
             <label className="hr-bonus-recurring"><input type="checkbox" name="recursMonthly" value="true" /><span><strong>Hər ay avtomatik davam et</strong><small>Bu dövr bitəndə eyni qaydalarla növbəti ay yaradılacaq.</small></span></label>
             <Field><FieldLabel>Nəticə mənbəyi</FieldLabel><FormSelect name="metricKind" value={metricKind} onValueChange={selectMetric} options={metricOptions} required /><FieldDescription>{metricDescription(metricKind)}</FieldDescription></Field>
@@ -471,10 +471,9 @@ function CreateBonusDialog({ open, departments, teacherDepartments, employees, p
             </Field>}
             <Field><FieldLabel>Təsdiq axını</FieldLabel><FormSelect name="distributionMode" options={distributionOptions} defaultValue="HR_APPROVAL" required /></Field>
           </FieldGroup>
-          <DialogFooter className="hr-bonus-drawer-footer"><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending}>{pending ? "Yaradılır…" : "Bonus yarat"}</Button></DialogFooter>
+          <div className="hr-bonus-inline-footer"><Button type="button" variant="outline" onClick={onClose}>Ləğv et</Button><Button type="submit" disabled={pending || !selectedEmployeeIds.length}>{pending ? "Yaradılır…" : "Bonusu təsdiqlə"}</Button></div>
         </form>
-      </DialogContent>
-    </Dialog>
+    </div> : null
   );
 }
 

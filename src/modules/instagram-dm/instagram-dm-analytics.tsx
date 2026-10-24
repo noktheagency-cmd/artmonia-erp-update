@@ -140,7 +140,7 @@ export function InstagramDmAnalytics({ data }: { data: InstagramDmAnalyticsData 
               <thead><tr><th>Analiz günü</th><th>Vəziyyət</th><th>Analiz edilən</th><th>Müştəri sorğusu</th><th>Yüksək niyyətli, cavabsız</th></tr></thead>
               <tbody>{history.pageRows.map((entry) => <tr key={entry.day}>
                 <td>{displayDate(entry.day)}</td>
-                <td>{({ READY: "Hazır", RUNNING: "Hazırlanır", FAILED: "Xəta", NO_DATA: "Mətnli dialoq yoxdur" })[entry.state] ?? entry.state}</td>
+                <td>{({ READY: "Hazır", RUNNING: "Hazırlanır", FAILED: "Xəta", NO_DATA: "Mətnli dialoq yoxdur" })[entry.state] ?? entry.state}{entry.state === "FAILED" && entry.errorCode ? <small className="instagram-dm-error-code" title="Şəxsi məlumat göstərilmədən saxlanılmış texniki xəta kodu"> ({entry.errorCode})</small> : null}</td>
                 <td>{entry.analyzedConversations === null ? "—" : count(entry.analyzedConversations)}</td>
                 <td>{entry.customerConversations === null ? "—" : count(entry.customerConversations)}</td>
                 <td>{entry.highIntentUnanswered === null ? "—" : count(entry.highIntentUnanswered)}</td>

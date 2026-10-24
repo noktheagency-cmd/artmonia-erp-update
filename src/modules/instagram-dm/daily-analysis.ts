@@ -18,6 +18,7 @@ export type DailyAnalysisHistoryItem = {
   analyzedConversations: number | null;
   customerConversations: number | null;
   highIntentUnanswered: number | null;
+  errorCode: string | null;
 };
 
 export type DailyAnalysisOutput = {
@@ -110,7 +111,7 @@ export async function getDailyDmAnalysis(input: {
       where: { periodFrom: key.periodFrom, periodTo: key.periodTo },
       orderBy: { snapshotDay: "desc" }, take: 31,
       // Classification IDs and any raw message text never go to the browser.
-      select: { snapshotDay: true, finishedAt: true, dataCutoffAt: true, status: true, model: true, result: true },
+      select: { snapshotDay: true, finishedAt: true, dataCutoffAt: true, status: true, model: true, result: true, errorCode: true },
     });
     return {
       ai: row ? resultFromRow(row) : { state: "unavailable", generatedAt: "", reason: "AI xidməti konfiqurasiya edilməyib." },
@@ -125,6 +126,7 @@ export async function getDailyDmAnalysis(input: {
           analyzedConversations: ready?.analyzedConversations ?? null,
           customerConversations: ready?.customerConversations ?? null,
           highIntentUnanswered: ready?.highIntentUnanswered ?? null,
+          errorCode: entry.status === "FAILED" ? entry.errorCode : null,
         };
       }),
     };
