@@ -11,6 +11,7 @@ import {
 } from "@/modules/shared/format";
 import { getStudentPaymentMethodLabel } from "@/modules/students/payment-method";
 import {
+  buildStudentAdvanceRemainingValueSql,
   buildStudentDueDebtValueSql,
   buildStudentFutureReceivableValueSql,
   buildStudentOldestDebtDueDateSql,
@@ -550,7 +551,10 @@ export async function getFinanceData(
         ${buildStudentFutureReceivableValueSql({
           studentId: Prisma.sql`s.id`,
           asOfDate: today,
-        })} as future_balance,
+        })} as future_invoice_balance,
+        ${buildStudentAdvanceRemainingValueSql({
+          studentId: Prisma.sql`s.id`,
+        })} as advance_remaining,
         ${buildStudentOldestDebtDueDateSql({
           studentId: Prisma.sql`s.id`,
           asOfDate: today,
@@ -562,7 +566,19 @@ export async function getFinanceData(
             and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
             and invoice.balance_due > 0
             and invoice.due_date > ${today}::date
-        ) as future_due_date
+        ) as future_due_date,
+        (
+          select greatest(
+            coalesce(cs.qualified_at + interval '1 month', ${today}::date + interval '1 day'),
+            ${today}::date + interval '1 day'
+          )::date
+          from erp.course_sales cs
+          where cs.student_id = s.id
+            and cs.status = 'DEPOSIT'
+            and cs.cancelled_at is null
+          order by cs.created_at desc
+          limit 1
+        ) as advance_due_date
       from erp.students s
       join erp.contacts c on c.id = s.contact_id
       left join current_enrollment ce on ce.student_id = s.id
@@ -571,17 +587,33 @@ export async function getFinanceData(
         ${studentSourceSql}
         ${searchSql.debts}
     ),
+    student_receivable_position_with_future as (
+      select
+        *,
+        future_invoice_balance + advance_remaining as future_balance,
+        coalesce(
+          future_due_date,
+          case
+            when advance_remaining > 0 then advance_due_date
+            else null
+          end
+        ) as receivable_future_due_date,
+        (advance_remaining > 0) as is_advance_receivable
+      from student_receivable_position
+    ),
     student_receivable_base as (
       select
         student_id, student_code, student_name, phone, program_name, teacher_name,
-        due_balance as balance_due, debt_due_date as next_due_date
-      from student_receivable_position
+        due_balance as balance_due, debt_due_date as next_due_date,
+        false as is_advance_receivable
+      from student_receivable_position_with_future
       where due_balance > 0
       union all
       select
         student_id, student_code, student_name, phone, program_name, teacher_name,
-        future_balance as balance_due, future_due_date as next_due_date
-      from student_receivable_position
+        future_balance as balance_due, receivable_future_due_date as next_due_date,
+        is_advance_receivable
+      from student_receivable_position_with_future
       where future_balance > 0
     ),
     student_receivables as (
@@ -805,8 +837,8 @@ export async function getFinanceData(
         coalesce((select sum(balance_due) from student_receivables where next_due_date <= ${today}::date), 0) as "studentOutstandingAmount",
         (select count(*)::int from student_receivables where next_due_date < ${today}::date) as "studentOverdueCount",
         coalesce((select sum(balance_due) from student_receivables where next_due_date < ${today}::date), 0) as "studentOverdueAmount",
-        (select count(*)::int from student_receivables where next_due_date > ${today}::date and next_due_date >= ${fromDate}::date and next_due_date < ${endDateExclusive}::date) as "studentFutureCount",
-        coalesce((select sum(balance_due) from student_receivables where next_due_date > ${today}::date and next_due_date >= ${fromDate}::date and next_due_date < ${endDateExclusive}::date), 0) as "studentFutureAmount",
+        (select count(*)::int from student_receivables where next_due_date > ${today}::date and ((next_due_date >= ${fromDate}::date and next_due_date < ${endDateExclusive}::date) or is_advance_receivable)) as "studentFutureCount",
+        coalesce((select sum(balance_due) from student_receivables where next_due_date > ${today}::date and ((next_due_date >= ${fromDate}::date and next_due_date < ${endDateExclusive}::date) or is_advance_receivable)), 0) as "studentFutureAmount",
         count(*) filter (where event_type = 'WORKSHOP')::int as "workshopCount",
         coalesce(sum(balance_due) filter (where event_type = 'WORKSHOP'), 0) as "workshopAmount",
         count(*) filter (where event_type = 'MASTERCLASS')::int as "masterclassCount",
@@ -1168,7 +1200,7 @@ export async function getFinanceData(
           when next_due_date > ${today}::date then 'FUTURE'
           else 'DUE'
         end as "receivableState",
-        coalesce(next_due_date >= ${fromDate}::date and next_due_date < ${endDateExclusive}::date, false) as "isInSelectedPeriod"
+        coalesce((  next_due_date >= ${fromDate}::date and next_due_date < ${endDateExclusive}::date ) or is_advance_receivable, false) as "isInSelectedPeriod"
       from student_receivables
       order by next_due_date asc nulls first, balance_due desc
     `) : Promise.resolve([] as DebtRow[]),
