@@ -286,6 +286,7 @@ export function StudentList({ data }: { data: StudentListData }) {
         <>
           <StudentOverviewCharts
             canReadAttendance={data.permissions.canReadAttendance}
+            currentRisk={data.riskPanel}
             programs={data.operations.programs}
             teachers={data.operations.teachers}
           />

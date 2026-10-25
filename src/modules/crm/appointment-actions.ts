@@ -8,16 +8,21 @@ import { assertCanAccessLead, assertCanEditLead } from "./access";
 import { appointmentSchema, appointmentInstant } from "./appointment-policy";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { appointmentHistory } from "./appointment-history";
 
 export const listAppointments = safeServerAction(async (leadId: string) => {
   const actor = await requireErpActor("crm.lead.read");
   const id = z.string().uuid().parse(leadId), db = getPrisma();
-  assertCanAccessLead(actor, await db.lead.findUnique({ where: { id } }), "crm.lead.read");
+  const lead = await db.lead.findUnique({
+    where: { id },
+    select: { id: true, managerId: true, stage: true, convertedStudentId: true, nextActionType: true, nextFollowUpAt: true },
+  });
+  assertCanAccessLead(actor, lead, "crm.lead.read");
   const [rows, teachers] = await Promise.all([
     db.crmAppointment.findMany({ where: { leadId: id }, orderBy: { plannedAt: "desc" }, take: 30 }),
     db.teacher.findMany({ where: { isActive: true }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" }, take: 300 }),
   ]);
-  return { rows: rows.map((row) => ({ id: row.id, kind: row.kind, plannedAt: row.plannedAt.toISOString(), occurredAt: row.occurredAt?.toISOString() ?? null, outcome: row.outcome, teacherId: row.teacherId, isLegacy: row.isLegacy, previousId: row.previousId })), teachers };
+  return { rows: appointmentHistory(rows.map((row) => ({ id: row.id, kind: row.kind, plannedAt: row.plannedAt.toISOString(), occurredAt: row.occurredAt?.toISOString() ?? null, outcome: row.outcome, teacherId: row.teacherId, isLegacy: row.isLegacy, previousId: row.previousId })), lead), teachers };
 }, "Görüşlər yüklənmədi.");
 
 export const saveAppointment = safeServerAction(async (formData: FormData) => {

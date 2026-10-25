@@ -14,7 +14,7 @@ export function StudentRiskPanel({ riskPanel }: { riskPanel: StudentListData["ri
         <span className="students-risk-icon" aria-hidden="true"><TrendingDown /></span>
         <div>
           <h3 id="students-risk-title">Riskli tələbələr</h3>
-          <p>Ardıcıl qayıb: 2 = sarı, 3 və çox = qırmızı</p>
+          <p>Son 93 gün · ardıcıl qayıb: 2 = sarı, 3 və çox = qırmızı</p>
         </div>
         <span className="students-risk-counts">
           <StatusChip tone="danger">{riskPanel.dangerCount}</StatusChip>

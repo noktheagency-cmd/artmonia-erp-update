@@ -11,17 +11,7 @@ import { TimePicker } from "@/components/ui/time-picker";
 import { listAppointments, saveAppointment } from "./appointment-actions";
 import { appointmentKindLabels, appointmentOutcomeLabels } from "./appointment-policy";
 import { dailyReportWindow } from "@/modules/dashboard/daily-report-policy";
-
-type Appointment = {
-  id: string;
-  plannedAt: string;
-  occurredAt: string | null;
-  kind: string;
-  outcome: string;
-  teacherId: string | null;
-  isLegacy: boolean;
-  previousId: string | null;
-};
+import type { AppointmentHistoryRow as Appointment } from "./appointment-history";
 
 const dateTime = (value: string) => {
   const local = new Date(new Date(value).getTime() + 4 * 3600000).toISOString();
@@ -61,12 +51,14 @@ function meetingTone(outcome: string) {
 export function LeadAppointments({
   leadId,
   embedded = false,
+  active = true,
   markedComplete = false,
   onScheduled,
   onActionSaved,
 }: {
   leadId: string;
   embedded?: boolean;
+  active?: boolean;
   markedComplete?: boolean;
   onScheduled?: () => void;
   onActionSaved?: (outcome: "scheduled" | "attended" | "missed") => void;
@@ -87,32 +79,48 @@ export function LeadAppointments({
   const [actualDate, setActualDate] = useState(() => dailyReportWindow().date);
   const [actualTime, setActualTime] = useState("12:00");
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [meetingMode, setMeetingMode] = useState<"missed" | "attended" | null>(null);
   const [nextDate, setNextDate] = useState(() => dailyReportWindow().date);
   const [nextTime, setNextTime] = useState("12:00");
   const shown = embedded || expanded;
-  const scheduled = rows.find((row) => row.outcome === "SCHEDULED") ?? null;
+  const scheduled = rows.find((row) => row.outcome === "SCHEDULED" && row.source === "APPOINTMENT") ?? null;
+  const reminderPlan = rows.find((row) => row.source === "LEAD_PLAN") ?? null;
   const attended = rows.some((row) => row.outcome === "ATTENDED");
   // const meetingComplete = markedComplete || (attended && !scheduled);
-  const meetingComplete = !scheduled && (markedComplete || attended);
+  const meetingComplete = !scheduled && !reminderPlan && (markedComplete || attended);
 
   useEffect(() => {
-    if (!embedded) return;
+    if (!embedded || !active) return;
     let ignore = false;
 
     async function run() {
       setBusy(true);
+      setLoaded(false);
+      setLoadError(false);
+      setMessage("");
       try {
         const result = await listAppointments(leadId);
         if (ignore) return;
         if (result.ok) {
           setRows(result.data.rows);
           setTeachers(result.data.teachers);
+          const plan = result.data.rows.find((row) => row.source === "LEAD_PLAN");
+          if (plan) {
+            const planned = dateTime(plan.plannedAt);
+            setDate(planned.date);
+            setTime(planned.time);
+          }
         } else {
           setMessage(result.message);
+          setLoadError(true);
         }
       } catch {
-        if (!ignore) setMessage("Görüşlər yüklənmədi.");
+        if (!ignore) {
+          setMessage("Görüşlər yüklənmədi.");
+          setLoadError(true);
+        }
       } finally {
         if (!ignore) {
           setBusy(false);
@@ -125,7 +133,7 @@ export function LeadAppointments({
     return () => {
       ignore = true;
     };
-  }, [embedded, leadId]);
+  }, [embedded, active, leadId, loadAttempt]);
 
   async function load() {
     const result = await listAppointments(leadId);
@@ -219,7 +227,7 @@ export function LeadAppointments({
   }
 
   async function completeMeeting(row: Appointment) {
-    if (busy) return;
+    if (busy || row.source !== "APPOINTMENT") return;
     const planned = dateTime(row.plannedAt);
     const now = bakuNow();
     setBusy(true);
@@ -253,7 +261,7 @@ export function LeadAppointments({
   }
 
   async function missMeeting(row: Appointment) {
-    if (busy || !nextDate || !nextTime) return;
+    if (busy || !nextDate || !nextTime || row.source !== "APPOINTMENT") return;
     const planned = dateTime(row.plannedAt);
     const now = bakuNow();
     setBusy(true);
@@ -306,8 +314,18 @@ export function LeadAppointments({
     );
   }
 
+  if (embedded && loadError) {
+    return (
+      <section className="crm-action-card is-embedded">
+        <p role="alert">{message}</p>
+        <Button type="button" variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Yenidən cəhd et</Button>
+      </section>
+    );
+  }
+
   if (embedded) {
-    const activeWhen = scheduled ? dateTime(scheduled.plannedAt) : null;
+    const activePlan = scheduled ?? reminderPlan;
+    const activeWhen = activePlan ? dateTime(activePlan.plannedAt) : null;
     return (
       <section className="crm-action-card is-embedded">
         <div className="crm-action-card-body">
@@ -316,11 +334,12 @@ export function LeadAppointments({
               <div className="crm-contact-active-meta">
                 <div className="crm-contact-active-copy">
                   <strong>
-                    {meetingComplete ? "Görüş baş tutdu" : scheduled ? "Görüş planlaşdırılıb" : "Plan yoxdur"}
+                    {meetingComplete ? "Görüş baş tutdu" : activePlan ? "Görüş planlaşdırılıb" : "Plan yoxdur"}
                   </strong>
                   {activeWhen ? (
                     <small>{`${activeWhen.date.split("-").reverse().join(".")} · ${activeWhen.time}`}</small>
                   ) : null}
+                  {reminderPlan ? <small>Müraciətdə saxlanmış görüş xatırlatması</small> : null}
                 </div>
               </div>
               {scheduled && !meetingComplete ? (
@@ -415,10 +434,10 @@ export function LeadAppointments({
                       <div className="crm-contact-log-main">
                         <div className="crm-contact-log-top">
                           <strong>{meetingTitle(row.outcome)}</strong>
-                          <em>{appointmentKindLabels[row.kind as keyof typeof appointmentKindLabels] ?? "Görüş"}</em>
+                          <em>{row.source === "LEAD_PLAN" ? "Müraciətin görüş planı" : appointmentKindLabels[row.kind as keyof typeof appointmentKindLabels] ?? "Görüş"}</em>
                         </div>
                       </div>
-                      <time dateTime={row.plannedAt}>{planned.date} · {planned.time}</time>
+                      <time dateTime={row.plannedAt}>{planned.date.split("-").reverse().join(".")} · {planned.time}</time>
                     </li>
                   );
                 })}
@@ -552,7 +571,7 @@ export function LeadAppointments({
               {rows.length > 0 ? <span>{rows.length} qeyd</span> : null}
             </div>
             <p className="crm-dialog-hint">
-              Son 30 görüş. Təxirə salınmış görüşün əvvəlki tarixi saxlanılır.
+              Son 30 görüş və müraciətin cari görüş planı. Təxirə salınmış görüşün əvvəlki tarixi saxlanılır.
             </p>
             {rows.length === 0 && !busy ? (
               <p className="crm-contact-empty">Hələ görüş qeydi yoxdur.</p>
@@ -566,9 +585,10 @@ export function LeadAppointments({
                       key={row.id}
                       type="button"
                       variant="secondary"
-                      disabled={busy || row.outcome !== "SCHEDULED"}
+                      disabled={busy || row.outcome !== "SCHEDULED" || row.source !== "APPOINTMENT"}
                       className="crm-appointment-log-item"
                       onClick={() => {
+                        if (row.source !== "APPOINTMENT") return;
                         const plannedAt = dateTime(row.plannedAt);
                         setId(row.id);
                         setDate(plannedAt.date);

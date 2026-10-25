@@ -31,7 +31,7 @@ export function isRiskEligibleLifecycle(lifecycleStatus: string | null | undefin
 }
 
 export function isAtRiskStreak(entries: AttendanceEntry[]) {
-  return consecutiveAbsences(entries) >= 3 && isRiskEligibleLifecycle(entries[0]?.lifecycleStatus);
+  return attendanceRiskLevel(consecutiveAbsences(entries)) !== null && isRiskEligibleLifecycle(entries[0]?.lifecycleStatus);
 }
 
 export type AttendanceRiskLevel = "danger" | "warning";
@@ -39,6 +39,13 @@ export type AttendanceRiskLevel = "danger" | "warning";
 /** 2 ardıcıl qayıb = sarı, 3 və daha çox = qırmızı. */
 export const WARNING_ABSENCE_STREAK = 2;
 export const DANGER_ABSENCE_STREAK = 3;
+export const ATTENDANCE_RISK_LOOKBACK_DAYS = 93;
+
+export function attendanceRiskPeriod(today: string) {
+  const from = new Date(`${today}T00:00:00.000Z`);
+  from.setUTCDate(from.getUTCDate() - (ATTENDANCE_RISK_LOOKBACK_DAYS - 1));
+  return { from: from.toISOString().slice(0, 10), to: today };
+}
 
 export function attendanceRiskLevel(streak: number): AttendanceRiskLevel | null {
   if (streak >= DANGER_ABSENCE_STREAK) return "danger";
@@ -55,6 +62,24 @@ export type StudentAttendanceRisk = {
   group: string;
   lastAbsentDate: string;
 };
+
+export type AttendanceRiskSummary = {
+  from: string;
+  to: string;
+  studentIds: string[];
+  dangerCount: number;
+  warningCount: number;
+};
+
+/** The student panel and modal share this exact current-risk snapshot. */
+export function attendanceRiskSummary(risks: StudentAttendanceRisk[], today: string): AttendanceRiskSummary {
+  return {
+    ...attendanceRiskPeriod(today),
+    studentIds: risks.map((risk) => risk.studentId),
+    dangerCount: risks.filter((risk) => risk.level === "danger").length,
+    warningCount: risks.filter((risk) => risk.level === "warning").length,
+  };
+}
 
 /** Hər tələbə üçün ən uzun ardıcıl qayıb seriyasına görə risk səviyyəsi. */
 export function studentAttendanceRisks(entries: AttendanceEntry[]) {
@@ -84,18 +109,7 @@ export function studentAttendanceRisks(entries: AttendanceEntry[]) {
 
 /** Unique student IDs with a qualifying consecutive-absence streak (per teacher pair). */
 export function riskyStudentIds(entries: AttendanceEntry[]) {
-  const byPair = new Map<string, AttendanceEntry[]>();
-  for (const entry of entries) {
-    const key = `${entry.teacherId}:${entry.studentId}`;
-    const history = byPair.get(key) ?? [];
-    history.push(entry);
-    byPair.set(key, history);
-  }
-  const risky = new Set<string>();
-  for (const history of byPair.values()) {
-    if (isAtRiskStreak(history)) risky.add(history[0].studentId);
-  }
-  return [...risky];
+  return [...studentAttendanceRisks(entries).keys()];
 }
 
 export function attendanceStats(entries: AttendanceEntry[]) {

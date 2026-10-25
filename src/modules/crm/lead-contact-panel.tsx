@@ -84,12 +84,14 @@ function planTitle(plan: PlanRow) {
 export function LeadContactPanel({
   leadId,
   embedded = false,
+  active = true,
   markedComplete = false,
   onReached,
   onActionSaved,
 }: {
   leadId: string;
   embedded?: boolean;
+  active?: boolean;
   markedComplete?: boolean;
   onReached?: () => void;
   onActionSaved?: (outcome: "reached" | "missed") => void;
@@ -131,7 +133,7 @@ export function LeadContactPanel({
   );
 
   useEffect(() => {
-    if (!embedded) return;
+    if (!embedded || !active) return;
     let ignore = false;
 
     async function run() {
@@ -166,7 +168,7 @@ export function LeadContactPanel({
     return () => {
       ignore = true;
     };
-  }, [embedded, leadId]);
+  }, [embedded, active, leadId]);
 
   async function load() {
     const result = await listContactEvents(leadId);

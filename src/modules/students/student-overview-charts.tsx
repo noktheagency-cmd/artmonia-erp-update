@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AttendanceAnalyticsCard } from "./attendance-analytics-card";
+import type { AttendanceRiskSummary } from "./attendance-analytics";
 import { Cell, Pie, PieChart } from "recharts";
 import { Layers3, UsersRound, type LucideIcon } from "lucide-react";
 import {
@@ -35,10 +36,12 @@ const teacherChartConfig = {
 
 export function StudentOverviewCharts({
   canReadAttendance = false,
+  currentRisk,
   programs,
   teachers,
 }: {
   canReadAttendance?: boolean;
+  currentRisk: AttendanceRiskSummary;
   programs: DistributionItem[];
   teachers: DistributionItem[];
 }) {
@@ -135,7 +138,7 @@ export function StudentOverviewCharts({
           <ChartEmptyState text="Müəllim məlumatı yoxdur" />
         )}
       </article>
-      {canReadAttendance && <AttendanceAnalyticsCard key={`${searchParams.get("attendance")}:${searchParams.get("attendanceFrom")}:${searchParams.get("attendanceTo")}`} />}
+      {canReadAttendance && <AttendanceAnalyticsCard currentRisk={currentRisk} key={`${searchParams.get("attendance")}:${searchParams.get("attendanceFrom")}:${searchParams.get("attendanceTo")}`} />}
     </section>
   );
 }

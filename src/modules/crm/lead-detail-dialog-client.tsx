@@ -282,8 +282,10 @@ export function LeadDetailDialogClient({
               <div className="crm-ops-scroll" hidden={actionPanel === null}>
                 <div hidden={actionPanel !== "contact"}>
                   <LeadContactPanel
+                    key={lead.id}
                     leadId={lead.id}
                     embedded
+                    active={actionPanel === "contact"}
                     markedComplete={contactDone}
                     onActionSaved={(outcome) => {
                       setNote((current) => current.trim() ? current : outcome === "reached" ? "Əlaqə quruldu" : "Əlaqə saxlanılmadı; növbəti əlaqə planlandı");
@@ -302,10 +304,11 @@ export function LeadDetailDialogClient({
                   />
                 </div>
                 <div hidden={actionPanel !== "meeting"}>
-                  {/* <LeadAppointments leadId={lead.id} embedded markedComplete={meetingDone} /> */}
                   <LeadAppointments
+                    key={lead.id}
                     leadId={lead.id}
                     embedded
+                    active={actionPanel === "meeting"}
                     markedComplete={meetingDone}
                     onActionSaved={(outcome) => {
                       setNote((current) => current.trim() ? current : outcome === "scheduled" ? "Görüş təyin edildi" : outcome === "attended" ? "Görüş baş tutdu" : "Görüş baş tutmadı; nəticə qeyd edildi");

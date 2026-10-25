@@ -2,29 +2,29 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { todayInBaku } from "@/modules/groups/shared";
+import type { PermissionScope } from "@/server/rbac/permissions";
+import { attendanceAnalyticsScope } from "./attendance-analytics-scope";
 import {
+  attendanceRiskPeriod,
   studentAttendanceRisks,
   type AttendanceEntry,
   type StudentAttendanceRisk,
 } from "./attendance-analytics";
 
-const RISK_LOOKBACK_DAYS = 93;
-
 type RiskScope = {
+  actorId: string;
+  studentScope: PermissionScope | null;
+  attendanceScope: PermissionScope | null;
   studentIds?: string[];
-  managerId?: string;
 };
 
-async function loadAttendanceEntries({ studentIds, managerId }: RiskScope) {
-  const today = todayInBaku();
-  const from = new Date(`${today}T00:00:00.000Z`);
-  from.setUTCDate(from.getUTCDate() - (RISK_LOOKBACK_DAYS - 1));
-  const fromDate = from.toISOString().slice(0, 10);
+async function loadAttendanceEntries({ studentIds, actorId, studentScope, attendanceScope }: RiskScope) {
+  if (!studentScope || !attendanceScope || studentIds?.length === 0) return [];
+  const { from, to } = attendanceRiskPeriod(todayInBaku());
 
   const idsSql = studentIds
     ? Prisma.sql`and s.id in (${Prisma.join(studentIds.map((id) => Prisma.sql`${id}::uuid`))})`
     : Prisma.empty;
-  const managerSql = managerId ? Prisma.sql`and s.manager_id = ${managerId}::uuid` : Prisma.empty;
 
   return getPrisma().$queryRaw<AttendanceEntry[]>(Prisma.sql`
     select distinct ss.id::text as "sessionId", ss.session_date::text as date, ss.start_time as time,
@@ -46,9 +46,9 @@ async function loadAttendanceEntries({ studentIds, managerId }: RiskScope) {
       where h.student_id = s.id and h.effective_at <= ss.session_date
       order by h.effective_at desc, h.created_at desc, h.id desc limit 1
     ) history on true
-    where ss.session_date between ${fromDate}::date and ${today}::date
+    where ss.session_date between ${from}::date and ${to}::date
       ${idsSql}
-      ${managerSql}
+      and ${attendanceAnalyticsScope(actorId, studentScope, attendanceScope)}
       and ss.status <> 'CANCELLED'
       and s.is_test_data = false
       and (ss.session_date + ss.end_time::time) at time zone 'Asia/Baku' <= now()
@@ -61,16 +61,16 @@ async function loadAttendanceEntries({ studentIds, managerId }: RiskScope) {
 }
 
 /** Siyahı üçün: tələbə → risk (2 qayıb = warning, 3+ = danger). */
-export async function loadStudentRisks(studentIds: string[]): Promise<Map<string, StudentAttendanceRisk>> {
+export async function loadStudentRisks(studentIds: string[], scope: Omit<RiskScope, "studentIds">): Promise<Map<string, StudentAttendanceRisk>> {
   if (studentIds.length === 0) return new Map();
-  return studentAttendanceRisks(await loadAttendanceEntries({ studentIds }));
+  return studentAttendanceRisks(await loadAttendanceEntries({ ...scope, studentIds }));
 }
 
 export type StudentRiskPanelItem = StudentAttendanceRisk & { code: string };
 
 /** Sağ kart üçün: qırmızılar yuxarıda, sonra sarılar. */
-export async function loadRiskPanelStudents(scope: { managerId?: string } = {}): Promise<StudentRiskPanelItem[]> {
-  const risks = [...studentAttendanceRisks(await loadAttendanceEntries({ managerId: scope.managerId })).values()];
+export async function loadRiskPanelStudents(scope: Omit<RiskScope, "studentIds">): Promise<StudentRiskPanelItem[]> {
+  const risks = [...studentAttendanceRisks(await loadAttendanceEntries(scope)).values()];
   if (risks.length === 0) return [];
 
   const students = await getPrisma().student.findMany({

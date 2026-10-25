@@ -52,7 +52,8 @@ import {
   loadStudentRisks,
   type StudentRiskPanelItem,
 } from "@/modules/students/attendance-risk-for-students";
-import type { AttendanceRiskLevel } from "@/modules/students/attendance-analytics";
+import { attendanceRiskSummary, type AttendanceRiskLevel, type AttendanceRiskSummary } from "@/modules/students/attendance-analytics";
+import { todayInBaku } from "@/modules/groups/shared";
 import { earliestPackageUpgradeMonth } from "@/modules/students/package-upgrade-policy";
 import { buildCrmSourceOptions } from "@/modules/crm/source-options";
 import { programJourneyImageUrl } from "@/server/storage/erp-files";
@@ -122,9 +123,7 @@ export type StudentListData = {
     dateLabel: string;
     items: StudentReminderItem[];
   };
-  riskPanel: {
-    dangerCount: number;
-    warningCount: number;
+  riskPanel: AttendanceRiskSummary & {
     items: StudentRiskPanelItem[];
   };
   operations: {
@@ -581,12 +580,15 @@ export async function getStudentListData(
   if (rawData !== initialRawData) page = 1;
   const { rows, options, clv, paymentSummary, operations } = rawData;
   const { programs, teachers, leads: convertibleLeads, sources, campaigns, discountTypes } = options;
-  const studentRisks = await loadStudentRisks(rows.map((row) => row.id));
-  const riskPanelItems = activeTab === "overview"
-    ? await loadRiskPanelStudents({
-        managerId: scopeFor(actor.permissions, "student.read") === "ALL" ? undefined : actor.id,
-      })
-    : [];
+  const riskScope = {
+    actorId: actor.id,
+    studentScope: scopeFor(actor.permissions, "student.read"),
+    attendanceScope: scopeFor(actor.permissions, "attendance.read"),
+  };
+  const [studentRisks, riskPanelItems] = await Promise.all([
+    loadStudentRisks(rows.map((row) => row.id), riskScope),
+    activeTab === "overview" ? loadRiskPanelStudents(riskScope) : Promise.resolve([]),
+  ]);
 
   const summaryCounts = new Map(
     Object.entries(options.summaryCounts).map(([status, count]) => [
@@ -666,8 +668,7 @@ export async function getStudentListData(
     },
     todayReminders,
     riskPanel: {
-      dangerCount: riskPanelItems.filter((item) => item.level === "danger").length,
-      warningCount: riskPanelItems.filter((item) => item.level === "warning").length,
+      ...attendanceRiskSummary(riskPanelItems, todayInBaku()),
       items: riskPanelItems,
     },
     operations,

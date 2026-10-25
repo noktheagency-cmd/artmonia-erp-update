@@ -1,6 +1,7 @@
 import "@/modules/students/students.css";
 import { StudentList } from "@/modules/students/student-list";
 import { getStudentListData } from "@/modules/students/queries";
+import { requireErpPageActor } from "@/server/auth/page-actor";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function StudentsPage({
     tab?: string;
   }>;
 }) {
+  await requireErpPageActor("/students");
   const filters = await searchParams;
   const data = await getStudentListData(filters);
 

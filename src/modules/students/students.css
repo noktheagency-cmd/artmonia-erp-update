@@ -1618,6 +1618,8 @@ html:not(.dark) .students-command-page .students-kpi {
 .attendance-inline-status.is-error { color: #b84c5d; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .attendance-empty-note { margin: 0; color: var(--att-muted); font-size: 12px; }
 .attendance-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; border: 0; }
+.attendance-kpi-current-risk { grid-column: 1 / -1; }
+.attendance-period-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .attendance-kpi {
   display: grid; gap: 8px; align-content: start; min-width: 0; padding: 16px;
   background: var(--att-soft); border: 1px solid var(--att-line); border-radius: 14px;

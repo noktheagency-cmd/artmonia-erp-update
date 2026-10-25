@@ -13,12 +13,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { FormSelect } from "@/components/ui/select";
 import { todayInBaku } from "@/modules/groups/shared";
 import { loadAttendanceReport } from "./attendance-analytics-action";
-import { attendanceStats, attendanceTeachers, consecutiveAbsences, isAtRiskStreak, riskyStudentIds, type AttendanceEntry, type AttendanceReport } from "./attendance-analytics";
+import { attendanceStats, attendanceTeachers, consecutiveAbsences, isAtRiskStreak, type AttendanceEntry, type AttendanceReport, type AttendanceRiskSummary } from "./attendance-analytics";
 
 const percent = (value: number | null) => value === null ? "—" : `${value}%`;
 const markLabels = { PRESENT: "İştirak", ABSENT: "Qaib", EXCUSED: "Üzrlü" };
 
-export function AttendanceAnalyticsCard() {
+export function AttendanceAnalyticsCard({ currentRisk }: { currentRisk: AttendanceRiskSummary }) {
   const searchParams = useSearchParams();
   const today = todayInBaku();
   const requestedPeriod = retentionInput.safeParse({ from: searchParams.get("attendanceFrom"), to: searchParams.get("attendanceTo") });
@@ -85,7 +85,7 @@ export function AttendanceAnalyticsCard() {
     ...entries.filter((entry) => !teacherId || entry.teacherId === teacherId).map((entry) => [entry.groupId, localizeAttendanceGroup(entry.group)] as const),
     ...retentionOptions.groups.filter((group) => !teacherId || group.teacherId === teacherId).map((group) => [group.id, group.name] as const),
   ]).entries()];
-  const riskyIds = riskyStudentIds(filtered);
+  const riskyIds = currentRisk.studentIds;
   const riskyStudentsHref = `/students?tab=list&dates=all&ids=${riskyIds.length ? riskyIds.join(",") : "none"}`;
 
   return (
@@ -100,7 +100,7 @@ export function AttendanceAnalyticsCard() {
                 <span><strong>{percent(totals.rate)}</strong><small>iştirak</small></span>
               </span>
               <span className="students-attendance-metrics">
-                <span><small><i className="is-risk" />Riskli tələbə</small><strong>{totals.risky}</strong></span>
+                <span><small><i className="is-risk" />Cari riskli tələbə</small><strong>{riskyIds.length}</strong></span>
                 <span><small><i className="is-missing" />Natamam dərs</small><strong>{totals.missingSessions}</strong></span>
                 <span><small><i className="is-complete" />Qeyd tamlığı</small><strong>{percent(totals.completeness)}</strong></span>
               </span>
@@ -153,19 +153,28 @@ export function AttendanceAnalyticsCard() {
             <Button className="attendance-apply" type="submit" disabled={loading}><RefreshCw size={15} />{loading ? "Yüklənir…" : "Yenilə"}</Button>
           </form>
           <RetentionAnalyticsPanel key={`${appliedPeriod.from}:${appliedPeriod.to}:${teacherId}:${groupId}`} from={appliedPeriod.from} to={appliedPeriod.to} teacherId={teacherId} groupId={groupId} onOptions={setRetentionOptions} />
+          <section className="attendance-block" aria-label="Cari davamiyyət riski">
+            <div className="attendance-section-heading">
+              <div><h3>Cari riskli tələbələr</h3><p>{displayDate(currentRisk.from)} — {displayDate(currentRisk.to)} · son 93 gün</p></div>
+            </div>
+            <div className="attendance-kpis">
+              <Link href={riskyStudentsHref as Route} className="attendance-kpi attendance-kpi-current-risk is-action" onClick={() => setOpen(false)} aria-label="Cari riskli tələbələri siyahıda göstər">
+                <span><ShieldAlert size={17} />Riskli tələbə</span>
+                <strong>{riskyIds.length}</strong>
+                <small>{currentRisk.dangerCount} qırmızı · {currentRisk.warningCount} sarı</small>
+                <small>Bütün əlçatan tələbələr üzrə cari risk; seçilmiş tarix, müəllim və qrup filtrlərindən asılı deyil.</small>
+                <small className="attendance-kpi-action">Ətraflı <ChevronRight size={14} /></small>
+              </Link>
+            </div>
+          </section>
           {loading ? <div className="attendance-state" role="status"><RefreshCw size={26} /><strong>Davamiyyət yüklənir…</strong><span>Göstəricilər hazırlanır.</span></div> : error ? <div className="attendance-state is-error" role="alert"><ShieldAlert size={26} /><strong>Məlumat yüklənmədi</strong><span>{error}</span><Button variant="outline" onClick={() => void load(from, to)}>Yenidən cəhd et</Button></div> : report && <>
             <section className="attendance-block" aria-label="Davamiyyət">
               <div className="attendance-section-heading">
                 <div><h3>Davamiyyət</h3><p>{displayDate(report.from)} — {displayDate(report.to)}</p></div>
                 <span>{filteredStats.students} tələbə · {attendanceTeachers(filtered).length} müəllim</span>
               </div>
-              <div className="attendance-kpis">
+              <div className="attendance-kpis attendance-period-kpis">
                 <div className="attendance-kpi is-primary"><span><CalendarCheck2 size={17} />Ümumi davamiyyət</span><strong>{percent(filteredStats.rate)}</strong><small>{filteredStats.present} iştirak / {filteredStats.present + filteredStats.absent} dərs</small></div>
-                <Link href={riskyStudentsHref as Route} className="attendance-kpi is-action" onClick={() => setOpen(false)} aria-label="Riskli tələbələri siyahıda göstər">
-                  <span><ShieldAlert size={17} />Riskli tələbə</span>
-                  <strong>{filteredStats.risky}</strong>
-                  <small className="attendance-kpi-action">Ətraflı <ChevronRight size={14} /></small>
-                </Link>
                 <div className="attendance-kpi"><span><UsersRound size={17} />Natamam dərs</span><strong>{filteredStats.missingSessions}</strong><small>{filteredStats.missing} tələbə üçün qeyd yoxdur</small></div>
                 <div className="attendance-kpi"><span><CheckCheck size={17} />Qeyd tamlığı</span><strong>{percent(filteredStats.completeness)}</strong><small>{filteredStats.excused} üzrlü · {filteredStats.absent} qaib</small></div>
               </div>
@@ -176,7 +185,7 @@ export function AttendanceAnalyticsCard() {
             </div> : <section className="attendance-teacher-section attendance-block">
               <div className="attendance-section-heading"><div><h3>Müəllimlər</h3><p>Detallar üçün müəllimi seçin</p></div><span>{attendanceTeachers(filtered).length} müəllim</span></div>
               <div className="students-attendance-table-wrap"><table className="students-attendance-table">
-                <thead><tr><th>Müəllim</th><th>Davamiyyət</th><th>İştirak / gözlənilən</th><th>Riskli tələbə</th><th>Natamam dərs</th></tr></thead>
+                <thead><tr><th>Müəllim</th><th>Davamiyyət</th><th>İştirak / gözlənilən</th><th>Dövr üzrə riskli tələbə</th><th>Natamam dərs</th></tr></thead>
                 <tbody>{attendanceTeachers(filtered).map((teacher) => <tr key={teacher.id}>
                   <td><button type="button" className="attendance-teacher-name" onClick={() => setSelectedTeacher(teacher.id)} aria-label={`${teacher.name} — tələbələrə bax`}><span className="attendance-avatar" aria-hidden="true">{initials(teacher.name)}</span><span><strong>{teacher.name}</strong><small>{teacher.students} tələbə</small></span><ChevronRight size={16} /></button></td>
                   <td><span className="attendance-rate"><strong>{percent(teacher.rate)}</strong><span aria-hidden="true"><i style={{ width: `${teacher.rate ?? 0}%` }} /></span></span></td>
@@ -191,7 +200,8 @@ export function AttendanceAnalyticsCard() {
               <div>
                 <p><strong>Saxlanma və itki.</strong> Tələbə itkisi = seçilmiş dövrdə donduran və ya dayandıran unikal tələbələr / dövrün sonunadək qeydiyyatdan keçən tələbələr. İmtina edənlər daxil deyil. Bu panel satış KPI-sı deyil.</p>
                 <p><strong>Davamiyyət.</strong> İştirak / (iştirak + qaib). Üzrlü və qeyd edilməmiş dərslər faizdən çıxarılır.</p>
-                <p><strong>Risk.</strong> Dövrün sonunda eyni müəllimlə ardıcıl ən azı 3 qaib; tələbənin cari statusu aktiv qalmalıdır. Dayandırılmış, dondurulmuş, imtina və tamamlanmış tələbələr riskə düşmür.</p>
+                <p><strong>Cari risk.</strong> Tələbələr səhifəsindəki risk kartı ilə eyni məlumatdır: son 93 gündə eyni müəllimlə ardıcıl 2 qaib sarı, 3 və daha çox qaib qırmızı riskdir. Hər tələbə bir dəfə sayılır. Bu say tarix, müəllim və qrup filtrlərindən asılı deyil.</p>
+                <p><strong>Dövr üzrə risk.</strong> Müəllim cədvəli və tələbə tarixçəsi eyni 2/3 qaib qaydasını yalnız seçilmiş dövr və filtrlər üzrə tətbiq edir. Dayandırılmış, dondurulmuş, imtina və tamamlanmış tələbələr riskə düşmür.</p>
                 <p>Müqayisə dövrü: {displayDate(report.previousFrom)} — {displayDate(report.previousTo)}.</p>
               </div>
             </details>

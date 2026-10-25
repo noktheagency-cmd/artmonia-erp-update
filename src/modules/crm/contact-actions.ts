@@ -11,6 +11,7 @@ import { assertCanAccessLead, assertCanEditLead } from "./access";
 import { assertContactTime, contactSchema, nextUnansweredDate } from "./contact-policy";
 import { syncLeadWorkPlan } from "./work-service";
 import { dailyReportWindow } from "@/modules/dashboard/daily-report-policy";
+import { isMeetingReminder } from "./appointment-history";
 
 export const listContactEvents = safeServerAction(async (leadId: string) => {
   const actor = await requireErpActor("crm.lead.read");
@@ -28,7 +29,7 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
   ) || rows.some(
     (row) => row.outcome === "TALKED" || row.outcome === "WHATSAPP_REPLIED",
   );
-  const orphanOpenPlans = workItems.filter((row) => !row.completedAt && !row.cancelledAt);
+  const orphanOpenPlans = workItems.filter((row) => !row.completedAt && !row.cancelledAt && !isMeetingReminder(row.kind));
   // Əlaqə artıq qurulubsa açıq qalan təkrar plan bugdur — bağla.
   if (contactEstablished && orphanOpenPlans.length > 0) {
     const now = new Date();
@@ -36,7 +37,7 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
       where: { id: { in: orphanOpenPlans.map((row) => row.id) } },
       data: { cancelledAt: now, result: "REPLANNED" },
     });
-    if (leadPlan?.nextFollowUpAt || leadPlan?.nextActionType) {
+    if ((leadPlan?.nextFollowUpAt || leadPlan?.nextActionType) && !isMeetingReminder(leadPlan?.nextActionType)) {
       await db.lead.update({
         where: { id },
         data: { nextFollowUpAt: null, nextActionType: null },
@@ -61,6 +62,7 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
   const [firstAttempt, attempts] = await Promise.all([db.leadContactEvent.findFirst({ where: unanswered, orderBy: { occurredAt: "asc" } }), db.leadContactEvent.count({ where: unanswered })]);
   const plans = workItems
     .filter((row) => {
+      if (isMeetingReminder(row.kind)) return false;
       if (!contactEstablished) return true;
       // Qurulmuş əlaqədən sonra açıq və ya avtomatik təkrar planlar history-yə düşməsin.
       if (!row.completedAt && !row.cancelledAt) return false;
@@ -76,7 +78,7 @@ export const listContactEvents = safeServerAction(async (leadId: string) => {
       cancelledAt: row.cancelledAt?.toISOString() ?? null,
       result: row.result,
     }));
-  const leadStillHasPlan = !contactEstablished && leadPlan?.nextActionType && leadPlan.nextFollowUpAt;
+  const leadStillHasPlan = !contactEstablished && leadPlan?.nextActionType && leadPlan.nextFollowUpAt && !isMeetingReminder(leadPlan.nextActionType);
   if (plans.length === 0 && leadStillHasPlan) {
     plans.push({
       id: `plan-${leadPlan.createdAt.toISOString()}`,
