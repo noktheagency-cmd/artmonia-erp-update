@@ -201,6 +201,7 @@ export type CrmData = {
     conversionLabel: string;
     /** BK-18: open SCHEDULED meeting without ATTENDED yet. */
     needsMeetingAttendanceConfirm: boolean;
+    pendingMeetingAt: string | null;
     meetingAttended: boolean;
     suggestion: WorkerSuggestion | null;
     detail: {
@@ -335,6 +336,7 @@ type CrmLeadRawRow = {
   programName: string | null;
   convertedStudentCode: string | null;
   needsMeetingAttendanceConfirm: boolean | null;
+  pendingMeetingAt: string | null;
   meetingAttended: boolean | null;
   latestMeetingOutcome: string | null;
   meetingOverdue: boolean | null;
@@ -661,7 +663,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
 
 const getCachedCrmRawData = unstable_cache(
   async (input: CrmCacheInput) => getCrmRawData(getPrisma(), toCrmRawDataInput(input)),
-  ["crm-pipeline-data-v17"],
+  ["crm-pipeline-data-v18"],
   {
     revalidate: 30,
     tags: [erpCacheTags.crm],
@@ -1100,6 +1102,7 @@ function getCrmRawData(
             'programName', lead_rows.program_name,
             'convertedStudentCode', lead_rows.converted_student_code,
             'needsMeetingAttendanceConfirm', lead_rows.needs_meeting_attendance_confirm,
+            'pendingMeetingAt', lead_rows.pending_meeting_at,
             'meetingAttended', lead_rows.meeting_attended,
             'latestMeetingOutcome', lead_rows.latest_meeting_outcome,
             'meetingOverdue', lead_rows.meeting_overdue,
@@ -1133,6 +1136,13 @@ function getCrmRawData(
             p.name as program_name,
             s.code as converted_student_code,
             ${leadNeedsAttendSql} as needs_meeting_attendance_confirm,
+            (
+              select a.planned_at from erp.crm_appointments a
+              where a.lead_id = l.id and a.kind in ('MEETING', 'CONSULTATION', 'TRIAL')
+                and a.outcome = 'SCHEDULED'
+              order by a.planned_at desc, a.created_at desc
+              limit 1
+            ) as pending_meeting_at,
             exists (
               select 1 from erp.crm_appointments attended_meeting
               where attended_meeting.lead_id = l.id
@@ -1533,7 +1543,8 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
   const [openScheduled, attendedMeeting, latestMeeting, overdueMeeting, upcomingMeeting, latestWork] = await Promise.all([
     getPrisma().crmAppointment.findFirst({
       where: { ...meetingWhere, outcome: "SCHEDULED" },
-      select: { id: true },
+      orderBy: [{ plannedAt: "desc" }, { createdAt: "desc" }],
+      select: { id: true, plannedAt: true },
     }),
     getPrisma().crmAppointment.findFirst({
       where: { ...meetingWhere, outcome: "ATTENDED" },
@@ -1570,6 +1581,7 @@ export async function getCrmLeadDetail(id: string): Promise<CrmData["leads"][num
     programName: lead.programInterest?.name ?? null,
     convertedStudentCode: lead.convertedStudent?.code ?? null,
     needsMeetingAttendanceConfirm: Boolean(openScheduled) && !attendedMeeting,
+    pendingMeetingAt: openScheduled?.plannedAt.toISOString() ?? null,
     meetingAttended: Boolean(attendedMeeting),
     latestMeetingOutcome: latestMeeting?.outcome ?? null,
     meetingOverdue: Boolean(overdueMeeting),
@@ -1634,6 +1646,7 @@ function formatLeadRow(lead: CrmLeadRawRow): CrmData["leads"][number] {
         ? "Qeydiyyata al"
         : "Proqram seçilməyib",
     needsMeetingAttendanceConfirm: Boolean(lead.needsMeetingAttendanceConfirm),
+    pendingMeetingAt: lead.needsMeetingAttendanceConfirm ? lead.pendingMeetingAt ?? null : null,
     meetingAttended: Boolean(lead.meetingAttended),
     suggestion: convertedStudentCode
       ? null

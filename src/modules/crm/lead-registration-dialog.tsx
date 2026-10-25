@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import {
   Banknote,
   BookOpen,
+  CalendarClock,
   CheckCircle2,
   CircleUserRound,
   ShieldCheck,
@@ -50,6 +51,14 @@ import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
 type LeadRow = CrmData["leads"][number];
+const meetingDateFormatter = new Intl.DateTimeFormat("az-AZ", {
+  day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  hour12: false, timeZone: "Asia/Baku",
+});
+function formatMeetingDate(value: string) {
+  const parts = new Map(meetingDateFormatter.formatToParts(new Date(value)).map(part => [part.type, part.value]));
+  return `${parts.get("day")}.${parts.get("month")}.${parts.get("year")} · ${parts.get("hour")}:${parts.get("minute")}`;
+}
 
 export function LeadRegistrationDialog({
   lead,
@@ -210,6 +219,20 @@ export function LeadRegistrationDialog({
           <input type="hidden" name="returnTo" value={returnTo} />
 
           <div className="crm-dialog-scroll">
+            {lead.needsMeetingAttendanceConfirm ? (
+              <section className="crm-registration-meeting" aria-labelledby={`register-meeting-${lead.id}`}>
+                <div className="crm-registration-meeting-heading">
+                  <span className="crm-registration-meeting-icon" aria-hidden="true"><CalendarClock /></span>
+                  <div><h3 id={`register-meeting-${lead.id}`}>Görüş iştirakını təsdiqləyin</h3>
+                    {lead.pendingMeetingAt ? <p>Təyin edilmiş görüş: <time dateTime={lead.pendingMeetingAt}>{formatMeetingDate(lead.pendingMeetingAt)}</time></p> : <p>Görüşün nəticəsi hələ qeyd olunmayıb.</p>}
+                  </div>
+                </div>
+                <label className="crm-registration-meeting-confirm">
+                  <Checkbox name="confirmMeetingAttended" value="true" required />
+                  <span><strong>Görüşdə iştirak etdi</strong><small>İştirakı təsdiqlədikdən sonra qeydiyyatı tamamlaya bilərsiniz.</small></span>
+                </label>
+              </section>
+            ) : null}
             <label className="guest-registration-choice"><Checkbox name="guestLesson" checked={guestLesson} onChange={e => { setGuestLesson(e.target.checked); setRequestId(""); }} /><span><strong>Birdəfəlik ödənişli — qonaq dərs</strong><small>Hər gəliş ayrıca ödənilir. Satış və aktiv tələbə sayına daxil deyil.</small></span></label>
             {/* <div className="crm-register-preview" role="status">
               <span aria-hidden="true">{lead.name.slice(0, 2).toUpperCase()}</span>
@@ -462,20 +485,6 @@ export function LeadRegistrationDialog({
 
             </>}
 
-            {lead.needsMeetingAttendanceConfirm ? (
-              <section className="crm-dialog-section">
-                <header><CheckCircle2 aria-hidden="true" /><h3>Görüş iştirakı</h3></header>
-                <label className="crm-register-attend">
-                  <input
-                    type="checkbox"
-                    name="confirmMeetingAttended"
-                    value="true"
-                    required
-                  />
-                  <span>Görüşdə iştirak etdi — qeydiyyat bu təsdiqdən sonra davam edir.</span>
-                </label>
-              </section>
-            ) : null}
           </div>
 
           <DialogFooter className="crm-dialog-actions">

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -23,6 +23,46 @@ export type SingleLessonViewData = {
 };
 type Row = SingleLessonViewData["rows"][number];
 const statusNames: Record<string, string> = {RESERVED:"Planlaşdırılıb",ATTENDED:"Gəldi",ABSENT:"Gəlmədi",CANCELLED:"Ləğv edilib",NEW:"Dərs təyin edilməyib"};
+
+function GuestLessonFilters({ q, status, student }: { q: string; status: string; student: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [filters, setFilters] = useState({ q, status, sourceQ: q, sourceStatus: status });
+  // Sync history/server changes without replacing text typed during a pending navigation.
+  if (q !== filters.sourceQ || status !== filters.sourceStatus) {
+    setFilters({ q: filters.q === filters.sourceQ ? q : filters.q,
+      status: filters.status === filters.sourceStatus ? status : filters.status,
+      sourceQ: q, sourceStatus: status });
+  }
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  function apply(nextQ: string, nextStatus: string, delay = 0) {
+    if (timer.current) clearTimeout(timer.current);
+    const navigate = () => {
+      const params = new URLSearchParams();
+      if (nextQ.trim()) params.set("q", nextQ.trim());
+      if (nextStatus !== "ALL") params.set("status", nextStatus);
+      if (student) params.set("student", student);
+      const query = params.toString();
+      startTransition(() => router.replace(("/students/single-lessons" + (query ? "?" + query : "")) as Route, { scroll: false }));
+    };
+    if (delay) timer.current = setTimeout(navigate, delay);
+    else navigate();
+  }
+
+  return <form className="guest-ledger-toolbar" role="search" aria-label="Qonaq dərs filtrləri"
+    onSubmit={event => { event.preventDefault(); apply(filters.q, filters.status); }}>
+    <div className="guest-search"><Search size={17} aria-hidden="true"/><Input name="q" value={filters.q}
+      onChange={event => { const value = event.target.value; setFilters(current => ({ ...current, q: value })); apply(value, filters.status, 300); }}
+      placeholder="Ad, kod və ya telefon" aria-label="Qonaq dərs axtar" maxLength={80}/></div>
+    <div className="guest-status-filter"><FormSelect name="status" value={filters.status}
+      onValueChange={value => { setFilters(current => ({ ...current, status: value })); apply(filters.q, value); }}
+      aria-label="Davamiyyət filtri" options={[{value:"ALL",label:"Bütün qeydlər"},{value:"RESERVED",label:"Planlaşdırılıb"},{value:"ATTENDED",label:"Gəldi"},{value:"ABSENT",label:"Gəlmədi"},{value:"CANCELLED",label:"Ləğv edilib"}]}/></div>
+    <span className="sr-only" role="status">{pending ? "Nəticələr yenilənir" : ""}</span>
+  </form>;
+}
+
 export function SingleLessonView({ data }: { data: SingleLessonViewData }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Row | null>(null);
@@ -41,12 +81,7 @@ export function SingleLessonView({ data }: { data: SingleLessonViewData }) {
   return <section className="guest-lessons-page">
     <header className="guest-lessons-heading"><div><Link href="/students" className="guest-back"><ArrowLeft size={15}/>Tələbələr</Link><h1>Qonaq dərslər</h1><p>Hər gəliş ayrıca. Yeni tarix təyin etmək üçün tələbənin adına klikləyin.</p></div></header>
     <section className="guest-ledger" aria-label="Qonaq dərs jurnalı">
-      <form method="get" className="guest-ledger-toolbar">
-        {data.selectedStudent ? <input type="hidden" name="student" value={data.selectedStudent}/> : null}
-        <div className="guest-search"><Search size={17} aria-hidden="true"/><Input name="q" defaultValue={data.q} placeholder="Ad, kod və ya telefon" aria-label="Qonaq dərs axtar" maxLength={80}/></div>
-        <div className="guest-status-filter"><FormSelect name="status" defaultValue={data.status} aria-label="Davamiyyət filtri" options={[{value:"ALL",label:"Bütün qeydlər"},{value:"RESERVED",label:"Planlaşdırılıb"},{value:"ATTENDED",label:"Gəldi"},{value:"ABSENT",label:"Gəlmədi"},{value:"CANCELLED",label:"Ləğv edilib"}]}/></div>
-        <Button type="submit" variant="outline">Göstər</Button>
-      </form>
+      <GuestLessonFilters key={data.selectedStudent} q={data.q} status={data.status} student={data.selectedStudent}/>
       <div className="guest-ledger-scroll"><table className="guest-ledger-table"><thead><tr><th>Tələbə</th><th>Dərs / müəllim</th><th>Gəliş vaxtı</th><th>Davamiyyət</th><th>Ödəniş</th><th><span className="sr-only">Əməliyyat</span></th></tr></thead><tbody>
         {data.rows.map(row => <tr key={row.id}>
           <th scope="row"><button type="button" className="guest-student-link" onClick={()=>open(row)}><strong>{row.student}</strong><span>{row.code} <span className="guest-lesson-badge">Qonaq dərs</span>{row.isTestData ? <span className="guest-test-badge">Test</span> : null}</span></button></th>

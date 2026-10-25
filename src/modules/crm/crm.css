@@ -1056,6 +1056,28 @@ html.dark .crm-conversion-result:hover { background: #241e18; border-color: #4a3
 .crm-register-header-icon { display: grid; place-items: center; width: 44px; height: 44px; color: #3158f5; background: #e9eeff; border: 1px solid #d8e0ff; border-radius: 14px; }
 .crm-register-header-icon svg { width: 21px; height: 21px; }
 .crm-register-dialog .crm-dialog-scroll { display: grid; gap: 10px; padding-top: 14px; }
+.crm-registration-meeting { padding:16px; border:1px solid #e6d6b5; border-radius:12px; background:#fffaf0; }
+.crm-registration-meeting-heading { display:flex; gap:11px; align-items:flex-start; }
+.crm-registration-meeting-icon { display:grid; place-items:center; flex:0 0 36px; height:36px; border-radius:10px; background:#ffedc8; color:#a56c14; }
+.crm-registration-meeting-icon svg { width:18px; height:18px; }
+.crm-registration-meeting-heading h3 { margin:0 0 5px; color:#573f20; font-size:13px; font-weight:700; line-height:1.4; }
+.crm-registration-meeting-heading p { margin:0; color:#7d6b52; font-size:12px; line-height:1.6; }
+.crm-registration-meeting-heading time { font-weight:650; color:#573f20; white-space:nowrap; }
+.crm-registration-meeting-confirm { display:flex; align-items:flex-start; gap:11px; margin-top:14px; padding:12px; border:1px solid #e6dcc7; border-radius:9px; background:#fff; cursor:pointer; }
+.crm-registration-meeting-confirm:has(input:checked) { border-color:#a9d8c3; background:#f0faf5; }
+.crm-registration-meeting-confirm:focus-within { outline:2px solid #4667e8; outline-offset:2px; }
+.crm-registration-meeting-confirm input { flex:0 0 auto; margin-top:2px; }
+.crm-registration-meeting-confirm>span { display:grid; gap:4px; }
+.crm-registration-meeting-confirm strong { color:#293447; font-size:12px; line-height:1.5; }
+.crm-registration-meeting-confirm small { color:#718096; font-size:11px; line-height:1.55; }
+html.dark .crm-registration-meeting { background:#2b2419; border-color:#59482f; }
+html.dark .crm-registration-meeting-heading :is(h3,time) { color:#f1d7ad; }
+html.dark .crm-registration-meeting-heading p { color:#c3ad8e; }
+html.dark .crm-registration-meeting-icon { background:#48371d; color:#efbb6e; }
+html.dark .crm-registration-meeting-confirm { background:#211e19; border-color:#514635; }
+html.dark .crm-registration-meeting-confirm:has(input:checked) { background:#192f26; border-color:#3f715b; }
+html.dark .crm-registration-meeting-confirm strong { color:#e5e8ec; }
+html.dark .crm-registration-meeting-confirm small { color:#aeb7c6; }
 .crm-register-preview { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 11px; align-items: center; padding: 12px 14px; background: #eef3f8; border: 1px solid #d8e1eb; border-radius: 13px; }
 .crm-register-preview > span { display: grid; place-items: center; width: 42px; height: 42px; color: #3158f5; background: #fff; border: 1px solid #d6deea; border-radius: 12px; font-size: 11px; font-weight: 750; }
 .crm-register-preview div { display: grid; gap: 3px; min-width: 0; }

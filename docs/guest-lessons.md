@@ -4,9 +4,9 @@ Qonaq dərs aylıq paket deyil: şəxs seçdiyi tarix və saatda bir dəfə işt
 
 ## Qeydiyyat və cədvəl
 
-1. Yeni tələbə və ya Follow-up → Qeydiyyata al modalında **Birdəfəlik ödənişli — qonaq dərs** işarələnir. Konsultasiya/sınaq görüşünün iştirak təsdiqi tələb olunursa həmin təsdiq qalır.
+1. Yeni tələbə və ya Follow-up → Qeydiyyata al modalında **Birdəfəlik ödənişli — qonaq dərs** işarələnir. Konsultasiya/sınaq görüşünün iştirak təsdiqi tələb olunursa, CRM modalının əvvəlində təsdiq bloku və həmin görüşün Bakı vaxtı ilə tarix/saatı göstərilir.
 2. Şəxsi məlumat, proqram, müəllim, konkret tarix/saat, müddət, otaq və dərs haqqı daxil edilir. Aylıq paket və satış yaradılmır. CRM müraciəti profilə bağlanır; satış mərhələsinə avtomatik keçirilməz.
-3. `/students/single-lessons` yalnız axtarış, davamiyyət filtri və cədvəldən ibarətdir. Tələbəyə klik etdikdə davamiyyət, ödəniş və **Yeni gəliş təyin et** açılır. Bu səhifədə yeni tələbə yaratmaq yoxdur.
+3. `/students/single-lessons` yalnız axtarış, davamiyyət filtri və cədvəldən ibarətdir. Status seçimi dərhal, axtarış 300 ms fasilədən sonra avtomatik tətbiq olunur; səhifələmə sıfırlanır, seçilmiş tələbə filtri saxlanır. Tələbəyə klik etdikdə davamiyyət, ödəniş və **Yeni gəliş təyin et** açılır. Bu səhifədə yeni tələbə yaratmaq yoxdur.
 4. Slot planlayıcısında **Qonaq dərslərin vaxtları** yaxın 31 gün üçün dəqiq tarixli gəlişləri göstərir. Təqvimdə də “Qonaq dərs” adı ilə görünür. Həftəlik təkrarlanan paket yeri yaradılmır.
 
 ## Maliyyə və saylar
