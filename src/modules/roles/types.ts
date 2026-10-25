@@ -23,6 +23,14 @@ export type RoleSummaryDto = {
 };
 
 export type RoleUserDto = {
+  updatedAt: string;
+  isCurrent: boolean;
+  pendingAccessChange?: {
+    requestKey: string;
+    operation: "DISABLE" | "ENABLE" | "DELETE";
+    expectedUpdatedAt: string;
+    reason: string;
+  } | null;
   id: string;
   employeeId: string | null;
   kind: "EMPLOYEE" | "PROFILE";
@@ -59,6 +67,8 @@ export type RolePermissionMatrix = {
   canManage: boolean;
   canManageSuperAdminPermissions: boolean;
   canManageUsers: boolean;
+  canChangeUserStatus: boolean;
+  canDeleteUserAccounts: boolean;
 };
 
 export type UpdateRolePermissionsResult =

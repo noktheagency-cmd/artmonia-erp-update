@@ -353,6 +353,14 @@
 .peopleList span,
 .peopleList em { color: #6d7480; font-size: 13px; font-style: normal; }
 .peopleList button svg { width: 15px; height: 15px; }
+.peopleList li > .peopleActions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 5px; }
+.accountLifecycleDialog { width: min(520px, calc(100vw - 28px)); }
+.accountLifecycleDialog form { display: grid; gap: 18px; margin-top: 20px; }
+.accountLifecycleDialog textarea { width: 100%; padding: 12px; color: var(--foreground); background: var(--background); border: 1px solid var(--border); border-radius: 10px; font: inherit; resize: vertical; }
+.accountLifecycleDialog textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.accountSpinner { animation: account-spin 1s linear infinite; }
+@keyframes account-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .accountSpinner { animation: none; } }
 
 .peopleEmpty {
   margin: 18px 8px;

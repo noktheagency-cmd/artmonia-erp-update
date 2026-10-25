@@ -24,6 +24,19 @@ test("Super Admin always receives the full permission catalog", () => {
   for (const definition of permissionDefinitions) assert.equal(permissions.get(definition.code), "ALL");
 });
 
+test("account status and deletion rights are separate, sensitive, and granted explicitly", () => {
+  for (const code of ["auth.user.status.change", "auth.user.delete"] as const) {
+    const definition = permissionDefinitions.find((item) => item.code === code)!;
+    assert.equal("sensitive" in definition && definition.sensitive, true);
+    assert.equal("superAdminManaged" in definition && definition.superAdminManaged, true);
+    assert.equal("dependsOn" in definition && definition.dependsOn, "auth.user.read");
+    assert.equal(getPermissionsForRoles([AppRole.SUPER_ADMIN]).has(code), true);
+    for (const role of Object.values(AppRole).filter((value) => value !== AppRole.SUPER_ADMIN)) {
+      assert.equal(getPermissionsForRoles([role]).has(code), false);
+    }
+  }
+});
+
 test("Owner can read and manage role permissions by default", () => {
   const permissions = getPermissionsForRoles([AppRole.OWNER]);
   assert.equal(permissions.has("auth.role.read"), true);

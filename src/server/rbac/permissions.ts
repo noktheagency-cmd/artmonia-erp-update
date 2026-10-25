@@ -102,6 +102,8 @@ export const permissionDefinitions = define([
 
   { code: "auth.user.read", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "read", actionLabel: "Görə bilər", description: "ERP istifadəçilərini görmək", sensitive: true },
   { code: "auth.user.manage", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "special", actionLabel: "İstifadəçiləri idarə edə bilər", description: "ERP istifadəçilərini idarə etmək", sensitive: true, dependsOn: "auth.user.read" },
+  { code: "auth.user.status.change", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "special", actionLabel: "Girişi dayandıra və bərpa edə bilər", description: "Əməkdaşın şəxsi kabinetini deaktiv və aktiv etmək, sessiyalarını bağlamaq", sensitive: true, superAdminManaged: true, dependsOn: "auth.user.read" },
+  { code: "auth.user.delete", module: "system", moduleLabel: "Sistem", tab: "users", tabLabel: "İstifadəçilər", action: "delete", actionLabel: "Giriş hesabını silə bilər", description: "Əməkdaş və əməliyyat tarixçəsini saxlayaraq şəxsi kabinetin giriş hesabını silmək", sensitive: true, superAdminManaged: true, dependsOn: "auth.user.read" },
   { code: "auth.role.read", module: "system", moduleLabel: "Sistem", tab: "roles", tabLabel: "Rol və icazələr", action: "read", actionLabel: "Görə bilər", description: "Rol və icazə matrisini görmək", sensitive: true },
   { code: "auth.role.manage", module: "system", moduleLabel: "Sistem", tab: "roles", tabLabel: "Rol və icazələr", action: "special", actionLabel: "İcazələri idarə edə bilər", description: "Rol icazələrini dəyişmək", sensitive: true, dependsOn: "auth.role.read" },
 ] as const);

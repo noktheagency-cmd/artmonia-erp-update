@@ -10,6 +10,7 @@ import { getPrisma } from "@/server/db/prisma";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { assertSafePassword } from "@/server/auth/password-security";
 import { getSupabaseAdminClient } from "@/server/supabase/admin";
+import { assertNoPendingAccountLifecycle } from "@/modules/roles/account-lifecycle-service";
 import {
   syncTeacherAccountLink,
   TeacherAccountLinkError,
@@ -136,6 +137,8 @@ async function updateAccount(formData: FormData) {
   try {
     await getPrisma().$transaction(async (tx) => {
       const effectiveRoles = uniqueRoles([...currentProtectedRoles, ...roles]);
+      await tx.$queryRaw`select id from erp.users where id = ${user.id}::uuid for update`;
+      await assertNoPendingAccountLifecycle(tx, user.id);
       await tx.user.update({ where: { id: user.id }, data: { email: input.loginEmail } });
       await tx.userRole.deleteMany({ where: { userId: user.id } });
       await tx.userRole.createMany({ data: effectiveRoles.map((role) => ({ userId: user.id, roleId: role.id })) });
@@ -193,6 +196,8 @@ async function setAccountStatus(formData: FormData) {
   });
   if (error) throw new PublicActionError(error.message);
   await getPrisma().$transaction(async (tx) => {
+    await tx.$queryRaw`select id from erp.users where id = ${user.id}::uuid for update`;
+    await assertNoPendingAccountLifecycle(tx, user.id);
     await tx.user.update({ where: { id: user.id }, data: { isActive: input.active } });
     await writeAuditLog(tx, {
       actorUserId: actor.id,

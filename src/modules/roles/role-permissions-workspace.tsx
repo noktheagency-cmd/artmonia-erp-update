@@ -32,6 +32,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { isProtectedTeamRole } from "@/lib/protected-roles";
+import { RoleAccountControls } from "./role-account-controls";
 import {
   createStandaloneUserAction,
   createRoleAction,
@@ -61,6 +62,11 @@ export function RolePermissionsWorkspace({
 }) {
   const [roles, setRoles] = useState(initialData.roles);
   const [users, setUsers] = useState(initialData.users);
+  const [serverUsers, setServerUsers] = useState(initialData.users);
+  if (serverUsers !== initialData.users) {
+    setServerUsers(initialData.users);
+    setUsers(initialData.users);
+  }
   const [selectedRoleId, setSelectedRoleId] = useState(initialData.roles[0]?.id ?? "");
   const [drafts, setDrafts] = useState<Record<string, PermissionDraft>>(() =>
     Object.fromEntries(initialData.roles.map((role) => [role.id, grantsToRecord(role.grants)])),
@@ -522,13 +528,27 @@ export function RolePermissionsWorkspace({
                             <span>{user.position} · {user.department}</span>
                           </div>
                           <em>
-                            {user.isProtected ? "Qorunan profil" : user.kind === "EMPLOYEE" ? "Əməkdaş" : "Profil"}
+                            {user.isProtected ? "Qorunan profil" : !user.hasLogin ? "Giriş yoxdur" : user.pendingAccessChange ? "Əməliyyat gözləyir" : user.isActive ? "Aktiv giriş" : "Giriş dayandırılıb"}
                           </em>
-                          {(initialData.canManageUsers || initialData.canManage) && selectedRole.code !== "SUPER_ADMIN" && !user.isProtected ? (
-                            <Button type="button" variant="ghost" size="icon-sm" aria-label="Profil məlumatlarını dəyiş" onClick={() => openUserProfile(user)}>
-                              <Pencil />
-                            </Button>
-                          ) : null}
+                          <div className={styles.peopleActions}>
+                            {(initialData.canManageUsers || initialData.canManage) && selectedRole.code !== "SUPER_ADMIN" && !user.isProtected ? (
+                              <Button type="button" variant="ghost" size="icon-sm" aria-label="Profil məlumatlarını dəyiş" onClick={() => openUserProfile(user)}>
+                                <Pencil />
+                              </Button>
+                            ) : null}
+                            <RoleAccountControls
+                              user={user}
+                              canChangeStatus={initialData.canChangeUserStatus}
+                              canDelete={initialData.canDeleteUserAccounts}
+                              onChanged={(result) => {
+                                const nextUsers = result.hasLogin
+                                  ? users.map((item) => item.id === result.userId ? { ...item, ...result, pendingAccessChange: null } : item)
+                                  : users.filter((item) => item.id !== result.userId);
+                                setUsers(nextUsers);
+                                setRoles((current) => current.map((role) => ({ ...role, userCount: nextUsers.filter((item) => item.roleIds.includes(role.id)).length })));
+                              }}
+                            />
+                          </div>
                         </li>
                       ))}
                     </ul>

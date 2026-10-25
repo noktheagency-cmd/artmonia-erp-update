@@ -7,6 +7,8 @@ const actionLabels: Record<string, string> = {
   "auth.account.update": "Giriş məlumatları yeniləndi",
   "auth.account.enable": "Giriş hesabı aktiv edildi",
   "auth.account.disable": "Giriş hesabı deaktiv edildi",
+  "auth.account.lifecycle.request": "Giriş hesabı əməliyyatı başladıldı",
+  "auth.account.lifecycle.complete": "Giriş hesabı əməliyyatı tamamlandı",
   "auth.password.reset": "Əməkdaş parolu yeniləndi",
   "class_slot.create": "Dərs vaxtı yaradıldı",
   "class_slot.delete": "Dərs vaxtı silindi",

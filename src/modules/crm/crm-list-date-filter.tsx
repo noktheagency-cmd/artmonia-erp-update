@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -27,6 +28,12 @@ export function CrmListDateControls({
   const [from, setFrom] = useState(filter.from);
   const [to, setTo] = useState(filter.to);
   const [error, setError] = useState(filter.error);
+  const presets: Array<{ label: string; title: string; selection: () => CrmListDateSelection }> = [
+    { label: "Bu ay", title: "Cari ayın bütün günləri", selection: () => ({ field, ...crmListMonthDates() }) },
+    { label: "Növbəti həftə", title: "Növbəti həftənin planları", selection: () => ({ field: "planned", ...crmListNextWeekDates() }) },
+    { label: "Gələn ay", title: "Gələn ayın planları", selection: () => ({ field: "planned", ...crmListMonthDates(1) }) },
+    { label: "Bütün tarixlər", title: "Tarix məhdudiyyətini götür", selection: () => ({ field: "created", from: "", to: "" }) },
+  ];
 
   function apply(selection: CrmListDateSelection) {
     const message = crmListDateError(selection.from, selection.to);
@@ -59,27 +66,40 @@ export function CrmListDateControls({
             ]}
           />
         </Field>
-        <Field>
-          <FieldLabel>Başlanğıc</FieldLabel>
-          <DatePicker name="listFrom" aria-label="Siyahının başlanğıc tarixi" value={from} onValueChange={setFrom} />
-        </Field>
-        <Field>
-          <FieldLabel>Bitmə</FieldLabel>
-          <DatePicker name="listTo" aria-label="Siyahının bitmə tarixi" value={to} onValueChange={setTo} />
-        </Field>
-        <Button type="submit" disabled={isPending}>{isPending ? "Tətbiq edilir…" : "Tətbiq et"}</Button>
+        <FieldGroup className="crm-list-date-range" role="group" aria-label="Tarix aralığı">
+          <Field>
+            <FieldLabel>Başlanğıc</FieldLabel>
+            <DatePicker name="listFrom" aria-label="Siyahının başlanğıc tarixi" value={from} onValueChange={setFrom} compact />
+          </Field>
+          <Field>
+            <FieldLabel>Bitmə</FieldLabel>
+            <DatePicker name="listTo" aria-label="Siyahının bitmə tarixi" value={to} onValueChange={setTo} compact />
+          </Field>
+        </FieldGroup>
+        <Button className="crm-list-date-apply" type="submit" disabled={isPending}>
+          {isPending ? <LoaderCircle className="crm-spin" data-icon="inline-start" /> : null}
+          {isPending ? "Tətbiq edilir…" : "Tətbiq et"}
+        </Button>
       </FieldGroup>
-      <div className="crm-list-date-presets" aria-label="Sürətli tarix seçimləri">
-        <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={() => apply({ field, ...crmListMonthDates() })}>Bu ay</Button>
-        <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={() => apply({ field: "planned", ...crmListNextWeekDates() })}>Növbəti həftənin planları</Button>
-        <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={() => apply({ field: "planned", ...crmListMonthDates(1) })}>Gələn ayın planları</Button>
-        <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={() => apply({ field: "created", from: "", to: "" })}>Bütün tarixlər</Button>
+      <div className="crm-list-dates-footer">
+        <div className="crm-list-date-presets" role="group" aria-label="Sürətli tarix seçimləri">
+          {presets.map((preset) => {
+            const selection = preset.selection();
+            const selected = filter.active && selection.field === filter.field
+              && selection.from === filter.from && selection.to === filter.to;
+            return (
+              <Button
+                key={preset.label} type="button" size="sm" variant={selected ? "secondary" : "outline"}
+                title={preset.title} aria-pressed={selected} disabled={isPending}
+                onClick={() => apply(preset.selection())}
+              >{preset.label}</Button>
+            );
+          })}
+        </div>
+        <p className={error ? "crm-list-date-error" : "crm-list-date-hint"} role={error ? "alert" : undefined}>
+          {error || (field === "planned" ? "Planlanan addım və görüş tarixinə görə" : "Müraciətin yaradılma tarixinə görə")}
+        </p>
       </div>
-      <p className={error ? "crm-list-date-error" : "crm-list-date-hint"} role={error ? "alert" : undefined}>
-        {error || (field === "planned"
-          ? "Müraciətin növbəti addımı və ya görüşü üçün planlanan tarixə görə axtarır."
-          : "Müraciətin yaradıldığı tarixə görə axtarır.")}
-      </p>
     </form>
   );
 }

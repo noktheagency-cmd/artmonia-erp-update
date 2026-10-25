@@ -6,6 +6,7 @@ import { AppRole, Prisma } from "@/generated/prisma/client";
 import { isProtectedTeamRole } from "@/lib/protected-roles";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { persistStandaloneUser } from "@/modules/roles/standalone-user-service";
+import { assertNoPendingAccountLifecycle } from "./account-lifecycle-service";
 import type { CreateRoleResult, DeleteRoleResult, RoleSummaryDto, RoleUserDto, UpdateRolePermissionsResult } from "@/modules/roles/types";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
@@ -58,18 +59,22 @@ async function createStandaloneUserActionImpl(formData: FormData) {
 
   try {
     const user = await prisma.$transaction(async (tx) => {
-      return persistStandaloneUser(tx, {
+      const created = await persistStandaloneUser(tx, {
         authUserId: data.user.id,
         email: input.email,
         fullName: input.fullName,
         role: { id: role.id, name: role.name },
         actorUserId: actor.id,
       });
+      const version = await tx.user.findUniqueOrThrow({ where: { id: created.id }, select: { updatedAt: true } });
+      return { ...created, updatedAt: version.updatedAt };
     });
 
     revalidatePath("/settings/roles");
     revalidatePath("/", "layout");
     const createdUser: RoleUserDto = {
+      updatedAt: user.updatedAt.toISOString(),
+      isCurrent: false,
       id: user.id,
       employeeId: null,
       kind: "PROFILE",
@@ -445,6 +450,8 @@ export async function updateRoleUserAction(formData: FormData) {
 
     try {
       await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`select id from erp.users where id = ${user.id}::uuid for update`;
+        await assertNoPendingAccountLifecycle(tx, user.id);
         if (emailChanged) {
           await tx.user.update({
             where: { id: user.id },
@@ -489,6 +496,8 @@ export async function updateRoleUserAction(formData: FormData) {
     }
 
     const updatedUser: RoleUserDto = {
+      updatedAt: (await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { updatedAt: true } })).updatedAt.toISOString(),
+      isCurrent: user.id === actor.id,
       id: user.id,
       employeeId: user.hrEmployeeProfile?.id ?? null,
       kind: user.hrEmployeeProfile ? "EMPLOYEE" : "PROFILE",
@@ -496,7 +505,7 @@ export async function updateRoleUserAction(formData: FormData) {
       email: parsedInput.data.email,
       department: user.hrEmployeeProfile?.department ?? "HR xaricində",
       position: user.hrEmployeeProfile?.position ?? "Giriş profili",
-      isActive: user.isActive && user.hrEmployeeProfile?.status !== "INACTIVE",
+      isActive: user.isActive,
       hasLogin: Boolean(user.authUserId),
       isProtected: false,
       roleIds,

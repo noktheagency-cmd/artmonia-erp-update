@@ -1,5 +1,5 @@
-import { AppRole } from "@/generated/prisma/client";
-import { isProtectedTeamRole } from "@/lib/protected-roles";
+import { AppRole, Prisma } from "@/generated/prisma/client";
+import { isProtectedLoginRole } from "./account-lifecycle-policy";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
 import {
@@ -30,7 +30,6 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
     }),
     getPrisma().user.findMany({
       where: {
-        isActive: true,
         roles: { some: {} },
       },
       orderBy: { fullName: "asc" },
@@ -41,6 +40,7 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
         fullName: true,
         email: true,
         isActive: true,
+        updatedAt: true,
         roles: { select: { roleId: true, role: { select: { code: true } } } },
         hrEmployeeProfile: {
           select: {
@@ -53,6 +53,22 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
       },
     }),
   ]);
+
+  const canChangeUserStatus = actor.permissions.has("auth.user.status.change");
+  const canDeleteUserAccounts = actor.permissions.has("auth.user.delete");
+  const pendingRows = users.length && (canChangeUserStatus || canDeleteUserAccounts)
+    ? await getPrisma().$queryRaw<Array<{ userId: string; requestKey: string; operation: "ENABLE" | "DISABLE" | "DELETE"; expectedUpdatedAt: string; reason: string }>>(Prisma.sql`
+      select r.entity_id::text as "userId", r.after_json->>'requestKey' as "requestKey",
+        r.after_json->>'operation' as operation, r.after_json->>'inputVersion' as "expectedUpdatedAt", r.reason
+      from erp.audit_logs r
+      where r.entity_type = 'user' and r.action = 'auth.account.lifecycle.request'
+        and r.entity_id in (${Prisma.join(users.map((user) => Prisma.sql`${user.id}::uuid`))})
+        and not exists (select 1 from erp.audit_logs done
+          where done.entity_id = r.entity_id and done.entity_type = 'user' and done.action = 'auth.account.lifecycle.complete'
+            and done.after_json->>'requestKey' = r.after_json->>'requestKey')
+      order by r.created_at desc limit 500
+    `) : [];
+  const pending = new Map(pendingRows.filter((row) => row.operation === "DELETE" ? canDeleteUserAccounts : canChangeUserStatus).map((row) => [row.userId, row]));
 
   const roleRank = new Map(roleOrder.map((role, index) => [role, index]));
   return {
@@ -81,6 +97,9 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
               ),
       })),
     users: users.map((user) => ({
+      updatedAt: user.updatedAt.toISOString(),
+      isCurrent: user.id === actor.id,
+      pendingAccessChange: pending.get(user.id) ?? null,
       id: user.id,
       employeeId: user.hrEmployeeProfile?.id ?? null,
       kind: user.hrEmployeeProfile ? "EMPLOYEE" as const : "PROFILE" as const,
@@ -88,9 +107,9 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
       email: user.email,
       department: user.hrEmployeeProfile?.department ?? "HR xaricində",
       position: user.hrEmployeeProfile?.position ?? "Giriş profili",
-      isActive: user.isActive && user.hrEmployeeProfile?.status !== "INACTIVE",
+      isActive: user.isActive,
       hasLogin: Boolean(user.authUserId),
-      isProtected: user.roles.some(({ role }) => isProtectedTeamRole(role.code)),
+      isProtected: user.roles.some(({ role }) => isProtectedLoginRole(role.code)),
       roleIds: user.roles.map((role) => role.roleId),
     })),
     definitions: permissionDefinitions.map((definition) => ({
@@ -114,5 +133,7 @@ export async function getRolePermissionMatrix(): Promise<RolePermissionMatrix> {
     canManage: actor.permissions.has("auth.role.manage"),
     canManageSuperAdminPermissions: actor.roles.includes(AppRole.SUPER_ADMIN),
     canManageUsers: actor.permissions.has("auth.user.manage"),
+    canChangeUserStatus,
+    canDeleteUserAccounts,
   };
 }
