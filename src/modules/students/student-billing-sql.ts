@@ -1,3 +1,4 @@
+import { regularInvoiceSql } from "./guest-lesson-sql";
 import { Prisma } from "@/generated/prisma/client";
 
 type StudentAmountSqlInput = {
@@ -12,6 +13,7 @@ export function buildStudentOpenBalanceValueSql({ studentId }: StudentAmountSqlI
     from erp.invoices invoice
     where invoice.student_id = ${studentId}
       and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
+      and ${regularInvoiceSql(Prisma.sql`invoice.id`)}
       and invoice.balance_due > 0
   ), 0)`;
 }
@@ -26,6 +28,7 @@ export function buildStudentDueDebtValueSql({
     from erp.invoices invoice
     where invoice.student_id = ${studentId}
       and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
+      and ${regularInvoiceSql(Prisma.sql`invoice.id`)}
       and invoice.balance_due > 0
       and (invoice.due_date is null or invoice.due_date <= ${asOfDate}::date)
   ), 0)`;
@@ -65,6 +68,7 @@ export function buildStudentFutureReceivableValueSql({
     from erp.invoices invoice
     where invoice.student_id = ${studentId}
       and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
+      and ${regularInvoiceSql(Prisma.sql`invoice.id`)}
       and invoice.balance_due > 0
       and invoice.due_date > ${asOfDate}::date
   ), 0)`;
@@ -80,6 +84,7 @@ export function buildStudentOldestDebtDueDateSql({
     from erp.invoices invoice
     where invoice.student_id = ${studentId}
       and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
+      and ${regularInvoiceSql(Prisma.sql`invoice.id`)}
       and invoice.balance_due > 0
       and (invoice.due_date is null or invoice.due_date <= ${asOfDate}::date)
   )`;
@@ -97,7 +102,8 @@ export function buildStudentNextPaymentDateSql(studentId: Prisma.Sql = Prisma.sq
       from erp.invoices invoice
       where invoice.student_id = ${studentId}
         and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
-        and invoice.balance_due > 0
+        and ${regularInvoiceSql(Prisma.sql`invoice.id`)}
+      and invoice.balance_due > 0
     ),
     (
       select case

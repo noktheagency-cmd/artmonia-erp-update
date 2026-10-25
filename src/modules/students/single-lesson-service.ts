@@ -8,6 +8,8 @@ import { normalizePhone } from "@/modules/crm/duplicate-phone";
 import { assertCreationDatesAllowed } from "@/modules/shared/creation-date-policy";
 import { currentBakuDateValue, parsePaymentDateInput } from "./payment-date-policy";
 import { assertSingleLessonAttendance, singleLessonSchema } from "./single-lesson-policy";
+import { recalculateTeacherPayoutsForMonthInTransaction } from "@/modules/hr/teacher-payroll-service";
+import { assertGuestVisitAvailable } from "./guest-visit-scheduling";
 
 type Actor = Pick<ErpActor, "id" | "permissions">;
 function requirePermission(actor: Actor, permission: PermissionCode) {
@@ -63,6 +65,7 @@ export async function bookSingleLesson(tx: Prisma.TransactionClient, raw: unknow
     await writeAuditLog(tx, { actorUserId: actor.id, action: "student.create", entityType: "student", entityId: student.id,
       after: { registrationMode: "SINGLE_LESSON", lifecycleStatus: "SLOT_WAITING", billingPaused: true }, reason: "Birdəfəlik dərs üçün profil yaradıldı; aylıq paket açılmadı" });
   }
+  await assertGuestVisitAvailable(tx, { studentId: student.id, date: input.date, time: input.time, duration: input.duration });
   const lesson = await tx.singleLesson.create({ data: {
     id: input.requestId, requestHash, studentId: student.id, teacherId: teacher.id, programId: program.id,
     lessonDate: new Date(input.date), startTime: input.time, durationMinutes: input.duration,
@@ -104,6 +107,9 @@ export async function markSingleLesson(tx: Prisma.TransactionClient, input: { le
   if (input.status === "CANCELLED" && lesson.paymentId) throw new PublicActionError("Ödənişli dərsin ləğvi üçün əvvəl maliyyə düzəlişi edilməlidir.");
   if (input.status === "ATTENDED") await ensureSingleLessonInvoice(tx, lesson);
   await tx.singleLesson.update({ where: { id: lesson.id }, data: { status: input.status } });
+  if (input.status === "ATTENDED" && lesson.payment) {
+    await recalculateTeacherPayoutsForMonthInTransaction(tx, lesson.payment.paymentMonth, actor.id, [lesson.teacherId]);
+  }
   await writeAuditLog(tx, { actorUserId: actor.id, action: "student.single_lesson.attendance", entityType: "single_lesson", entityId: lesson.id,
     before: { status: lesson.status }, after: { status: input.status }, reason: "Birdəfəlik dərs davamiyyəti qeyd edildi; aylıq status dəyişmədi" });
 }
@@ -128,6 +134,9 @@ export async function paySingleLesson(tx: Prisma.TransactionClient, input: { les
   await tx.paymentAllocation.create({ data: { paymentId: payment.id, invoiceId, amountAllocated: lesson.price, mode: "SELECTED_INVOICE" } });
   await tx.invoice.update({ where: { id: invoiceId }, data: { balanceDue: 0, status: "PAID" } });
   await tx.singleLesson.update({ where: { id: lesson.id }, data: { paymentId: payment.id } });
+  if (lesson.status === "ATTENDED") {
+    await recalculateTeacherPayoutsForMonthInTransaction(tx, payment.paymentMonth, actor.id, [lesson.teacherId]);
+  }
   await writeAuditLog(tx, { actorUserId: actor.id, action: "student.single_lesson.payment", entityType: "single_lesson", entityId: lesson.id,
     after: { paymentId: payment.id, invoiceId, amount: lesson.price.toFixed(2), paidDate: input.paidDate, method: input.method }, reason: "Yalnız bu dərsin ödənişi; aylıq borc və satış yaratmır" });
 }

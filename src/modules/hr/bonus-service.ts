@@ -56,7 +56,7 @@ export async function calculateBonusCampaignValues(
           from erp.payments payment
           join erp.students student on student.id = payment.student_id
           join erp.hr_employees employee on employee.user_id = student.manager_id
-          where employee.department = campaign.department
+          where payment.receipt_purpose <> 'ONE_OFF' and employee.department = campaign.department
             and exists (
               select 1 from erp.hr_bonus_participants participant
               where participant.campaign_id = campaign.id
@@ -123,7 +123,7 @@ export async function calculateBonusCampaignValue(campaignId: string) {
       from erp.payments p
       join erp.students s on s.id = p.student_id
       join erp.hr_employees he on he.user_id = s.manager_id
-      where he.department = ${campaign.department}
+      where p.receipt_purpose <> 'ONE_OFF' and he.department = ${campaign.department}
         and exists (
           select 1 from erp.hr_bonus_participants participant
           where participant.campaign_id = ${campaign.id}::uuid
@@ -411,7 +411,7 @@ async function calculateParticipantRevenueValues(campaignId: string, employeeId?
         select sum(payment.amount)
         from erp.payments payment
         join erp.students student on student.id = payment.student_id
-        where student.manager_id = employee.user_id
+        where payment.receipt_purpose <> 'ONE_OFF' and student.manager_id = employee.user_id
           and student.is_test_data = false
           and payment.paid_at >= campaign.starts_at
           and payment.paid_at <= campaign.ends_at

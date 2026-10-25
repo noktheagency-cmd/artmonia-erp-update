@@ -448,7 +448,7 @@ function mapTeacherRow(row: TeacherRawRow, payroll?: import("@/modules/hr/teache
     paidRevenue: payroll?.paidRevenue ?? 0,
     eligibleRevenue: payroll?.eligibleRevenue ?? 0,
     estimatedSalary: salaryMode === "STATIC"
-      ? Number(row.salaryAmount ?? 0)
+      ? new Prisma.Decimal(String(row.salaryAmount ?? 0)).plus(payroll?.guestLessonPayout ?? 0).toNumber()
       : payroll?.payoutAmount ?? 0,
     attendedLessons: payroll?.attendedLessons ?? 0,
     absentLessons: payroll?.absentLessons ?? 0,

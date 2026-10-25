@@ -1,3 +1,4 @@
+import { regularInvoiceSql } from "@/modules/students/guest-lesson-sql";
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 import { requireErpActor, type ErpActor } from "@/server/auth/actor";
@@ -61,6 +62,7 @@ export type FinanceData = {
   };
   summary: {
     income: string;
+    guestIncome: string;
     studentIncome: string;
     eventIncome: string;
     expense: string;
@@ -166,12 +168,14 @@ export type FinanceData = {
     meta: string;
     salaryMode: "STATIC" | "PERCENT";
     staticSalary: string;
+    guestLessonSalary?: string;
     salaryPercent: string;
     salaryBase: string;
     calculatedSalary: string;
   }>;
   corporateCustomers: Array<{ id: string; name: string }>;
   payments: Array<{
+    isGuest?: boolean;
     sourceKind: "STUDENT" | "WORKSHOP";
     sourceLabel: string;
     sourceHref: string;
@@ -281,6 +285,7 @@ export type FinanceData = {
 
 type FinanceSummaryRow = {
   income: unknown;
+  guestIncome: unknown;
   studentIncome: unknown;
   activeStudentIncome: unknown;
   workshopIncome: unknown;
@@ -347,12 +352,14 @@ type StaffOptionRow = {
   meta: string;
   salaryMode: "STATIC" | "PERCENT";
   staticSalary: unknown;
+  guestLessonSalary: unknown;
   salaryPercent: unknown;
   salaryBase: unknown;
   calculatedSalary: unknown;
 };
 
 type PaymentRow = {
+  receiptPurpose: string;
   id: string;
   studentId: string;
   studentName: string;
@@ -643,12 +650,16 @@ export async function getFinanceData(
           ${searchSql.expenses}
       )
       select
+        coalesce((select sum(p.amount) from erp.payments p join erp.students s on s.id=p.student_id join erp.contacts c on c.id=s.contact_id
+          where p.receipt_purpose='ONE_OFF' and p.refunded_at is null and not s.is_test_data
+            and p.paid_at >= ${periodStart} and p.paid_at < ${periodEnd}
+            ${studentSourceSql} ${searchSql.payments}),0) as "guestIncome",
         coalesce((
           select sum(p.amount)
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${periodStart}
+          where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${periodStart}
             and p.paid_at < ${periodEnd}
             and s.is_test_data = false
             ${studentSourceSql}
@@ -669,7 +680,7 @@ export async function getFinanceData(
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${periodStart}
+          where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${periodStart}
             and p.paid_at < ${periodEnd}
             and s.is_test_data = false
             ${studentSourceSql}
@@ -680,7 +691,7 @@ export async function getFinanceData(
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${periodStart}
+          where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${periodStart}
             and p.paid_at < ${periodEnd}
             and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
             and s.is_test_data = false
@@ -703,7 +714,7 @@ export async function getFinanceData(
           from erp.payments p
           join erp.students s on s.id = p.student_id
           join erp.contacts c on c.id = s.contact_id
-          where p.paid_at >= ${periodStart}
+          where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${periodStart}
             and p.paid_at < ${periodEnd}
             and s.is_test_data = false
             ${studentSourceSql}
@@ -939,7 +950,7 @@ export async function getFinanceData(
           min(i.due_date) filter (where i.balance_due > 0) as next_due_date
         from erp.invoices i
         where i.student_id = s.id
-          and i.status <> 'VOID'::"erp"."InvoiceStatus"
+          and i.status <> 'VOID'::"erp"."InvoiceStatus" and ${regularInvoiceSql(Prisma.sql`i.id`)}
       ) inv on true
       left join lateral (
         select
@@ -966,6 +977,7 @@ export async function getFinanceData(
         concat(he.position, ' · ', he.department) as "meta",
         he.salary_mode::text as "salaryMode",
         he.salary_amount as "staticSalary",
+        0::numeric as "guestLessonSalary",
         coalesce(he.salary_percent, 0) as "salaryPercent",
         case when he.salary_mode = 'STATIC'::"erp"."FinanceSalaryMode" then he.salary_amount else coalesce(last_salary.salary_base_amount, 0) end as "salaryBase",
         case when he.salary_mode = 'STATIC'::"erp"."FinanceSalaryMode" then he.salary_amount else round(coalesce(last_salary.salary_base_amount, 0) * coalesce(he.salary_percent, 0) / 100, 2) end as "calculatedSalary"
@@ -994,9 +1006,10 @@ export async function getFinanceData(
         coalesce(t.phone, 'Müəllim') as "meta",
         case when he.salary_mode = 'STATIC' then 'STATIC' else 'PERCENT' end as "salaryMode",
         case when he.salary_mode = 'STATIC' then he.salary_amount else 0 end as "staticSalary",
+        coalesce(guest.payout_amount, 0) as "guestLessonSalary",
         case when he.salary_mode = 'STATIC' then 0 else coalesce(rule.salary_percent, last_salary.salary_percent, 0) end as "salaryPercent",
         case when he.salary_mode = 'STATIC' then he.salary_amount else coalesce(payout.eligible_revenue, last_salary.salary_base_amount, 0) end as "salaryBase",
-        case when he.salary_mode = 'STATIC' then he.salary_amount else coalesce(payout.payout_amount, last_salary.salary_calculated_amount, 0) end as "calculatedSalary"
+        case when he.salary_mode = 'STATIC' then he.salary_amount + coalesce(guest.payout_amount, 0) else coalesce(payout.payout_amount, last_salary.salary_calculated_amount, 0) end as "calculatedSalary"
       from erp.teachers t
       left join lateral (
         select employee.salary_mode, employee.salary_amount
@@ -1024,6 +1037,13 @@ export async function getFinanceData(
         limit 1
       ) payout on true
       left join lateral (
+        select sum(line.payout_amount) as payout_amount from erp.teacher_payout_lines line
+        join erp.teacher_payouts parent on parent.id=line.payout_id
+        join erp.single_lessons lesson on lesson.payment_id=line.payment_id
+        where parent.teacher_id=t.id and parent.period_month=${activePeriodStart}
+          and line.enrollment_id is null and lesson.teacher_id=t.id
+      ) guest on true
+      left join lateral (
         select
           fe.salary_percent,
           fe.salary_base_amount,
@@ -1045,6 +1065,7 @@ export async function getFinanceData(
         s.code as "studentCode",
         s.lifecycle_status::text as "lifecycleStatus",
         p.payer_name as "payerName",
+        p.receipt_purpose as "receiptPurpose",
         p.amount,
         to_char(p.paid_at, 'DD.MM.YYYY') as "paidAt",
         to_char(p.paid_at, 'YYYY-MM-DD') as "dateKey",
@@ -1242,6 +1263,7 @@ export async function getFinanceData(
 
   const summary = summaryRows[0] ?? {
     income: 0,
+    guestIncome: 0,
     studentIncome: 0,
     workshopIncome: 0,
     paymentCount: 0,
@@ -1381,6 +1403,7 @@ export async function getFinanceData(
     },
     summary: {
       income: formatAmount(income),
+      guestIncome: formatAmount(summary.guestIncome),
       studentIncome: formatAmount(studentIncome),
       eventIncome: formatAmount(eventIncome),
       expense: formatAmount(expense),
@@ -1445,7 +1468,7 @@ export async function getFinanceData(
           studentCode: payment.studentCode,
           amount: formatAmount(payment.amount),
           paidAt: payment.paidAt,
-          paymentMonth: payment.paymentMonth,
+          paymentMonth: payment.receiptPurpose === "ONE_OFF" ? "Qonaq dərs" : payment.paymentMonth,
           lifecycleStatus: payment.lifecycleStatus,
           status: "Ödənilib",
         })),
@@ -1554,6 +1577,7 @@ export async function getFinanceData(
       meta: staff.meta,
       salaryMode: staff.salaryMode,
       staticSalary: formatDecimalInput(staff.staticSalary),
+      guestLessonSalary: formatDecimalInput(staff.guestLessonSalary),
       salaryPercent: formatDecimalInput(staff.salaryPercent),
       salaryBase: formatDecimalInput(staff.salaryBase),
       calculatedSalary: formatDecimalInput(staff.calculatedSalary),
@@ -1562,8 +1586,9 @@ export async function getFinanceData(
     payments: [
       ...paymentRows.map((payment) => ({
       sourceKind: "STUDENT" as const,
-      sourceLabel: "Tələbə ödənişi",
-      sourceHref: `/students/${payment.studentId}`,
+      isGuest: payment.receiptPurpose === "ONE_OFF",
+      sourceLabel: payment.receiptPurpose === "ONE_OFF" ? "Qonaq dərs" : "Tələbə ödənişi",
+      sourceHref: payment.receiptPurpose === "ONE_OFF" ? `/students/single-lessons?student=${payment.studentId}` : `/students/${payment.studentId}`,
       id: payment.id,
       studentId: payment.studentId,
       studentName: payment.studentName,
@@ -1999,7 +2024,7 @@ async function getLimitedFinanceData({
     filters: { ...normalizedFilters, type: "overview", activeCount: 0 },
     filterLabels: { category: "", type: "", period: "Cari ay", source: "" },
     summary: {
-      income: emptyAmount, studentIncome: emptyAmount, eventIncome: emptyAmount,
+      income: emptyAmount, guestIncome: emptyAmount, studentIncome: emptyAmount, eventIncome: emptyAmount,
       expense: emptyAmount, operatingExpense: emptyAmount, coreExpense: emptyAmount, eventExpense: emptyAmount,
       net: emptyAmount, grossProfit: emptyAmount, operatingProfit: emptyAmount, netProfit: emptyAmount,
       netCash: emptyAmount, directCost: emptyAmount, opex: emptyAmount, capex: emptyAmount,

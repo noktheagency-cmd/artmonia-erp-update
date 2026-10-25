@@ -1,4 +1,5 @@
 "use server";
+import { registerGuestStudentFromForm } from "@/modules/students/guest-registration";
 import { resolveStudentEducationLevel } from "./education-level-service";
 
 import { revalidatePath, updateTag } from "next/cache";
@@ -266,6 +267,7 @@ const createStudentEnrollmentSchema = z.object({
 
 async function createStudentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("student.create");
+  if (formData.get("guestLesson") === "on") return registerGuestStudentFromForm(formData, actor);
   const input = createStudentSchema.parse(Object.fromEntries(formData));
   const initialLifecycleStatus = StudentLifecycleStatus.SLOT_WAITING;
   input.lifecycleStatus = initialLifecycleStatus;
@@ -639,6 +641,10 @@ async function updateStudentStatusActionImpl(formData: FormData) {
 
     if (scopeFor(actor.permissions,"student.status.change")!=="ALL" && current.managerId!==actor.id)
       throw new PublicActionError("Bu tələbənin statusunu dəyişmək icazəniz yoxdur", "FORBIDDEN");
+    if (["ACTIVE", "FROZEN", "FROZEN_RESERVED"].includes(input.lifecycleStatus)) {
+      const guestOnly = await tx.student.count({ where: { id: current.id, singleLessons: { some: {} }, enrollments: { none: {} } } });
+      if (guestOnly) throw new PublicActionError("Qonaq dərs tələbəsi aktiv aylıq tələbə deyil. Aylıq təhsilə keçid üçün əvvəl paket qeydiyyatı aparılmalıdır.");
+    }
     if (
       input.lifecycleStatus === "FROZEN_RESERVED"
       || (current.freezeReserved && input.lifecycleStatus === "ACTIVE")

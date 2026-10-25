@@ -92,7 +92,7 @@ export async function getMarketingDashboardData(filters?: { from?: string; to?: 
           select payment.student_id
           from erp.payments payment
           join erp.students student on student.id = payment.student_id
-          where student.is_test_data = false
+          where payment.receipt_purpose <> 'ONE_OFF' and student.is_test_data = false
             and (student.campaign_id is not null or exists (
               select 1 from erp.leads lead
               where lead.converted_student_id = student.id and lead.source is not null
@@ -127,7 +127,7 @@ export async function getMarketingDashboardData(filters?: { from?: string; to?: 
           select payment.student_id, min(payment.paid_at) as first_paid_at
           from erp.payments payment
           join erp.students student on student.id = payment.student_id
-          where student.is_test_data = false
+          where payment.receipt_purpose <> 'ONE_OFF' and student.is_test_data = false
             and (student.campaign_id is not null or exists (
               select 1 from erp.leads lead
               where lead.converted_student_id = student.id and lead.source is not null
@@ -170,7 +170,7 @@ export async function getMarketingDashboardData(filters?: { from?: string; to?: 
           select student.id
           from erp.students student
           join erp.payments payment on payment.student_id = student.id
-          where student.campaign_id = campaign.id and student.is_test_data = false
+          where payment.receipt_purpose <> 'ONE_OFF' and student.campaign_id = campaign.id and student.is_test_data = false
           group by student.id
           having min(payment.paid_at) >= ${businessStart} and min(payment.paid_at) < ${businessEnd}
         ) paid

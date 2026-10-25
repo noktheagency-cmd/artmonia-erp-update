@@ -1,4 +1,5 @@
 "use server";
+import { registerGuestStudentFromForm } from "@/modules/students/guest-registration";
 import { resolveStudentEducationLevel } from "@/modules/students/education-level-service";
 
 import { revalidatePath, updateTag } from "next/cache";
@@ -551,6 +552,7 @@ async function deleteLeadActionImpl(formData: FormData) {
 
 async function convertLeadToStudentActionImpl(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.convert");
+  if (formData.get("guestLesson") === "on") return registerGuestStudentFromForm(formData, actor);
   const input = convertLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const today = new Date();

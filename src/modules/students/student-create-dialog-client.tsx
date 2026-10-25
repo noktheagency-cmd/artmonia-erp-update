@@ -1,5 +1,6 @@
 "use client";
 
+import { GuestLessonFields } from "./guest-lesson-fields";
 import { useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
@@ -101,10 +102,15 @@ export function StudentCreateDialogClient({
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [acceptPayment, setAcceptPayment] = useState(false);
   const [values, setValues] = useState(() => buildInitialStudentValues(createOptions));
+  const [guestLesson, setGuestLesson] = useState(false);
+  const [requestId, setRequestId] = useState("");
+  const [saving, setSaving] = useState(false);
   const isGift = isGiftDiscount(values.discountType);
 
   function resetCreateForm() {
     setSelectedLeadId("");
+    setGuestLesson(false);
+    setRequestId("");
     setAcceptPayment(false);
     setValues(buildInitialStudentValues(createOptions));
   }
@@ -197,7 +203,8 @@ export function StudentCreateDialogClient({
   }
 
   async function createStudent(formData: FormData) {
-    if (!isGift && !acceptPayment) {
+    if (saving) return;
+    if (!guestLesson && !isGift && !acceptPayment) {
       notifyCaughtError(
         new Error("Əvvəl «Ödəniş qəbul et» ilə ilkin ödənişi əlavə edin."),
         "Ödəniş məcburidir.",
@@ -205,12 +212,15 @@ export function StudentCreateDialogClient({
       return;
     }
     if (
-      acceptPayment
+      !guestLesson && acceptPayment
       && !confirmPaymentMonthMismatch(formData, {
         paidDateField: "paymentDate",
         paymentMonthField: "paymentMonth",
       })
     ) return;
+    const key = requestId || crypto.randomUUID();
+    setRequestId(key); formData.set("idempotencyKey", key);
+    setSaving(true);
     try {
       const result = unwrapActionResult(await createStudentAction(formData)) as {
         redirectTo: string;
@@ -227,7 +237,7 @@ export function StudentCreateDialogClient({
       );
     } catch (error) {
       notifyCaughtError(error, "Tələbə yaradılmadı.");
-    }
+    } finally { setSaving(false); }
   }
 
   return (
@@ -246,7 +256,7 @@ export function StudentCreateDialogClient({
               <DialogDescription>Müraciəti tələbəyə çevirin və tədris məlumatlarını tamamlayın.</DialogDescription>
             </div>
           </div>
-          {!isGift ? (
+          {!guestLesson && !isGift ? (
             <InitialPaymentDialog
               accepted={acceptPayment}
               canRecordPayment={canRecordPayment}
@@ -270,7 +280,8 @@ export function StudentCreateDialogClient({
           <input name="paymentKind" type="hidden" value={values.paymentScheduleType} />
           <input name="paymentScheduleType" type="hidden" value={storedScheduleTypeForPaymentKind(values.paymentScheduleType)} />
           <input name="paymentNote" type="hidden" value={values.paymentNote} />
-          {isGift ? (
+          <label className="guest-registration-choice"><Checkbox name="guestLesson" checked={guestLesson} onChange={e => { setGuestLesson(e.target.checked); setRequestId(""); }} /><span><strong>Birdəfəlik ödənişli — qonaq dərs</strong><small>Hər gəliş ayrıca ödənilir. Satış və aktiv tələbə sayına daxil deyil.</small></span></label>
+          {guestLesson ? null : isGift ? (
             <p className="student-create-gift-note">Hədiyyə güzəşti — ilkin ödəniş və satış jurnalı tətbiq olunmur.</p>
           ) : acceptPayment ? (
             values.paymentScheduleType === AVANS_PAYMENT_KIND ? (
@@ -378,6 +389,7 @@ export function StudentCreateDialogClient({
             </div>
           </div>
 
+          {guestLesson ? <section className="student-create-section"><GuestLessonFields programs={createOptions.programs.map(p => ({value:p.id,label:p.name}))} teachers={createOptions.teachers.map(t => ({value:t.id,label:t.fullName}))} defaults={{programId: values.programId, teacherId: values.teacherId}} /></section> : (
           <div className="student-create-section">
             <div className="student-create-section-heading">
               <BookOpen />
@@ -538,6 +550,8 @@ export function StudentCreateDialogClient({
             </label>
           </div>
 
+          )}
+
           <div className="student-create-toolbar">
             <p>Məcburi sahələri doldurduqdan sonra tələbəni yaradın.</p>
             <DialogFooter>
@@ -549,14 +563,14 @@ export function StudentCreateDialogClient({
               <Button
                 type="submit"
                 disabled={
-                  !canCreateStudent
+                  saving || !canCreateStudent
                   || (Boolean(selectedLeadId) && !canConvertLead)
-                  || (!isGift && !acceptPayment)
-                  || (!isGift && !canRecordPayment)
+                  || (!guestLesson && !isGift && !acceptPayment)
+                  || (!guestLesson && !isGift && !canRecordPayment)
                 }
               >
                 <Plus data-icon="inline-start" />
-                {isGift ? "Tələbəni yarat" : "Yarat və ödənişi qəbul et"}
+                {saving ? "Saxlanılır…" : guestLesson ? "Qonaq dərsə qeydiyyata al" : isGift ? "Tələbəni yarat" : "Yarat və ödənişi qəbul et"}
               </Button>
             </DialogFooter>
           </div>

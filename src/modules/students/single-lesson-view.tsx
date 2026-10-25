@@ -2,81 +2,73 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import type { Route } from "next";
+import { ArrowLeft, CalendarPlus, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormSelect } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { currentBakuMonthStart } from "@/modules/shared/creation-date-policy";
 import { currentBakuDateValue } from "@/lib/baku-date";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
+import { GuestLessonFields } from "./guest-lesson-fields";
 import { bookSingleLessonAction, markSingleLessonAction, paySingleLessonAction } from "./single-lesson-actions";
 
 export type SingleLessonViewData = {
-  q: string; selectedStudent: string;
-  students: Array<{value:string;label:string}>; teachers: Array<{value:string;label:string}>; programs: Array<{value:string;label:string}>;
-  canCreate: boolean; canBook: boolean; canPay: boolean;
-  rows: Array<{id:string;studentId:string;student:string;teacher:string;program:string;date:string;time:string;price:string;status:string;paid:boolean;canMark:boolean;canPay:boolean}>;
+  q: string; selectedStudent: string; page: number; hasNext: boolean; status: string;
+  teachers: Array<{value:string;label:string}>; programs: Array<{value:string;label:string}>;
+  rows: Array<{id:string;studentId:string;code:string;student:string;teacher:string;teacherId:string;program:string;programId:string;date:string;time:string;duration:number;room:string;price:string;status:string;paid:boolean;canMark:boolean;canPay:boolean;canBook:boolean}>;
 };
+type Row = SingleLessonViewData["rows"][number];
+const statusNames: Record<string, string> = {RESERVED:"Planlaşdırılıb",ATTENDED:"Gəldi",ABSENT:"Gəlmədi",CANCELLED:"Ləğv edilib",NEW:"Dərs təyin edilməyib"};
 export function SingleLessonView({ data }: { data: SingleLessonViewData }) {
   const router = useRouter();
-  const [newStudent, setNewStudent] = useState(false);
+  const [selected, setSelected] = useState<Row | null>(null);
+  const [mode, setMode] = useState<"detail" | "book" | "pay">("detail");
   const [busy, setBusy] = useState(false);
   const [requestId, setRequestId] = useState("");
+  function open(row: Row, nextMode: typeof mode = "detail") { setSelected(row); setMode(nextMode); setRequestId(crypto.randomUUID()); }
   async function run(action: (form: FormData) => Promise<unknown>, form: FormData, message: string) {
     if (busy) return;
-    setBusy(true);
-    try { unwrapActionResult(await action(form)); notifySuccess(message); router.refresh(); return true; }
-    catch (error) { notifyCaughtError(error, "Əməliyyat alınmadı."); return false; }
+    setBusy(true); form.set("requestId",requestId);
+    try { unwrapActionResult(await action(form)); notifySuccess(message); setSelected(null); router.refresh(); }
+    catch (error) { notifyCaughtError(error, "Əməliyyat alınmadı."); }
     finally { setBusy(false); }
   }
-  return <section className="students-command-page">
-    <header><h1>Birdəfəlik dərslər</h1><p>Hər gəliş ayrıca qeydə alınır. Aylıq paket, növbəti ay üçün borc və qəbul satışı yaranmır.</p><Link href="/students">Tələbələrə qayıt</Link></header>
-    <form method="get" className="field-grid">
-      <label className="form-field"><span>Tələbə axtar</span><Input name="q" defaultValue={data.q} placeholder="Ad və ya telefon" maxLength={80}/></label>
-      <Button type="submit" variant="outline">Axtar</Button>
-    </form>
-    {data.canBook || data.canCreate ? <form className="student-create-section" action={async form => {
-      const id = requestId || crypto.randomUUID(); setRequestId(id); form.set("requestId", id);
-      if (await run(bookSingleLessonAction, form, "Birdəfəlik dərs yaradıldı")) setRequestId("");
-    }}>
-      <h2>Dərs təyin et</h2>
-      {data.canCreate && data.canBook ? <label><input type="checkbox" checked={newStudent} onChange={event => { setNewStudent(event.target.checked); setRequestId(""); }}/> Yeni tələbə üçün profil yarat</label> : null}
-      <div className="student-create-grid">
-        {newStudent || !data.canBook ? <>
-          <label className="form-field"><span>Ad və soyad</span><Input name="fullName" minLength={2} maxLength={120} required/></label>
-          <label className="form-field"><span>Telefon</span><Input name="phone" type="tel" minLength={6} maxLength={40} required/></label>
-        </> : <label className="form-field"><span>Tələbə</span><FormSelect name="studentId" defaultValue={data.selectedStudent} options={data.students} emptyLabel="Tələbə seçin" searchable required/></label>}
-        <label className="form-field"><span>Proqram</span><FormSelect name="programId" options={data.programs} emptyLabel="Proqram seçin" searchable required/></label>
-        <label className="form-field"><span>Müəllim</span><FormSelect name="teacherId" options={data.teachers} emptyLabel="Müəllim seçin" searchable required/></label>
-        <label className="form-field"><span>Dərs tarixi</span><DatePicker name="date" minValue={currentBakuMonthStart()} defaultValue={currentBakuDateValue()} required allowClear={false}/></label>
-        <label className="form-field"><span>Saat</span><Input name="time" type="time" defaultValue="15:00" required/></label>
-        <label className="form-field"><span>Müddət (dəqiqə)</span><Input name="duration" type="number" min={15} max={480} defaultValue={120} required/></label>
-        <label className="form-field"><span>Otaq / zona</span><Input name="room" maxLength={80}/></label>
-        <label className="form-field"><span>Bu dərsin haqqı (AZN)</span><Input name="price" type="number" min="0.01" step="0.01" max="99999" required/></label>
-      </div>
-      <Button type="submit" disabled={busy}>{busy ? "Saxlanılır…" : "Dərsi yarat"}</Button>
-    </form> : null}
-    <section className="student-create-section"><h2>Dərs və ödəniş tarixçəsi</h2>
-      <p>Son 100 qeyd göstərilir. İştirak edilən, ödənilməyən dərsin haqqı yalnız həmin dərs üzrə borcdur.</p>
-      <div className="single-lesson-table-scroll"><table className="single-lesson-table"><thead><tr><th>Tələbə</th><th>Dərs</th><th>Tarix</th><th>Haqq</th><th>Davamiyyət</th><th>Ödəniş</th></tr></thead>
-        <tbody>{data.rows.map(row => <tr key={row.id}>
-          <th scope="row"><Link href={`/students/${row.studentId}`}>{row.student}</Link></th><td>{row.program}<br/>{row.teacher}</td><td>{row.date}<br/>{row.time}</td><td>{row.price} AZN</td>
-          <td>{({RESERVED:"Planlaşdırılıb",ATTENDED:"Gəldi",ABSENT:"Gəlmədi",CANCELLED:"Ləğv edilib"})[row.status] ?? row.status}
-            {row.canMark && row.status === "RESERVED" ? <form action={async form => { await run(markSingleLessonAction,form,"Davamiyyət saxlanıldı"); }}>
-              <input type="hidden" name="lessonId" value={row.id}/>
-              <Button type="submit" name="status" value="ATTENDED" disabled={busy || row.date > currentBakuDateValue()}>Gəldi</Button>
-              <Button type="submit" variant="outline" name="status" value="ABSENT" disabled={busy || row.date > currentBakuDateValue()}>Gəlmədi</Button>
-              {!row.paid ? <Button type="submit" variant="ghost" name="status" value="CANCELLED" disabled={busy}>Ləğv et</Button> : null}
-            </form> : null}
-          </td><td>{row.paid ? "Ödənilib" : row.canPay && !["ABSENT","CANCELLED"].includes(row.status) ? <form action={async form => {form.set("requestId",crypto.randomUUID()); await run(paySingleLessonAction,form,"Ödəniş saxlanıldı");}}>
-            <input type="hidden" name="lessonId" value={row.id}/>
-            <DatePicker name="paidDate" minValue={currentBakuMonthStart()} maxValue={currentBakuDateValue()} defaultValue={currentBakuDateValue()} required allowClear={false}/>
-            <FormSelect name="method" defaultValue="CASH" options={[{value:"CASH",label:"Nağd"},{value:"CARD",label:"Kart"},{value:"BANK_TRANSFER",label:"Köçürmə"}]}/>
-            <Button type="submit" disabled={busy}>Ödənişi qəbul et</Button>
-          </form> : "Ödənilməyib"}</td>
-        </tr>)}</tbody>
-      </table>{!data.rows.length ? <p>Dərs qeydi yoxdur.</p> : null}</div>
+  function pageHref(page: number) { const p = new URLSearchParams({q:data.q,status:data.status,page:String(page)}); if(data.selectedStudent)p.set("student",data.selectedStudent); return ("/students/single-lessons?"+p) as Route; }
+  return <section className="guest-lessons-page">
+    <header className="guest-lessons-heading"><div><Link href="/students" className="guest-back"><ArrowLeft size={15}/>Tələbələr</Link><h1>Qonaq dərslər</h1><p>Hər gəliş ayrıca. Yeni tarix təyin etmək üçün tələbənin adına klikləyin.</p></div></header>
+    <section className="guest-ledger" aria-label="Qonaq dərs jurnalı">
+      <form method="get" className="guest-ledger-toolbar">
+        {data.selectedStudent ? <input type="hidden" name="student" value={data.selectedStudent}/> : null}
+        <div className="guest-search"><Search size={17} aria-hidden="true"/><Input name="q" defaultValue={data.q} placeholder="Ad, kod və ya telefon" aria-label="Qonaq dərs axtar" maxLength={80}/></div>
+        <FormSelect name="status" defaultValue={data.status} aria-label="Davamiyyət filtri" options={[{value:"ALL",label:"Bütün qeydlər"},{value:"RESERVED",label:"Planlaşdırılıb"},{value:"ATTENDED",label:"Gəldi"},{value:"ABSENT",label:"Gəlmədi"},{value:"CANCELLED",label:"Ləğv edilib"}]}/>
+        <Button type="submit" variant="outline">Göstər</Button>
+      </form>
+      <div className="guest-ledger-scroll"><table className="guest-ledger-table"><thead><tr><th>Tələbə</th><th>Dərs / müəllim</th><th>Gəliş vaxtı</th><th>Davamiyyət</th><th>Ödəniş</th><th><span className="sr-only">Əməliyyat</span></th></tr></thead><tbody>
+        {data.rows.map(row => <tr key={row.id}>
+          <th scope="row"><button type="button" className="guest-student-link" onClick={()=>open(row)}><strong>{row.student}</strong><span>{row.code} <span className="guest-lesson-badge">Qonaq dərs</span></span></button></th>
+          <td><strong>{row.program || "—"}</strong><small>{row.teacher || "Müəllim seçilməyib"}</small></td>
+          <td><strong>{row.date ? row.date.split("-").reverse().join(".") : "—"}</strong><small>{row.time}{row.duration ? " · "+row.duration+" dəq." : ""}{row.room ? " · "+row.room : ""}</small></td>
+          <td><span className={"guest-status guest-status-"+row.status.toLowerCase()}>{statusNames[row.status]}</span></td>
+          <td><strong>{row.price ? row.price+" AZN" : "—"}</strong><small className={row.paid ? "guest-paid" : ""}>{row.paid ? "Ödənilib" : ["ABSENT","CANCELLED","NEW"].includes(row.status) ? "—" : "Ödənilməyib"}</small></td>
+          <td><button type="button" className="guest-row-action" onClick={()=>open(row)} aria-label={row.student+": dərs əməliyyatları"}><ChevronRight size={18}/></button></td>
+        </tr>)}
+        {!data.rows.length ? <tr><td colSpan={6} className="guest-empty">Uyğun qonaq dərs tapılmadı.<small>İlk qeydiyyatı Yeni tələbə və ya Follow-up pəncərəsində edin.</small></td></tr> : null}
+      </tbody></table></div>
+      <footer className="guest-ledger-footer"><span>Səhifə {data.page}</span><div>{data.page>1 ? <Link href={pageHref(data.page-1)}>Əvvəlki</Link> : null}{data.hasNext ? <Link href={pageHref(data.page+1)}>Növbəti</Link> : null}</div></footer>
     </section>
+    <Dialog open={Boolean(selected)} onOpenChange={value=>{if(!value&&!busy)setSelected(null);}}><DialogContent className="guest-lesson-dialog"><DialogHeader><DialogTitle>{mode==="book" ? "Yeni gəliş təyin et" : mode==="pay" ? "Qonaq dərsin ödənişi" : selected?.student}</DialogTitle><DialogDescription>{selected?.code} · {mode==="detail" ? "Qonaq dərs — aylıq paket və satış deyil" : selected?.student}</DialogDescription></DialogHeader>
+      {selected && mode==="detail" ? <div className="guest-lesson-detail">
+        {selected.date ? <p><strong>{selected.date.split("-").reverse().join(".")} · {selected.time}</strong><br/>{selected.program} · {selected.teacher}<br/>{statusNames[selected.status]} · {selected.price} AZN · {selected.paid ? "Ödənilib" : "Ödənilməyib"}</p> : null}
+        {selected.canMark && selected.status==="RESERVED" ? <form className="guest-dialog-actions" action={form=>run(markSingleLessonAction,form,"Davamiyyət saxlanıldı")}><input type="hidden" name="lessonId" value={selected.id}/><Button name="status" value="ATTENDED" disabled={busy || selected.date>currentBakuDateValue()}>Gəldi</Button><Button variant="outline" name="status" value="ABSENT" disabled={busy || selected.date>currentBakuDateValue()}>Gəlmədi</Button>{!selected.paid ? <Button variant="ghost" name="status" value="CANCELLED" disabled={busy}>Ləğv et</Button> : null}</form> : null}
+        <div className="guest-dialog-actions">{selected.canPay && !selected.paid && ["RESERVED","ATTENDED"].includes(selected.status) ? <Button onClick={()=>setMode("pay")}>Ödənişi qəbul et</Button> : null}{selected.canBook ? <Button variant="outline" onClick={()=>setMode("book")}><CalendarPlus size={16}/>Yeni gəliş təyin et</Button> : null}</div>
+        <Link href={('/students/'+selected.studentId) as Route} className="guest-back">Tələbə profilinə keç<ChevronRight size={14}/></Link>
+      </div> : null}
+      {selected && mode==="book" ? <form action={form=>run(bookSingleLessonAction,form,"Qonaq dərs təyin edildi")}><input type="hidden" name="studentId" value={selected.studentId}/><GuestLessonFields booking programs={data.programs} teachers={data.teachers} defaults={{programId:selected.programId,teacherId:selected.teacherId,price:selected.price,time:selected.time,duration:selected.duration || 120,room:selected.room}}/><div className="guest-dialog-actions"><Button type="button" variant="ghost" disabled={busy} onClick={()=>setMode("detail")}>Geri</Button><Button type="submit" disabled={busy}>{busy?"Saxlanılır…":"Dərsi təyin et"}</Button></div></form> : null}
+      {selected && mode==="pay" ? <form action={form=>run(paySingleLessonAction,form,"Qonaq dərsin ödənişi saxlanıldı")}><input type="hidden" name="lessonId" value={selected.id}/><p className="guest-payment-amount">{selected.price} <span>AZN</span></p><div className="guest-lesson-fields"><label className="form-field"><span>Ödəniş tarixi</span><DatePicker name="paidDate" minValue={currentBakuMonthStart()} maxValue={currentBakuDateValue()} defaultValue={currentBakuDateValue()} required allowClear={false}/></label><label className="form-field"><span>Metod</span><FormSelect name="method" defaultValue="CASH" options={[{value:"CASH",label:"Nağd"},{value:"CARD",label:"Kart"},{value:"BANK_TRANSFER",label:"Köçürmə"}]}/></label></div><div className="guest-dialog-actions"><Button type="button" variant="ghost" disabled={busy} onClick={()=>setMode("detail")}>Geri</Button><Button type="submit" disabled={busy}>{busy?"Saxlanılır…":"Ödənişi qəbul et"}</Button></div></form> : null}
+    </DialogContent></Dialog>
   </section>;
 }

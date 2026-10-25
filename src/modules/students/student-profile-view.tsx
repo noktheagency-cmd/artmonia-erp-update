@@ -1,3 +1,4 @@
+import "./guest-lessons.css";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AlertTriangle, ChevronLeft, BellRing, CheckCheck, GraduationCap } from "lucide-react";
@@ -36,7 +37,7 @@ export function StudentProfileView({ student, actions, mobileAccount, freezePeri
         <div className="sp-identity-row">
           <div className="sp-identity">
             <span className="sp-avatar" aria-hidden="true">{student.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("")}</span>
-            <div><h1 id="student-profile-name">{student.name}</h1><div className="sp-identity-meta"><StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip><StatusChip tone={student.paymentTone}>{student.paymentStatus}</StatusChip><span>{student.code} · {student.lastContact}</span></div></div>
+            <div><h1 id="student-profile-name">{student.name}</h1><div className="sp-identity-meta"><>{student.isGuestOnly ? <span className="guest-lesson-badge">Qonaq dərs</span> : <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>}</><StatusChip tone={student.paymentTone}>{student.paymentStatus}</StatusChip><span>{student.code} · {student.lastContact}</span></div></div>
           </div>
           {actions}
         </div>
@@ -161,7 +162,7 @@ export function StudentProfileView({ student, actions, mobileAccount, freezePeri
 
       <TabsContent value="history" className="sp-tab-content" keepMounted>
         <ProfilePanel title="Status tarixçəsi">
-          <div className="sp-history-summary"><StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip><span>Qeydiyyat: {detail.registeredAt}</span><span>Məsul: {detail.manager}</span><span>Hesablama: {detail.billingPaused}</span></div>
+          <div className="sp-history-summary"><>{student.isGuestOnly ? <span className="guest-lesson-badge">Qonaq dərs</span> : <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>}</><span>Qeydiyyat: {detail.registeredAt}</span><span>Məsul: {detail.manager}</span><span>Hesablama: {detail.billingPaused}</span></div>
           {detail.timeline.length ? <ol className="sp-timeline">{detail.timeline.map((item) => <li key={item.id}><span className="sp-timeline-mark" aria-hidden="true" /><div><strong>{item.label}</strong><small>{item.date} · {item.changedBy}</small><p>{item.reason}</p></div></li>)}</ol> : <EmptyDetail text="Əlavə status dəyişikliyi yoxdur." />}
         </ProfilePanel>
       </TabsContent>

@@ -1,5 +1,6 @@
 "use client";
 
+import "@/modules/students/guest-lessons.css";
 import {
   ADMISSION_PAYMENT_MIN_MESSAGE,
   isAdmissionAmountBelowMinimum,
@@ -1254,7 +1255,7 @@ function CashFlowChart({ data }: { data: FinanceData }) {
       buckets.set(key, current);
       return current;
     };
-    data.payments.forEach((payment) => {
+    data.payments.filter(payment => !payment.isGuest).forEach((payment) => {
       if (payment.dateKey) ensure(payment.dateKey).income += payment.amountValue;
     });
     expenseMovements.forEach((movement) => {
@@ -1772,7 +1773,7 @@ const expenseCategoryChartConfig = {
 
 function FinanceStructureChart({ data }: { data: FinanceData }) {
   const slices = useMemo<ChartSlice[]>(() => {
-    const income = data.payments.reduce((sum, payment) => sum + payment.amountValue, 0);
+    const income = data.payments.filter(payment => !payment.isGuest).reduce((sum, payment) => sum + payment.amountValue, 0);
     const expense = data.expenses.reduce((sum, item) => sum + item.amountValue, 0);
     const payroll = data.payrollItems.reduce((sum, item) => sum + item.amountValue, 0);
     const receivable = data.debtors.reduce((sum, item) => sum + item.balanceValue, 0);
@@ -1923,7 +1924,7 @@ function PaymentMethodChart({ data }: { data: FinanceData }) {
   const rows = useMemo(() => {
     const breakdown = new Map<string, { value: number; count: number }>();
 
-    data.payments.forEach((payment) => {
+    data.payments.filter(payment => !payment.isGuest).forEach((payment) => {
       const current = breakdown.get(payment.method) ?? { value: 0, count: 0 };
       breakdown.set(payment.method, {
         value: current.value + payment.amountValue,
@@ -2166,6 +2167,7 @@ function PaymentLedger({
           <span>Gəlir cədvəli</span>
           <h2>Ödəniş qəbulu</h2>
           <small>{payments.length} sətir göstərilir</small>
+          <small>Qonaq dərslər: {data.summary.guestIncome} · ümumi gəlirə daxil deyil</small>
         </div>
         <BadgeDollarSign size={18} />
       </div>
@@ -2191,23 +2193,23 @@ function PaymentLedger({
                   <td>
                     <div className="finance-entity-cell">
                       <strong>{payment.studentName}</strong>
-                      <span>{payment.studentCode} · {payment.sourceKind === "WORKSHOP" ? "Workshop" : "Tələbə"}</span>
+                      <span>{payment.studentCode} · {payment.sourceKind === "WORKSHOP" ? "Workshop" : payment.isGuest ? "Qonaq dərs" : "Tələbə"}</span>
                     </div>
                   </td>
                   <td>{payment.payerName}</td>
                   <td className="finance-money positive">{payment.amount}</td>
                   <td>{payment.paidAt}</td>
-                  <td>{payment.paymentMonth}</td>
+                  <td>{payment.isGuest ? <span className="guest-lesson-badge">Qonaq dərs</span> : payment.paymentMonth}</td>
                   <td><span className="payment-method-chip">{payment.method}</span></td>
                   <td>
                     <ReceiptActions payment={payment} />
                   </td>
                   <td>{payment.note}</td>
                   <td>
-                    {payment.sourceKind === "WORKSHOP" ? (
+                    {payment.sourceKind === "WORKSHOP" || payment.isGuest ? (
                       <Link className="finance-row-action-btn" href={payment.sourceHref as Route}>
                         <Eye size={13} />
-                        Tədbirə bax
+                        {payment.isGuest ? "Dərsə bax" : "Tədbirə bax"}
                       </Link>
                     ) : (
                       <PaymentCrudActions
@@ -3200,5 +3202,5 @@ function formatStaffSalaryFormula(staff: FinanceData["staff"][number]) {
     return `${staff.salaryBase || "0"} AZN x ${staff.salaryPercent || "0"}%`;
   }
 
-  return `${staff.staticSalary || staff.calculatedSalary || "0"} AZN`;
+  return `${staff.staticSalary || "0"} AZN${staff.guestLessonSalary ? ` + ${staff.guestLessonSalary} AZN qonaq dərs` : ""}`;
 }

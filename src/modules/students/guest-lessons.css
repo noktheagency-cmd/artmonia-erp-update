@@ -1,0 +1,12 @@
+.guest-lesson-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.guest-lesson-hint { grid-column: 1 / -1; margin: 0; color: var(--students-muted, #687386); font-size: 12px; line-height: 1.6; }
+.guest-registration-choice { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid #dce4f5; border-radius: 12px; background: #f2f6ff; cursor: pointer; margin-bottom: 18px; }
+.guest-registration-choice input { flex: 0 0 auto; margin-top: 3px; }
+.guest-registration-choice span { display: grid; gap: 4px; font-size: 13px; }
+.guest-registration-choice small { color: #687386; line-height: 1.5; font-size: 12px; }
+.guest-lesson-badge { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 6px; background: #edf1ff; color: #4a57ad; font-size: 11px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.students-guest-link { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #d7e0ea; border-radius: 10px; background: #fff; color: #566078; font-size: 13px; font-weight: 600; transition: color .15s, background .15s, border-color .15s; }
+.students-guest-link:hover { background: #eef1ff; color: #4354b5; border-color: #bcc6f0; }
+.students-guest-link:focus-visible { outline: 2px solid #4667e8; outline-offset: 3px; }
+.students-guest-link svg { width: 17px; height: 17px; }
+@media (max-width: 560px) { .guest-lesson-fields { grid-template-columns: minmax(0, 1fr); } }

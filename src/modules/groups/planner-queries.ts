@@ -110,6 +110,7 @@ export type PlannerWorkspaceData = {
   today: string;
   selectedSlotId: string;
   slots: PlannerSlot[];
+  guestLessons?: Array<{ id: string; studentId: string; student: string; teacherId: string; teacher: string; date: string; time: string; room: string }>;
   teachers: Array<{ id: string; name: string }>;
   enrollments: PlannerEnrollment[];
   slotDetail: {
@@ -154,7 +155,7 @@ export async function getPlannerWorkspaceData(input?: {
   const teacherId = teacherProfile?.id;
   const slotScope = buildPlannerSlotScope(groupReadScope, teacherId);
 
-  const [slots, teachers, enrollments] = await Promise.all([
+  const [slots, teachers, enrollments, guestLessons] = await Promise.all([
     prisma.classSlot.findMany({
       where: slotScope,
       take: 250,
@@ -249,6 +250,15 @@ export async function getPlannerWorkspaceData(input?: {
           },
         })
       : Promise.resolve([]),
+    prisma.singleLesson.findMany({
+      where: { status: "RESERVED", student: { isTestData: false },
+        lessonDate: { gte: dateFromInput(today), lt: new Date(dateFromInput(today).getTime() + 31 * 86400000) },
+        ...(groupReadScope === "ALL" ? {} : { teacherId: teacherId ?? "00000000-0000-0000-0000-000000000000" }),
+      },
+      take: 100, orderBy: [{ lessonDate: "asc" }, { startTime: "asc" }],
+      select: { id: true, studentId: true, teacherId: true, lessonDate: true, startTime: true, room: true,
+        teacher: { select: { fullName: true } }, student: { select: { contact: { select: { fullName: true } } } } },
+    }),
   ]);
 
   const plannerSlots: PlannerSlot[] = slots.map((slot) => ({
@@ -610,6 +620,8 @@ export async function getPlannerWorkspaceData(input?: {
     today,
     selectedSlotId,
     slots: plannerSlots,
+    guestLessons: guestLessons.map(lesson => ({ id: lesson.id, studentId: lesson.studentId, student: lesson.student.contact.fullName,
+      teacherId: lesson.teacherId, teacher: lesson.teacher.fullName, date: toDateInput(lesson.lessonDate), time: lesson.startTime, room: lesson.room ?? "" })),
     teachers: teachers.map((teacher) => ({ id: teacher.id, name: teacher.fullName })),
     enrollments: enrollments.map((enrollment) => ({
       id: enrollment.id,

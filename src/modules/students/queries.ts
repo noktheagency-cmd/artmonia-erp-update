@@ -1,3 +1,4 @@
+import { guestOnlyStudentSql, regularInvoiceSql } from "./guest-lesson-sql";
 import { nameSearchSql } from "@/modules/shared/search-sql";
 import {
   AppRole,
@@ -260,6 +261,7 @@ export type StudentListData = {
     hasFutureReceivable: boolean;
     lifecycleStatusValue: StudentLifecycleStatus;
     freezeReserved: boolean;
+    isGuestOnly: boolean;
     lifecycleStatus: string;
     lifecycleTone: StudentTone;
     /** Derived from attendance streak; not a lifecycle status. */
@@ -843,7 +845,7 @@ export async function getStudentListData(
         code: student.code,
         name: student.name,
         phone: student.phone ?? "-",
-        program: student.programName ?? "Proqram təyin edilməyib",
+        program: student.programName ?? (student.isGuestOnly ? "Qonaq dərs" : "Proqram təyin edilməyib"),
         teacher: student.teacherName ?? "Müəllim təyin edilməyib",
         group: student.slotLabel ?? "Slota təyin edilməyib",
         dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate) : "—",
@@ -855,7 +857,8 @@ export async function getStudentListData(
         hasFutureReceivable: futureReceivable > 0,
         lifecycleStatusValue: student.lifecycleStatus,
         freezeReserved: student.freezeReserved,
-        lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
+        isGuestOnly: student.isGuestOnly,
+        lifecycleStatus: student.isGuestOnly ? "Qonaq dərs" : student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
         lifecycleTone: lifecycleStatus.tone,
         isAtRisk: studentRisks.get(student.id)?.level === "danger",
         riskLevel: studentRisks.get(student.id)?.level ?? null,
@@ -923,6 +926,8 @@ export async function getStudentListData(
 type StudentListQueryRow = {
   id: string;
   code: string;
+  isGuestOnly: boolean;
+  hasGuestLessons: boolean;
   lifecycleStatus: StudentLifecycleStatus;
   registeredAt: Date | string;
   notes: string | null;
@@ -1320,6 +1325,8 @@ async function getStudentRows(
       ps.id::text as "id",
       ps.code,
       ps."lifecycleStatus",
+      ${guestOnlyStudentSql(Prisma.sql`ps.id`)} as "isGuestOnly",
+      exists (select 1 from erp.single_lessons guest where guest.student_id=ps.id) as "hasGuestLessons",
       ps."registeredAt",
       ps.notes,
       ps."billingPaused",
@@ -1347,7 +1354,7 @@ async function getStudentRows(
       inv.due_debt as "dueDebt",
       inv.future_receivable as "futureReceivable",
       ${buildStudentAdvanceRemainingValueSql({ studentId: Prisma.sql`ps.id` })} as "advanceRemaining",
-      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and date_trunc('month', p.paid_at) = date_trunc('month', ${input.today}::date)), 0) as "currentMonthPaid",
+      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and p.receipt_purpose <> 'ONE_OFF' and date_trunc('month', p.paid_at) = date_trunc('month', ${input.today}::date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
       clv.admission_paid as "admissionPaid",
@@ -1408,13 +1415,14 @@ async function getStudentRows(
             from erp.invoices i
             where i.student_id = ps.id
               and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            and ${regularInvoiceSql(Prisma.sql`i.id`)}
             order by i.due_date asc, i.created_at asc
           ) ordered
         ), '[]'::jsonb) as invoices
     ) inv on true
     left join lateral (
       select
-        coalesce(sum(p.amount) filter (where p.refunded_at is null), 0) as total_paid,
+        coalesce(sum(p.amount) filter (where p.refunded_at is null and p.receipt_purpose <> 'ONE_OFF'), 0) as total_paid,
         coalesce(sum(p.amount) filter (
           where p.receipt_purpose = 'ADMISSION'
             and p.refunded_at is null
@@ -1433,6 +1441,7 @@ async function getStudentRows(
           where p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
             and p.receipt_purpose is distinct from 'ADMISSION'
             and p.receipt_purpose is distinct from 'INITIAL_BALANCE'
+            and p.receipt_purpose is distinct from 'ONE_OFF'
         )::int as paid_months,
         coalesce(sum(greatest(
           p.amount - coalesce((
@@ -1576,7 +1585,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v23"],
+  ["student-list-data-v24-guest"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -1690,7 +1699,7 @@ async function getStudentClvSummary(
         and exists (
           select 1
           from erp.payments payment
-          where payment.student_id = student.id
+          where payment.student_id = student.id and payment.receipt_purpose <> 'ONE_OFF'
         )
         and not exists (
           select 1
@@ -1712,7 +1721,7 @@ async function getStudentClvSummary(
       cross join lateral (
         select coalesce(sum(payment.amount), 0) as successful_revenue
         from erp.payments payment
-        where payment.student_id = eligible.student_id
+        where payment.student_id = eligible.student_id and payment.receipt_purpose <> 'ONE_OFF'
       ) revenue
       cross join lateral (
         select coalesce(sum(refund.amount), 0) as refunded_amount
@@ -1725,6 +1734,7 @@ async function getStudentClvSummary(
         from erp.invoices invoice
         where invoice.student_id = eligible.student_id
           and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
+            and ${regularInvoiceSql(Prisma.sql`invoice.id`)}
           and invoice.period_month >= date_trunc('month', eligible.education_started_at)::date
           and invoice.period_month <= date_trunc('month', eligible.closed_at)::date
           and not exists (
@@ -1812,7 +1822,7 @@ async function getStudentPaymentSummary(
     left join lateral (
       select coalesce(sum(payment.amount), 0) as total_paid
       from erp.payments payment
-      where payment.student_id = s.id
+      where payment.student_id = s.id and payment.receipt_purpose <> 'ONE_OFF'
     ) payments on true
     left join lateral (
       select
@@ -1832,6 +1842,7 @@ async function getStudentPaymentSummary(
           from erp.invoices invoice
           where invoice.student_id = s.id
             and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
+            and ${regularInvoiceSql(Prisma.sql`invoice.id`)}
             and invoice.balance_due > 0
             and invoice.due_date < ${input.today}::date
         ), 0) as overdue_debt
@@ -1884,7 +1895,7 @@ async function getStudentOperationsOverview(
         coalesce((
           select sum(p.amount)
           from erp.payments p
-          where p.student_id = s.id
+          where p.student_id = s.id and p.receipt_purpose <> 'ONE_OFF'
             and p.paid_at >= date_trunc('month', ${today}::date)
             and p.paid_at < date_trunc('month', ${today}::date) + interval '1 month'
         ), 0) as current_month_paid,
@@ -1893,6 +1904,7 @@ async function getStudentOperationsOverview(
           from erp.invoices i
           where i.student_id = s.id
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            and ${regularInvoiceSql(Prisma.sql`i.id`)}
             and i.balance_due > 0
             and (i.due_date is null or i.due_date <= ${today}::date)
         ), 0) as invoice_balance,
@@ -1900,7 +1912,7 @@ async function getStudentOperationsOverview(
       from erp.students s
       join erp.contacts c on c.id = s.contact_id
       left join current_enrollment ce on ce.student_id = s.id
-      where s.is_test_data = false
+      where s.is_test_data = false and not ${guestOnlyStudentSql(Prisma.sql`s.id`)}
     ),
     student_finance as (
       select
@@ -2006,7 +2018,7 @@ async function getStudentOperationsOverview(
       coalesce((
         select sum(p.amount)
         from erp.payments p
-        where p.paid_at >= date_trunc('month', ${today}::date)
+        where p.receipt_purpose <> 'ONE_OFF' and p.paid_at >= date_trunc('month', ${today}::date)
           and p.paid_at < date_trunc('month', ${today}::date) + interval '1 month'
       ), 0) as "collectedAmount",
       coalesce((
@@ -2194,7 +2206,7 @@ async function getStudentCreateOptions(
         from (
           select s.lifecycle_status::text as lifecycle_status, count(*)::int as total_count
           from erp.students s
-          where s.is_test_data = false
+          where s.is_test_data = false and not ${guestOnlyStudentSql(Prisma.sql`s.id`)}
           group by s.lifecycle_status
         ) summary
       ), '{}'::jsonb) as "summaryCounts",
@@ -2208,6 +2220,7 @@ async function getStudentCreateOptions(
           left join erp.invoices i
             on i.student_id = s.id
             and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            and ${regularInvoiceSql(Prisma.sql`i.id`)}
             and i.balance_due > 0
           where s.is_test_data = false
           group by s.lifecycle_status
@@ -2995,7 +3008,7 @@ function presentStudentPayment(payment: StudentPaymentRecord, nextDueDate: Date 
     id: payment.id,
     amount: formatAmount(payment.amount),
     paidAt: formatShortDate(payment.paidAt),
-    paymentMonth: formatMonthInput(payment.paymentMonth),
+    paymentMonth: payment.receiptPurpose === "ONE_OFF" ? "Qonaq dərs" : formatMonthInput(payment.paymentMonth),
     nextPaymentDate: advance
       ? "—"
       : payment.scheduleType === "ONE_TIME"
@@ -3003,7 +3016,7 @@ function presentStudentPayment(payment: StudentPaymentRecord, nextDueDate: Date 
         : nextDueDate
           ? formatShortDate(nextDueDate)
           : "—",
-    scheduleType: refunded
+    scheduleType: payment.receiptPurpose === "ONE_OFF" ? "Qonaq dərs" : refunded
       ? "Avans qaytarılıb"
       : advance
         ? "Avans"
@@ -3096,6 +3109,8 @@ export async function getStudentDetailData(studentId: string) {
       ps.id::text as "id",
       ps.code,
       ps."lifecycleStatus",
+      ${guestOnlyStudentSql(Prisma.sql`ps.id`)} as "isGuestOnly",
+      exists (select 1 from erp.single_lessons guest where guest.student_id=ps.id) as "hasGuestLessons",
       ps."registeredAt",
       ps.notes,
       ps."billingPaused",
@@ -3135,7 +3150,7 @@ export async function getStudentDetailData(studentId: string) {
       inv.due_debt as "dueDebt",
       inv.future_receivable as "futureReceivable",
       ${buildStudentAdvanceRemainingValueSql({ studentId: Prisma.sql`ps.id` })} as "advanceRemaining",
-      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)), 0) as "currentMonthPaid",
+      coalesce((select sum(p.amount) from erp.payments p where p.student_id = ps.id and p.refunded_at is null and p.receipt_purpose <> 'ONE_OFF' and date_trunc('month', p.paid_at) = date_trunc('month', ${today}::date)), 0) as "currentMonthPaid",
       inv.next_due_date as "nextDueDate",
       clv.total_paid as "totalPaid",
       clv.admission_paid as "admissionPaid",
@@ -3198,13 +3213,14 @@ export async function getStudentDetailData(studentId: string) {
             from erp.invoices i
             where i.student_id = ps.id
               and i.status <> 'VOID'::"erp"."InvoiceStatus"
+            and ${regularInvoiceSql(Prisma.sql`i.id`)}
             order by i.due_date asc, i.created_at asc
           ) ordered
         ), '[]'::jsonb) as invoices
     ) inv on true
     left join lateral (
       select
-        coalesce(sum(p.amount) filter (where p.refunded_at is null), 0) as total_paid,
+        coalesce(sum(p.amount) filter (where p.refunded_at is null and p.receipt_purpose <> 'ONE_OFF'), 0) as total_paid,
         coalesce(sum(p.amount) filter (
           where p.receipt_purpose = 'ADMISSION'
             and p.refunded_at is null
@@ -3223,6 +3239,7 @@ export async function getStudentDetailData(studentId: string) {
           where p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
             and p.receipt_purpose is distinct from 'ADMISSION'
             and p.receipt_purpose is distinct from 'INITIAL_BALANCE'
+            and p.receipt_purpose is distinct from 'ONE_OFF'
         )::int as paid_months,
         coalesce(sum(greatest(
           p.amount - coalesce((
@@ -3254,6 +3271,7 @@ export async function getStudentDetailData(studentId: string) {
           and p.schedule_type = 'MONTHLY'::"erp"."PaymentScheduleType"
           and p.receipt_purpose is distinct from 'ADMISSION'
             and p.receipt_purpose is distinct from 'INITIAL_BALANCE'
+            and p.receipt_purpose is distinct from 'ONE_OFF'
         group by date_trunc('month', p.payment_month)::date
       ) monthly
     ) clv_history on true
@@ -3561,7 +3579,7 @@ export async function getStudentDetailData(studentId: string) {
       code: student.code,
       name: student.name,
       phone: student.phone ?? "-",
-      program: student.programName ?? "Proqram təyin edilməyib",
+      program: student.programName ?? (student.isGuestOnly ? "Qonaq dərs" : "Proqram təyin edilməyib"),
       teacher: student.teacherName ?? "Müəllim təyin edilməyib",
       group: student.slotLabel ?? "Slota təyin edilməyib",
       dueDate: student.nextDueDate ? formatShortDate(student.nextDueDate as Date) : "—",
@@ -3573,7 +3591,8 @@ export async function getStudentDetailData(studentId: string) {
       hasFutureReceivable: futureReceivable > 0,
       lifecycleStatusValue: student.lifecycleStatus as StudentLifecycleStatus,
       freezeReserved: student.freezeReserved,
-      lifecycleStatus: student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
+      isGuestOnly: student.isGuestOnly,
+      lifecycleStatus: student.isGuestOnly ? "Qonaq dərs" : student.freezeReserved ? "Dondurulub — yer rezervdir" : lifecycleStatus.label,
       lifecycleTone: lifecycleStatus.tone,
       activationWarning: resolveFirstLessonActivationWarning({
         lifecycleStatus: student.lifecycleStatus,

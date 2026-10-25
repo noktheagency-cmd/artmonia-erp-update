@@ -43,6 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createStudentAction, recordStudentPaymentAction } from "@/modules/students/actions";
+import "./guest-lessons.css";
 import { StudentCreateDialogClient } from "@/modules/students/student-create-dialog-client";
 import { StudentFilterForm } from "@/modules/students/student-filter-form";
 import { StudentOverviewCharts } from "@/modules/students/student-overview-charts";
@@ -190,7 +191,6 @@ export function StudentList({ data }: { data: StudentListData }) {
       <h1 id="students-page-title" className="sr-only">Tələbələr və Balans</h1>
       {headerActionsTarget ? createPortal(
           <div className="students-toolbar-actions">
-            <Link className={buttonVariants({variant:"outline"})} href="/students/single-lessons">Birdəfəlik dərslər</Link>
             <StudentFilterForm filterOptions={data.filterOptions} filters={data.filters} />
             {data.permissions.canExport ? (
               <ExportDialog
@@ -273,6 +273,7 @@ export function StudentList({ data }: { data: StudentListData }) {
             <CreditCard /><span>Proqramlar</span><small>{data.createOptions.programs.length}</small>
           </button>
         </div>
+        <Link className="students-guest-link" href="/students/single-lessons"><CalendarClock aria-hidden="true" />Qonaq dərslər</Link>
         {data.filters.activeCount > 0 ? (
           <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters}>
             <X data-icon="inline-start" />
@@ -774,7 +775,7 @@ function StudentDataTable({
                   </TableCell>
                   <TableCell>
                     <div className="students-status-cell">
-                      <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>
+                      {student.isGuestOnly ? <span className="guest-lesson-badge">Qonaq dərs</span> : <StatusChip tone={student.lifecycleTone}>{student.lifecycleStatus}</StatusChip>}
                       {riskLevel ? (
                         <span title={`Ardıcıl ${student.riskStreak} dərs qayıb`}>
                           <StatusChip tone={riskLevel}>Riskli</StatusChip>

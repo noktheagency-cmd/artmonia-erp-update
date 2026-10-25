@@ -16,6 +16,8 @@ test("currentActiveStudentsSql matches students-list ACTIVE snapshot", {
   try {
     await client.query("begin");
     await client.query(`
+      create temporary table single_lessons (student_id uuid);
+      create temporary table enrollments (student_id uuid);
       create temporary table students (
         id uuid primary key,
         registered_at date not null,
@@ -47,6 +49,8 @@ test("activeStudentsAsOfSql reconstructs ACTIVE from status history", {
   try {
     await client.query("begin");
     await client.query(`
+      create temporary table single_lessons (student_id uuid);
+      create temporary table enrollments (student_id uuid);
       create temporary table students (
         id uuid primary key,
         registered_at date not null,

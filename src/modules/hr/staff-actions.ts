@@ -218,7 +218,7 @@ async function updateStaffActionImpl(formData: FormData) {
   if (uploadedProfilePhotoUrl && before.profilePhotoUrl && before.profilePhotoUrl !== uploadedProfilePhotoUrl) {
     await deleteLocalProfilePhoto(before.profilePhotoUrl);
   }
-  if (teacherIdForRecalculation && input.salaryMode === "PERCENT") {
+  if (teacherIdForRecalculation) {
     await recalculateTeacherPayoutsForMonth(currentMonth(), actor.id, [teacherIdForRecalculation]);
   }
   revalidateHr();

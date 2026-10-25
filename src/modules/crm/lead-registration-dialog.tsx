@@ -1,5 +1,6 @@
 "use client";
 
+import { GuestLessonFields } from "@/modules/students/guest-lesson-fields";
 import { useEffect, useState, useTransition } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
@@ -79,6 +80,8 @@ export function LeadRegistrationDialog({
   const [discountTypes, setDiscountTypes] = useState<{ value: string; label: string }[]>([]);
   const [educationLevels, setEducationLevels] = useState<{ value: string; label: string }[]>([]);
   const [programTerms, setProgramTerms] = useState<Record<string, { monthlyFee: string; lessonsPerMonth: string }>>({});
+  const [guestLesson, setGuestLesson] = useState(false);
+  const [requestId, setRequestId] = useState("");
   const enabled = lead.canConvert && canConvert;
   const gift = isGiftDiscount(discountType);
   const paymentAmountError = !gift && isAdmissionAmountBelowMinimum(paymentAmount, "ADMISSION")
@@ -153,6 +156,7 @@ export function LeadRegistrationDialog({
   }
 
   function registerLead(formData: FormData) {
+    const key = requestId || crypto.randomUUID(); setRequestId(key); formData.set("idempotencyKey", key);
     startTransition(async () => {
       try {
         const result = unwrapActionResult(await convertLeadToStudentAction(formData)) as {
@@ -206,6 +210,7 @@ export function LeadRegistrationDialog({
           <input type="hidden" name="returnTo" value={returnTo} />
 
           <div className="crm-dialog-scroll">
+            <label className="guest-registration-choice"><Checkbox name="guestLesson" checked={guestLesson} onChange={e => { setGuestLesson(e.target.checked); setRequestId(""); }} /><span><strong>Birdəfəlik ödənişli — qonaq dərs</strong><small>Hər gəliş ayrıca ödənilir. Satış və aktiv tələbə sayına daxil deyil.</small></span></label>
             {/* <div className="crm-register-preview" role="status">
               <span aria-hidden="true">{lead.name.slice(0, 2).toUpperCase()}</span>
               <div>
@@ -268,6 +273,7 @@ export function LeadRegistrationDialog({
               </FieldGroup>
             </section>
 
+            {guestLesson ? <section className="crm-dialog-section"><GuestLessonFields programs={programs.map(p => ({value:p.id,label:p.name}))} teachers={teachers.map(t => ({value:t.id,label:t.fullName}))} defaults={{programId}} /></section> : <>
             <section className="crm-dialog-section">
               <header><BookOpen aria-hidden="true" /><h3>Cari paket və ödəniş planı</h3></header>
               <FieldGroup className="crm-dialog-fields">
@@ -454,6 +460,8 @@ export function LeadRegistrationDialog({
               </section>
             )}
 
+            </>}
+
             {lead.needsMeetingAttendanceConfirm ? (
               <section className="crm-dialog-section">
                 <header><CheckCircle2 aria-hidden="true" /><h3>Görüş iştirakı</h3></header>
@@ -474,11 +482,11 @@ export function LeadRegistrationDialog({
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isPending}>Ləğv et</Button>
             </DialogClose>
-            <Button type="submit" disabled={isPending || (!gift && Boolean(paymentAmountError))}>
+            <Button type="submit" disabled={isPending || (!guestLesson && !gift && Boolean(paymentAmountError))}>
               <CheckCircle2 data-icon="inline-start" />
               {isPending
                 ? "Qeydiyyata alınır..."
-                : gift
+                : guestLesson ? "Qonaq dərsə qeydiyyata al" : gift
                   ? "Təsdiqlə və qeydiyyata al"
                   : "Ödənişlə qeydiyyata al"}
             </Button>

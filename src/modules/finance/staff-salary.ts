@@ -1,4 +1,5 @@
-import { FinanceSalaryMode, type Prisma } from "@/generated/prisma/client";
+import { FinanceSalaryMode, Prisma } from "@/generated/prisma/client";
+import { getSavedGuestLessonPayout } from "@/modules/hr/guest-lesson-payroll";
 import { startOfMonth, toNumber } from "@/modules/shared/format";
 
 export type ExpenseStaff = { employeeUserId: string | null; teacherId: string | null };
@@ -87,12 +88,13 @@ export async function resolveStaffSalarySnapshot(
   }) : null);
   if (employee?.salaryMode === FinanceSalaryMode.STATIC) {
     const salaryAmount = roundMoney(toNumber(employee.salaryAmount));
+    const guestPay = await getSavedGuestLessonPayout(tx, teacher.id, periodMonth);
     return {
       payeeName: teacher.fullName,
       salaryMode: FinanceSalaryMode.STATIC,
       salaryPercent: null,
       salaryBaseAmount: salaryAmount,
-      salaryCalculatedAmount: salaryAmount,
+      salaryCalculatedAmount: new Prisma.Decimal(salaryAmount).plus(guestPay).toNumber(),
     };
   }
 

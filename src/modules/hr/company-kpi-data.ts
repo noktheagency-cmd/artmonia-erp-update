@@ -1,3 +1,4 @@
+import { guestOnlyStudentSql } from "@/modules/students/guest-lesson-sql";
 import {
   activeStudentsActualSql,
   activeStudentsAsOfSql,
@@ -216,7 +217,7 @@ async function getActuals(
             or exists (
               select 1
               from erp.students converted
-              where converted.id = l.converted_student_id
+              where converted.id = l.converted_student_id and not ${guestOnlyStudentSql(Prisma.sql`converted.id`)}
                 and converted.registered_at < ${actualEnd}
                 and converted.is_test_data = false
             )
@@ -226,7 +227,7 @@ async function getActuals(
         select sum(p.amount)
         from erp.payments p
         join erp.students s on s.id = p.student_id
-        where p.paid_at >= ${periodStart}
+        where p.receipt_purpose <> 'ONE_OFF' and p.paid_at >= ${periodStart}
           and p.paid_at < ${actualEnd}
           and s.is_test_data = false
       ), 0) + coalesce((

@@ -12,7 +12,15 @@ export const singleLessonSchema = z.object({
   duration: z.coerce.number().int().min(15).max(480),
   room: z.string().trim().max(80).default(""),
   price: z.string().regex(/^\d{1,5}(?:\.\d{1,2})?$/).refine(value => Number(value) > 0, "Dərs haqqı sıfırdan böyük olmalıdır."),
-}).refine(input => Boolean(input.studentId || (input.fullName && input.phone)), "Tələbə seçin və ya yeni tələbənin adını və telefonunu yazın.");
+}).refine(input => Boolean(input.studentId || (input.fullName && input.phone)), "Tələbə seçin və ya yeni tələbənin adını və telefonunu yazın.")
+  .refine(input => {
+    const date = new Date(`${input.date}T00:00:00Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === input.date;
+  }, "Dərs tarixi düzgün deyil.")
+  .refine(input => {
+    const [hour, minute] = input.time.split(":").map(Number);
+    return hour * 60 + minute + input.duration <= 24 * 60;
+  }, "Dərs gecə yarısından sonraya keçə bilməz.");
 
 export function assertSingleLessonAttendance(current: string, requested: string, date: string, today: string) {
   if (current === requested) return;

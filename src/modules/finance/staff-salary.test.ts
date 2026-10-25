@@ -3,7 +3,7 @@ import test from "node:test";
 import { FinanceSalaryMode, Prisma } from "@/generated/prisma/client";
 import { resolveExpenseStaff, resolveStaffSalarySnapshot } from "./staff-salary";
 
-function fixture(options: { fixed?: string; active?: boolean; linked?: boolean; userLink?: boolean; payout?: number } = {}) {
+function fixture(options: { fixed?: string; active?: boolean; linked?: boolean; userLink?: boolean; payout?: number; guestPayout?: string } = {}) {
   const teacher = { id: "teacher-1", userId: "user-1", fullName: "Test müəllim", isActive: options.active ?? true };
   const employee = { teacherId: options.linked === false ? null : teacher.id, salaryMode: options.fixed !== undefined ? FinanceSalaryMode.STATIC : FinanceSalaryMode.PERCENT, salaryAmount: new Prisma.Decimal(options.fixed ?? 0) };
   const tx = {
@@ -14,6 +14,7 @@ function fixture(options: { fixed?: string; active?: boolean; linked?: boolean; 
     teacher: { findUnique: async () => options.userLink === false ? null : teacher },
     teacherContractRule: { findFirst: async () => ({ salaryPercent: new Prisma.Decimal(40) }) },
     teacherPayout: { findFirst: async () => ({ eligibleRevenue: new Prisma.Decimal(500), payoutAmount: new Prisma.Decimal(options.payout ?? 200) }) },
+    teacherPayoutLine: { aggregate: async () => ({ _sum: { payoutAmount: new Prisma.Decimal(options.guestPayout ?? 0) } }) },
     financeExpense: { findFirst: async () => ({ salaryPercent: new Prisma.Decimal(40), salaryBaseAmount: new Prisma.Decimal(1000), salaryCalculatedAmount: new Prisma.Decimal(400), amount: new Prisma.Decimal(400) }) },
   } as unknown as Prisma.TransactionClient;
   return tx;
@@ -43,6 +44,12 @@ test("fixed salary also works for legacy user-only HR links", async () => {
   const result = await resolveStaffSalarySnapshot(fixture({ fixed: "625.75", linked: false }), teacherStaff, date);
   assert.equal(result.salaryCalculatedAmount, 625.75);
   assert.equal(result.salaryMode, "STATIC");
+});
+
+test("fixed salary adds only the separately saved guest commission", async () => {
+  const result = await resolveStaffSalarySnapshot(fixture({ fixed: "625.75", guestPayout: "8.75", payout: 208.75 }), teacherStaff, date);
+  assert.equal(result.salaryBaseAmount, 625.75);
+  assert.equal(result.salaryCalculatedAmount, 634.5);
 });
 test("zero fixed salary is not replaced by a previous payment", async () => {
   const result = await resolveStaffSalarySnapshot(fixture({ fixed: "0" }), teacherStaff, date);

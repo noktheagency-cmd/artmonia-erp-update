@@ -1,6 +1,6 @@
 import { getPrisma } from "@/server/db/prisma";
 import type { ErpActor } from "@/server/auth/actor";
-import { hasPermission } from "@/server/rbac/permissions";
+import { hasPermission, scopeFor } from "@/server/rbac/permissions";
 import { canAdministerTasks } from "@/modules/tasks/task-permissions";
 
 export const calendarEventKinds = ["task", "workshop", "lesson", "content", "invoice"] as const;
@@ -42,7 +42,7 @@ export async function getErpCalendarData(
   const { start, end } = monthBounds(month);
   const canViewAllTasks = await canAdministerTasks(actor);
 
-  const [tasks, workshops, contentItems, invoices, slots, sessions] = await Promise.all([
+  const [tasks, workshops, contentItems, invoices, slots, sessions, guestLessons] = await Promise.all([
     hasPermission(actor.permissions, "task.read")
       ? prisma.task.findMany({
           where: {
@@ -147,6 +147,18 @@ export async function getErpCalendarData(
           },
         })
       : Promise.resolve([]),
+    hasPermission(actor.permissions, "student.read") || hasPermission(actor.permissions, "attendance.read")
+      ? prisma.singleLesson.findMany({
+          where: { lessonDate: { gte: start, lt: end }, status: { not: "CANCELLED" }, student: { isTestData: false },
+            ...(scopeFor(actor.permissions, "student.read") === "ALL" ? {} : { OR: [
+              ...(hasPermission(actor.permissions, "student.read") ? [{ student: { managerId: actor.id } }] : []),
+              ...(hasPermission(actor.permissions, "attendance.read") ? [{ teacher: { userId: actor.id } }] : []),
+            ] }),
+          },
+          orderBy: [{ lessonDate: "asc" }, { startTime: "asc" }], take: 300,
+          select: { id: true, studentId: true, lessonDate: true, startTime: true, status: true, room: true,
+            teacher: { select: { fullName: true } }, student: { select: { contact: { select: { fullName: true } } } } },
+        }) : Promise.resolve([]),
   ]);
 
   const events: ErpCalendarEvent[] = [
@@ -191,6 +203,12 @@ export async function getErpCalendarData(
       status: invoice.status,
     })),
     ...buildSlotEvents(slots, sessions, start, end),
+    ...guestLessons.map(lesson => ({
+      id: `guest:${lesson.id}`, kind: "lesson" as const, title: `Qonaq dərs · ${lesson.student.contact.fullName}`,
+      meta: [lesson.teacher.fullName, lesson.room].filter(Boolean).join(" · "),
+      date: dateKey(lesson.lessonDate), time: lesson.startTime, status: lesson.status,
+      href: `/students/single-lessons?student=${lesson.studentId}`,
+    })),
   ].sort((left, right) =>
     left.date.localeCompare(right.date)
     || left.time.localeCompare(right.time)

@@ -120,7 +120,7 @@ test("payments, workshop money and unknown old money reconcile without inventing
  const event=await tx.workshopEvent.create({data:{title:"Synthetic workshop",eventDate:new Date("2026-10-10T00:00:00Z"),startTime:"12:00"}});
  const participant=await tx.workshopParticipant.create({data:{eventId:event.id,fullName:"Synthetic workshop guest"}});
  await tx.workshopPayment.create({data:{eventId:event.id,participantId:participant.id,amount:"25.66",paidAt:new Date("2026-10-10T00:00:00Z"),createdById:f.user.id}});
- const t=await totals(tx);assert.equal(t.sales,0);assert.equal(t.unclassified,"12.34");assert.equal(t.oneOff,"15.00");assert.equal(t.other,"25.66");assert.equal(t.payments,"53.00");
+ const t=await totals(tx);assert.equal(t.sales,0);assert.equal(t.unclassified,"12.34");assert.equal(t.oneOff,"15.00");assert.equal(t.other,"25.66");assert.equal(t.payments,"38.00");
 }));
 test("assigned payment and admission access deny another manager and replay rejects changed money",{skip:!url},()=>isolated(async(tx,f)=>{
  const actor:ErpActor={id:f.other.id,authUserId:null,currentSessionId:null,fullName:"Synthetic actor",email:"synthetic@example.invalid",profilePhotoUrl:null,roles:[],permissions:new Map([["billing.payment.create","ASSIGNED"],["crm.lead.read","ALL"],["crm.lead.convert","ASSIGNED"]])};

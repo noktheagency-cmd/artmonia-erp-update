@@ -1,3 +1,4 @@
+import { guestOnlyStudentSql } from "./guest-lesson-sql";
 import { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -12,7 +13,7 @@ export function currentActiveStudentsSql() {
     select count(*)::int
     from erp.students s
     where s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-      and s.is_test_data = false
+      and s.is_test_data = false and not ${guestOnlyStudentSql(Prisma.sql`s.id`)}
   )`;
 }
 
@@ -28,7 +29,7 @@ export function activeStudentsAsOfSql(asOfExclusive: Prisma.Sql) {
     select count(*)::int
     from erp.students s
     where s.registered_at < ${asOfExclusive}
-      and s.is_test_data = false
+      and s.is_test_data = false and not ${guestOnlyStudentSql(Prisma.sql`s.id`)}
       and coalesce(
         (
           select h.new_status

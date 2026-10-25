@@ -242,7 +242,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         select sum(p.amount)
         from erp.payments p
         join erp.students s on s.id = p.student_id
-        where p.paid_at >= ${periodStart}
+        where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${periodStart}
           and p.paid_at < ${periodEndExclusive}
           and s.is_test_data = false
       ), 0) + coalesce((
@@ -256,7 +256,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         select sum(p.amount)
         from erp.payments p
         join erp.students s on s.id = p.student_id
-        where p.paid_at >= ${periodStart}
+        where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${periodStart}
           and p.paid_at < ${periodEndExclusive}
           and s.is_test_data = false
       ), 0) as "periodStudentRevenue",
@@ -297,7 +297,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         select sum(p.amount)
         from erp.payments p
         join erp.students s on s.id = p.student_id
-        where p.paid_at >= ${previousPeriodStart}
+        where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${previousPeriodStart}
           and p.paid_at < ${previousPeriodEndExclusive}
           and s.is_test_data = false
       ), 0) + coalesce((
@@ -349,7 +349,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
             select date_trunc('month', p.paid_at)::date as payment_month, p.amount
             from erp.payments p
             join erp.students s on s.id = p.student_id
-            where p.paid_at >= ${firstRevenueMonth}
+            where p.receipt_purpose <> 'ONE_OFF' and p.refunded_at is null and p.paid_at >= ${firstRevenueMonth}
               and p.paid_at < ${nextRevenueMonth}
               and s.is_test_data = false
             union all
@@ -490,7 +490,7 @@ export async function getOwnerDashboardData(filters: DashboardFilters = {}): Pro
         )
         from (
           select p2.id, p2.amount, p2.paid_at, p2.method, p2.student_id, p2.created_at
-          from erp.payments p2
+          from erp.payments p2 where p2.receipt_purpose <> 'ONE_OFF'
           order by p2.created_at desc
           limit 5
         ) p

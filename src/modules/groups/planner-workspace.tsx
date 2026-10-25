@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   BookOpenCheck,
   CalendarDays,
@@ -434,6 +435,16 @@ export function PlannerWorkspace({
           <RotateCcw data-icon="inline-start" /> Sıfırla
         </Button>
       </div>
+
+      {data.guestLessons?.length ? <details className={styles.guestVisits}>
+        <summary>Qonaq dərslərin vaxtları <span>Yaxın 31 gün</span></summary>
+        <ul>{data.guestLessons.filter(lesson => teacherFilter === "all" || lesson.teacherId === teacherFilter).map(lesson => <li key={lesson.id}>
+          <Link href={(`/students/single-lessons?student=${lesson.studentId}`) as Route}>
+            <strong>{lesson.student}</strong><span>{formatNumericDateAz(lesson.date)} · {lesson.time}</span><small>{lesson.teacher}{lesson.room ? ` · ${lesson.room}` : ""}</small>
+          </Link>
+        </li>)}</ul>
+        <Link href="/students/single-lessons">Bütün qonaq dərslərə bax</Link>
+      </details> : null}
 
       <div className={styles.workspace}>
         <main className={styles.canvas}>

@@ -2206,3 +2206,11 @@ button.historyStatus { cursor: pointer; }
   .attendanceBulkActions button:last-child { grid-column: 1 / -1; }
   .attendanceBulkActions button { justify-content: center; }
 }
+.guestVisits { padding:16px 20px; border:1px solid #dce3ee; border-radius:12px; background:#fff; font-size:13px; }
+.guestVisits summary { cursor:pointer; font-weight:600; }
+.guestVisits summary span { margin-left:12px; font-weight:400; font-size:11px; color:#8a94a5; }
+.guestVisits ul { list-style:none; margin:14px 0; padding:0; display:grid; gap:0; }
+.guestVisits li a { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:10px 0; border-bottom:1px solid #edf0f5; }
+.guestVisits li span { color:#586581; }
+.guestVisits li small { color:#8a94a5; }
+.guestVisits>a { color:#4354b5; font-size:12px; }
