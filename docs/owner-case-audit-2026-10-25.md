@@ -52,9 +52,11 @@ Owner-in köhnə qaydalara aid arxiv qalıqlarının ləğvi göstərişi üzrə
 
 ## 8. Follow-up və sınaq analitikası
 
-CRM icmalında müəllimlər üzrə sınaq təyinatı, iştirak, gəlməmə, uğurlu/itirilmiş nəticə və gözləmə cədvəli var. Dövr müraciətin yaradılmasına deyil, görüşün Bakı tarixinə tətbiq olunur. Əvvəlki ay yaradılmış müraciətin bu aykı sınağı da sayılır. Uğurlu nəticə iştirakdan sonrakı ləğv edilməmiş uyğun satışla, uğursuz nəticə iştirak edib sonra LOST olan müraciətlə müəyyən olunur; cavabı gözləyənlər təxminlə uğursuz sayılmır.
+26.10.2026 dəqiqləşdirməsi: ayrıca müəllim nəticələri cədvəli tələb olunmadığı üçün owner-in göstərişi ilə CRM icmalından çıxarıldı. Yalnız həmin UI paneli və ona məxsus CSS silindi; görüş analitikası, tarix filtrləri və follow-up hesablama düzəlişləri saxlanıldı.
 
-Tamamlanmamış və gecikmiş görüş sayı bütün dövrləri əhatə edir. Bugünkü follow-up sayında yaradılma ayı məhdudiyyəti çıxarılıb. Köhnə qeyddə müəllim yoxdursa `Müəllim təyin edilməyib` göstərilir; müəllim təxmin edilmir. Tarixi reminder planları real görüşlə eyni günə düşürsə iki dəfə sayılmır. Sınaq cədvəli görüş qeydlərini sayır; təkrar sınaq ayrıca görüşdür.
+25 oktyabr düzəlişində CRM icmalına müəllimlər üzrə sınaq təyinatı, iştirak, gəlməmə, uğurlu/itirilmiş nəticə və gözləmə cədvəli əlavə edilmişdi. Saxlanılan hesablamada dövr müraciətin yaradılmasına deyil, görüşün Bakı tarixinə tətbiq olunur. Əvvəlki ay yaradılmış müraciətin bu aykı sınağı da sayılır. Uğurlu nəticə iştirakdan sonrakı ləğv edilməmiş uyğun satışla, uğursuz nəticə iştirak edib sonra LOST olan müraciətlə müəyyən olunur; cavabı gözləyənlər təxminlə uğursuz sayılmır.
+
+Tamamlanmamış və gecikmiş görüş sayı bütün dövrləri əhatə edir. Bugünkü follow-up sayında yaradılma ayı məhdudiyyəti çıxarılıb. Köhnə qeyddə müəllim yoxdursa analitika nəticəsində `Müəllim təyin edilməyib` saxlanır; müəllim təxmin edilmir. Tarixi reminder planları real görüşlə eyni günə düşürsə iki dəfə sayılmır. Sınaq analitikası görüş qeydlərini sayır; təkrar sınaq ayrıca görüşdür.
 
 ## 9. Satış sayı
 

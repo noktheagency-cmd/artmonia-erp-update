@@ -2642,6 +2642,19 @@ html.dark .side-rail .brand-mark:hover .brand-logo-dark {
 
 /* Compact sidebar docks retain their hierarchy in the warm dark theme. */
 @media (min-width: 961px) {
+  html.dark .app-stage.is-sidebar-compact .side-rail .nav-icon.is-active,
+  html.dark .app-stage.is-sidebar-compact .side-rail .nav-icon.is-active:hover {
+    background: linear-gradient(145deg, #51351e, #392619);
+    border-color: #a36832;
+    box-shadow: inset 0 1px 0 rgb(255 211 161 / 12%), 0 2px 5px rgb(0 0 0 / 20%);
+  }
+
+  html.dark .app-stage.is-sidebar-compact .side-rail .nav-icon.is-active .nav-icon-box {
+    color: #ffc17d !important;
+    background: transparent;
+    box-shadow: none;
+  }
+
   html.dark .app-stage.is-sidebar-compact .sidebar-brand-row,
   html.dark .app-stage.is-sidebar-compact .side-rail .rail-bottom-stack {
     border-color: rgb(255 177 92 / 12%);

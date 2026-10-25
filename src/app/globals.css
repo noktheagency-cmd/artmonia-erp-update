@@ -24525,19 +24525,44 @@ body:has(.workshop-dialog) .ui-select-content {
   }
 
   .app-stage.is-sidebar-compact .nav-stack {
-    width: 50px;
+    width: calc(100% + 10px);
     align-items: center;
     flex: 1 1 auto;
-    padding: 0 1px 8px;
+    margin-right: -10px;
+    padding: 0 8px 8px 2px;
     overflow-x: hidden;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .app-stage.is-sidebar-compact .nav-icon {
     width: 46px;
     min-height: 44px;
     height: 44px;
+    gap: 0;
     border-radius: 13px;
+  }
+
+  .app-stage.is-sidebar-compact .side-rail .nav-active-indicator {
+    display: none;
+  }
+
+  .app-stage.is-sidebar-compact .side-rail .nav-icon.is-active,
+  .app-stage.is-sidebar-compact .side-rail .nav-icon.is-active:hover {
+    background: linear-gradient(145deg, #fff0da, #ffe2b8);
+    border-color: #efbd7c;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%), 0 2px 5px rgb(159 83 12 / 10%);
+  }
+
+  .app-stage.is-sidebar-compact .side-rail .nav-icon.is-active .nav-icon-box {
+    color: #b85c08;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app-stage.is-sidebar-compact .side-rail .nav-icon:focus-visible {
+    outline: 2px solid var(--theme-accent, #d96a08);
+    outline-offset: -3px;
   }
 
   .app-stage.is-sidebar-compact .side-rail .rail-bottom-stack {

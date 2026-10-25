@@ -300,21 +300,6 @@ export function CrmOverview({
         </div>
       </article>
 
-      <article className="crm-panel crm-trial-panel crm-enter">
-        <PanelHeading icon={CalendarCheck2} title="Müəllimlər üzrə sınaq nəticələri"
-          description="Seçilmiş dövrdə görüş tarixinə görə; əvvəlki aylarda yaradılmış müraciətlər də daxildir"
-          meta={`${data.meetings.pending} tamamlanmamış görüş · ${data.meetings.overdue} gecikmiş`} tone="blue" />
-        <div className="crm-trial-table-scroll">
-          <table className="crm-trial-table">
-            <thead><tr><th>Müəllim</th><th>Təyin edilib</th><th>İştirak edib</th><th>Gəlməyib</th><th>Uğurlu</th><th>Uğursuz</th><th>Gözləyir</th></tr></thead>
-            <tbody>{data.meetings.teachers.length ? data.meetings.teachers.map(row => (
-              <tr key={row.teacherId ?? "unassigned"}><th scope="row">{row.teacher}</th><td>{row.scheduled}</td><td>{row.attended}</td><td>{row.noShow}</td><td>{row.successful}</td><td>{row.unsuccessful}</td><td>{row.pending}</td></tr>
-            )) : <tr><td colSpan={7}>Bu dövrdə sınaq təyin edilməyib.</td></tr>}</tbody>
-          </table>
-        </div>
-        <p className="crm-trial-note">Uğurlu: iştirakdan sonra ödənişli qeydiyyata keçib. Uğursuz: iştirak edib, sonra müraciət itirilib. Nəticəsi hələ seçilməyən iştirak ayrıca uğursuz sayılmır. Tamamlanmamış görüş sayı bütün dövrləri əhatə edir.</p>
-      </article>
-
       <article className="crm-panel crm-team-panel crm-enter" style={{ animationDelay: "235ms" }}>
         <PanelHeading
           icon={UsersRound}

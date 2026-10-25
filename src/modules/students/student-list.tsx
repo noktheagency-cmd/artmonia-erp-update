@@ -517,25 +517,29 @@ function StudentReminderAttentionRow({
   reminder: StudentListData["todayReminders"]["items"][number];
 }) {
   return (
-    <article className="students-attention-row is-reminder" data-kind={reminder.kind.toLowerCase()}>
-      <span className="students-attention-avatar is-reminder" aria-hidden="true"><BellRing /></span>
-      <span className="students-attention-person">
-        <Link href={`/students/${reminder.studentId}` as Route}>{reminder.studentName}</Link>
-        <small>{reminder.studentCode} · {reminder.ownerName}</small>
-      </span>
-      <StatusChip tone="info">{reminder.kindLabel}</StatusChip>
-      <span className="students-attention-action">
-        <strong>{reminder.note}</strong>
-        <small><CalendarClock aria-hidden="true" /> Xatırlatma günü: {reminder.dueDate}</small>
-      </span>
-      {reminder.canComplete ? (
-        <CompleteStudentReminderButton
-          reminderId={reminder.id}
-          studentId={reminder.studentId}
-          action={completeStudentReminderAction}
-          compact
-        />
-      ) : null}
+    <article className="students-reminder-card" data-kind={reminder.kind.toLowerCase()}>
+      <header className="students-reminder-card-head">
+        <span className="students-attention-avatar is-reminder" aria-hidden="true"><BellRing /></span>
+        <div className="students-reminder-card-person">
+          <Link href={`/students/${reminder.studentId}` as Route}>{reminder.studentName}</Link>
+          <small>{reminder.studentCode} · {reminder.ownerName}</small>
+        </div>
+        <StatusChip tone="info">{reminder.kindLabel}</StatusChip>
+      </header>
+      <p className="students-reminder-card-note">{reminder.note}</p>
+      <footer className="students-reminder-card-footer">
+        <span className="students-reminder-card-date">
+          <CalendarClock aria-hidden="true" />
+          <span>Xatırlatma günü: <strong>{reminder.dueDate}</strong></span>
+        </span>
+        {reminder.canComplete ? (
+          <CompleteStudentReminderButton
+            reminderId={reminder.id}
+            studentId={reminder.studentId}
+            action={completeStudentReminderAction}
+          />
+        ) : null}
+      </footer>
     </article>
   );
 }
