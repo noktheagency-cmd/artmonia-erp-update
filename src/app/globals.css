@@ -24415,6 +24415,9 @@ body:has(.workshop-dialog) .ui-select-content {
 .side-rail .brand-mark {
   min-height: 100px;
   padding-block: 0;
+  /* Switch geometry together: animating width/min-height separately stretches
+     the compact tile while the logo has already changed size. */
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .side-rail .brand-symbol {
@@ -24441,6 +24444,7 @@ body:has(.workshop-dialog) .ui-select-content {
   object-fit: contain;
   opacity: 1;
   transform: none;
+  transition: none;
 }
 
 .side-rail .brand-logo-dark {
@@ -24499,13 +24503,13 @@ body:has(.workshop-dialog) .ui-select-content {
   }
 
   .app-stage.is-sidebar-compact .side-rail .brand-symbol {
-    width: 40px !important;
-    height: 40px !important;
-    flex-basis: 40px !important;
+    width: 38px !important;
+    height: 38px !important;
+    flex-basis: 38px !important;
   }
 
   .app-stage.is-sidebar-compact .side-rail .brand-logo {
-    width: 40px !important;
+    width: 38px !important;
     height: auto !important;
     max-height: 38px;
   }
