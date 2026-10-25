@@ -12,6 +12,7 @@ import {
 } from "@/modules/hr/bonus-rules";
 import { getTeacherPayrollPreviews } from "@/modules/hr/teacher-payroll";
 import { departmentSalesCountSql } from "@/modules/students/sales-metrics-sql";
+import { participantEmployeeSql, participantSalesMetricsSql } from "./bonus-metrics-sql";
 import { getPrisma } from "@/server/db/prisma";
 
 type NumericRow = { value: Prisma.Decimal | number | string | null };
@@ -388,20 +389,21 @@ export async function syncBonusCampaign(campaignId: string, actorUserId?: string
 export async function calculateCampaignParticipantMetrics(
   campaignId: string,
   metricKind: "DEPARTMENT_COLLECTED_REVENUE" | "DEPARTMENT_SALES_COUNT" | "TEACHER_RETENTION_RATE" | "MANUAL_KPI",
+  employeeId?: string,
 ) {
   if (metricKind === "DEPARTMENT_SALES_COUNT") {
-    return calculateParticipantSalesValues(campaignId);
+    return calculateParticipantSalesValues(campaignId, employeeId);
   }
   if (metricKind === "DEPARTMENT_COLLECTED_REVENUE") {
-    return calculateParticipantRevenueValues(campaignId);
+    return calculateParticipantRevenueValues(campaignId, employeeId);
   }
   if (metricKind === "TEACHER_RETENTION_RATE") {
-    return calculateParticipantTeacherValues(campaignId);
+    return calculateParticipantTeacherValues(campaignId, employeeId);
   }
   return new Map<string, number>();
 }
 
-async function calculateParticipantRevenueValues(campaignId: string) {
+async function calculateParticipantRevenueValues(campaignId: string, employeeId?: string) {
   const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
     select
       participant.id::text as "participantId",
@@ -419,11 +421,12 @@ async function calculateParticipantRevenueValues(campaignId: string) {
     left join erp.hr_employees employee on employee.id = participant.employee_id
     where participant.campaign_id = ${campaignId}::uuid
       and participant.is_eligible = true
+      ${participantEmployeeSql(employeeId)}
   `);
   return new Map(rows.map((row) => [row.participantId, Number(row.value)]));
 }
 
-async function calculateParticipantTeacherValues(campaignId: string) {
+async function calculateParticipantTeacherValues(campaignId: string, employeeId?: string) {
   const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
     select
       participant.id::text as "participantId",
@@ -436,34 +439,13 @@ async function calculateParticipantTeacherValues(campaignId: string) {
     from erp.hr_bonus_participants participant
     where participant.campaign_id = ${campaignId}::uuid
       and participant.is_eligible = true
+      ${participantEmployeeSql(employeeId)}
   `);
   return new Map(rows.map((row) => [row.participantId, Number(row.value)]));
 }
 
-async function calculateParticipantSalesValues(campaignId: string) {
-  const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(Prisma.sql`
-    select
-      participant.id::text as "participantId",
-      coalesce((
-        select count(*)::int
-        from erp.course_sales cs
-        join erp.students s on s.id = cs.student_id
-        where s.is_test_data = false
-          and cs.cancelled_at is null
-          and cs.owner_id = employee.user_id
-          and cs.qualified_at >= (
-            select campaign.starts_at::date from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
-          )
-          and cs.qualified_at <= (
-            select campaign.ends_at::date from erp.hr_bonus_campaigns campaign where campaign.id = ${campaignId}::uuid
-          )
-          and cs.qualified_at <= (now() at time zone 'Asia/Baku')::date
-      ), 0)::int as value
-    from erp.hr_bonus_participants participant
-    left join erp.hr_employees employee on employee.id = participant.employee_id
-    where participant.campaign_id = ${campaignId}::uuid
-      and participant.is_eligible = true
-  `);
+async function calculateParticipantSalesValues(campaignId: string, employeeId?: string) {
+  const rows = await getPrisma().$queryRaw<ParticipantMetricRow[]>(participantSalesMetricsSql(campaignId, employeeId));
   return new Map(rows.map((row) => [row.participantId, Number(row.value)]));
 }
 

@@ -5,7 +5,7 @@ import {
 } from "@/modules/hr/bonus-service";
 import { requireErpActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
-import { scopeFor } from "@/server/rbac/permissions";
+import { bonusAwardReadWhere, bonusCampaignReadWhere, bonusParticipantReadWhere, canReadAllBonuses, visibleBonusValue } from "./bonus-access";
 
 export type HrBonusAwardDto = {
   id: string;
@@ -46,6 +46,7 @@ export type HrBonusParticipantDto = {
 };
 
 export type HrBonusCampaignDto = {
+  metricScope: "TEAM" | "PERSONAL";
   id: string;
   name: string;
   department: string;
@@ -105,7 +106,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
   const canManage = actor.permissions.has("hr.bonus.manage");
   const canApprove = actor.permissions.has("hr.bonus.approve");
   const canPost = actor.permissions.has("billing.expense.create");
-  const canSeeAll = canManage || scopeFor(actor.permissions, "hr.bonus.read") === "ALL";
+  const canSeeAll = canReadAllBonuses(actor.permissions);
   const [actorEmployee, departmentRows, teacherDepartmentRows, employeeRows] = await Promise.all([
     prisma.hrEmployee.findUnique({ where: { userId: actor.id }, select: { id: true, department: true, teacherId: true } }),
     canManage
@@ -129,14 +130,11 @@ export async function getHrBonusData(): Promise<HrBonusData> {
   ]);
 
   const campaigns = await prisma.hrBonusCampaign.findMany({
-    where: canSeeAll
-      ? {}
-      : actorEmployee
-        ? { department: actorEmployee.department }
-        : { id: "__no_access__" },
+    where: bonusCampaignReadWhere(canSeeAll, actorEmployee?.id),
     include: {
       adjustments: { select: { amount: true } },
       participants: {
+        where: bonusParticipantReadWhere(canSeeAll, actorEmployee?.id),
         orderBy: { employeeName: "asc" },
         include: { awards: { select: { id: true, amount: true, status: true, stageId: true } } },
       },
@@ -145,6 +143,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         include: {
           churnRules: { orderBy: { sortOrder: "asc" } },
           awards: {
+            where: bonusAwardReadWhere(canSeeAll, actorEmployee?.id),
             include: { participant: { select: { employeeId: true, employeeName: true } } },
             orderBy: { participant: { employeeName: "asc" } },
           },
@@ -155,14 +154,14 @@ export async function getHrBonusData(): Promise<HrBonusData> {
     take: 60,
   });
 
-  const values = await calculateBonusCampaignValues(campaigns);
-  const participantMetricMaps = await Promise.all(
-    campaigns.map((campaign) => calculateCampaignParticipantMetrics(campaign.id, campaign.metricKind)),
-  );
+  const [values, participantMetricMaps] = await Promise.all([
+    calculateBonusCampaignValues(campaigns.filter((campaign) => canSeeAll || campaign.metricKind !== "DEPARTMENT_SALES_COUNT")),
+    Promise.all(campaigns.map((campaign) => calculateCampaignParticipantMetrics(campaign.id, campaign.metricKind, canSeeAll ? undefined : actorEmployee?.id))),
+  ]);
   return {
     asOf: new Date().toISOString(),
     campaigns: campaigns.map((campaign, campaignIndex) => {
-      const value = values.get(campaign.id) ?? {
+      const aggregate = values.get(campaign.id) ?? {
         baseValue: 0,
         adjustmentValue: 0,
         currentValue: 0,
@@ -171,6 +170,12 @@ export async function getHrBonusData(): Promise<HrBonusData> {
       const maxThreshold = Number(campaign.stages.at(-1)?.threshold ?? 0);
       const participantMetrics = participantMetricMaps[campaignIndex] ?? new Map<string, number>();
       const ownParticipant = campaign.participants.find((participant) => participant.employeeId === actorEmployee?.id);
+      const value = visibleBonusValue({
+        canSeeAll,
+        metricKind: campaign.metricKind,
+        aggregate,
+        ownMetric: ownParticipant ? participantMetrics.get(ownParticipant.id) ?? 0 : 0,
+      });
       const eligibleParticipants = campaign.participants.filter((participant) => participant.isEligible);
       const participants = eligibleParticipants
         .map((participant) => {
@@ -190,6 +195,7 @@ export async function getHrBonusData(): Promise<HrBonusData> {
         })
         .sort((left, right) => right.progress - left.progress || left.employeeName.localeCompare(right.employeeName, "az"));
       return {
+        metricScope: value.metricScope,
         id: campaign.id,
         name: campaign.name,
         department: campaign.department,
@@ -214,23 +220,25 @@ export async function getHrBonusData(): Promise<HrBonusData> {
           .filter((award) => award.status !== "VOIDED")
           .reduce((sum, award) => sum + Number(award.amount), 0) ?? 0,
         participants,
-        stages: campaign.stages.map((stage) => ({
-          id: stage.id,
-          sortOrder: stage.sortOrder,
-          threshold: Number(stage.threshold),
-          bonusPool: Number(stage.bonusPool),
-          bonusPercent: Number(stage.bonusPercent),
-          fixedAmount: Number(stage.fixedAmount),
-          isIncremental: stage.isIncremental,
-          churnRules: stage.churnRules.map((rule) => ({
-            id: rule.id,
-            churnThreshold: rule.churnThreshold,
-            deductionAmount: Number(rule.deductionAmount),
-          })),
-          reachedAt: stage.reachedAt?.toISOString() ?? "",
-          reachedValue: Number(stage.reachedValue ?? 0),
-          awards: canManage || canApprove || canPost
-            ? stage.awards.map((award) => ({
+        stages: campaign.stages.map((stage) => {
+          const ownAward = stage.awards.find((award) => award.participant.employeeId === actorEmployee?.id && award.status !== "VOIDED");
+          return {
+            id: stage.id,
+            sortOrder: stage.sortOrder,
+            threshold: Number(stage.threshold),
+            bonusPool: Number(stage.bonusPool),
+            bonusPercent: Number(stage.bonusPercent),
+            fixedAmount: Number(stage.fixedAmount),
+            isIncremental: stage.isIncremental,
+            churnRules: stage.churnRules.map((rule) => ({
+              id: rule.id,
+              churnThreshold: rule.churnThreshold,
+              deductionAmount: Number(rule.deductionAmount),
+            })),
+            reachedAt: canSeeAll || ownAward ? stage.reachedAt?.toISOString() ?? "" : "",
+            reachedValue: Number(canSeeAll ? stage.reachedValue ?? 0 : ownAward?.metricValue ?? 0),
+            awards: canManage || canApprove || canPost
+              ? stage.awards.map((award) => ({
                 id: award.id,
                 employeeName: award.participant.employeeName,
                 employeeId: award.participant.employeeId ?? "",
@@ -242,9 +250,10 @@ export async function getHrBonusData(): Promise<HrBonusData> {
                 workloadMultiplier: Number(award.workloadMultiplier),
                 metricValue: Number(award.metricValue ?? 0),
                 calculationNote: award.calculationNote ?? "",
-              }))
-            : [],
-        })),
+                }))
+              : [],
+          };
+        }),
       };
     }),
     departments: canManage

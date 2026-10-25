@@ -163,7 +163,7 @@ export function BonusWorkspace({
         <div className="hr-bonus-scene-wrap">
           <VanGoghBonusIllustration progress={selected.progress} reachedCount={reachedStages.length} celebrationKey={`${selected.id}:${latestStage?.id ?? "start"}`} replayToken={replayToken} />
           <div className="hr-bonus-progress-float">
-            <span>{selected.department} komandası</span>
+            <span>{selected.metricScope === "PERSONAL" ? "Sizin satış nəticəniz" : `${selected.department} komandası`}</span>
             <strong>{Math.round(selected.progress)}%</strong>
             <b>{formatMetric(selected.currentValue, unit)} <i>/ {formatMetric(selected.maxThreshold, unit)}</i></b>
             <div><span style={{ width: `${selected.progress}%` }} /></div>
@@ -173,7 +173,7 @@ export function BonusWorkspace({
         <MilestoneRail campaign={selected} unit={unit} />
       </section> */}
 
-      {!selected ? <p className="hr-bonus-empty-note">Bu departament üçün hələ kampaniya yoxdur. Aşağıdan əməkdaş seçib bonus yarada bilərsiniz.</p> : null}
+      {!selected ? <p className="hr-bonus-empty-note">{data.permissions.canManage ? "Bu departament üçün hələ kampaniya yoxdur. Aşağıdan əməkdaş seçib bonus yarada bilərsiniz." : "Sizə təyin edilmiş uyğun bonus kampaniyası yoxdur."}</p> : null}
       <section className="hr-bonus-employees-card">
         <div className="hr-bonus-employees-heading"><div><h2>Departament əməkdaşları</h2><p>Cədvəldən əməkdaşı seçin və bonusu aşağıda təyin edin.</p></div><span>{selectedEmployeeIds.length} seçilib</span></div>
         <div className="hr-bonus-employee-table-wrap"><table className="hr-bonus-employee-table"><thead><tr><th scope="col">Seç</th><th scope="col">Əməkdaş</th><th scope="col">Vəzifə</th><th scope="col">Departament</th></tr></thead><tbody>
@@ -198,7 +198,7 @@ export function BonusWorkspace({
         <div><span>Kampaniya</span><strong>{selected.name}</strong></div>
         <div><span>Departament</span><strong>{selected.department}</strong></div>
         <div><span>Dövr</span><strong>{formatDate(selected.startsAt)} – {formatDate(selected.endsAt)}</strong></div>
-        <div><span>Komanda</span><strong>{Math.round(selected.progress)}% · {formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</strong></div>
+        <div><span>{selected.metricScope === "PERSONAL" ? "Şəxsi nəticə" : "Komanda"}</span><strong>{Math.round(selected.progress)}% · {formatMetric(selected.currentValue, unit)} / {formatMetric(selected.maxThreshold, unit)}</strong></div>
         <div><span>Status</span><span className={`hr-bonus-status is-${status.tone}`}>{status.label}</span></div>
       </div>
 <div className="hr-bonus-inspector">
