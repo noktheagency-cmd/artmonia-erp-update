@@ -83,7 +83,7 @@ async function lockedLesson(tx: Prisma.TransactionClient, lessonId: string) {
   await tx.$queryRaw(Prisma.sql`select id from erp.students where id=${target.studentId}::uuid for update`);
   await tx.$queryRaw(Prisma.sql`select id from erp.single_lessons where id=${lessonId}::uuid for update`);
   return tx.singleLesson.findUniqueOrThrow({ where: { id: lessonId }, include: {
-    student: { select: { managerId: true } }, teacher: { select: { userId: true } }, payment: true,
+    student: { select: { managerId: true, isTestData: true } }, teacher: { select: { userId: true } }, payment: true,
   } });
 }
 async function ensureSingleLessonInvoice(tx: Prisma.TransactionClient, lesson: { id: string; studentId: string; lessonDate: Date; price: Prisma.Decimal; invoiceId: string | null }) {
@@ -107,7 +107,7 @@ export async function markSingleLesson(tx: Prisma.TransactionClient, input: { le
   if (input.status === "CANCELLED" && lesson.paymentId) throw new PublicActionError("Ödənişli dərsin ləğvi üçün əvvəl maliyyə düzəlişi edilməlidir.");
   if (input.status === "ATTENDED") await ensureSingleLessonInvoice(tx, lesson);
   await tx.singleLesson.update({ where: { id: lesson.id }, data: { status: input.status } });
-  if (input.status === "ATTENDED" && lesson.payment) {
+  if (input.status === "ATTENDED" && lesson.payment && !lesson.student.isTestData) {
     await recalculateTeacherPayoutsForMonthInTransaction(tx, lesson.payment.paymentMonth, actor.id, [lesson.teacherId]);
   }
   await writeAuditLog(tx, { actorUserId: actor.id, action: "student.single_lesson.attendance", entityType: "single_lesson", entityId: lesson.id,
@@ -134,7 +134,7 @@ export async function paySingleLesson(tx: Prisma.TransactionClient, input: { les
   await tx.paymentAllocation.create({ data: { paymentId: payment.id, invoiceId, amountAllocated: lesson.price, mode: "SELECTED_INVOICE" } });
   await tx.invoice.update({ where: { id: invoiceId }, data: { balanceDue: 0, status: "PAID" } });
   await tx.singleLesson.update({ where: { id: lesson.id }, data: { paymentId: payment.id } });
-  if (lesson.status === "ATTENDED") {
+  if (lesson.status === "ATTENDED" && !lesson.student.isTestData) {
     await recalculateTeacherPayoutsForMonthInTransaction(tx, payment.paymentMonth, actor.id, [lesson.teacherId]);
   }
   await writeAuditLog(tx, { actorUserId: actor.id, action: "student.single_lesson.payment", entityType: "single_lesson", entityId: lesson.id,

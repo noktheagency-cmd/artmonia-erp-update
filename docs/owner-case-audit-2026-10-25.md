@@ -31,16 +31,14 @@ Qeydiyyatın bütün əlaqəli seçimləri aktiv təhsil kataloqundan alınır. 
 
 ## 5. Hər gəliş üzrə birdəfəlik dərs
 
-Yeni səhifə: `/students/single-lessons`. Tələbələr səhifəsindən və profilindən keçid var.
+26.10.2026 dəqiqləşdirməsi ilə xidmət “Qonaq dərs” adlanır. Cari axın, hesablama və qəbul addımları [qonaq dərs müqaviləsində](guest-lessons.md) saxlanılır.
 
-- Mövcud tələbə seçilə və ya ayrıca tələbə profili yaradıla bilər; hər dərsin müəllim, proqram, tarix, saat, müddət və qiyməti var.
-- Gəldi / gəlmədi / ləğv qeydləri ayrıca jurnaldadır. Gələcək tarixə iştirak yazılmır. İştirak edilən dərs üçün yalnız həmin dərsin fakturası açılır.
-- Ödəniş yalnız dərsin öz fakturasına ayrılır və `ONE_OFF` / `ONE_TIME` kimi saxlanır. Aylıq enrollment, billing cycle, avtomatik ACTIVE status, növbəti ay borcu və qəbul satışı yaranmır.
-- Mövcud aylıq tələbə bu xidmətdən istifadə etdikdə onun aylıq statusu, tarifi və gələcək ödəniş günü dəyişmir. Ümumi aylıq ödəniş allocator-u bu fakturanı götürmür.
-- Server qeydiyyat üçün `student.create` / `student.update`, iştirak üçün `attendance.manage`, pul üçün `billing.payment.create` tələb edir. ASSIGNED müəllim yalnız öz dərsinin davamiyyətini dəyişir; ödəniş və təkrar icrada tələbə scope-u yenidən yoxlanır.
-- Ödənişli dərsin ləğvi avtomatik refund etmir. Müəllim üzrə birdəfəlik xidmət komissiyası ayrıca qayda verilmədiyi üçün aylıq payout-a təxminlə əlavə edilmir.
+- İlk qeydiyyat Yeni tələbə və ya CRM qeydiyyat modalındakı “Birdəfəlik ödənişli — qonaq dərs” seçimindən başlayır. `/students/single-lessons` yalnız jurnaldır; oradan yeni tələbə yaradılmır, mövcud tələbəyə yeni gəliş təyin edilir.
+- Qonaq dərs satış və aktiv tələbə deyil; aylıq paket, avtomatik dövr və növbəti ay borcu yaratmır. Pul yalnız həmin dərsin fakturasına ayrılır. Ümumi gəlir və tələbə göstəricilərindən ayrı göstərilir.
+- İştirak və ödəniş tamamlananda faizli müəllimə müqavilə faizi, sabit maaşlı müəllimə əlavə 35% hesablanır. Test ödənişləri real maaş və gəlirdən çıxarılır.
+- Əvvəlki qeydiyyat, scope, idempotency və aylıq tələbənin mövcud paketini qoruma qaydaları saxlanılır.
 
-Schema Vercel bazasında tətbiq olunub; səhifə və düymələr kod deployundan sonra görünəcək. Sintetik DB axını testində qeydiyyat, iştirak, ödəniş və replay yoxlanıb; bütün test qeydləri rollback edilib.
+Schema Vercel bazasında əvvəl tətbiq olunub. Sonrakı kod dəyişikliklərinin deploy statusu bu auditlə təsdiqlənmir.
 
 ## 6. Axtarış
 
@@ -81,8 +79,8 @@ Prisma miqrasiyaları: `20261025190000_single_lessons`, `20261025191000_current_
 ## Owner üçün qısa qəbul addımları
 
 1. Üç əvvəlki problemli profili yeniləyin: borc 0, cari dövr 04.10, növbəti ödəniş 04.11. Gülayda 05.10 / 05.11 olmalıdır.
-2. Kod deployundan sonra `/students/single-lessons`: bir dərs yaradın, iştirak və 25 AZN kimi test üçün seçdiyiniz faktiki ödənişi qeydə alın; ayrıca ikinci dərs planlanmayınca növbəti ay borcu açılmamalıdır. Test pulunu yalnız real qəbzlə daxil edin.
-3. `/crm`: keçən ay yaradılmış, bu ay sınağa yazılmış müraciəti icmalda yoxlayın; müəllim cədvəli və bütün dövrlərin tamamlanmamış görüş sayı görünməlidir.
+2. Kod deployundan sonra [qonaq dərs qəbul addımlarını](guest-lessons.md) izləyin. İşarələnmiş demo profilləri üzərində test ödənişləri real pul və maaşa təsir etmir.
+3. `/crm`: keçən ay yaradılmış, bu ay sınağa yazılmış müraciəti icmalda yoxlayın; mövcud görüş və follow-up göstəricilərini yoxlayın. Ayrı müəllim nəticələri cədvəli çıxarılıb.
 4. Nazlının profilində təhsil pilləsini seçib saxlayın; Hiranın adını şəxsi redaktə rejimində yoxlayın. Axtarışda `Gulay`, `Kerimzade Gulay` və təkrar eyni adı sınayın.
 
 Brauzer/E2E qəbulu owner üstünlüyünə uyğun icra edilməyib. Kod deployu bu audit əməliyyatı tərəfindən edilməyib; DB düzəlişi ilə kodun Vercel-də dərc olunması ayrı statuslardır.

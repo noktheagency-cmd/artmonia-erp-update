@@ -325,6 +325,7 @@ export function StudentCreateDialogClient({
               searchPlaceholder="Müraciət axtar..."
             />
           </label>
+          {guestLesson && selectedLeadId ? <label className="guest-registration-choice"><Checkbox name="confirmMeetingAttended" /><span><strong>Əvvəl təyin edilmiş görüşdə iştirak edib</strong><small>Açıq konsultasiya və ya sınaq görüşü varsa, iştirakı təsdiqləyin.</small></span></label> : null}
 
           <div className="student-create-section">
             <div className="student-create-section-heading">

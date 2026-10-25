@@ -5,8 +5,11 @@
 .guest-registration-choice span { display: grid; gap: 4px; font-size: 13px; }
 .guest-registration-choice small { color: #687386; line-height: 1.5; font-size: 12px; }
 .guest-lesson-badge { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 6px; background: #edf1ff; color: #4a57ad; font-size: 11px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
-.students-guest-link { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #d7e0ea; border-radius: 10px; background: #fff; color: #566078; font-size: 13px; font-weight: 600; transition: color .15s, background .15s, border-color .15s; }
+.students-view-navigation { display:flex; align-items:center; flex-wrap:wrap; gap:12px; min-width:0; }
+.students-guest-link { display: inline-flex; flex:0 0 auto; align-items: center; gap: 7px; padding: 9px 12px; border: 1px solid #d7e0ea; border-radius: 10px; background: #fff; color: #566078; font-size: 12px; font-weight: 600; white-space:nowrap; transition: color .15s, background .15s, border-color .15s; }
 .students-guest-link:hover { background: #eef1ff; color: #4354b5; border-color: #bcc6f0; }
 .students-guest-link:focus-visible { outline: 2px solid #4667e8; outline-offset: 3px; }
 .students-guest-link svg { width: 17px; height: 17px; }
 @media (max-width: 560px) { .guest-lesson-fields { grid-template-columns: minmax(0, 1fr); } }
+
+.guest-test-badge { display:inline-flex; padding:3px 7px; border:1px dashed #cfb270; border-radius:6px; color:#8b6a29; background:#fff9ec; font-size:10px; line-height:1.3; white-space:nowrap; }

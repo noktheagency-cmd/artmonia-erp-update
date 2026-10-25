@@ -1,3 +1,4 @@
+import { visibleGuestStudentWhere } from "@/modules/students/guest-demo-policy";
 import { EnrollmentStatus, StudentLifecycleStatus } from "@/generated/prisma/client";
 import {
   dateFromInput,
@@ -110,7 +111,7 @@ export type PlannerWorkspaceData = {
   today: string;
   selectedSlotId: string;
   slots: PlannerSlot[];
-  guestLessons?: Array<{ id: string; studentId: string; student: string; teacherId: string; teacher: string; date: string; time: string; room: string }>;
+  guestLessons?: Array<{ isTestData?: boolean; id: string; studentId: string; student: string; teacherId: string; teacher: string; date: string; time: string; room: string }>;
   teachers: Array<{ id: string; name: string }>;
   enrollments: PlannerEnrollment[];
   slotDetail: {
@@ -251,13 +252,13 @@ export async function getPlannerWorkspaceData(input?: {
         })
       : Promise.resolve([]),
     prisma.singleLesson.findMany({
-      where: { status: "RESERVED", student: { isTestData: false },
+      where: { status: "RESERVED", student: visibleGuestStudentWhere(),
         lessonDate: { gte: dateFromInput(today), lt: new Date(dateFromInput(today).getTime() + 31 * 86400000) },
         ...(groupReadScope === "ALL" ? {} : { teacherId: teacherId ?? "00000000-0000-0000-0000-000000000000" }),
       },
       take: 100, orderBy: [{ lessonDate: "asc" }, { startTime: "asc" }],
       select: { id: true, studentId: true, teacherId: true, lessonDate: true, startTime: true, room: true,
-        teacher: { select: { fullName: true } }, student: { select: { contact: { select: { fullName: true } } } } },
+        teacher: { select: { fullName: true } }, student: { select: { isTestData: true, contact: { select: { fullName: true } } } } },
     }),
   ]);
 
@@ -620,7 +621,7 @@ export async function getPlannerWorkspaceData(input?: {
     today,
     selectedSlotId,
     slots: plannerSlots,
-    guestLessons: guestLessons.map(lesson => ({ id: lesson.id, studentId: lesson.studentId, student: lesson.student.contact.fullName,
+    guestLessons: guestLessons.map(lesson => ({ isTestData: lesson.student.isTestData, id: lesson.id, studentId: lesson.studentId, student: lesson.student.contact.fullName,
       teacherId: lesson.teacherId, teacher: lesson.teacher.fullName, date: toDateInput(lesson.lessonDate), time: lesson.startTime, room: lesson.room ?? "" })),
     teachers: teachers.map((teacher) => ({ id: teacher.id, name: teacher.fullName })),
     enrollments: enrollments.map((enrollment) => ({

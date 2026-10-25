@@ -1,3 +1,4 @@
+import { visibleGuestStudentWhere } from "@/modules/students/guest-demo-policy";
 import { getPrisma } from "@/server/db/prisma";
 import type { ErpActor } from "@/server/auth/actor";
 import { hasPermission, scopeFor } from "@/server/rbac/permissions";
@@ -149,7 +150,7 @@ export async function getErpCalendarData(
       : Promise.resolve([]),
     hasPermission(actor.permissions, "student.read") || hasPermission(actor.permissions, "attendance.read")
       ? prisma.singleLesson.findMany({
-          where: { lessonDate: { gte: start, lt: end }, status: { not: "CANCELLED" }, student: { isTestData: false },
+          where: { lessonDate: { gte: start, lt: end }, status: { not: "CANCELLED" }, student: visibleGuestStudentWhere(),
             ...(scopeFor(actor.permissions, "student.read") === "ALL" ? {} : { OR: [
               ...(hasPermission(actor.permissions, "student.read") ? [{ student: { managerId: actor.id } }] : []),
               ...(hasPermission(actor.permissions, "attendance.read") ? [{ teacher: { userId: actor.id } }] : []),
@@ -157,7 +158,7 @@ export async function getErpCalendarData(
           },
           orderBy: [{ lessonDate: "asc" }, { startTime: "asc" }], take: 300,
           select: { id: true, studentId: true, lessonDate: true, startTime: true, status: true, room: true,
-            teacher: { select: { fullName: true } }, student: { select: { contact: { select: { fullName: true } } } } },
+            teacher: { select: { fullName: true } }, student: { select: { isTestData: true, contact: { select: { fullName: true } } } } },
         }) : Promise.resolve([]),
   ]);
 
@@ -204,7 +205,7 @@ export async function getErpCalendarData(
     })),
     ...buildSlotEvents(slots, sessions, start, end),
     ...guestLessons.map(lesson => ({
-      id: `guest:${lesson.id}`, kind: "lesson" as const, title: `Qonaq dərs · ${lesson.student.contact.fullName}`,
+      id: `guest:${lesson.id}`, kind: "lesson" as const, title: `Qonaq dərs${lesson.student.isTestData ? " · Test" : ""} · ${lesson.student.contact.fullName}`,
       meta: [lesson.teacher.fullName, lesson.room].filter(Boolean).join(" · "),
       date: dateKey(lesson.lessonDate), time: lesson.startTime, status: lesson.status,
       href: `/students/single-lessons?student=${lesson.studentId}`,

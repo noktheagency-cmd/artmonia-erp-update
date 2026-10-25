@@ -2199,7 +2199,7 @@ function PaymentLedger({
                   <td>{payment.payerName}</td>
                   <td className="finance-money positive">{payment.amount}</td>
                   <td>{payment.paidAt}</td>
-                  <td>{payment.isGuest ? <span className="guest-lesson-badge">Qonaq dərs</span> : payment.paymentMonth}</td>
+                  <td>{payment.isGuest ? <span className="guest-lesson-badge">Qonaq dərs{payment.isTestData ? " · Test" : ""}</span> : payment.paymentMonth}</td>
                   <td><span className="payment-method-chip">{payment.method}</span></td>
                   <td>
                     <ReceiptActions payment={payment} />

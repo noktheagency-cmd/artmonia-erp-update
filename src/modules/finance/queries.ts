@@ -1,3 +1,4 @@
+import { GUEST_DEMO_MARKER } from "@/modules/students/guest-demo-policy";
 import { regularInvoiceSql } from "@/modules/students/guest-lesson-sql";
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
@@ -176,6 +177,7 @@ export type FinanceData = {
   corporateCustomers: Array<{ id: string; name: string }>;
   payments: Array<{
     isGuest?: boolean;
+    isTestData?: boolean;
     sourceKind: "STUDENT" | "WORKSHOP";
     sourceLabel: string;
     sourceHref: string;
@@ -359,6 +361,7 @@ type StaffOptionRow = {
 };
 
 type PaymentRow = {
+  isTestData: boolean;
   receiptPurpose: string;
   id: string;
   studentId: string;
@@ -1066,6 +1069,7 @@ export async function getFinanceData(
         s.lifecycle_status::text as "lifecycleStatus",
         p.payer_name as "payerName",
         p.receipt_purpose as "receiptPurpose",
+        s.is_test_data as "isTestData",
         p.amount,
         to_char(p.paid_at, 'DD.MM.YYYY') as "paidAt",
         to_char(p.paid_at, 'YYYY-MM-DD') as "dateKey",
@@ -1086,7 +1090,10 @@ export async function getFinanceData(
       join erp.contacts c on c.id = s.contact_id
       where p.paid_at >= ${fromDate}
         and p.paid_at < ${endDateExclusive}
-        and s.is_test_data = false
+        and (s.is_test_data = false or (
+          s.is_test_data and s.notes like ${GUEST_DEMO_MARKER + "%"} and p.receipt_purpose='ONE_OFF'
+          and not exists(select 1 from erp.enrollments demo_enrollment where demo_enrollment.student_id=s.id)
+        ))
         ${studentSourceSql}
         ${searchSql.payments}
       order by p.paid_at desc, p.created_at desc
@@ -1461,7 +1468,7 @@ export async function getFinanceData(
       legacyActiveOnlyTotal: formatAmount(activeStudentIncome),
       difference: formatAmount(educationCollectionDifference),
       rows: paymentRows
-        .filter((payment) => payment.lifecycleStatus !== "ACTIVE")
+        .filter((payment) => payment.lifecycleStatus !== "ACTIVE" && payment.receiptPurpose !== "ONE_OFF")
         .map((payment) => ({
           id: payment.id,
           studentName: payment.studentName,
@@ -1587,6 +1594,7 @@ export async function getFinanceData(
       ...paymentRows.map((payment) => ({
       sourceKind: "STUDENT" as const,
       isGuest: payment.receiptPurpose === "ONE_OFF",
+      isTestData: payment.isTestData,
       sourceLabel: payment.receiptPurpose === "ONE_OFF" ? "Qonaq dərs" : "Tələbə ödənişi",
       sourceHref: payment.receiptPurpose === "ONE_OFF" ? `/students/single-lessons?student=${payment.studentId}` : `/students/${payment.studentId}`,
       id: payment.id,

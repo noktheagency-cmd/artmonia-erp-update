@@ -436,11 +436,11 @@ export function PlannerWorkspace({
         </Button>
       </div>
 
-      {data.guestLessons?.length ? <details className={styles.guestVisits}>
+      {data.guestLessons?.length ? <details className={styles.guestVisits} open>
         <summary>Qonaq dərslərin vaxtları <span>Yaxın 31 gün</span></summary>
         <ul>{data.guestLessons.filter(lesson => teacherFilter === "all" || lesson.teacherId === teacherFilter).map(lesson => <li key={lesson.id}>
           <Link href={(`/students/single-lessons?student=${lesson.studentId}`) as Route}>
-            <strong>{lesson.student}</strong><span>{formatNumericDateAz(lesson.date)} · {lesson.time}</span><small>{lesson.teacher}{lesson.room ? ` · ${lesson.room}` : ""}</small>
+            <strong>{lesson.student} <span className={styles.guestBadge}>Qonaq dərs{lesson.isTestData ? " · Test" : ""}</span></strong><span>{formatNumericDateAz(lesson.date)} · {lesson.time}</span><small>{lesson.teacher}{lesson.room ? ` · ${lesson.room}` : ""}</small>
           </Link>
         </li>)}</ul>
         <Link href="/students/single-lessons">Bütün qonaq dərslərə bax</Link>

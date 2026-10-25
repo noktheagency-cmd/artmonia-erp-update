@@ -31,7 +31,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -247,6 +247,7 @@ export function StudentList({ data }: { data: StudentListData }) {
       </section>
 
       <div className="students-view-toolbar">
+        <div className="students-view-navigation">
         <div className="students-tabs" role="tablist" aria-label="Tələbə görünüşü">
           <button
             type="button"
@@ -274,6 +275,7 @@ export function StudentList({ data }: { data: StudentListData }) {
           </button>
         </div>
         <Link className="students-guest-link" href="/students/single-lessons"><CalendarClock aria-hidden="true" />Qonaq dərslər</Link>
+        </div>
         {data.filters.activeCount > 0 ? (
           <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters}>
             <X data-icon="inline-start" />

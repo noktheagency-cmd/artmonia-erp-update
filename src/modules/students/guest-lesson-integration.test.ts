@@ -15,6 +15,8 @@ import { resolveStaffSalarySnapshot } from "@/modules/finance/staff-salary";
 import { recalculateTeacherPayoutsForMonthInTransaction } from "@/modules/hr/teacher-payroll-service";
 import { filteredDailyReportWindow } from "@/modules/dashboard/daily-report-policy";
 import { dailyReportSummarySql } from "@/modules/dashboard/daily-report-sql";
+import { GUEST_DEMO_MARKER, visibleGuestStudentWhere } from "./guest-demo-policy";
+import { queryGuestLessonPayrollLines } from "@/modules/hr/guest-lesson-payroll";
 
 test("guest registration, CRM follow-up, irregular visits, isolated totals and both salary modes", { skip: process.env.RUN_SINGLE_LESSON_DB_TESTS !== "1" }, async () => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL, max: 1 }) });
@@ -88,6 +90,19 @@ test("guest registration, CRM follow-up, irregular visits, isolated totals and b
       await tx.teacherContractRule.updateMany({ where: { teacherId: percentTeacher.id }, data: { salaryPercent: 50 } });
       await recalculateTeacherPayoutsForMonthInTransaction(tx, month, user.id, [percentTeacher.id]);
       assert.equal((await tx.teacherPayout.findUniqueOrThrow({ where: { id: percentPay.id } })).payoutAmount.toFixed(2), "10.00");
+
+      // Visible demos exercise the operational flow without recalculating real payroll.
+      const demo = await registerGuestStudent(tx, { ...base, idempotencyKey: randomUUID(), fullName: `Synthetic demo ${id}`, phone: "0501112233" }, actor);
+      await tx.student.update({ where: { id: demo.studentId }, data: { isTestData: true } });
+      assert.equal(await tx.student.count({ where: { AND: [{ id: demo.studentId }, visibleGuestStudentWhere()] } }), 0, "unmarked test students stay hidden");
+      await tx.student.update({ where: { id: demo.studentId }, data: { notes: `${GUEST_DEMO_MARKER} synthetic` } });
+      assert.equal(await tx.student.count({ where: { AND: [{ id: demo.studentId }, visibleGuestStudentWhere()] } }), 1);
+      const realPayoutBefore = await tx.teacherPayout.findUniqueOrThrow({ where: { id: payout.id }, include: { lines: true } });
+      await paySingleLesson(tx, { ...payment, lessonId: demo.lessonId, requestId: randomUUID() }, actor);
+      await markSingleLesson(tx, { lessonId: demo.lessonId, status: "ATTENDED" }, actor);
+      assert.deepEqual(await tx.teacherPayout.findUniqueOrThrow({ where: { id: payout.id }, include: { lines: true } }), realPayoutBefore);
+      const demoLesson = await tx.singleLesson.findUniqueOrThrow({ where: { id: demo.lessonId } });
+      assert.ok(!(await queryGuestLessonPayrollLines(tx, month, [staticTeacher.id])).some(line => line.paymentId === demoLesson.paymentId));
       throw rollback;
     }, { timeout: 60000 }), error => error === rollback);
   } finally { await prisma.$disconnect(); }

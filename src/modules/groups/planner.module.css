@@ -2214,3 +2214,5 @@ button.historyStatus { cursor: pointer; }
 .guestVisits li span { color:#586581; }
 .guestVisits li small { color:#8a94a5; }
 .guestVisits>a { color:#4354b5; font-size:12px; }
+
+.guestVisits .guestBadge { display:inline-flex; margin-left:8px; padding:3px 7px; border-radius:6px; background:#edf1ff; color:#4a57ad; font-size:10px; font-weight:500; white-space:nowrap; }

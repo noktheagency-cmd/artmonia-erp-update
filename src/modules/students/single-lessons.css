@@ -4,9 +4,13 @@
 .guest-back { display:inline-flex; align-items:center; gap:6px; color:#687386; font-size:12px; }
 .guest-back:hover { color:#4354b5; }
 .guest-ledger { background:#fff; border:1px solid #dce3ee; border-radius:14px; overflow:hidden; }
-.guest-ledger-toolbar { display:flex; gap:10px; align-items:center; padding:18px 20px; border-bottom:1px solid #e9edf4; }
-.guest-search { display:flex; gap:8px; align-items:center; flex:1; max-width:380px; color:#929cad; }
-.guest-search input { width:100%; }
+.guest-ledger-toolbar { display:grid; grid-template-columns:minmax(220px,420px) 190px auto; justify-content:start; gap:10px; align-items:center; padding:18px 20px; border-bottom:1px solid #e9edf4; }
+.guest-search { position:relative; min-width:0; color:#929cad; }
+.guest-search>svg { position:absolute; left:13px; top:50%; transform:translateY(-50%); pointer-events:none; }
+.guest-ledger-toolbar .guest-search input { width:100%; min-width:0; height:40px; border-radius:10px; padding-left:39px; font-size:13px; }
+.guest-status-filter { min-width:0; }
+.guest-ledger-toolbar .guest-status-filter .ui-select-trigger { width:100%; min-height:40px; height:40px; border-radius:10px; font-size:13px; padding:0 12px; }
+.guest-ledger-toolbar>[data-slot="button"] { min-height:40px; height:40px; border-radius:10px; font-size:13px; }
 .guest-ledger-scroll { overflow-x:auto; }
 .guest-ledger-table { border-collapse:collapse; width:100%; min-width:820px; text-align:left; font-size:13px; }
 .guest-ledger-table thead { background:#f7f9fc; color:#7a8597; font-size:11px; }
@@ -37,4 +41,4 @@
 .guest-lesson-detail strong { color:#252d3d; }
 .guest-payment-amount { font-size:28px; font-weight:700; margin:8px 0 22px; }
 .guest-payment-amount span { font-size:14px; font-weight:500; color:#929cad; }
-@media(max-width:640px) { .guest-ledger-toolbar { flex-wrap:wrap; padding:14px; }.guest-search { flex-basis:100%;max-width:none; }.guest-lessons-heading h1{font-size:23px;}.guest-lessons-page{gap:18px;} }
+@media(max-width:640px) { .guest-ledger-toolbar { grid-template-columns:minmax(0,1fr) auto; padding:14px; }.guest-search { grid-column:1 / -1; }.guest-lessons-heading h1{font-size:23px;}.guest-lessons-page{gap:18px;} }

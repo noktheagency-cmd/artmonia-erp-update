@@ -19,7 +19,7 @@ import { bookSingleLessonAction, markSingleLessonAction, paySingleLessonAction }
 export type SingleLessonViewData = {
   q: string; selectedStudent: string; page: number; hasNext: boolean; status: string;
   teachers: Array<{value:string;label:string}>; programs: Array<{value:string;label:string}>;
-  rows: Array<{id:string;studentId:string;code:string;student:string;teacher:string;teacherId:string;program:string;programId:string;date:string;time:string;duration:number;room:string;price:string;status:string;paid:boolean;canMark:boolean;canPay:boolean;canBook:boolean}>;
+  rows: Array<{isTestData?:boolean;id:string;studentId:string;code:string;student:string;teacher:string;teacherId:string;program:string;programId:string;date:string;time:string;duration:number;room:string;price:string;status:string;paid:boolean;canMark:boolean;canPay:boolean;canBook:boolean}>;
 };
 type Row = SingleLessonViewData["rows"][number];
 const statusNames: Record<string, string> = {RESERVED:"Planlaşdırılıb",ATTENDED:"Gəldi",ABSENT:"Gəlmədi",CANCELLED:"Ləğv edilib",NEW:"Dərs təyin edilməyib"};
@@ -44,12 +44,12 @@ export function SingleLessonView({ data }: { data: SingleLessonViewData }) {
       <form method="get" className="guest-ledger-toolbar">
         {data.selectedStudent ? <input type="hidden" name="student" value={data.selectedStudent}/> : null}
         <div className="guest-search"><Search size={17} aria-hidden="true"/><Input name="q" defaultValue={data.q} placeholder="Ad, kod və ya telefon" aria-label="Qonaq dərs axtar" maxLength={80}/></div>
-        <FormSelect name="status" defaultValue={data.status} aria-label="Davamiyyət filtri" options={[{value:"ALL",label:"Bütün qeydlər"},{value:"RESERVED",label:"Planlaşdırılıb"},{value:"ATTENDED",label:"Gəldi"},{value:"ABSENT",label:"Gəlmədi"},{value:"CANCELLED",label:"Ləğv edilib"}]}/>
+        <div className="guest-status-filter"><FormSelect name="status" defaultValue={data.status} aria-label="Davamiyyət filtri" options={[{value:"ALL",label:"Bütün qeydlər"},{value:"RESERVED",label:"Planlaşdırılıb"},{value:"ATTENDED",label:"Gəldi"},{value:"ABSENT",label:"Gəlmədi"},{value:"CANCELLED",label:"Ləğv edilib"}]}/></div>
         <Button type="submit" variant="outline">Göstər</Button>
       </form>
       <div className="guest-ledger-scroll"><table className="guest-ledger-table"><thead><tr><th>Tələbə</th><th>Dərs / müəllim</th><th>Gəliş vaxtı</th><th>Davamiyyət</th><th>Ödəniş</th><th><span className="sr-only">Əməliyyat</span></th></tr></thead><tbody>
         {data.rows.map(row => <tr key={row.id}>
-          <th scope="row"><button type="button" className="guest-student-link" onClick={()=>open(row)}><strong>{row.student}</strong><span>{row.code} <span className="guest-lesson-badge">Qonaq dərs</span></span></button></th>
+          <th scope="row"><button type="button" className="guest-student-link" onClick={()=>open(row)}><strong>{row.student}</strong><span>{row.code} <span className="guest-lesson-badge">Qonaq dərs</span>{row.isTestData ? <span className="guest-test-badge">Test</span> : null}</span></button></th>
           <td><strong>{row.program || "—"}</strong><small>{row.teacher || "Müəllim seçilməyib"}</small></td>
           <td><strong>{row.date ? row.date.split("-").reverse().join(".") : "—"}</strong><small>{row.time}{row.duration ? " · "+row.duration+" dəq." : ""}{row.room ? " · "+row.room : ""}</small></td>
           <td><span className={"guest-status guest-status-"+row.status.toLowerCase()}>{statusNames[row.status]}</span></td>
