@@ -1014,6 +1014,8 @@
 .attendanceForm {
   display: grid;
   min-height: 0;
+  /* Mobile dialogs are flex columns; keep all journal rows in the scroll flow. */
+  flex-shrink: 0;
 }
 
 .attendanceLessonFields {
@@ -1283,7 +1285,9 @@
   text-align: center;
 }
 
-.attendanceFooter {
+.attendanceForm .attendanceFooter {
+  /* Override the shared mobile sheet's !important sticky footer rule. */
+  position: static !important;
   display: flex;
   justify-content: flex-end;
   gap: 12px;

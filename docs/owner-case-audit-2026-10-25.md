@@ -1,5 +1,7 @@
 # Owner halları üzrə audit — 25.10.2026
 
+Sonrakı 18–28-ci hallar və onların tətbiq/yoxlama nəticələri [26 oktyabr auditində](owner-case-audit-2026-10-26.md) saxlanılıb.
+
 ## Əhatə və tətbiq
 
 Hədəf owner-in seçdiyi `https://artmonia-erp.vercel.app/` və verdiyi bağlantı ilə təsdiqlənən `xgxlwbqaojbptrgosxtj` bazasıdır. Əsas `Artmoni-erp-final` bazası ilə eyni tələbə ID-ləri olmasına baxmayaraq, həmin əsas bazaya bu düzəlişlər yazılmayıb. Bağlantı sirrləri fayllarda saxlanılmayıb.

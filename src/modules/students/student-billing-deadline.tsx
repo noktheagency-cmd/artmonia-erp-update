@@ -151,7 +151,10 @@ export function StudentBillingDeadline({ studentId }: { studentId: string }) {
                 <MonthPicker
                   name="month"
                   value={month}
-                  onValueChange={setMonth}
+                  onValueChange={(value) => {
+                    setMonth(value);
+                    reset();
+                  }}
                   allowClear={false}
                   required
                 />
@@ -187,7 +190,9 @@ export function StudentBillingDeadline({ studentId }: { studentId: string }) {
           <p className={styles.note}>
             Keçmiş ayı da seçə bilərsiniz. Ümumi dəyişiklik seçilən aydan
             sonrakı əvvəlki tarix qaydalarını əvəz edir; yalnız-ay seçimi digər
-            aylara təsir etmir. Qısa aylarda son gün istifadə edilir.
+            aylara təsir etmir. Gələn aydan tətbiq etmək üçün həmin ayı seçin;
+            cari ayın ödənişi və mövcud tarix qaydası dəyişməyəcək.
+            Qısa aylarda son gün istifadə edilir.
           </p>
           {error ? (
             <p role="alert" className={styles.error}>
