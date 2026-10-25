@@ -1,5 +1,7 @@
 # Qayıdan köhnə tələbələrin billing yoxlaması — 25.10.2026
 
+> **Son status:** bu ilkin araşdırmadakı plan sonrakı owner təsdiqləri ilə Vercel-in `xgxlwbqaojbptrgosxtj` bazasında tətbiq edilib. Matica üzrə əvvəlki 27 sentyabr məlumatı sonradan düzəldilib: faktiki qayıdış **4 oktyabr**, faktiki ödəniş **bir dəfə 79 AZN** olub. Heydər üçün 4 oktyabrda nağd 100 AZN ayrıca təsdiqlənib və qeydə alınıb. Dörd profilin cari borcu 0 AZN-dir. Son nəticə və qəbul addımları: [owner-case-audit-2026-10-25.md](./owner-case-audit-2026-10-25.md). Aşağıdakı rəqəmlər ilkin araşdırmanın arxiv qeydidir.
+
 ## Tətbiqdə düzəldilən səbəb
 
 `ensureStudentMonthlyInvoicesForPeriod` həm `ACTIVE`, həm də `PAUSED` paketlər üçün yeni faktura yaradırdı. Daha ucuz/yeni paketlə qayıdan tələbədə köhnə paket də eyni aya hesablanır, ödəniş əvvəl yaradılmış köhnə fakturaya ayrılırdı. Yeni aylıq faktura yalnız həmin dövrdə başlamış aktiv paketə yaradılır. Aylıq ödənişin invoice seçimi tələbə və maliyyə səhifələrində, həmçinin ödəniş redaktəsində eyniləşdirilib.
@@ -35,6 +37,6 @@ Cari aktiv paket seçilmiş ayda hələ başlamayıbsa, onun üçün faktura aç
 
 ## Tətbiq vəziyyəti və qəbul
 
-Bu hesabatdakı maliyyə düzəlişləri **hələ canlı DB-yə tətbiq edilməyib**. Tətbiq zamanı tələbə/faktura/bölgü sətirləri yenidən oxunmalı, dəyişmədiyi yoxlanmalı, əlaqəli məlumatların əvvəlki vəziyyəti saxlanmalı və vahid transaction/audit ilə işlənməlidir. Ödəniş cəmi dəyişməməli, orijinal ilk dərs və əvvəlki audit qeydləri saxlanmalıdır. Köhnə səhv borclar UI-da gizlədilmir.
+İlkin plan bu araşdırma hazırlananda tətbiq edilməmişdi. Sonrakı tətbiqdə qeydlər yenidən oxundu, bərpa surəti saxlandı, fingerprint və sətir kilidləri ilə transaction/audit tətbiq edildi. Owner-in ayrıca təsdiqlədiyi Heydər qəbzi və Matica dublikatının çıxarılması pul cəminin auditli dəyişiklikləridir. Qalan pul qeydləri və əvvəlki audit tarixçəsi saxlanıb; səhv borclar UI-da gizlədilməyib.
 
 Qəbul: yeni deploydan sonra yeni aylıq ödənişdə yalnız cari paket hesablanır; keçmiş ay seçiləndə gələcək paket üçün borc yaranmır; status/tarif redaktəsi özlüyündə ödəniş yaratmır. Mövcud üç profilin düzəlişi yuxarıdakı təsdiqlənmiş əməliyyatlara görə ayrıca yoxlanılır.

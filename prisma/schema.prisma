@@ -522,6 +522,7 @@ enum HrNotificationStatus {
 }
 
 model User {
+  singleLessons SingleLesson[] @relation("SingleLessonCreator")
   factualLeadContacts LeadContactEvent[] @relation("LeadContactActor")
   ownedLeadWork LeadWorkItem[] @relation("LeadWorkOwner")
   completedLeadWork LeadWorkItem[] @relation("LeadWorkCompleter")
@@ -1635,6 +1636,7 @@ model LeadStageHistory {
 }
 
 model Program {
+  singleLessons SingleLesson[]
   id                     String   @id @default(uuid()) @db.Uuid
   name                   String   @unique
   code                   String?  @unique
@@ -1712,6 +1714,7 @@ model ProgramPricingVersion {
 }
 
 model Teacher {
+  singleLessons SingleLesson[]
   crmAppointments CrmAppointment[]
   id        String   @id @default(uuid()) @db.Uuid
   userId    String?  @unique @map("user_id") @db.Uuid
@@ -1742,6 +1745,7 @@ model Teacher {
 }
 
 model Student {
+  singleLessons SingleLesson[]
   admissionTracking Boolean @default(false) @map("admission_tracking")
   courseSales CourseSale[]
   fircaExclusion FircaExclusion?
@@ -2307,6 +2311,37 @@ model TeacherAssignmentHistory {
   @@schema("erp")
 }
 
+// Pay-per-visit lessons have no monthly enrollment and cannot start a monthly billing cycle.
+model SingleLesson {
+  id String @id @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  teacherId String @map("teacher_id") @db.Uuid
+  programId String @map("program_id") @db.Uuid
+  lessonDate DateTime @map("lesson_date") @db.Date
+  startTime String @map("start_time")
+  durationMinutes Int @map("duration_minutes")
+  room String
+  price Decimal @db.Decimal(12, 2)
+  status LessonStatus @default(RESERVED)
+  paymentId String? @unique @map("payment_id") @db.Uuid
+  invoiceId String? @unique @map("invoice_id") @db.Uuid
+  requestHash String @map("request_hash") @db.Char(64)
+  createdById String @map("created_by_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  program Program @relation(fields: [programId], references: [id], onDelete: Restrict)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdBy User @relation("SingleLessonCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  @@index([studentId, lessonDate])
+  @@index([teacherId, lessonDate])
+  @@index([lessonDate, status])
+  @@map("single_lessons")
+  @@schema("erp")
+}
+
 model Lesson {
   id              String       @id @default(uuid()) @db.Uuid
   studentId       String       @map("student_id") @db.Uuid
@@ -2506,6 +2541,7 @@ model WorkshopPayment {
 }
 
 model Invoice {
+  singleLesson SingleLesson?
   id             String        @id @default(uuid()) @db.Uuid
   studentId      String        @map("student_id") @db.Uuid
   enrollmentId   String?       @map("enrollment_id") @db.Uuid
@@ -2535,6 +2571,7 @@ model Invoice {
 }
 
 model Payment {
+  singleLesson SingleLesson?
   receiptPurpose String @default("UNCLASSIFIED") @map("receipt_purpose")
   courseSaleId String? @map("course_sale_id") @db.Uuid
   courseSale CourseSale? @relation(fields: [courseSaleId], references: [id], onDelete: Restrict)

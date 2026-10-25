@@ -26,7 +26,6 @@ import {
 import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import { currentBakuMonthStart } from "@/modules/shared/creation-date-policy";
-import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import {
   AVANS_PAYMENT_KIND,
@@ -373,7 +372,7 @@ export function StudentCreateDialogClient({
                   searchable
                   catalogKey="STUDENT_EDUCATION_LEVEL"
                   createLabel="Yeni təhsil səviyyəsi əlavə et"
-                  options={educationLevelOptions}
+                  options={createOptions.educationLevels}
                 />
               </label>
             </div>

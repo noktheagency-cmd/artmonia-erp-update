@@ -4,6 +4,7 @@ import { optionalFormString } from "@/modules/shared/form-values";
 import { normalizePhone } from "@/modules/crm/duplicate-phone";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { PublicActionError } from "@/server/actions/public-action-error";
+import { resolveStudentEducationLevel } from "./education-level-service";
 
 const optionalText = (max: number) => z.preprocess(optionalFormString, z.string().trim().max(max).optional());
 const optionalId = z.preprocess(optionalFormString, z.string().uuid().optional());
@@ -39,21 +40,13 @@ export async function updatePersonalStudentProfile(
   // Manager and campaign are set at create time and are not editable from the student form.
   const managerId = current.managerId;
   const campaignId = current.campaignId;
-  const educationLevel = input.educationLevel
-    ? await tx.dropdownCatalogOption.findUnique({
-        where: { catalog_value: { catalog: "STUDENT_EDUCATION_LEVEL", value: input.educationLevel } },
-        select: { value: true, isActive: true },
-      })
-    : null;
-  if (input.educationLevel && (!educationLevel || (!educationLevel.isActive && input.educationLevel !== current.educationLevel))) {
-    throw new PublicActionError("Təhsil səviyyəsi tapılmadı və ya artıq aktiv deyil.");
-  }
+  const educationLevel = await resolveStudentEducationLevel(tx,input.educationLevel,current.educationLevel);
   const contactData = {
     fullName: input.fullName, phoneDisplay: input.phone, phoneNormalized,
     email: input.email ?? null, source: input.source ?? null,
   };
   const studentData = {
-    managerId, campaignId, educationLevel: input.educationLevel ?? null,
+    managerId, campaignId, educationLevel: educationLevel?.value ?? null,
     registeredAt, notes: input.notes ?? null,
   };
   await tx.contact.update({ where: { id: current.contactId }, data: contactData });

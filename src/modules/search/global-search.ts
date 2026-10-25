@@ -6,6 +6,8 @@ import { getPrisma } from "@/server/db/prisma";
 import type { ErpActor } from "@/server/auth/actor";
 import { scopeFor } from "@/server/rbac/permissions";
 import { TASK_WORKSPACE_EXCLUDED_TYPES } from "@/modules/tasks/task-scope";
+import { normalizeAzerbaijaniSearch } from "@/modules/shared/search-text";
+export { normalizeAzerbaijaniSearch } from "@/modules/shared/search-text";
 
 export const globalSearchKinds = [
   "student",
@@ -89,20 +91,6 @@ function buildSearchContext(query: string): SearchContext {
 
 function cleanSearchQuery(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 80);
-}
-
-export function normalizeAzerbaijaniSearch(value: string) {
-  return value
-    .toLocaleLowerCase("az")
-    .replaceAll("ə", "e")
-    .replaceAll("ğ", "g")
-    .replaceAll("ı", "i")
-    .replaceAll("ö", "o")
-    .replaceAll("ş", "s")
-    .replaceAll("ü", "u")
-    .replaceAll("ç", "c")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
 }
 
 const foldedLettersFrom = "əğıöşüçƏĞIİÖŞÜÇ";

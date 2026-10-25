@@ -1,4 +1,5 @@
 "use server";
+import { resolveStudentEducationLevel } from "./education-level-service";
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
@@ -68,7 +69,7 @@ import { planLifecycleHistoryChange } from "@/modules/students/lifecycle-history
 import { changeReservedFreeze } from "@/modules/students/reserved-freeze-service";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
 import { updatePersonalStudentProfile } from "@/modules/students/personal-profile-service";
-import { planNewStudentPackage } from "@/modules/students/package-return-policy";
+import { openPackageConflictWhere, planNewStudentPackage } from "@/modules/students/package-return-policy";
 import { contractConfirmationSchema, receiptPurposeSchema } from "./course-sale-policy";
 import { recordCourseSalePayment, refundOpenDepositOnDecline } from "./course-sale-service";
 import { lockPaymentStudent, replayPayment, assertAdmissionLeadActor } from "./payment-entry-guard";
@@ -365,17 +366,7 @@ async function createStudentActionImpl(formData: FormData) {
 
       const effectiveMonthlyFee = resolveStudentMonthlyFee(discountType?.value, input.monthlyFee);
 
-    const educationLevel = input.educationLevel
-      ? await tx.dropdownCatalogOption.findUnique({
-          where: {
-            catalog_value: {
-              catalog: "STUDENT_EDUCATION_LEVEL",
-              value: input.educationLevel,
-            },
-          },
-          select: { value: true, isActive: true },
-        })
-      : null;
+    const educationLevel = await resolveStudentEducationLevel(tx,input.educationLevel);
 
     if (input.educationLevel && (!educationLevel || !educationLevel.isActive)) {
       throw new Error("Təhsil səviyyəsi tapılmadı");
@@ -886,17 +877,7 @@ async function updateStudentProfileActionImpl(formData: FormData) {
       effectiveTeacherId
         ? tx.teacher.findUnique({ where: { id: effectiveTeacherId }, select: { id: true } })
         : Promise.resolve(null),
-      input.educationLevel
-        ? tx.dropdownCatalogOption.findUnique({
-            where: {
-              catalog_value: {
-                catalog: "STUDENT_EDUCATION_LEVEL",
-                value: input.educationLevel,
-              },
-            },
-            select: { value: true, isActive: true },
-          })
-        : Promise.resolve(null),
+      resolveStudentEducationLevel(tx,input.educationLevel,current.educationLevel),
       input.discountType
         ? tx.dropdownCatalogOption.findUnique({
             where: {
@@ -1205,6 +1186,7 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
         billingPaused: true,
         billingAnchorDate: true,
         originalFirstLessonAt: true,
+        statusHistory: { where: {eventType:"REACTIVATED"},orderBy:[{effectiveAt:"desc"},{createdAt:"desc"}],take:1,select:{effectiveAt:true} },
       },
     });
     if (!student) throw new PublicActionError("Tələbə tapılmadı.");
@@ -1241,11 +1223,7 @@ async function createStudentEnrollmentActionImpl(formData: FormData) {
           })
         : Promise.resolve(null),
       tx.enrollment.findFirst({
-        where: {
-          studentId: student.id,
-          programId: input.programId,
-          status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
-        },
+        where: openPackageConflictWhere(student.id,input.programId,student.statusHistory[0]?.effectiveAt),
         select: { id: true },
       }),
     ]);
@@ -1599,6 +1577,7 @@ async function createPaymentAndAllocate(
     receiptPurpose?: string;
   }
 ) {
+  if (input.receiptPurpose === "ONE_OFF") throw new PublicActionError("Birdəfəlik dərs ödənişini Birdəfəlik dərslər bölməsində qəbul edin.");
   const paymentStudent = await tx.student.findUnique({
     where: { id: input.studentId },
     select: {
@@ -1653,6 +1632,7 @@ async function createPaymentAndAllocate(
         where: {
           status: { not: InvoiceStatus.VOID },
           balanceDue: { gt: 0 },
+          singleLesson: { is: null },
           ...(input.scheduleType === "MONTHLY" && !allowPreBillingDeposit
             ? monthlyPaymentInvoiceWhere(paymentMonth)
             : {}),

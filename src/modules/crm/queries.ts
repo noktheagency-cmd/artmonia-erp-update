@@ -1,4 +1,6 @@
 import { LeadStage, Prisma } from "@/generated/prisma/client";
+import { nameSearchSql } from "@/modules/shared/search-sql";
+import { meetingAnalyticsSql } from "./meeting-analytics-sql";
 import { unstable_cache } from "next/cache";
 import { getCrmScopeLabel, getLeadReadScope } from "@/modules/crm/access";
 import {
@@ -126,6 +128,10 @@ export type CrmData = {
   stageAllTimeTotal: number;
   /** BK-23: full filtered list size; table may return a page of leads. */
   listTotalCount: number;
+  meetings: {
+    scheduled: number; attended: number; noShow: number; pending: number; overdue: number;
+    teachers: Array<{ teacherId: string | null; teacher: string; scheduled: number; attended: number; noShow: number; successful: number; unsuccessful: number; pending: number }>;
+  };
   attentionFocus: CrmLeadFocusRow[];
   createdTodayFocus: CrmLeadFocusRow[];
   dashboardStats: {
@@ -269,6 +275,7 @@ type CrmCacheInput = {
 };
 
 type CrmRawRow = {
+  meetings: unknown;
   stageCounts: unknown;
   reminderCount: unknown;
   totalLeads: unknown;
@@ -451,6 +458,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
   const consultationPathSales = toNumber(conversionStats?.consultationSales);
   const contactedCount = toNumber(conversionStats?.contactedCount);
   const consultationCount = toNumber(conversionStats?.consultationCount);
+  const meetings = asJsonObject<CrmData["meetings"]>(row?.meetings);
   const trialLessonLeads = toNumber(conversionStats?.trialLessonLeads);
   const trialLessonCount = toNumber(conversionStats?.trialLessonCount);
   const lostCount = toNumber(conversionStats?.lostCount);
@@ -580,6 +588,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     }),
     stageAllTimeTotal,
     listTotalCount,
+    meetings: meetings ?? { scheduled: 0, attended: 0, noShow: 0, pending: 0, overdue: 0, teachers: [] },
     attentionFocus: attentionRows.map((lead) =>
       formatAttentionRow(lead, todayStart, tomorrowStart),
     ),
@@ -600,8 +609,8 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       conversionRate: formatPercent(salesCount, totalLeads),
       contactedCount: formatCount(contactedCount),
       contactRate: formatPercent(contactedCount, totalLeads),
-      meetingCount: formatCount(consultationCount),
-      meetingAttendedCount: formatCount(consultationCount),
+      meetingCount: formatCount(meetings?.scheduled ?? 0),
+      meetingAttendedCount: formatCount(meetings?.attended ?? 0),
       contactToMeetingRate: formatPercent(consultationCount, contactedCount),
       meetingToSaleRate: formatPercent(
         consultationPathSales > 0 ? consultationPathSales : followUpSales,
@@ -765,6 +774,7 @@ function getCrmRawData(
 
   return prisma.$queryRaw<CrmRawRow[]>(Prisma.sql`
     select
+      ${meetingAnalyticsSql(scopeSql, input.periodRange?.gte ?? null, input.periodRange?.lt ?? null, input.todayStart)} as meetings,
       coalesce((
         -- BK-22: mərhələ kartı period filtrindən asılı olmayaraq bütün dövrü göstərir.
         select jsonb_object_agg(summary.stage, summary.total_count)
@@ -809,7 +819,7 @@ function getCrmRawData(
       coalesce((
         select count(*)::int
         from erp.leads l
-        where ${summarySql}
+        where ${scopeSql}
           and l.stage in (
             'NEW'::"erp"."LeadStage",
             'CONTACTED'::"erp"."LeadStage",
@@ -1408,6 +1418,7 @@ function buildCrmListWhereSql(input: {
     const searchPattern = `%${input.search}%`;
     const searchConditions: Prisma.Sql[] = [
       Prisma.sql`c.full_name ilike ${searchPattern}`,
+      nameSearchSql(Prisma.sql`c.full_name`, input.search),
       Prisma.sql`c.phone_display ilike ${searchPattern}`,
       Prisma.sql`l.source ilike ${searchPattern}`,
       Prisma.sql`p.name ilike ${searchPattern}`,

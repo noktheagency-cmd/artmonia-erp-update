@@ -48,6 +48,7 @@ function activationTx(enrollment: {
   firstLessonAt: Date | null;
   billingAnchorDate?: Date | null;
   frozenAtDue?: boolean;
+  admissionTracking?: boolean;
 }) {
   let enrollmentUpdate: unknown;
   const studentUpdates: unknown[] = [];
@@ -69,6 +70,7 @@ function activationTx(enrollment: {
         monthlyFee: 200,
         student: {
           originalFirstLessonAt: enrollment.firstLessonAt,
+          admissionTracking: enrollment.admissionTracking ?? false,
           billingAnchorDate: enrollment.billingAnchorDate === undefined
             ? enrollment.firstLessonAt
             : enrollment.billingAnchorDate,
@@ -218,6 +220,18 @@ test("confirmed return attendance anchors the new period without changing the or
     const nextMonth = new Date(Date.UTC(returned.getUTCFullYear(), returned.getUTCMonth() + 1, 1));
     assert.equal(billingDateForMonth(nextMonth, result.billingAnchorDate).toISOString(), utcDate(scenario.next).toISOString());
   }
+});
+
+test("new admission with an absent planned first day records the actual first lesson as its origin",async()=>{
+  const planned=utcDate("2026-10-01"),actual=utcDate("2026-10-05");
+  const state=activationTx({startDate:planned,firstLessonAt:planned,billingAnchorDate:null,admissionTracking:true});
+  const result=await syncActivationBilling(state.tx,{studentId:"new-student",studentCode:"SYNTH",effectiveAt:actual,useActualLessonDate:true});
+  assert.equal(result.originalFirstLessonAt.toISOString(),actual.toISOString());
+  assert.equal(result.billingAnchorDate.toISOString(),actual.toISOString());
+  assert.deepEqual(state.getStudentUpdates(),[
+    {where:{id:"new-student",billingAnchorDate:null},data:{originalFirstLessonAt:actual}},
+    {where:{id:"new-student"},data:{billingAnchorDate:actual}},
+  ]);
 });
 
 test("completion closes enrollment and outstanding invoices without deleting history", async () => {

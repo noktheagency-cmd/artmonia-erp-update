@@ -129,6 +129,7 @@ export async function activateStudentFromFirstPresent(
     effectiveAt: input.lessonDate,
     isReactivation,
     useActualLessonDate: true,
+    actorId: input.actorId,
   });
   await restartStudentPaymentScheduleForActiveSlot(tx, { studentId: student.id });
 

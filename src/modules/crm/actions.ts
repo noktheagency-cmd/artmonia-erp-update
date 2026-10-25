@@ -1,4 +1,5 @@
 "use server";
+import { resolveStudentEducationLevel } from "@/modules/students/education-level-service";
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
@@ -972,23 +973,7 @@ async function resolveEducationLevelName(
   tx: Prisma.TransactionClient,
   requestedName: string | undefined,
 ) {
-  if (!requestedName) return null;
-
-  const educationLevel = await tx.dropdownCatalogOption.findUnique({
-    where: {
-      catalog_value: {
-        catalog: "STUDENT_EDUCATION_LEVEL",
-        value: requestedName,
-      },
-    },
-    select: { value: true, isActive: true },
-  });
-
-  if (!educationLevel || !educationLevel.isActive) {
-    throw new Error("Təhsil səviyyəsi tapılmadı");
-  }
-
-  return educationLevel.value;
+  return (await resolveStudentEducationLevel(tx,requestedName))?.value ?? null;
 }
 
 function normalizeDateValue(value: string | undefined) {

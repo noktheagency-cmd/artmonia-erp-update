@@ -2228,3 +2228,9 @@ html:not(.dark) .crm-command-page .crm-metric-card { background: #fff !important
   .crm-header-slot { width: 100%; }
   .crm-filter-dialog .crm-filter-selects { grid-template-columns: minmax(0, 1fr); }
 }
+.crm-trial-panel { grid-column: 1 / -1; }
+.crm-trial-table-scroll { overflow-x: auto; }
+.crm-trial-table { width: 100%; border-collapse: collapse; text-align: left; }
+.crm-trial-table :is(th, td) { padding: 12px 16px; border-bottom: 1px solid var(--border, #dce4ef); white-space: nowrap; }
+.crm-trial-table thead { background: var(--surface-soft, #f6f8fb); }
+.crm-trial-note { margin: 12px 16px; font-size: 12px; color: var(--muted-foreground, #66748b); line-height: 1.7; }

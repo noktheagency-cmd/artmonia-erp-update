@@ -1,3 +1,4 @@
+import { nameSearchSql } from "@/modules/shared/search-sql";
 import {
   AppRole,
   EnrollmentStatus,
@@ -2540,6 +2541,7 @@ function buildStudentWhereSql({
     const searchConditions: Prisma.Sql[] = [
       Prisma.sql`s.code ilike ${searchPattern}`,
       Prisma.sql`c.full_name ilike ${searchPattern}`,
+      nameSearchSql(Prisma.sql`c.full_name`, search),
       Prisma.sql`c.phone_display ilike ${searchPattern}`,
     ];
 

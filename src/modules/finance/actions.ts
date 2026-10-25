@@ -877,6 +877,7 @@ async function allocateExistingPayment(
       studentId: input.studentId,
       status: { not: InvoiceStatus.VOID },
       balanceDue: { gt: 0 },
+      singleLesson: { is: null },
       ...(input.scheduleType === "MONTHLY" ? monthlyPaymentInvoiceWhere(input.paymentMonth) : {}),
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
@@ -1082,6 +1083,7 @@ async function createPaymentAndAllocate(
     receiptPurpose?: string;
   }
 ) {
+  if (input.receiptPurpose === "ONE_OFF") throw new PublicActionError("Birdəfəlik dərs ödənişini Birdəfəlik dərslər bölməsində qəbul edin.");
   const paymentStudent = await tx.student.findUnique({
     where: { id: input.studentId },
     select: {
@@ -1135,6 +1137,7 @@ async function createPaymentAndAllocate(
         where: {
           status: { not: InvoiceStatus.VOID },
           balanceDue: { gt: 0 },
+          singleLesson: { is: null },
           ...(input.scheduleType === "MONTHLY" && !allowPreBillingDeposit
             ? monthlyPaymentInvoiceWhere(paymentMonth)
             : {}),

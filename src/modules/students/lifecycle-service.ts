@@ -8,6 +8,8 @@ import {
 import { toNumber } from "@/modules/shared/format";
 import { billingDateForMonth } from "@/modules/students/payment-billing-period";
 import { resolveEnrollmentBillingTerms } from "@/modules/students/enrollment-billing-terms";
+import { setActivationBillingAnchor } from "./activation-billing-anchor";
+import { allocateActivationPayments } from "./activation-payment-allocation";
 
 /**
  * BK-10: FROZEN keeps the seat and continues monthly billing.
@@ -284,6 +286,7 @@ export async function syncActivationBilling(
     isReactivation?: boolean;
     /** BK-06/07: billing and first lesson follow the actual PRESENT date, not the plan. */
     useActualLessonDate?: boolean;
+    actorId?: string | null;
   }
 ) {
   const enrollment = await tx.enrollment.findFirst({
@@ -309,6 +312,7 @@ export async function syncActivationBilling(
         select: {
           originalFirstLessonAt: true,
           billingAnchorDate: true,
+          admissionTracking: true,
         },
       },
     },
@@ -319,10 +323,11 @@ export async function syncActivationBilling(
   }
 
   const useActualLessonDate = Boolean(input.useActualLessonDate);
+  const firstTrackedActivation = useActualLessonDate && !input.isReactivation
+    && enrollment.student.admissionTracking && !enrollment.student.billingAnchorDate;
   const originalFirstLessonAt =
-    enrollment.student.originalFirstLessonAt
-    ?? enrollment.firstLessonAt
-    ?? input.effectiveAt;
+    firstTrackedActivation ? input.effectiveAt : enrollment.student.originalFirstLessonAt
+      ?? enrollment.firstLessonAt ?? input.effectiveAt;
   const currentFirstLessonAt = input.isReactivation || useActualLessonDate
     ? input.effectiveAt
     : enrollment.firstLessonAt ?? input.effectiveAt;
@@ -330,18 +335,19 @@ export async function syncActivationBilling(
     ? input.effectiveAt
     : enrollment.student.billingAnchorDate ?? originalFirstLessonAt;
 
-  if (!enrollment.student.originalFirstLessonAt) {
+  if (!enrollment.student.originalFirstLessonAt || firstTrackedActivation) {
     await tx.student.updateMany({
-      where: { id: input.studentId, originalFirstLessonAt: null },
+      where: { id: input.studentId, ...(firstTrackedActivation ? {billingAnchorDate:null} : {originalFirstLessonAt:null}) },
       data: { originalFirstLessonAt },
     });
   }
 
   if (useActualLessonDate) {
-    await tx.student.update({
-      where: { id: input.studentId },
-      data: { billingAnchorDate },
-    });
+    if (enrollment.student.billingAnchorDate?.getTime() !== billingAnchorDate.getTime()) {
+      await setActivationBillingAnchor(tx, {
+        studentId: input.studentId, lessonDate: billingAnchorDate, actorId: input.actorId,
+      });
+    }
   } else if (!enrollment.student.billingAnchorDate) {
     await tx.student.updateMany({
       where: { id: input.studentId, billingAnchorDate: null },
@@ -420,6 +426,9 @@ export async function syncActivationBilling(
         }),
       },
     });
+    if (useActualLessonDate && toNumber(existingInvoice.balanceDue) > 0) {
+      await allocateActivationPayments(tx, { studentId: input.studentId, enrollmentId: enrollment.id, invoiceId: existingInvoice.id, actorId: input.actorId });
+    }
     return {
       enrollmentId: enrollment.id,
       previousFirstLessonAt: enrollment.firstLessonAt,
@@ -439,7 +448,7 @@ export async function syncActivationBilling(
   });
   const amount = billingTerms.monthlyFee;
 
-  await tx.invoice.create({
+  const createdInvoice = await tx.invoice.create({
     data: {
       studentId: input.studentId,
       enrollmentId: enrollment.id,
@@ -456,6 +465,9 @@ export async function syncActivationBilling(
       idempotencyKey: `student-activation-${input.studentCode}-${periodMonth.toISOString().slice(0, 10)}`,
     },
   });
+  if (useActualLessonDate) {
+    await allocateActivationPayments(tx, { studentId: input.studentId, enrollmentId: enrollment.id, invoiceId: createdInvoice.id, actorId: input.actorId });
+  }
 
   return {
     enrollmentId: enrollment.id,

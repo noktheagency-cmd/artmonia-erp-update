@@ -66,13 +66,13 @@ export function GlobalSearch({
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const cacheRef = useRef(new Map<string, GlobalSearchItem[]>());
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [remoteItems, setRemoteItems] = useState<GlobalSearchItem[]>([]);
   const [recentItems, setRecentItems] = useState<DisplaySearchItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [retry, setRetry] = useState(0);
   const trimmedQuery = query.replace(/\s+/g, " ").trim();
   const normalizedQuery = normalizeText(trimmedQuery);
 
@@ -188,17 +188,8 @@ export function GlobalSearch({
       return;
     }
 
-    const cacheKey = normalizeText(trimmedQuery);
-    const cachedItems = cacheRef.current.get(cacheKey);
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
-      if (cachedItems) {
-        setRemoteItems(cachedItems);
-        setRequestState("ready");
-        setActiveIndex(0);
-        return;
-      }
-
       setRequestState("loading");
 
       try {
@@ -212,8 +203,9 @@ export function GlobalSearch({
         if (!response.ok) {
           throw new Error(payload.error || "Axtarış tamamlana bilmədi.");
         }
+        if (!Array.isArray(payload.items)) throw new Error("Axtarış nəticəsi düzgün deyil.");
 
-        rememberCacheEntry(cacheRef.current, cacheKey, payload.items);
+        if (controller.signal.aborted) return;
         setRemoteItems(payload.items);
         setRequestState("ready");
         setActiveIndex(0);
@@ -224,13 +216,13 @@ export function GlobalSearch({
         setRemoteItems([]);
         setRequestState("error");
       }
-    }, cachedItems ? 0 : 180);
+    }, 180);
 
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [hasRemoteQuery, trimmedQuery]);
+  }, [hasRemoteQuery, trimmedQuery, retry]);
 
   useEffect(() => {
     const activeElement = listRef.current?.querySelector<HTMLElement>("[data-search-active='true']");
@@ -351,18 +343,20 @@ export function GlobalSearch({
           aria-controls="global-search-results"
           aria-activedescendant={open && flatItems[resolvedActiveIndex] ? `global-search-option-${resolvedActiveIndex}` : undefined}
           autoComplete="off"
+          maxLength={80}
           spellCheck={false}
           placeholder="Tələbə, CRM, task, əməkdaş və ya workshop axtar..."
           onChange={(event) => {
             const nextQuery = event.target.value;
             const nextTrimmedQuery = nextQuery.replace(/\s+/g, " ").trim();
             setQuery(nextQuery);
+            if (nextTrimmedQuery !== trimmedQuery) setRemoteItems([]);
             setOpen(true);
             setActiveIndex(0);
             if (nextTrimmedQuery.length < 2) {
               setRemoteItems([]);
               setRequestState("idle");
-            } else {
+            } else if (nextTrimmedQuery !== trimmedQuery) {
               setRequestState("loading");
             }
           }}
@@ -474,12 +468,14 @@ export function GlobalSearch({
           {showNoResults ? (
             <SearchMessage icon={<Search />} title="Nəticə tapılmadı">
               Ad, kod, telefon və ya açar sözü fərqli yazaraq yenidən yoxlayın.
+              <button type="button" onClick={() => setRetry(current => current + 1)}>Yenidən axtar</button>
             </SearchMessage>
           ) : null}
 
           {requestState === "error" ? (
             <SearchMessage icon={<Search />} title="Axtarışa qoşulmaq mümkün olmadı">
               Bir neçə saniyə sonra yenidən cəhd edin.
+              <button type="button" onClick={() => setRetry(current => current + 1)}>Yenidən cəhd et</button>
             </SearchMessage>
           ) : null}
         </div>
@@ -579,14 +575,6 @@ function dedupeItems(items: DisplaySearchItem[]) {
     seen.add(key);
     return true;
   });
-}
-
-function rememberCacheEntry(cache: Map<string, GlobalSearchItem[]>, key: string, items: GlobalSearchItem[]) {
-  if (cache.size >= 20) {
-    const oldestKey = cache.keys().next().value;
-    if (oldestKey) cache.delete(oldestKey);
-  }
-  cache.set(key, items);
 }
 
 function readRecentItems(): DisplaySearchItem[] {

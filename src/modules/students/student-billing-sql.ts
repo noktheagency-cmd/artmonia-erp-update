@@ -87,7 +87,7 @@ export function buildStudentOldestDebtDueDateSql({
 
 /**
  * Returns the oldest unpaid due date. Once everything issued is paid, derives
- * the next monthly date from the immutable first-lesson anchor and the latest
+ * the next monthly date from the current confirmed first-lesson anchor and the latest
  * invoiced period. It never uses slot, group or payment dates as the anchor.
  */
 export function buildStudentNextPaymentDateSql(studentId: Prisma.Sql = Prisma.sql`s.id`) {
@@ -115,6 +115,7 @@ export function buildStudentNextPaymentDateSql(studentId: Prisma.Sql = Prisma.sq
               select (date_trunc('month', max(invoice.period_month)) + interval '1 month')::date
               from erp.invoices invoice
               where invoice.student_id = student.id
+                and not exists (select 1 from erp.single_lessons single_lesson where single_lesson.invoice_id=invoice.id)
                 and invoice.status <> 'VOID'::"erp"."InvoiceStatus"
             ),
             date_trunc('month', student.billing_anchor_date)::date

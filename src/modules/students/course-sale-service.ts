@@ -146,6 +146,7 @@ export async function refundOpenDepositOnDecline(
 }
 
 export async function assertSalePaymentEditable(tx: Prisma.TransactionClient, paymentId: string) {
-  const payment = await tx.payment.findUnique({ where: { id: paymentId }, select: { courseSaleId: true } });
+  const payment = await tx.payment.findUnique({ where: { id: paymentId }, select: { courseSaleId: true, receiptPurpose: true } });
+  if (payment?.receiptPurpose === "ONE_OFF") throw new PublicActionError("Birdəfəlik dərsin ödənişi yalnız həmin dərsin maliyyə düzəlişi ilə dəyişdirilə bilər.");
   if (payment?.courseSaleId) throw new PublicActionError("Satışa bağlı pulun silinməsi, refund və tarix/məbləğ dəyişikliyi bu əməliyyatda mümkün deyil.");
 }

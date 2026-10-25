@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Prisma } from "@/generated/prisma/client";
 import { updatePersonalStudentProfile } from "./personal-profile-service";
-import { planNewStudentPackage } from "./package-return-policy";
+import { openPackageConflictWhere, planNewStudentPackage } from "./package-return-policy";
 import { assertManualStudentStatusTransition, getStudentLifecycleEventType } from "./lifecycle-service";
 
 const studentId = "bedcddf0-a861-44e8-ac09-11713666b80d";
@@ -92,4 +92,10 @@ test("package return preserves permissions and lifecycle invariants", () => {
   assert.throws(() => planNewStudentPackage({ lifecycleStatus: "COMPLETED", billingPaused: true, hasOpenPackages: true, canChangeStatus: true }), /açıq paketi/);
   assert.throws(() => planNewStudentPackage({ lifecycleStatus: "DECLINED", billingPaused: true, hasOpenPackages: false, canChangeStatus: true }), /Slot gözləyir/);
   assert.equal(planNewStudentPackage({ lifecycleStatus: "ACTIVE", billingPaused: false, hasOpenPackages: true, canChangeStatus: false }).enrollmentStatus, "ACTIVE");
+});
+
+test("an old paused base program does not block a returned student's new package",()=>{
+  const returned=new Date("2026-10-04");
+  assert.deepEqual(openPackageConflictWhere("student","base",returned),{studentId:"student",programId:"base",OR:[{status:"ACTIVE"},{status:"PAUSED",startDate:{gte:returned}}]});
+  assert.deepEqual(openPackageConflictWhere("student","base").OR,[{status:"ACTIVE"},{status:"PAUSED"}]);
 });

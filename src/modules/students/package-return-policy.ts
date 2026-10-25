@@ -1,5 +1,15 @@
-import { EnrollmentStatus, StudentLifecycleStatus } from "@/generated/prisma/client";
+import { EnrollmentStatus, StudentLifecycleStatus, type Prisma } from "@/generated/prisma/client";
 import { PublicActionError } from "@/server/actions/public-action-error";
+
+/** A paused package from an older visit must not block the same program on return.
+ * Current ACTIVE packages and drafts from this return still conflict.
+ */
+export function openPackageConflictWhere(studentId: string, programId: string, returnedAt?: Date): Prisma.EnrollmentWhereInput {
+  return { studentId, programId, OR: [
+    {status:EnrollmentStatus.ACTIVE},
+    {status:EnrollmentStatus.PAUSED,...(returnedAt ? {startDate:{gte:returnedAt}} : {})},
+  ] };
+}
 
 export function planNewStudentPackage(input: {
   lifecycleStatus: StudentLifecycleStatus;

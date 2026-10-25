@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileCheck2 } from "lucide-react";
+import Link from "next/link";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormSelect } from "@/components/ui/select";
 import { receiptPurposeLabels, receiptPurposes } from "./receipt-purpose";
@@ -42,11 +43,12 @@ export function ReceiptFields({
           value={purpose}
           onValueChange={(value) => void changePurpose(value)}
           options={receiptPurposes
-            .filter((value) => value !== "UNCLASSIFIED")
+            .filter((value) => value !== "UNCLASSIFIED" && value !== "ONE_OFF")
             .map((value) => ({ value, label: receiptPurposeLabels[value] }))}
           required
         />
       </label>
+      <Link href={studentId ? `/students/single-lessons?student=${studentId}` : "/students/single-lessons"}>Birdəfəlik dərs təyin et və ödənişini qəbul et</Link>
 
       {purpose === "ADMISSION" && leads.length > 0 ? (
         <label className="form-field">

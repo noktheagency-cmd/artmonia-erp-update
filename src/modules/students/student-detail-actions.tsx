@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Banknote,
   BookOpen,
@@ -15,7 +16,7 @@ import {
   Undo2,
   UserRound,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { currentBakuMonthValue, MonthPicker, normalizeMonthValue } from "@/components/ui/month-picker";
@@ -148,7 +149,8 @@ export function StudentDetailActions({
   const lifecycleStatusOpen = useRef(false);
   const [editProgramId, setEditProgramId] = useState(student.detail.programId);
   const [editMonthlyFee, setEditMonthlyFee] = useState(student.detail.monthlyFee);
-  const editingEnrollment = student.detail.hasEditableEnrollment;
+  const [editPackage, setEditPackage] = useState(false);
+  const editingEnrollment = student.detail.hasEditableEnrollment && editPackage;
   const [profileBusy, setProfileBusy] = useState(false);
   const [packageBusy, setPackageBusy] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
@@ -240,6 +242,7 @@ const selectableStatusOptions = firstLessonPending
 
   return (
     <div className="student-actions-row">
+      <Link className={buttonVariants({variant:"outline"})} href={`/students/single-lessons?student=${student.id}`}>Birdəfəlik dərslər</Link>
       <StudentReminderDialog
         studentId={student.id}
         studentName={student.name}
@@ -625,6 +628,7 @@ const selectableStatusOptions = firstLessonPending
           setEditProgramId(student.detail.programId);
           setEditMonthlyFee(student.detail.monthlyFee);
           setEditLifecycleStatus(student.lifecycleStatusValue);
+          setEditPackage(false);
         }
         setEditOpen(value);
       }}>
@@ -715,6 +719,14 @@ const selectableStatusOptions = firstLessonPending
               </div>
             </section>
 
+            {student.detail.hasEditableEnrollment ? (
+              <label className="form-field">
+                <span>
+                  <input type="checkbox" checked={editPackage} onChange={(event) => setEditPackage(event.target.checked)} />
+                  {" "}Cari paket və tədris planını da redaktə et
+                </span>
+              </label>
+            ) : null}
             {editingEnrollment ? (
             <section className="student-create-section">
               <div className="student-detail-section-title">
@@ -857,7 +869,7 @@ const selectableStatusOptions = firstLessonPending
                 </div>
               </details>
             </section>
-            ) : (
+            ) : !student.detail.hasEditableEnrollment ? (
               <section className="student-create-section">
                 <div className="student-detail-section-title">
                   <GraduationCap />
@@ -865,7 +877,7 @@ const selectableStatusOptions = firstLessonPending
                 </div>
                 <Button type="button" variant="outline" onClick={() => { setEditOpen(false); setPackageOpen(true); }}>Yeni paket əlavə et</Button>
               </section>
-            )}
+            ) : null}
 
             <section className="student-create-section">
               <div className="student-detail-section-title">

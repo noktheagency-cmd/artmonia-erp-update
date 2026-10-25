@@ -31,7 +31,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -190,6 +190,7 @@ export function StudentList({ data }: { data: StudentListData }) {
       <h1 id="students-page-title" className="sr-only">Tələbələr və Balans</h1>
       {headerActionsTarget ? createPortal(
           <div className="students-toolbar-actions">
+            <Link className={buttonVariants({variant:"outline"})} href="/students/single-lessons">Birdəfəlik dərslər</Link>
             <StudentFilterForm filterOptions={data.filterOptions} filters={data.filters} />
             {data.permissions.canExport ? (
               <ExportDialog

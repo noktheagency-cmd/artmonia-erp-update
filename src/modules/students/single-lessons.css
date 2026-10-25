@@ -1,0 +1,6 @@
+.single-lesson-table-scroll { overflow-x: auto; }
+.single-lesson-table { width: 100%; border-collapse: collapse; text-align: left; }
+.single-lesson-table :is(th, td) { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.single-lesson-table thead { background: var(--muted); white-space: nowrap; }
+.single-lesson-table form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; min-width: 220px; }
+.single-lesson-table .date-picker { width: 180px; }
