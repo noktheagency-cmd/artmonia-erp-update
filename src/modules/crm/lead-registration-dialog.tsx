@@ -45,7 +45,6 @@ import { isGiftDiscount } from "@/modules/students/student-create-rules";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
 import type { CrmData } from "@/modules/crm/queries";
 import { buildCrmSourceSelectOptions } from "@/modules/crm/source-options";
-import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 
@@ -78,6 +77,7 @@ export function LeadRegistrationDialog({
   const [paymentKind, setPaymentKind] = useState("MONTHLY");
   const [teachers, setTeachers] = useState<{ id: string; fullName: string }[]>([]);
   const [discountTypes, setDiscountTypes] = useState<{ value: string; label: string }[]>([]);
+  const [educationLevels, setEducationLevels] = useState<{ value: string; label: string }[]>([]);
   const [programTerms, setProgramTerms] = useState<Record<string, { monthlyFee: string; lessonsPerMonth: string }>>({});
   const enabled = lead.canConvert && canConvert;
   const gift = isGiftDiscount(discountType);
@@ -95,14 +95,19 @@ export function LeadRegistrationDialog({
     let ignore = false;
 
     async function load() {
-      const result = await listRegistrationPackageOptions();
-      if (ignore || !result.ok) return;
-      setTeachers(result.data.teachers);
-      setDiscountTypes(result.data.discountTypes);
-      setProgramTerms(Object.fromEntries(result.data.programs.map((program) => [
-        program.id,
-        { monthlyFee: program.monthlyFee, lessonsPerMonth: program.lessonsPerMonth },
-      ])));
+      try {
+        const data = unwrapActionResult(await listRegistrationPackageOptions());
+        if (ignore) return;
+        setTeachers(data.teachers);
+        setDiscountTypes(data.discountTypes);
+        setEducationLevels(data.educationLevels);
+        setProgramTerms(Object.fromEntries(data.programs.map((program) => [
+          program.id,
+          { monthlyFee: program.monthlyFee, lessonsPerMonth: program.lessonsPerMonth },
+        ])));
+      } catch (error) {
+        if (!ignore) notifyCaughtError(error, "Qeydiyyat seçimləri yüklənmədi.");
+      }
     }
 
     void load();
@@ -253,8 +258,11 @@ export function LeadRegistrationDialog({
                     name="educationLevel"
                     defaultValue={lead.detail.educationLevel}
                     emptyLabel="Təhsil səviyyəsi seçilməyib"
-                    options={educationLevelOptions}
+                    options={educationLevels}
                     searchable
+                    searchPlaceholder="Təhsil səviyyəsi axtar..."
+                    catalogKey="STUDENT_EDUCATION_LEVEL"
+                    createLabel="Yeni təhsil səviyyəsi əlavə et"
                   />
                 </Field>
               </FieldGroup>

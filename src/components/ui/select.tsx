@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { cx } from "@/components/ui/cx";
+import { resolveSelectValueItem } from "@/components/ui/select-value";
 import {
   Dialog,
   DialogContent,
@@ -690,7 +691,7 @@ function FormSelectState({
         }
       : null;
     const visibleItems = createItem ? [...filteredItems, createItem] : filteredItems;
-    const selectedItem = items.find((item) => item.value === currentValue) ?? null;
+    const selectedItem = resolveSelectValueItem(items, currentValue, emptyValue, displayLabel);
     const comboboxLabel = ariaLabel ?? searchPlaceholder;
 
     return (

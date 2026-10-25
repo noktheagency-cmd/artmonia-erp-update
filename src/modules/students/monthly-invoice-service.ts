@@ -120,18 +120,24 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
     requestedMonth: input.requestedPeriodMonth,
     billingAnchorDate,
   });
-  const [dueRule] = await tx.$queryRaw<Array<{ dueDate: Date; billable: boolean }>>(Prisma.sql`
-    select erp.student_payment_due_date(${input.studentId}::uuid,${periodMonth}::date) as "dueDate",
-      erp.student_is_billable_on_date(
-        ${input.studentId}::uuid,${billingDateForMonth(periodMonth, billingAnchorDate)}::date
+  const enrollments = student.enrollments.filter((enrollment) => enrollment.startDate < nextBillingMonth(periodMonth));
+  if (enrollments.length === 0) return periodMonth;
+  const dueRules = await tx.$queryRaw<Array<{ enrollmentId: string; dueDate: Date; billable: boolean }>>(Prisma.sql`
+    select e.id::text as "enrollmentId",
+      erp.student_payment_due_date(${input.studentId}::uuid,${periodMonth}::date) as "dueDate",
+      erp.student_is_billable_on_date(${input.studentId}::uuid,
+        greatest(${billingDateForMonth(periodMonth, billingAnchorDate)}::date,e.start_date)
       ) as billable
+    from erp.enrollments e
+    where e.student_id=${input.studentId}::uuid and e.status='ACTIVE'::"erp"."EnrollmentStatus"
+      and e.id in (${Prisma.join(enrollments.map((enrollment) => Prisma.sql`${enrollment.id}::uuid`))})
   `);
-  if (dueRule?.billable === false) return periodMonth;
-  const dueDate = dueRule?.dueDate ?? billingDateForMonth(periodMonth, billingAnchorDate);
 
-  for (const enrollment of student.enrollments) {
-    // Explicit historical payments must not create invoices for a later package.
-    if (enrollment.startDate >= nextBillingMonth(periodMonth)) continue;
+  for (const enrollment of enrollments) {
+    const dueRule = dueRules.find((rule) => rule.enrollmentId === enrollment.id);
+    if (!dueRule) throw new PublicActionError("Paket məlumatı dəyişib. Ödənişi yenidən yoxlayın.", "CONFLICT");
+    if (!dueRule.billable) continue;
+    const dueDate = dueRule.dueDate ?? billingDateForMonth(periodMonth, billingAnchorDate);
     const existing = await tx.invoice.findFirst({
       where: {
         studentId: input.studentId,

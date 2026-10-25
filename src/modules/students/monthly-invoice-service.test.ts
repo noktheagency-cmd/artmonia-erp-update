@@ -47,7 +47,9 @@ test("prepayment anchors billing to the confirmed first lesson before activation
         invoiceCreate = args;
       },
     },
-    $queryRaw: async () => [],
+    $queryRaw: async (query: Prisma.Sql) => query.sql.includes("student_payment_due_date")
+      ? [{ enrollmentId: "enrollment-1", dueDate: firstLessonAt, billable: true }]
+      : [],
   } as unknown as Prisma.TransactionClient;
 
   const periodMonth = await ensureStudentMonthlyInvoicesForPeriod(tx, {

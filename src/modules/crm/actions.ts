@@ -1031,7 +1031,7 @@ export const deleteLeadAction = safeServerAction(
 export const listRegistrationPackageOptions = safeServerAction(async () => {
   await requireMutationActor("crm.lead.convert");
   const today = new Date();
-  const [teachers, discountTypes, programs] = await Promise.all([
+  const [teachers, discountTypes, programs, educationLevels] = await Promise.all([
     getPrisma().teacher.findMany({
       where: { isActive: true },
       select: { id: true, fullName: true },
@@ -1060,11 +1060,17 @@ export const listRegistrationPackageOptions = safeServerAction(async () => {
       },
       orderBy: { name: "asc" },
     }),
+    getPrisma().dropdownCatalogOption.findMany({
+      where: { catalog: "STUDENT_EDUCATION_LEVEL", isActive: true },
+      select: { value: true, label: true },
+      orderBy: [{ label: "asc" }, { createdAt: "asc" }],
+    }),
   ]);
 
   return {
     teachers,
     discountTypes,
+    educationLevels,
     programs: programs.map((program) => ({
       id: program.id,
       monthlyFee: String(program.pricingVersions[0]?.monthlyFee ?? program.defaultMonthlyFee),

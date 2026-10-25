@@ -38,7 +38,7 @@ function monthlyTx(options: { paused?: boolean; status?: string; start?: string;
       create: async (args: { data: { enrollmentId: string; amount: number } }) => { created.push(args); },
     },
     $queryRaw: async (query: Prisma.Sql) => query.sql.includes("student_payment_due_date")
-      ? [{ dueDate: date("2026-10-27"), billable: options.billable ?? true }]
+      ? [{ enrollmentId: "new-package", dueDate: date("2026-10-27"), billable: options.billable ?? true }]
       : [],
   } as unknown as Prisma.TransactionClient;
   return { tx, created, seen };
@@ -76,4 +76,14 @@ test("seat-reserving freeze continues to bill its active package", async () => {
   const state = monthlyTx({ status: "FROZEN", billable: true });
   await ensureStudentMonthlyInvoicesForPeriod(state.tx, { studentId: "student-test", requestedPeriodMonth: date("2026-10-01"), asOfDate: date("2026-10-04") });
   assert.equal(state.created.length, 1);
+});
+
+test("a package changed during billing fails closed without creating a charge", async () => {
+  const state = monthlyTx();
+  state.tx.$queryRaw = (async () => []) as typeof state.tx.$queryRaw;
+  await assert.rejects(
+    ensureStudentMonthlyInvoicesForPeriod(state.tx, { studentId: "student-test", requestedPeriodMonth: date("2026-10-01"), asOfDate: date("2026-10-04") }),
+    /Paket məlumatı dəyişib/,
+  );
+  assert.deepEqual(state.created, []);
 });

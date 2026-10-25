@@ -533,6 +533,7 @@ html body .erp-frame .crm-leads-table .crm-status-cell > .status-chip {
 .crm-list-dates-fields .ui-field { min-width: 0; gap: 6px; }
 .crm-list-dates-fields .ui-field-label { color: var(--crm-muted); font-size: 11px; font-weight: 600; line-height: 1.4; }
 .crm-list-dates-fields :is(.ui-select-trigger, .date-picker-trigger) { width: 100%; min-width: 0; height: 40px; min-height: 40px; padding-inline: 12px; border-radius: 10px; font-size: 13px; font-weight: 550; }
+.crm-list-dates-fields .date-picker-trigger { padding-inline-start: 36px; }
 .crm-list-date-apply[data-slot="button"] { min-width: 110px; height: 40px; padding-inline: 16px; border-radius: 10px; font-size: 13px; }
 .crm-list-dates-footer { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--border); }
 .crm-list-date-presets { display: flex; flex-wrap: wrap; gap: 6px; }

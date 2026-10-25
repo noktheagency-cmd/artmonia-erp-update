@@ -56,6 +56,9 @@ function activationTx(enrollment: {
     $queryRaw: async () => [],
     studentStatusHistory: { findFirst: async () => enrollment.frozenAtDue ? { newStatus: "FROZEN" } : null },
     student: {
+      update: async (args: unknown) => {
+        studentUpdates.push(args);
+      },
       updateMany: async (args: unknown) => {
         studentUpdates.push(args);
       },
@@ -192,6 +195,29 @@ test("reactivation keeps the original lesson date and starts a new current perio
     getStatusChangeReason("ACTIVE", "FROZEN"),
     "Tələbə yenidən aktiv edildi",
   );
+});
+
+test("confirmed return attendance anchors the new period without changing the original first lesson", async () => {
+  for (const scenario of [
+    { original: "2026-08-11", returned: "2026-10-04", next: "2026-11-04" },
+    { original: "2026-04-01", returned: "2026-09-27", next: "2026-10-27" },
+  ]) {
+    const original = utcDate(scenario.original);
+    const returned = utcDate(scenario.returned);
+    const state = activationTx({ startDate: original, firstLessonAt: original });
+    const result = await syncActivationBilling(state.tx, {
+      studentId: "student-test", studentCode: "ART-TEST", effectiveAt: returned,
+      isReactivation: true, useActualLessonDate: true,
+    });
+    assert.equal(result.originalFirstLessonAt.toISOString(), original.toISOString());
+    assert.equal(result.billingAnchorDate.toISOString(), returned.toISOString());
+    assert.deepEqual(state.getStudentUpdates(), [{ where: { id: "student-test" }, data: { billingAnchorDate: returned } }]);
+    const invoice = state.getInvoiceUpdate() as { data: { dueDate: Date } };
+    assert.equal(invoice.data.dueDate.toISOString(), returned.toISOString());
+    const { billingDateForMonth } = await import("./payment-billing-period");
+    const nextMonth = new Date(Date.UTC(returned.getUTCFullYear(), returned.getUTCMonth() + 1, 1));
+    assert.equal(billingDateForMonth(nextMonth, result.billingAnchorDate).toISOString(), utcDate(scenario.next).toISOString());
+  }
 });
 
 test("completion closes enrollment and outstanding invoices without deleting history", async () => {
