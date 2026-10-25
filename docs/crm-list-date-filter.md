@@ -2,7 +2,7 @@
 
 Müraciət Siyahısı bölməsində ayrıca tarix sətri var. İlkin seçim cari Bakı ayının ilk və son günüdür. “Yaradılma tarixi” müraciətin əlavə olunduğu tarixə, “Növbəti addım / görüş tarixi” isə cari planın `leads.next_follow_up_at` tarixinə görə süzür. Görüş planlaşdırma əməliyyatı həmin sahəni görüşün tarixi ilə sinxronlaşdırır; zəng və digər izləmə planları da bu tarix filtrinə daxildir. Bitmiş/ləğv edilmiş görüş tarixçəsi bu filtrin mənbəyi deyil.
 
-“Növbəti həftənin planları” gələn bazar ertəsindən bazar gününədək, “Gələn ayın planları” gələn ayın bütün günlərini seçir və plan tarixini tətbiq edir. İstənilən həftə və ay üçün başlanğıc/bitmə tarixlərini ayrıca seçmək olar. “Bütün tarixlər” cədvəlin tarix məhdudiyyətini götürür; digər status, məsul və axtarış filtrləri saxlanır.
+“Növbəti həftə” gələn bazar ertəsindən bazar gününədək, “Gələn ay” gələn ayın bütün günlərini seçir və plan tarixini tətbiq edir. İstənilən həftə və ay üçün başlanğıc/bitmə tarixlərini ayrıca seçmək olar. “Bütün tarixlər” cədvəlin tarix məhdudiyyətini götürür; digər status, məsul və axtarış filtrləri saxlanır. Aktiv sürətli seçim fərqlənir. Tarix sahələri və tətbiq düyməsi eyni ölçüdədir, dar ekranda sahələr uyğun sıralanır.
 
 URL parametrləri: `listDateBy=created|planned`, `listFrom=YYYY-MM-DD`, `listTo=YYYY-MM-DD`. Yenilənmə, profil əməliyyatından geri dönüş və filtrli ixrac seçimi bu parametrləri saxlayır. Sorğunun cache açarında tarix növü və aralığı ayrıca iştirak edir. Başlanğıc daxil, bitmədən sonrakı Bakı gecə yarısı xaricdir. Yanlış tarix və tərs aralıq bütün siyahını açmır: nəticə boş və səhv mesajı görünür.
 
@@ -10,8 +10,8 @@ Açıq tətbiq edilmiş tarix aralığı ciddi filtrdir: kritik prioritet və ko
 
 ## İstifadəçi yoxlaması
 
-1. CRM → Müraciət Siyahısı → “Gələn ayın planları”: əvvəlki aylarda yaradılmış, gələn aya görüş/izləmə planı olan müraciət görünməlidir.
-2. “Növbəti həftənin planları”: başlanğıc bazar ertəsi, bitmə bazar günü olmalıdır. Aylararası həftə də tam göstərilməlidir.
+1. CRM → Müraciət Siyahısı → “Gələn ay”: əvvəlki aylarda yaradılmış, gələn aya görüş/izləmə planı olan müraciət görünməlidir.
+2. “Növbəti həftə”: başlanğıc bazar ertəsi, bitmə bazar günü olmalıdır. Aylararası həftə də tam göstərilməlidir.
 3. “Tarix növü”nü və sərbəst aralığı dəyişib “Tətbiq et” seçin; axtarış/status/məsul filtri və səhifə yeniləməsi aralığı saxlamalıdır.
 4. “Bütün tarixlər”dən sonra tarix xaricindəki filtrlər qalmalıdır; profil modalı həmin müraciətin planını göstərməlidir.
 
