@@ -1358,20 +1358,24 @@ function buildCrmListWhereSql(input: {
     Prisma.sql`l.converted_student_id is null`,
     // Ödənişli qeydiyyat follow-updan çıxır — tələbələr siyahısında (slot gözləyir) görünür.
     Prisma.sql`l.stage <> 'REGISTERED'::"erp"."LeadStage"`,
-    Prisma.sql`(
-      (${periodSql})
-      or (
-        l.created_at >= ${createdTodayFrom}
-        and l.created_at < ${createdTodayUntil}
-      )
-      or (
-        l.priority = 'CRITICAL'::"erp"."LeadPriority"
-        and l.stage not in (
-          'REGISTERED'::"erp"."LeadStage",
-          'LOST'::"erp"."LeadStage"
-        )
-      )
-    )`,
+    // Konsultasiya/Sınaq kartı all-time say göstərir; onun siyahısı da eyni
+    // mərhələ üzrə bütün açıq müraciətləri göstərməlidir, period filtri say fərqi yaratmasın.
+    input.stageFilter === consultationTrialStage
+      ? Prisma.sql`true`
+      : Prisma.sql`(
+          (${periodSql})
+          or (
+            l.created_at >= ${createdTodayFrom}
+            and l.created_at < ${createdTodayUntil}
+          )
+          or (
+            l.priority = 'CRITICAL'::"erp"."LeadPriority"
+            and l.stage not in (
+              'REGISTERED'::"erp"."LeadStage",
+              'LOST'::"erp"."LeadStage"
+            )
+          )
+        )`,
   ];
 
   if (input.search.length > 0) {

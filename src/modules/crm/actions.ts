@@ -417,8 +417,17 @@ async function updateLeadActionImpl(formData: FormData) {
     const followUpClosed = Boolean(current.convertedStudentId)
       || input.stage === LeadStage.REGISTERED
       || input.stage === LeadStage.LOST;
-    const plannedAt = followUpClosed ? null : followUpAt;
-    const plannedAction = followUpClosed ? null : nextActionType ?? null;
+    // A scheduled CRM appointment is the source of truth for the next follow-up.
+    // The profile form can contain stale nextFollowUpDate values when an appointment
+    // was scheduled in the Meetings tab, so do not let saving profile fields restore
+    // an older date over the appointment plan.
+    const scheduledAppointment = followUpClosed ? null : await tx.crmAppointment.findFirst({
+      where: { leadId: current.id, outcome: "SCHEDULED" },
+      orderBy: [{ plannedAt: "desc" }, { createdAt: "desc" }],
+      select: { plannedAt: true },
+    });
+    const plannedAt = followUpClosed ? null : scheduledAppointment?.plannedAt ?? followUpAt;
+    const plannedAction = followUpClosed ? null : scheduledAppointment ? "CONSULTATION_REMINDER" : nextActionType ?? null;
     await syncLeadWorkPlan(tx, { leadId: current.id, ownerId: managerId, kind: plannedAction, plannedAt,
       closed: followUpClosed });
 
