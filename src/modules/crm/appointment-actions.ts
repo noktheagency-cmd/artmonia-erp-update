@@ -9,6 +9,7 @@ import { appointmentSchema, appointmentInstant } from "./appointment-policy";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { appointmentHistory } from "./appointment-history";
+import { assertAppointmentReplay, materializeLeadMeetingPlan } from "./appointment-plan";
 
 export const listAppointments = safeServerAction(async (leadId: string) => {
   const actor = await requireErpActor("crm.lead.read");
@@ -28,7 +29,7 @@ export const listAppointments = safeServerAction(async (leadId: string) => {
 export const saveAppointment = safeServerAction(async (formData: FormData) => {
   const actor = await requireMutationActor("crm.lead.update");
   const input = appointmentSchema.parse(Object.fromEntries(formData));
-  const now = new Date(), plannedAt = appointmentInstant(input.date, input.time);
+  const now = new Date(), plannedAt = input.leadPlanAt ? new Date(input.leadPlanAt) : appointmentInstant(input.date, input.time);
   const occurredAt = input.occurredDate && input.occurredTime ? appointmentInstant(input.occurredDate, input.occurredTime) : null;
   if (occurredAt && occurredAt > now) throw new PublicActionError("Gələcək faktiki nəticə qeyd edilə bilməz.");
   await getPrisma().$transaction(async (tx) => {
@@ -38,13 +39,14 @@ export const saveAppointment = safeServerAction(async (formData: FormData) => {
     const replay = await tx.auditLog.findFirst({ where: { entityId: lead.id, action: "lead.appointment.save", afterJson: { path: ["requestKey"], equals: input.idempotencyKey } } });
     if (replay) {
       const previous = replay.afterJson as Record<string, unknown>;
-      for (const field of ["leadId","date","time","kind","outcome","teacherId","occurredDate","occurredTime","reason"] as const) if ((previous[field] ?? "") !== (input[field] ?? "")) throw new PublicActionError("Təkrar görüş əməliyyatının məlumatları fərqlidir.");
-      if (replay.actorUserId !== actor.id) throw new PublicActionError("Əməliyyat açarı başqa əməkdaşa aiddir.");
+      assertAppointmentReplay(previous, input, actor.id, replay.actorUserId);
       return;
     }
     if (!lead.managerId) throw new PublicActionError("Müraciətin sahibi seçilməlidir.");
     if (input.teacherId && !await tx.teacher.findUnique({ where: { id: input.teacherId, isActive: true } })) throw new PublicActionError("Aktiv müəllim seçin.");
-    const before = input.appointmentId ? await tx.crmAppointment.findUnique({ where: { id: input.appointmentId } }) : null;
+    const before = input.leadPlanAt
+      ? await materializeLeadMeetingPlan(tx, lead, input)
+      : input.appointmentId ? await tx.crmAppointment.findUnique({ where: { id: input.appointmentId } }) : null;
     if (input.appointmentId && (!before || before.leadId !== lead.id)) throw new PublicActionError("Bu görüş müraciətə aid deyil.");
     if (before?.outcome === "RESCHEDULED") throw new PublicActionError("Təxirə salınmış qeydin yeni görüşünü seçin.");
     if (before && before.outcome !== "SCHEDULED") throw new PublicActionError("Tamamlanmış görüş tarixçəsi saxlanılır. Yeni görüşü ayrıca təyin edin.");
@@ -99,8 +101,9 @@ export const saveAppointment = safeServerAction(async (formData: FormData) => {
       });
     }
     await writeAuditLog(tx, { actorUserId: actor.id, action: "lead.appointment.save", entityType: "lead", entityId: lead.id,
-      before: before ? { id: before.id, plannedAt: before.plannedAt.toISOString(), outcome: before.outcome, occurredAt: before.occurredAt?.toISOString() ?? null } : null,
-      after: { ...input, requestKey: input.idempotencyKey, appointmentId: saved.id } });
+      before: input.leadPlanAt ? { source: "LEAD_PLAN", plannedAt: input.leadPlanAt, nextActionType: lead.nextActionType }
+        : before ? { id: before.id, plannedAt: before.plannedAt.toISOString(), outcome: before.outcome, occurredAt: before.occurredAt?.toISOString() ?? null } : null,
+      after: { ...input, requestKey: input.idempotencyKey, requestedAppointmentId: input.appointmentId ?? null, appointmentId: saved.id } });
   }).catch((error: unknown) => {
     if (error instanceof PublicActionError) throw error;
     const message = error instanceof Error ? error.message : "";

@@ -1,36 +1,134 @@
 import Link from "next/link";
-import type { Route } from "next";
-import { ArrowRight, BookOpen, Users, CalendarClock, UserRoundCheck, CreditCard, GraduationCap, RefreshCw, BellRing, Wallet, BriefcaseBusiness, Layers3, ClipboardList } from "lucide-react";
-import { requireErpActor } from "@/server/auth/actor";
+import { ArrowLeft, ArrowRight, BookOpen, CheckCheck, ChevronDown, CircleCheck, Info, ListOrdered } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { requireErpPageActor } from "@/server/auth/page-actor";
 import { can } from "@/server/rbac/permissions";
+import { guideResources, guideStages } from "@/modules/guide/workflow";
 import "./guide.css";
 
 export const dynamic = "force-dynamic";
 
-const sections = [
-  { id: "crm", title: "Müraciət və CRM", description: "Yeni müraciətin yaradılması, mənbə və proqram seçimi, məsul şəxsin təyin edilməsi, status və prioritetin idarəsi.", icon: Users, href: "/crm", steps: ["Müraciət yaradın və əlaqə məlumatlarını yoxlayın.", "Müraciətin mənbəyini, maraqlandığı proqramı, məsul əməkdaşı və prioriteti qeyd edin.", "Statusu yeniləyin; hər əlaqə cəhdini və nəticəni tarixçədə saxlayın."] },
-  { id: "contact", title: "Əlaqə və görüş planı", description: "Telefon əlaqəsi, görüş/konsultasiya/sınaq dərsi planı və nəticəsinin izlənməsi.", icon: CalendarClock, href: "/crm", steps: ["Müraciəti açın və Əlaqə və ya Görüş bölməsinə keçin.", "Görüş tarixini və saatını təyin edib yadda saxlayın.", "Təyin edilmiş tarix xatırlatma siyahılarında həmin gün görünməlidir: gələcək tarix sabahkı planlarda, cari tarix bugünkü planlarda.", "Görüş baş tutdu/baş tutmadı nəticəsini qeyd edin və növbəti addımı yeniləyin."] },
-  { id: "registration", title: "Qeydiyyat və tələbəyə çevirmə", description: "Müraciətdən tələbə profilinə keçid və təhsil məlumatlarının rəsmiləşdirilməsi.", icon: UserRoundCheck, href: "/crm", steps: ["Müraciətin əlaqə və proqram məlumatlarını təsdiqləyin.", "Qeydiyyat/çevirmə əməliyyatını başladın; dublikat tələbə və natamam məlumatları yoxlayın.", "Çevirmədən sonra tələbə profilini Tələbələr bölməsində açın.", "Tələbəyə uyğun proqram, qrup və müəllim təyinatını yoxlayın."] },
-  { id: "students", title: "Tələbə, qrup və müəllim", description: "Tələbə profili, qrup yerləşdirmə, müəllim transferi və proqram dəyişiklikləri.", icon: GraduationCap, href: "/students", steps: ["Tələbələr bölməsindən profili açın və aktiv qeydiyyatı yoxlayın.", "Qrup təyin edərkən proqram, səviyyə, cədvəl və tutumu uyğunlaşdırın.", "Müəllim transferində əvvəlki və yeni müəllimi, qüvvəyə minmə tarixini və səbəbi qeyd edin.", "Proqram dəyişikliyini yalnız tələbənin razılığı, uyğunluq və maliyyə/qrup təsirləri yoxlanandan sonra edin.", "İkinci proqram əlavə edilirsə, ayrıca proqram qeydiyyatı yaradın; mövcud proqramı səssizcə əvəz etməyin."] },
-  { id: "payments", title: "Ödəniş və geri qaytarma", description: "Ödənişlərin qeydiyyatı, üsullar, borc qalığı və geri ödəniş nəzarəti.", icon: CreditCard, href: "/finance", steps: ["Maliyyə bölməsində tələbəni və müvafiq hesab/fakturanı seçin.", "Ödəniş üsulunu ayrıca göstərin: nağd, bank kartı/POS, bank köçürməsi və ya digər sistemdə aktiv üsul.", "Məbləği, tarixi, valyutanı və qəbz/referans məlumatını daxil edib təsdiqləyin.", "Qismən ödənişdə qalıq borcu yoxlayın; ödənişi təkrar daxil etməyin.", "Geri ödənişdə ilkin əməliyyata istinad, məbləğ, səbəb və təsdiq qeyd olunmalıdır; icazəsiz silmə ilə əvəz etməyin."] },
-  { id: "reminders", title: "Xatırlatmalar və bildirişlər", description: "Bugünkü və sabahkı planlar, gecikmiş əlaqələr və sistem bildirişləri.", icon: BellRing, href: "/crm", steps: ["Xatırlatma planlaşdırılmış tarixə əsaslanmalıdır, köhnə növbəti-addım mətninə yox.", "Bu gün üçün tarixli əlaqə/görüş bugünkü planlarda, sabah üçün olan sabahkı planlarda görünür.", "Tarixi dəyişdikdə siyahı və müraciətin növbəti addımı eyni mənbədən yenilənməlidir.", "Bildirişlər panelində oxunmamış bildirişləri izləyin və lazım olduqda oxunmuş kimi işarələyin."] },
-  { id: "finance", title: "Maliyyənin idarə olunması", description: "Gəlir, xərc, borc, ödəniş və maliyyə hesabatları.", icon: Wallet, href: "/finance", steps: ["Gəlir və xərcləri düzgün kateqoriya və tarixlə qeyd edin.", "Tələbə ödənişlərini və borc qalıqlarını maliyyə əməliyyatları ilə tutuşdurun.", "Geri qaytarma və düzəlişlərdə səbəb/audit izini qoruyun.", "Dövr, filial və kateqoriya filtrləri ilə hesabatı yoxlayın; yekunları təsdiqlənmiş əməliyyatlardan götürün."] },
-  { id: "hr", title: "HR və əməkdaşlar", description: "Əməkdaş profilləri, rollar, davamiyyət və əmək haqqı prosesləri.", icon: BriefcaseBusiness, href: "/hr", steps: ["Əməkdaş profilində əlaqə, vəzifə və iş statusunu aktual saxlayın.", "Rol və icazələri yalnız iş öhdəliyinə uyğun verin; həssas məlumatlara çıxışı məhdudlaşdırın.", "Davamiyyət və məzuniyyət məlumatlarını təsdiqlənmiş qeydlərlə aparın.", "Əmək haqqı hesablamasında dövr, davamiyyət, dərs/yük və tətbiq edilən qaydaları yoxlayın."] },
-  { id: "operations", title: "Qruplar, dərslər və davamiyyət", description: "Cədvəllər, dərs keçirilməsi və davamiyyət qeydiyyatı.", icon: Layers3, href: "/groups", steps: ["Qrupun proqramını, müəllimini, otağını və cədvəlini yoxlayın.", "Dərs başa çatdıqda iştirak və buraxılma vəziyyətini qeyd edin.", "Dəyişikliklərdən sonra tələbənin aktiv qrup və dərs tarixçəsini yoxlayın."] },
-  { id: "tasks", title: "Tapşırıqlar və iş axını", description: "Məsul şəxslər, son tarixlər və icra vəziyyəti.", icon: ClipboardList, href: "/tasks", steps: ["Tapşırığa məsul şəxs və real son tarix təyin edin.", "Vəziyyəti işin faktiki gedişinə uyğun yeniləyin.", "Gecikmiş tapşırıqları gündəlik yoxlayın və nəticəni qeyd edin."] },
-];
+export default async function GuidePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ step?: string | string[] }>;
+}) {
+  const actor = await requireErpPageActor("/guide");
+  const requestedStep = (await searchParams).step;
+  const selectedIndex = Math.max(0, guideStages.findIndex((stage) => stage.id === requestedStep));
+  const stage = guideStages[selectedIndex];
+  const previous = guideStages[selectedIndex - 1];
+  const next = guideStages[selectedIndex + 1];
+  const moduleLinks = stage.links.filter((link) => link.permissions.some((permission) => can(actor.permissions, permission)));
+  const resources = guideResources.filter((resource) => resource.permissions.some((permission) => can(actor.permissions, permission)));
 
-export default async function GuidePage() {
-  const actor = await requireErpActor();
-  const visibleSections = sections.filter(
-    (section) =>
-      section.href !== "/hr" ||
-      can(actor.permissions, "hr.employee.read")
+  return (
+    <main className="guide-page">
+      <header className="guide-header">
+        <span className="guide-header-icon" aria-hidden="true"><BookOpen size={24} /></span>
+        <div>
+          <h1>İş axını bələdçisi</h1>
+          <p>Follow-up-dan tələbəyə keçidə, ilk dərsdən gündəlik nəzarətə qədər prosesi ardıcıl izləyin.</p>
+        </div>
+      </header>
+
+      <div className="guide-workspace">
+        <nav className="guide-navigation" aria-label="İş axınının mərhələləri">
+          <div className="guide-navigation-title"><ListOrdered size={17} aria-hidden="true" />İşin ardıcıllığı</div>
+          <ol>
+            {guideStages.map((item, index) => (
+              <li key={item.id}>
+                <Link
+                  href={{ pathname: "/guide", query: { step: item.id }, hash: "guide-stage-title" }}
+                  aria-current={item.id === stage.id ? "step" : undefined}
+                  prefetch={false}
+                >
+                  <span className="guide-stage-number" aria-hidden="true">{index + 1}</span>
+                  <span className="guide-navigation-copy"><strong>{item.shortTitle}</strong><small>{item.caption}</small></span>
+                  <ArrowRight className="guide-navigation-arrow" size={16} aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ol>
+          <p className="guide-navigation-note">Mərhələni seçin, addımları izləyin və nəticəni yoxladıqdan sonra davam edin.</p>
+        </nav>
+
+        <section className="guide-current-stage" aria-labelledby="guide-stage-title">
+          <header className="guide-stage-header">
+            <p className="guide-stage-position">Mərhələ {selectedIndex + 1} / {guideStages.length}</p>
+            <h2 id="guide-stage-title" tabIndex={-1} aria-live="polite">{selectedIndex + 1}. {stage.title}</h2>
+            <p>{stage.description}</p>
+          </header>
+
+          <div className="guide-start"><strong>Nə vaxt başlayır?</strong><p>{stage.startWhen}</p></div>
+
+          <ol className="guide-instructions" aria-label={stage.shortTitle + ": əməliyyat addımları"}>
+            {stage.steps.map((step, index) => (
+              <li key={step.title}>
+                <span className="guide-instruction-number" aria-hidden="true">{selectedIndex + 1}.{index + 1}</span>
+                <div><h3>{step.title}</h3><p>{step.description}</p></div>
+              </li>
+            ))}
+          </ol>
+
+          <section className="guide-decisions" aria-labelledby="guide-decisions-title">
+            <h3 id="guide-decisions-title">Nəticəyə görə necə davam edək?</h3>
+            <dl>{stage.decisions.map((decision) => (
+              <div key={decision.when}><dt>{decision.when}</dt><dd>{decision.then}</dd></div>
+            ))}</dl>
+          </section>
+
+          <div className="guide-reminder"><Info size={17} aria-hidden="true" /><p>{stage.reminder}</p></div>
+          <section className="guide-result" aria-labelledby="guide-result-title">
+            <CircleCheck size={20} aria-hidden="true" />
+            <div><h3 id="guide-result-title">Mərhələnin sonunda</h3><p>{stage.result}</p></div>
+          </section>
+
+          {moduleLinks.length > 0 ? (
+            <div className="guide-module-links" aria-label="Əməliyyatı sistemdə aç">
+              {moduleLinks.map((link) => (
+                <Link key={link.href} href={link.href} className={buttonVariants({ variant: "outline", size: "lg" })}>
+                  {link.label}<ArrowRight data-icon="inline-end" aria-hidden="true" />
+                </Link>
+              ))}
+            </div>
+          ) : <p className="guide-access-note">Bu mərhələnin əməliyyatlarını uyğun icazəsi olan məsul əməkdaş tamamlayır.</p>}
+
+          <footer className="guide-pagination" aria-label="Mərhələlər arasında keçid">
+            {previous ? (
+              <Link href={{ pathname: "/guide", query: { step: previous.id }, hash: "guide-stage-title" }} className={buttonVariants({ variant: "outline", size: "lg" })}>
+                <ArrowLeft data-icon="inline-start" aria-hidden="true" />Əvvəlki mərhələ
+              </Link>
+            ) : <span className="guide-pagination-start">Proses buradan başlayır</span>}
+            {next ? (
+              <Link href={{ pathname: "/guide", query: { step: next.id }, hash: "guide-stage-title" }} className={buttonVariants({ size: "lg" })}>
+                <span>Növbəti: {next.shortTitle}</span><ArrowRight data-icon="inline-end" aria-hidden="true" />
+              </Link>
+            ) : (
+              <Link href={{ pathname: "/guide", query: { step: guideStages[0].id }, hash: "guide-stage-title" }} className={buttonVariants({ variant: "secondary", size: "lg" })}>
+                <CheckCheck data-icon="inline-start" aria-hidden="true" />Ardıcıllığa yenidən bax
+              </Link>
+            )}
+          </footer>
+        </section>
+      </div>
+
+      {resources.length > 0 ? (
+        <section className="guide-resources" aria-labelledby="guide-resources-title">
+          <header><h2 id="guide-resources-title">Digər gündəlik əməliyyatlar</h2><p>Əsas tələbə axını ilə yanaşı görülən dəstək işləri.</p></header>
+          <div className="guide-resource-list">
+            {resources.map((resource) => (
+              <details key={resource.href} className="guide-resource">
+                <summary><span><strong>{resource.label}</strong><small>{resource.description}</small></span><ChevronDown size={18} aria-hidden="true" /></summary>
+                <div className="guide-resource-content">
+                  <ol>{resource.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+                  <Link href={resource.href}>{resource.label}<ArrowRight size={15} aria-hidden="true" /></Link>
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </main>
   );
-  return <main className="guide-page">
-    <header className="guide-hero"><div className="guide-hero-icon"><BookOpen size={27}/></div><div><p className="guide-eyebrow">ARTMONIA ERP · KNOWLEDGE CENTER</p><h1>İş axını bələdçisi</h1><p>Modullar üzrə addım-addım təlimatlar və birbaşa keçidlər. Əməliyyatları yalnız sizdə olan icazələr çərçivəsində yerinə yetirin.</p></div></header>
-    <nav className="guide-quicklinks" aria-label="Sürətli keçidlər">{visibleSections.map(s => <a key={s.id} href={`#${s.id}`}>{s.title}<ArrowRight size={15}/></a>)}</nav>
-    <div className="guide-sections">{visibleSections.map((section, index) => { const Icon = section.icon; return <section className="guide-section" id={section.id} key={section.id}><div className="guide-section-head"><span className="guide-number">{String(index + 1).padStart(2,"0")}</span><span className="guide-section-icon"><Icon size={21}/></span><div><h2>{section.title}</h2><p>{section.description}</p></div><Link className="guide-open" href={section.href as Route}></Link></div><ol>{section.steps.map((step, i) => <li key={step}><span>{i + 1}</span><p>{step}</p></li>)}</ol><div className="guide-section-foot"><span>{section.steps.length} addım</span><Link href={section.href as Route}>Bu bölməyə keç <ArrowRight size={15}/></Link></div></section>; })}</div>
-    <footer className="guide-note"><RefreshCw size={18}/><p><strong>İş prinsipi:</strong> Tarixli planlar üçün planlaşdırılmış tarix əsas götürülür; maliyyə, qeydiyyat və HR əməliyyatlarında dəyişikliklər təsdiq və audit izi ilə aparılmalıdır. Bu bələdçi mövcud modullara keçid verir; hər funksiyanın aktivliyi istifadəçi icazələrindən və sistem konfiqurasiyasından asılıdır.</p></footer>
-  </main>;
 }

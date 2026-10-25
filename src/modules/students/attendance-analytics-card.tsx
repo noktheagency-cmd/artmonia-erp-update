@@ -100,7 +100,7 @@ export function AttendanceAnalyticsCard({ currentRisk }: { currentRisk: Attendan
                 <span><strong>{percent(totals.rate)}</strong><small>iştirak</small></span>
               </span>
               <span className="students-attendance-metrics">
-                <span><small><i className="is-risk" />Cari riskli tələbə</small><strong>{riskyIds.length}</strong></span>
+                <span><small><i className="is-risk" />Riskli tələbə</small><strong>{riskyIds.length}</strong></span>
                 <span><small><i className="is-missing" />Natamam dərs</small><strong>{totals.missingSessions}</strong></span>
                 <span><small><i className="is-complete" />Qeyd tamlığı</small><strong>{percent(totals.completeness)}</strong></span>
               </span>
@@ -153,28 +153,19 @@ export function AttendanceAnalyticsCard({ currentRisk }: { currentRisk: Attendan
             <Button className="attendance-apply" type="submit" disabled={loading}><RefreshCw size={15} />{loading ? "Yüklənir…" : "Yenilə"}</Button>
           </form>
           <RetentionAnalyticsPanel key={`${appliedPeriod.from}:${appliedPeriod.to}:${teacherId}:${groupId}`} from={appliedPeriod.from} to={appliedPeriod.to} teacherId={teacherId} groupId={groupId} onOptions={setRetentionOptions} />
-          <section className="attendance-block" aria-label="Cari davamiyyət riski">
-            <div className="attendance-section-heading">
-              <div><h3>Cari riskli tələbələr</h3><p>{displayDate(currentRisk.from)} — {displayDate(currentRisk.to)} · son 93 gün</p></div>
-            </div>
-            <div className="attendance-kpis">
-              <Link href={riskyStudentsHref as Route} className="attendance-kpi attendance-kpi-current-risk is-action" onClick={() => setOpen(false)} aria-label="Cari riskli tələbələri siyahıda göstər">
-                <span><ShieldAlert size={17} />Riskli tələbə</span>
-                <strong>{riskyIds.length}</strong>
-                <small>{currentRisk.dangerCount} qırmızı · {currentRisk.warningCount} sarı</small>
-                <small>Bütün əlçatan tələbələr üzrə cari risk; seçilmiş tarix, müəllim və qrup filtrlərindən asılı deyil.</small>
-                <small className="attendance-kpi-action">Ətraflı <ChevronRight size={14} /></small>
-              </Link>
-            </div>
-          </section>
           {loading ? <div className="attendance-state" role="status"><RefreshCw size={26} /><strong>Davamiyyət yüklənir…</strong><span>Göstəricilər hazırlanır.</span></div> : error ? <div className="attendance-state is-error" role="alert"><ShieldAlert size={26} /><strong>Məlumat yüklənmədi</strong><span>{error}</span><Button variant="outline" onClick={() => void load(from, to)}>Yenidən cəhd et</Button></div> : report && <>
             <section className="attendance-block" aria-label="Davamiyyət">
               <div className="attendance-section-heading">
                 <div><h3>Davamiyyət</h3><p>{displayDate(report.from)} — {displayDate(report.to)}</p></div>
                 <span>{filteredStats.students} tələbə · {attendanceTeachers(filtered).length} müəllim</span>
               </div>
-              <div className="attendance-kpis attendance-period-kpis">
+              <div className="attendance-kpis">
                 <div className="attendance-kpi is-primary"><span><CalendarCheck2 size={17} />Ümumi davamiyyət</span><strong>{percent(filteredStats.rate)}</strong><small>{filteredStats.present} iştirak / {filteredStats.present + filteredStats.absent} dərs</small></div>
+                <Link href={riskyStudentsHref as Route} className="attendance-kpi is-action" onClick={() => setOpen(false)} aria-label="Riskli tələbələri siyahıda göstər" title={`Son 93 gün: ${displayDate(currentRisk.from)} — ${displayDate(currentRisk.to)}`}>
+                  <span><ShieldAlert size={17} />Riskli tələbə</span>
+                  <strong>{riskyIds.length}</strong>
+                  <small className="attendance-kpi-action">Ətraflı <ChevronRight size={14} /></small>
+                </Link>
                 <div className="attendance-kpi"><span><UsersRound size={17} />Natamam dərs</span><strong>{filteredStats.missingSessions}</strong><small>{filteredStats.missing} tələbə üçün qeyd yoxdur</small></div>
                 <div className="attendance-kpi"><span><CheckCheck size={17} />Qeyd tamlığı</span><strong>{percent(filteredStats.completeness)}</strong><small>{filteredStats.excused} üzrlü · {filteredStats.absent} qaib</small></div>
               </div>

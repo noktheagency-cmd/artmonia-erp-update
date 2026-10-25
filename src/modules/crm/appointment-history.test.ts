@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appointmentHistory, isMeetingReminder, type AppointmentHistoryRow } from "./appointment-history";
+import { appointmentHistory, appointmentOutcomeTarget, isMeetingReminder, type AppointmentHistoryRow } from "./appointment-history";
 
 const lead = {
   id: "lead-1", stage: "QUALIFIED", convertedStudentId: null,
@@ -14,6 +14,12 @@ function appointment(extra: Partial<Omit<AppointmentHistoryRow, "source">> = {})
     ...extra,
   };
 }
+
+test("outcome buttons send the real appointment ID or the exact reminder timestamp", () => {
+  const plan = appointmentHistory([], lead)[0];
+  assert.deepEqual(appointmentOutcomeTarget(plan), { leadPlanAt: lead.nextFollowUpAt.toISOString() });
+  assert.deepEqual(appointmentOutcomeTarget({ ...appointment(), source: "APPOINTMENT" }), { appointmentId: "appointment-1" });
+});
 
 test("today and tomorrow meeting reminders appear without inventing attendance or a database appointment ID", () => {
   for (const date of ["2026-10-25", "2026-10-26"]) {

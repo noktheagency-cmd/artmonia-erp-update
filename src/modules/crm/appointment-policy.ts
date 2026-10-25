@@ -3,6 +3,7 @@ import { optionalFormString } from "@/modules/shared/form-values";
 const optionalId = z.preprocess(optionalFormString, z.string().uuid().optional());
 export const appointmentSchema = z.object({
   leadId: z.string().uuid(), idempotencyKey: z.string().uuid(), appointmentId: optionalId,
+  leadPlanAt: z.preprocess(optionalFormString, z.iso.datetime().optional()),
   date: z.iso.date(), time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   kind: z.enum(["MEETING", "CONSULTATION", "TRIAL"]), teacherId: optionalId,
   outcome: z.enum(["SCHEDULED", "ATTENDED", "NO_SHOW", "CANCELLED", "RESCHEDULED"]),
@@ -10,6 +11,11 @@ export const appointmentSchema = z.object({
   occurredTime: z.preprocess((value) => value === "" ? undefined : value, z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional()),
   reason: z.string().trim().max(500).default(""),
 }).superRefine((input, ctx) => {
+  if (input.leadPlanAt) {
+    if (input.appointmentId || !["ATTENDED", "NO_SHOW"].includes(input.outcome)) ctx.addIssue({ code: "custom", message: "Görüş planı üçün baş tutdu və ya baş tutmadı nəticəsini seçin." });
+    const minute = Math.floor(Date.parse(input.leadPlanAt) / 60_000) * 60_000;
+    if (appointmentInstant(input.date, input.time).getTime() !== minute) ctx.addIssue({ code: "custom", message: "Görüş planının tarixi dəyişib. Bölməni yenidən açın." });
+  }
   if (["ATTENDED", "NO_SHOW"].includes(input.outcome) && (!input.occurredDate || !input.occurredTime)) ctx.addIssue({ code: "custom", message: "Faktiki görüş tarixini və saatını seçin." });
   if (input.outcome === "ATTENDED" && input.kind === "TRIAL" && !input.teacherId) ctx.addIssue({ code: "custom", message: "Sınağı keçirən müəllim seçilməlidir." });
   if (["CANCELLED", "RESCHEDULED"].includes(input.outcome) && !input.reason) ctx.addIssue({ code: "custom", message: "Ləğv və ya təxirə salınma səbəbini yazın." });

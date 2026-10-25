@@ -11,7 +11,7 @@ import { TimePicker } from "@/components/ui/time-picker";
 import { listAppointments, saveAppointment } from "./appointment-actions";
 import { appointmentKindLabels, appointmentOutcomeLabels } from "./appointment-policy";
 import { dailyReportWindow } from "@/modules/dashboard/daily-report-policy";
-import type { AppointmentHistoryRow as Appointment } from "./appointment-history";
+import { appointmentOutcomeTarget, type AppointmentHistoryRow as Appointment } from "./appointment-history";
 
 const dateTime = (value: string) => {
   const local = new Date(new Date(value).getTime() + 4 * 3600000).toISOString();
@@ -70,6 +70,7 @@ export function LeadAppointments({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [key, setKey] = useState(() => crypto.randomUUID());
+  const [nextPlanKey, setNextPlanKey] = useState(() => crypto.randomUUID());
   const [id, setId] = useState("");
   const [date, setDate] = useState(() => dailyReportWindow().date);
   const [time, setTime] = useState("12:00");
@@ -85,11 +86,9 @@ export function LeadAppointments({
   const [nextDate, setNextDate] = useState(() => dailyReportWindow().date);
   const [nextTime, setNextTime] = useState("12:00");
   const shown = embedded || expanded;
-  const scheduled = rows.find((row) => row.outcome === "SCHEDULED" && row.source === "APPOINTMENT") ?? null;
-  const reminderPlan = rows.find((row) => row.source === "LEAD_PLAN") ?? null;
+  const scheduled = rows.find((row) => row.outcome === "SCHEDULED") ?? null;
   const attended = rows.some((row) => row.outcome === "ATTENDED");
-  // const meetingComplete = markedComplete || (attended && !scheduled);
-  const meetingComplete = !scheduled && !reminderPlan && (markedComplete || attended);
+  const meetingComplete = !scheduled && (markedComplete || attended);
 
   useEffect(() => {
     if (!embedded || !active) return;
@@ -227,19 +226,19 @@ export function LeadAppointments({
   }
 
   async function completeMeeting(row: Appointment) {
-    if (busy || row.source !== "APPOINTMENT") return;
+    if (busy) return;
     const planned = dateTime(row.plannedAt);
     const now = bakuNow();
     setBusy(true);
     setMessage("");
     try {
       const result = await submitAppointment(key, {
-        appointmentId: row.id,
+        ...appointmentOutcomeTarget(row),
         date: planned.date,
         time: planned.time,
         kind: row.kind,
         outcome: "ATTENDED",
-        teacherId: row.teacherId ?? "",
+        teacherId: row.teacherId ?? teacher,
         occurredDate: now.date,
         occurredTime: now.time,
       });
@@ -261,19 +260,19 @@ export function LeadAppointments({
   }
 
   async function missMeeting(row: Appointment) {
-    if (busy || !nextDate || !nextTime || row.source !== "APPOINTMENT") return;
+    if (busy || !nextDate || !nextTime) return;
     const planned = dateTime(row.plannedAt);
     const now = bakuNow();
     setBusy(true);
     setMessage("");
     try {
       const missed = await submitAppointment(key, {
-        appointmentId: row.id,
+        ...appointmentOutcomeTarget(row),
         date: planned.date,
         time: planned.time,
         kind: row.kind,
         outcome: "NO_SHOW",
-        teacherId: row.teacherId ?? "",
+        teacherId: row.teacherId ?? teacher,
         occurredDate: now.date,
         occurredTime: now.time,
       });
@@ -281,14 +280,14 @@ export function LeadAppointments({
         setMessage(missed.message);
         return;
       }
-      const nextKey = crypto.randomUUID();
-      const plannedNext = await submitAppointment(nextKey, {
+      const plannedNext = await submitAppointment(nextPlanKey, {
         date: nextDate,
         time: nextTime,
         kind: "MEETING",
         outcome: "SCHEDULED",
       });
       setKey(crypto.randomUUID());
+      setNextPlanKey(crypto.randomUUID());
       onActionSaved?.("missed");
       if (!plannedNext.ok) {
         setMessage(plannedNext.message);
@@ -324,11 +323,17 @@ export function LeadAppointments({
   }
 
   if (embedded) {
-    const activePlan = scheduled ?? reminderPlan;
+    const activePlan = scheduled;
     const activeWhen = activePlan ? dateTime(activePlan.plannedAt) : null;
+    const previousRows = rows.filter((row) => row.id !== scheduled?.id);
     return (
       <section className="crm-action-card is-embedded">
         <div className="crm-action-card-body">
+          <div className="crm-contact-history">
+            <div className="crm-contact-history-head">
+              <h4>Görüş tarixçəsi</h4>
+              {rows.length > 0 ? <span>{rows.length} qeyd</span> : null}
+            </div>
           <div className="crm-contact-plan">
             <div className={meetingComplete ? "crm-contact-active is-done" : "crm-contact-active"}>
               <div className="crm-contact-active-meta">
@@ -339,7 +344,6 @@ export function LeadAppointments({
                   {activeWhen ? (
                     <small>{`${activeWhen.date.split("-").reverse().join(".")} · ${activeWhen.time}`}</small>
                   ) : null}
-                  {reminderPlan ? <small>Müraciətdə saxlanmış görüş xatırlatması</small> : null}
                 </div>
               </div>
               {scheduled && !meetingComplete ? (
@@ -357,7 +361,7 @@ export function LeadAppointments({
                   <button
                     type="button"
                     className="crm-choice is-success"
-                    disabled={busy}
+                    disabled={busy || (scheduled.kind === "TRIAL" && !scheduled.teacherId && !teacher)}
                     onClick={() => {
                       if (!scheduled) return;
                       setMeetingMode("attended");
@@ -370,6 +374,21 @@ export function LeadAppointments({
                 </div>
               ) : null}
             </div>
+
+            {scheduled?.kind === "TRIAL" && !scheduled.teacherId ? (
+              <label className="form-field">
+                <span>Sınağı keçirən müəllim</span>
+                <FormSelect
+                  name="meetingOutcomeTeacher"
+                  aria-label="Sınağı keçirən müəllim"
+                  value={teacher}
+                  onValueChange={setTeacher}
+                  emptyLabel="Müəllim seçin"
+                  options={teachers.map((item) => ({ value: item.id, label: item.fullName }))}
+                  disabled={busy}
+                />
+              </label>
+            ) : null}
 
             {!scheduled && !meetingComplete ? (
               <div className="crm-dialog-fields">
@@ -416,15 +435,10 @@ export function LeadAppointments({
             {message ? <p className="crm-contact-confirm" role="status">{message}</p> : null}
           </div>
 
-          <div className="crm-contact-history">
-            <div className="crm-contact-history-head">
-              <h4>Görüş tarixçəsi</h4>
-              {rows.length > 0 ? <span>{rows.length} qeyd</span> : null}
-            </div>
             {rows.length === 0 && !busy ? <p className="crm-contact-empty">Hələ görüş planı yoxdur.</p> : null}
-            {rows.length > 0 ? (
+            {previousRows.length > 0 ? (
               <ul className="crm-contact-log">
-                {rows.map((row) => {
+                {previousRows.map((row) => {
                   const planned = dateTime(row.plannedAt);
                   return (
                     <li key={row.id} className={`crm-contact-log-item is-${meetingTone(row.outcome)}`}>

@@ -22,6 +22,10 @@ export function isMeetingReminder(kind: string | null | undefined) {
   return kind === "CONSULTATION_REMINDER" || kind === "TRIAL_LESSON_REMINDER";
 }
 
+export function appointmentOutcomeTarget(row: AppointmentHistoryRow): Record<string, string> {
+  return row.source === "LEAD_PLAN" ? { leadPlanAt: row.plannedAt } : { appointmentId: row.id };
+}
+
 function bakuDay(date: Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baku" }).format(date);
 }
