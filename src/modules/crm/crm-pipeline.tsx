@@ -27,6 +27,8 @@ import { Button } from "@/components/ui/button";
 import { cx } from "@/components/ui/cx";
 import { FormSelect, type SelectOption } from "@/components/ui/select";
 import { CrmLeadsTable } from "@/modules/crm/crm-leads-table";
+import { CrmListDateControls, type CrmListDateSelection } from "./crm-list-date-filter";
+import { clearCrmListDateParams } from "./list-date-filter";
 import {
   CrmConversionDialog,
   type CrmConversionNavTarget,
@@ -113,10 +115,22 @@ export function CrmPipeline({ data }: { data: CrmData }) {
 
   function handleQuickFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (value && value !== "all") params.set(key, value);
+    if (key === "listDate") clearCrmListDateParams(params);
+    else if (value && value !== "all") params.set(key, value);
     else params.delete(key);
     params.set("tab", "list");
     navigate(params);
+  }
+
+  function handleListDateApply(selection: CrmListDateSelection) {
+    const params = new URLSearchParams(searchParams.toString());
+    clearCrmListDateParams(params);
+    params.set("listDateBy", selection.field);
+    if (selection.from) params.set("listFrom", selection.from);
+    if (selection.to) params.set("listTo", selection.to);
+    params.set("tab", "list");
+    params.delete("page");
+    navigate(params, true);
   }
 
   function handleConversionOpenChange(open: boolean) {
@@ -130,6 +144,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
 
   function handleConversionNavigate(target: CrmConversionNavTarget) {
     const params = new URLSearchParams(searchParams.toString());
+    clearCrmListDateParams(params);
     params.delete("salesDetails");
     params.delete("followUp");
     params.delete("q");
@@ -194,6 +209,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
     }
     const params = new URLSearchParams(searchParams.toString());
     if (index === 1) {
+      clearCrmListDateParams(params);
       params.delete("from");
       params.delete("to");
       params.delete("period");
@@ -282,7 +298,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
             <ExportDialog
               module="crm"
               resultCount={data.leads.length}
-              filters={{ q: data.query, stage: data.filters.stage, owner: data.filters.owner, program: data.filters.program, source: data.filters.source, priority: data.filters.priority, followUp: data.filters.followUp, from: data.filters.dateFrom, to: data.filters.dateTo }}
+              filters={{ q: data.query, stage: data.filters.stage, owner: data.filters.owner, program: data.filters.program, source: data.filters.source, priority: data.filters.priority, followUp: data.filters.followUp, period: data.filters.period, from: data.filters.dateFrom, to: data.filters.dateTo, ...(data.filters.listDate.active ? { listDateBy: data.filters.listDate.field, listFrom: data.filters.listDate.from, listTo: data.filters.listDate.to } : {}) }}
               previewRows={data.leads.map((lead) => ({ name: lead.name, phone: lead.phone, program: lead.program, source: lead.source, stage: lead.stageLabel, trialLessonCount: lead.trialLessonCount || "-", priority: lead.priorityLabel, nextAction: lead.nextActionTypeLabel, nextFollowUp: lead.nextFollowUpAt, manager: lead.manager, createdAt: lead.createdAt, note: lead.latestNote, convertedStudent: lead.detail.convertedStudentCode, history: "" }))}
             />
           ) : null}
@@ -370,6 +386,7 @@ export function CrmPipeline({ data }: { data: CrmData }) {
             onStageSelect={(stage) => {
               // BK-22/23: kart bütün dövrdür; klik eyni əhatəli siyahı açır.
               const params = new URLSearchParams(searchParams.toString());
+              clearCrmListDateParams(params);
               params.set("stage", stage);
               params.set("period", "all");
               params.delete("from");
@@ -401,6 +418,12 @@ export function CrmPipeline({ data }: { data: CrmData }) {
             onOpenFilters={() => setFiltersOpen(true)}
           />
           <ActiveFiltersBar data={data} onClear={handleClearFilters} onRemove={handleQuickFilter} />
+          <CrmListDateControls
+            key={JSON.stringify(data.filters.listDate)}
+            filter={data.filters.listDate}
+            isPending={isPending}
+            onApply={handleListDateApply}
+          />
           <CrmLeadsTable data={data} onClearFilters={handleClearFilters} />
         </div>
       )}
@@ -623,6 +646,9 @@ function ActiveFiltersBar({
   if (data.filters.activeCount === 0) return null;
 
   const chips = [
+    data.filters.listDate.active
+      ? { key: "listDate", label: `${data.filters.listDate.field === "planned" ? "Plan tarixi" : "Yaradılma"}: ${data.filters.listDate.from || "Əvvəldən"} – ${data.filters.listDate.to || "Sonadək"}` }
+      : null,
     data.query ? { key: "q", label: `Axtarış: ${data.query}` } : null,
     data.filters.stage
       ? { key: "stage", label: `Status: ${data.filters.stage === consultationTrialStage ? consultationTrialLabel : leadStageLabels[data.filters.stage]}` }
@@ -652,7 +678,7 @@ function ActiveFiltersBar({
     <div className="crm-active-filters" aria-label="Aktiv filtrlər">
       <div>
         <SlidersHorizontal aria-hidden="true" />
-        <span>{data.leads.length} nəticə</span>
+        <span>{data.listTotalCount} nəticə</span>
       </div>
       <div className="crm-filter-chips">
         {chips.map((chip) => (

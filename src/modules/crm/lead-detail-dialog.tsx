@@ -9,6 +9,7 @@ export function LeadDetailDialog({
   sourceOptions,
   returnTo,
   canConvert = true,
+  canDelete = false,
   open,
   onOpenChange,
   initialPanel = null,
@@ -19,6 +20,7 @@ export function LeadDetailDialog({
   sourceOptions: CrmData["sourceOptions"];
   returnTo: string;
   canConvert?: boolean;
+  canDelete?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   initialPanel?: "contact" | "meeting" | null;
@@ -31,6 +33,7 @@ export function LeadDetailDialog({
       sourceOptions={sourceOptions}
       returnTo={returnTo}
       canConvert={canConvert}
+      canDelete={canDelete}
       updateLeadAction={updateLeadAction}
       deleteLeadAction={deleteLeadAction}
       open={open}

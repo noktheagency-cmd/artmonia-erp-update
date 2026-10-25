@@ -132,6 +132,7 @@ function CrmLeadRow({
               sourceOptions={data.sourceOptions}
               returnTo={data.returnTo}
               canConvert={data.access.canConvertLead}
+              canDelete={data.access.canDeleteLead}
               open={open}
               onOpenChange={setOpen}
               initialPanel={panel}

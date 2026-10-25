@@ -41,6 +41,7 @@ export function OverviewLeadDialog({ leadId, data, onClose }: {
       sourceOptions={data.sourceOptions}
       returnTo={data.returnTo}
       canConvert={data.access.canConvertLead}
+      canDelete={data.access.canDeleteLead}
       updateLeadAction={updateLeadAction}
       deleteLeadAction={deleteLeadAction}
       open

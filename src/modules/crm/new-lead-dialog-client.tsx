@@ -46,6 +46,7 @@ import {
 import { DEFAULT_TRIAL_LESSON_COUNT } from "@/modules/crm/trial-lesson";
 import type { CreateLeadFormState } from "@/modules/crm/actions";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
+import { currentBakuMonthStart } from "@/modules/shared/creation-date-policy";
 
 type DuplicateMatch = {
   id: string;
@@ -378,6 +379,7 @@ export function NewLeadDialogClient({
                   <DatePicker
                     aria-label="Növbəti addım tarixi"
                     name="nextFollowUpDate"
+                    minValue={currentBakuMonthStart()}
                     required
                     compact
                     popoverPlacement="floating"

@@ -41,7 +41,9 @@ import {
 } from "@/modules/crm/trial-lesson";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { CRM_UPDATE_NOTE_MAX_LENGTH } from "@/modules/crm/note-limits";
+import { deleteLeadWithPlans } from "./lead-deletion-service";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { assertCreationDatesAllowed } from "@/modules/shared/creation-date-policy";
 import { assertLeadPlan } from "./lead-validation";
 import { resolveRegistrationMeetingAttendance } from "./registration-attend-policy";
 import { closeConvertedLeadFollowUp, syncLeadWorkPlan } from "./work-service";
@@ -250,6 +252,7 @@ export async function createLeadClientAction(
 async function createLead(formData: FormData) {
   const actor = await requireMutationActor("crm.lead.create");
   const input = createLeadSchema.parse(Object.fromEntries(formData));
+  assertCreationDatesAllowed([{ label: "Növbəti addım tarixi", value: input.nextFollowUpDate }]);
   const prisma = getPrisma();
   const managerId = actor.id;
   const phoneNormalized = normalizePhone(input.phone);
@@ -532,67 +535,11 @@ async function updateLeadActionImpl(formData: FormData) {
 }
 
 async function deleteLeadActionImpl(formData: FormData) {
-  const actor = await requireMutationActor("crm.lead.update");
+  const actor = await requireMutationActor("crm.lead.delete");
   const input = deleteLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
 
-  await prisma.$transaction(async (tx) => {
-    const lead = await tx.lead.findUnique({
-      where: { id: input.leadId },
-      select: {
-        id: true,
-        managerId: true,
-        stage: true,
-        source: true,
-        contactId: true,
-        contact: { select: { fullName: true, phoneDisplay: true } },
-      },
-    });
-
-    assertCanAccessLead(actor, lead, "crm.lead.update");
-
-    const facts = await tx.lead.findUniqueOrThrow({ where: { id: lead.id }, select: { _count: { select: { contactEvents: true, workItems: true, appointments: true, courseSales: true } } } });
-    if (Object.values(facts._count).some((count) => count > 0)) throw new Error("Əməliyyat tarixçəsi olan müraciət silinə bilməz. Səbəbi yazaraq İtirilib seçin.");
-
-    await tx.task.deleteMany({
-      where: { entityType: "lead", entityId: lead.id },
-    });
-    await tx.lead.delete({ where: { id: lead.id } });
-
-    const contactStillUsed = await tx.contact.findUnique({
-      where: { id: lead.contactId },
-      select: {
-        _count: {
-          select: {
-            leads: true,
-            students: true,
-            teacherProfiles: true,
-            studentRelationships: true,
-          },
-        },
-      },
-    });
-
-    if (
-      contactStillUsed &&
-      Object.values(contactStillUsed._count).every((count) => count === 0)
-    ) {
-      await tx.contact.delete({ where: { id: lead.contactId } });
-    }
-
-    await writeAuditLog(tx, {
-      actorUserId: actor.id,
-      action: "lead.delete",
-      entityType: "lead",
-      entityId: lead.id,
-      before: {
-        stage: lead.stage,
-        source: lead.source,
-        contact: lead.contact,
-      },
-      reason: input.reason,
-    });
-  });
+  await prisma.$transaction((tx) => deleteLeadWithPlans(tx, input, actor));
 
   revalidatePath("/crm");
   revalidatePath("/dashboard");
@@ -606,7 +553,7 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
   const input = convertLeadSchema.parse(Object.fromEntries(formData));
   const prisma = getPrisma();
   const today = new Date();
-  const registeredAt = new Date(`${getBakuDateInput()}T00:00:00.000Z`);
+  const registeredAt = new Date(`${getBakuDateInput(today)}T00:00:00.000Z`);
   const phoneNormalized = normalizePhone(input.phone);
   const giftAdmission = isGiftDiscount(input.discountType);
 
@@ -624,6 +571,12 @@ async function convertLeadToStudentActionImpl(formData: FormData) {
   const paymentMonth = paymentDate
     ? parseBillingMonthInput(input.paymentMonth, paymentDate)
     : null;
+
+  assertCreationDatesAllowed([
+    { label: "İlk dərs tarixi", value: input.firstLessonDate },
+    { label: "Ödəniş tarixi", value: paymentDate },
+    { label: "Ödənişin aid olduğu ay", value: paymentMonth },
+  ], today);
 
   await prisma.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({

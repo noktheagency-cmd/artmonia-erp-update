@@ -18,6 +18,9 @@ export default async function CrmPage({
     period?: string;
     from?: string;
     to?: string;
+    listDateBy?: string;
+    listFrom?: string;
+    listTo?: string;
   }>;
 }) {
   const params = await searchParams;

@@ -26,6 +26,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MonthPicker, normalizeMonthValue } from "@/components/ui/month-picker";
 import { Input } from "@/components/ui/input";
+import { currentBakuMonthStart } from "@/modules/shared/creation-date-policy";
 import { FormSelect } from "@/components/ui/select";
 import { convertLeadToStudentAction, listRegistrationPackageOptions } from "@/modules/crm/actions";
 import {
@@ -291,6 +292,7 @@ export function LeadRegistrationDialog({
                   <FieldLabel>Cari paket üzrə ilk dərs</FieldLabel>
                   <DatePicker
                     name="firstLessonDate"
+                    minValue={currentBakuMonthStart()}
                     aria-label="Cari paket üzrə ilk dərs"
                     required={!gift}
                   />
@@ -404,6 +406,7 @@ export function LeadRegistrationDialog({
                     <FieldLabel>Ödəniş tarixi</FieldLabel>
                     <DatePicker
                       name="paymentDate"
+                      minValue={currentBakuMonthStart()}
                       value={paymentDate}
                       onValueChange={setPaymentDate}
                       maxValue={currentBakuDateValue()}
@@ -415,6 +418,7 @@ export function LeadRegistrationDialog({
                     <FieldLabel>Aid olduğu ay</FieldLabel>
                     <MonthPicker
                       name="paymentMonth"
+                      min={currentBakuMonthStart().slice(0, 7)}
                       value={paymentMonth}
                       onValueChange={setPaymentMonth}
                       allowClear={false}

@@ -20,6 +20,7 @@ import { closeConvertedLeadFollowUp } from "@/modules/crm/work-service";
 import { optionalFormString } from "@/modules/shared/form-values";
 import { toNumber } from "@/modules/shared/format";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { assertCreationDatesAllowed } from "@/modules/shared/creation-date-policy";
 import { studentPaymentMethodValues } from "@/modules/students/payment-method";
 import {
   studentPaymentScheduleTypeValues,
@@ -328,6 +329,12 @@ async function createStudentActionImpl(formData: FormData) {
     select: { id: true },
   });
   if (!existingStudent) try {
+    assertCreationDatesAllowed([
+      { label: "Qeydiyyat tarixi", value: input.registeredDate },
+      { label: "İlk dərs tarixi", value: input.firstLessonMode === "MANUAL" ? input.firstLessonDate : null },
+      { label: "Ödəniş tarixi", value: paymentDate },
+      { label: "Ödənişin aid olduğu ay", value: paymentMonth },
+    ]);
     await prisma.$transaction(async (tx) => {
       const [program, discountType] = await Promise.all([
         tx.program.findUnique({

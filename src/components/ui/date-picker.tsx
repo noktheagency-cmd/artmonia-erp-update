@@ -5,6 +5,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "re
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { cx } from "@/components/ui/cx";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { calendarYearOptions, clampCalendarMonth, isCalendarMonthAllowed } from "./calendar-range";
 
 type DatePickerProps = {
   name: string;
@@ -59,7 +60,9 @@ export function DatePicker({
   );
   const selectedValue = isControlled ? value : internalValue;
   const [isOpen, setIsOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(() => parsePickerDate(selectedValue) ?? new Date());
+  const [viewMonth, setViewMonth] = useState(() => pickerMonth(selectedValue));
+  const visibleMonth = clampCalendarMonth(viewMonth, minValue, maxValue);
+  const viewDate = useMemo(() => parsePickerDate(`${visibleMonth}-01`)!, [visibleMonth]);
   const [floatingStyle, setFloatingStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -172,9 +175,13 @@ export function DatePicker({
   }, [isOpen, compact]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
-  const yearOptions = useMemo(() => buildYearOptions(viewDate), [viewDate]);
-  const todayValue = toPickerDate(new Date());
+  const yearOptions = calendarYearOptions(viewDate.getFullYear(), minValue, maxValue);
+  const todayValue = currentBakuDateValue();
   const selectedDate = parsePickerDate(selectedValue);
+
+  function shiftedMonth(offset: number) {
+    return toPickerDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1)).slice(0, 7);
+  }
 
   function updateValue(nextValue: string) {
     if (!isControlled) {
@@ -188,24 +195,28 @@ export function DatePicker({
     if (minValue && nextValue < minValue) return;
     if (maxValue && nextValue > maxValue) return;
     updateValue(nextValue);
-    setViewDate(date);
+    setViewMonth(nextValue.slice(0, 7));
     closeCalendar();
   }
 
   function shiftMonth(monthOffset: number) {
-    setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + monthOffset, 1));
+    setViewMonth(clampCalendarMonth(shiftedMonth(monthOffset), minValue, maxValue));
   }
 
   function selectMonth(month: number) {
-    setViewDate((current) => new Date(current.getFullYear(), month, 1));
+    setViewMonth(clampCalendarMonth(
+      toPickerDate(new Date(viewDate.getFullYear(), month, 1)).slice(0, 7), minValue, maxValue,
+    ));
   }
 
   function selectYear(year: number) {
-    setViewDate((current) => new Date(year, current.getMonth(), 1));
+    setViewMonth(clampCalendarMonth(
+      toPickerDate(new Date(year, viewDate.getMonth(), 1)).slice(0, 7), minValue, maxValue,
+    ));
   }
 
   function selectToday() {
-    selectDate(new Date());
+    selectDate(parsePickerDate(todayValue)!);
   }
 
   function clearDate() {
@@ -229,7 +240,12 @@ export function DatePicker({
       aria-label={ariaLabel ?? "Tarix sec"}
     >
       <div className="date-picker-head">
-        <button type="button" aria-label="Əvvəlki ay" onClick={() => shiftMonth(-1)}>
+        <button
+          type="button"
+          aria-label="Əvvəlki ay"
+          onClick={() => shiftMonth(-1)}
+          disabled={!isCalendarMonthAllowed(shiftedMonth(-1), minValue, maxValue)}
+        >
           <ChevronLeft size={16} />
         </button>
         <div className="date-picker-current" aria-label="Göstərilən ay və il">
@@ -238,11 +254,13 @@ export function DatePicker({
             value={viewDate.getMonth()}
             onChange={(event) => selectMonth(Number(event.target.value))}
           >
-            {monthNames.map((month, index) => (
+            {monthNames.map((month, index) => isCalendarMonthAllowed(
+              `${viewDate.getFullYear()}-${String(index + 1).padStart(2, "0")}`, minValue, maxValue,
+            ) ? (
               <option key={month} value={index}>
                 {month}
               </option>
-            ))}
+            ) : null)}
           </select>
           <select
             aria-label="İl seç"
@@ -256,7 +274,12 @@ export function DatePicker({
             ))}
           </select>
         </div>
-        <button type="button" aria-label="Növbəti ay" onClick={() => shiftMonth(1)}>
+        <button
+          type="button"
+          aria-label="Növbəti ay"
+          onClick={() => shiftMonth(1)}
+          disabled={!isCalendarMonthAllowed(shiftedMonth(1), minValue, maxValue)}
+        >
           <ChevronRight size={16} />
         </button>
       </div>
@@ -337,9 +360,8 @@ export function DatePicker({
         aria-haspopup="dialog"
         aria-controls={isOpen ? popoverId : undefined}
         onClick={() => {
-          const parsed = parsePickerDate(selectedValue);
-          if (!isOpen && parsed) {
-            setViewDate(parsed);
+          if (!isOpen) {
+            setViewMonth(clampCalendarMonth(pickerMonth(selectedValue), minValue, maxValue));
           }
           setIsOpen((current) => !current);
         }}
@@ -351,6 +373,11 @@ export function DatePicker({
       {popover}
     </div>
   );
+}
+
+function pickerMonth(value?: string) {
+  const parsed = parsePickerDate(value);
+  return (parsed ? toPickerDate(parsed) : currentBakuDateValue()).slice(0, 7);
 }
 
 function buildCalendarDays(viewDate: Date) {
@@ -369,13 +396,6 @@ function buildCalendarDays(viewDate: Date) {
       isCurrentMonth: date.getMonth() === month,
     };
   });
-}
-
-function buildYearOptions(viewDate: Date) {
-  const currentYear = viewDate.getFullYear();
-  const startYear = currentYear - 8;
-
-  return Array.from({ length: 17 }, (_, index) => startYear + index);
 }
 
 function parsePickerDate(value?: string) {

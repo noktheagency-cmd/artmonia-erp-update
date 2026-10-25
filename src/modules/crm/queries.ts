@@ -53,6 +53,8 @@ import {
   getCrmTeamPerformanceAccess,
 } from "@/modules/crm/team-performance-rules";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
+import { buildCrmListDateSql } from "./list-date-filter-sql";
+import { crmListMonthDates, resolveCrmListDateFilter, type CrmListDateFilter, type CrmListDateInput } from "./list-date-filter";
 import { scopeFor, type PermissionScope } from "@/server/rbac/permissions";
 
 export type CrmFollowUpFilter =
@@ -64,7 +66,7 @@ export type CrmFollowUpFilter =
   | "unplanned"
   | "scheduled";
 
-export type CrmFiltersInput = {
+export type CrmFiltersInput = CrmListDateInput & {
   q?: string;
   stage?: string;
   owner?: string;
@@ -90,6 +92,7 @@ export type CrmData = {
     period: CrmPeriodValue;
     dateFrom: string;
     dateTo: string;
+    listDate: CrmListDateFilter;
     /** Resolved sale-window bounds for conversion → students deep-links */
     saleFrom: string;
     saleTo: string;
@@ -103,6 +106,7 @@ export type CrmData = {
     canAssignOwner: boolean;
     canCreateLead: boolean;
     canUpdateLead: boolean;
+    canDeleteLead: boolean;
     canConvertLead: boolean;
     canExport: boolean;
   };
@@ -256,6 +260,7 @@ type CrmCacheInput = {
   priorityFilter: LeadPriorityValue | "";
   followUpFilter: CrmFollowUpFilter;
   periodRange: CrmCachePeriodRange;
+  listDate: CrmListDateFilter;
   monthStart: string;
   today: string;
   todayStart: string;
@@ -383,6 +388,16 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     dateTo: dateToFilter.date,
     reference: today,
   });
+  const listDate = resolveCrmListDateFilter(input,
+    dateFromFilter.input || dateToFilter.input
+      ? { from: dateFromFilter.input, to: dateToFilter.input }
+      : periodFilter === "this_month"
+        ? crmListMonthDates(0, today)
+        : {
+          from: periodRange?.gte?.toISOString().slice(0, 10) ?? "",
+          to: periodRange?.lt ? addUtcDays(periodRange.lt, -1).toISOString().slice(0, 10) : "",
+        },
+  );
   const todayStart = getBakuBusinessDate(today);
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setUTCDate(todayStart.getUTCDate() + 1);
@@ -404,6 +419,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     priorityFilter: priorityFilter ?? "",
     followUpFilter,
     periodRange: serializePeriodRange(periodRange),
+    listDate,
     monthStart: monthStart.toISOString(),
     today: cachedToday.toISOString(),
     todayStart: todayStart.toISOString(),
@@ -455,6 +471,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
     programFilter,
     sourceFilter,
     priorityFilter,
+    listDate.active ? "listDate" : "",
     dateFromFilter.input,
     dateToFilter.input,
     !dateFromFilter.input && !dateToFilter.input && periodFilter !== "this_month"
@@ -476,6 +493,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       period: periodFilter,
       dateFrom: dateFromFilter.input,
       dateTo: dateToFilter.input,
+      listDate,
     }),
     filters: {
       stage: stageFilter ?? "",
@@ -487,6 +505,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       period: periodFilter,
       dateFrom: dateFromFilter.input,
       dateTo: dateToFilter.input,
+      listDate,
       saleFrom: (periodRange?.gte ?? new Date("2000-01-01T00:00:00.000Z"))
         .toISOString()
         .slice(0, 10),
@@ -506,6 +525,7 @@ export async function getCrmData(input: CrmFiltersInput = {}): Promise<CrmData> 
       canAssignOwner: managers.some((manager) => manager.id !== actor.id),
       canCreateLead: actor.permissions.has("crm.lead.create"),
       canUpdateLead: actor.permissions.has("crm.lead.update"),
+      canDeleteLead: actor.permissions.has("crm.lead.delete"),
       canConvertLead: actor.permissions.has("crm.lead.convert"),
       canExport: actor.permissions.has("report.export"),
     },
@@ -677,6 +697,7 @@ function getCrmRawData(
     priorityFilter: LeadPriorityValue | "";
     followUpFilter: CrmFollowUpFilter;
     periodRange: CrmPeriodRange;
+    listDate: CrmListDateFilter;
     monthStart: Date;
     today: Date;
     todayStart: Date;
@@ -688,6 +709,9 @@ function getCrmRawData(
   const periodSql = buildLeadPeriodSql(input.periodRange);
   const summarySql = Prisma.sql`${scopeSql} AND ${periodSql}`;
   const listWhereSql = buildCrmListWhereSql(input);
+  const teamWhereSql = input.listDate.active
+    ? buildCrmListWhereSql({ ...input, listDate: { ...input.listDate, active: false } })
+    : listWhereSql;
   const managerScopeSql = buildManagerScopeSql(input.actor);
   const teamMemberScopeSql = buildTeamMemberScopeSql(input.actor, input.ownerFilter);
   const teamSalePeriodSql = buildLeadSalePeriodSql(input.periodRange);
@@ -901,7 +925,7 @@ function getCrmRawData(
           left join erp.hr_employees he on he.user_id = u.id
           left join lateral (
             select
-              count(*) filter (where ${listWhereSql})::int as total_count,
+              count(*) filter (where ${teamWhereSql})::int as total_count,
               count(*) filter (
                 where ${leadHasQualifiedSaleSql()}
                   and ${teamSalePeriodSql}
@@ -1345,11 +1369,13 @@ function buildCrmListWhereSql(input: {
   priorityFilter: LeadPriorityValue | "";
   followUpFilter: CrmFollowUpFilter;
   periodRange: CrmPeriodRange;
+  listDate: CrmListDateFilter;
   today: Date;
   todayStart: Date;
   tomorrowStart: Date;
 }) {
-  // Siyahı: seçilmiş dövr + bu gün əlavə olunanlar + bütün açıq kritiklər (dövrə düşməsə belə).
+  // Explicit list dates are strict; otherwise preserve the overview's legacy
+  // period + today's leads + open critical leads, including all-time stage drill-downs.
   const createdTodayFrom = new Date(input.todayStart.getTime() - 4 * 60 * 60 * 1000);
   const createdTodayUntil = new Date(input.tomorrowStart.getTime() - 4 * 60 * 60 * 1000);
   const periodSql = buildLeadPeriodSql(input.periodRange);
@@ -1360,7 +1386,7 @@ function buildCrmListWhereSql(input: {
     Prisma.sql`l.stage <> 'REGISTERED'::"erp"."LeadStage"`,
     // Konsultasiya/Sınaq kartı all-time say göstərir; onun siyahısı da eyni
     // mərhələ üzrə bütün açıq müraciətləri göstərməlidir, period filtri say fərqi yaratmasın.
-    input.stageFilter === consultationTrialStage
+    buildCrmListDateSql(input.listDate) ?? (input.stageFilter === consultationTrialStage
       ? Prisma.sql`true`
       : Prisma.sql`(
           (${periodSql})
@@ -1375,7 +1401,7 @@ function buildCrmListWhereSql(input: {
               'LOST'::"erp"."LeadStage"
             )
           )
-        )`,
+        )`),
   ];
 
   if (input.search.length > 0) {
@@ -1815,6 +1841,7 @@ function buildReturnTo(filters: {
   period: CrmPeriodValue;
   dateFrom: string;
   dateTo: string;
+  listDate: CrmListDateFilter;
   followUp: CrmFollowUpFilter;
 }) {
   const params = new URLSearchParams();
@@ -1828,6 +1855,11 @@ function buildReturnTo(filters: {
   if (filters.period !== "this_month") params.set("period", filters.period);
   if (filters.dateFrom) params.set("from", filters.dateFrom);
   if (filters.dateTo) params.set("to", filters.dateTo);
+  if (filters.listDate.active) {
+    params.set("listDateBy", filters.listDate.field);
+    if (filters.listDate.from) params.set("listFrom", filters.listDate.from);
+    if (filters.listDate.to) params.set("listTo", filters.listDate.to);
+  }
   if (filters.followUp !== "all") params.set("followUp", filters.followUp);
 
   const query = params.toString();

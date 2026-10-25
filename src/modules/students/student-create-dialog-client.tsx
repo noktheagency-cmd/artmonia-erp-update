@@ -25,6 +25,7 @@ import {
 } from "@/modules/students/admission-payment-amount";
 import { FormSelect } from "@/components/ui/select";
 import { EMPTY_SELECT_VALUE } from "@/modules/shared/form-values";
+import { currentBakuMonthStart } from "@/modules/shared/creation-date-policy";
 import { educationLevelOptions } from "@/modules/students/education-level-options";
 import { studentPaymentMethodOptions } from "@/modules/students/payment-method";
 import {
@@ -438,6 +439,7 @@ export function StudentCreateDialogClient({
                 <span>Qeydiyyat tarixi</span>
                 <DatePicker
                   name="registeredDate"
+                  minValue={currentBakuMonthStart()}
                   value={values.registeredDate}
                   onValueChange={(value) => updateValue("registeredDate", value)}
                   allowClear={false}
@@ -470,6 +472,7 @@ export function StudentCreateDialogClient({
                   <span>Manual ilk dərs tarixi</span>
                   <DatePicker
                     name="firstLessonDate"
+                    minValue={currentBakuMonthStart()}
                     value={values.firstLessonDate}
                     onValueChange={(value) => updateValue("firstLessonDate", value)}
                     allowClear={false}
@@ -685,6 +688,7 @@ function InitialPaymentDialog({
             <span>Ödəniş tarixi</span>
             <DatePicker
               name="paymentDate"
+              minValue={currentBakuMonthStart()}
               value={values.paymentDate}
               onValueChange={(value) => onChange("paymentDate", value)}
               maxValue={currentBakuDateValue()}
@@ -697,6 +701,7 @@ function InitialPaymentDialog({
             <span>Aid olduğu ay</span>
             <MonthPicker
               name="paymentMonth"
+              min={currentBakuMonthStart().slice(0, 7)}
               value={values.paymentMonth}
               onValueChange={(value) => onChange("paymentMonth", value)}
               allowClear={false}

@@ -5,6 +5,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "re
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { cx } from "@/components/ui/cx";
 import { currentBakuDateValue } from "@/modules/students/payment-date-policy";
+import { calendarYearOptions, clampCalendarMonth, isCalendarMonthAllowed } from "./calendar-range";
 
 type MonthPickerProps = {
   name?: string;
@@ -90,9 +91,10 @@ export function MonthPicker({
   const selectedValue = normalizeMonthValue(isControlled ? value : internalValue)
     || (required ? currentBakuMonthValue() : "");
   const [isOpen, setIsOpen] = useState(false);
-  const [viewYear, setViewYear] = useState(
-    () => parseMonthValue(selectedValue)?.year ?? new Date().getFullYear(),
+  const [requestedYear, setViewYear] = useState(
+    () => parseMonthValue(selectedValue)?.year ?? Number(currentBakuMonthValue().slice(0, 4)),
   );
+  const viewYear = Number(clampCalendarMonth(`${requestedYear}-01`, min, max).slice(0, 4));
   const [floatingStyle, setFloatingStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -201,7 +203,7 @@ export function MonthPicker({
     };
   }, [isOpen, compact]);
 
-  const yearOptions = useMemo(() => buildYearOptions(viewYear, min, max), [viewYear, min, max]);
+  const yearOptions = useMemo(() => calendarYearOptions(viewYear, min, max), [viewYear, min, max]);
   const todayMonth = currentBakuMonthValue();
   const selectedMonth = parseMonthValue(selectedValue);
 
@@ -219,7 +221,7 @@ export function MonthPicker({
   }
 
   function shiftYear(offset: number) {
-    setViewYear((current) => current + offset);
+    setViewYear(Number(clampCalendarMonth(`${viewYear + offset}-01`, min, max).slice(0, 4)));
   }
 
   function selectThisMonth() {
@@ -254,7 +256,12 @@ export function MonthPicker({
       aria-label={ariaLabel ?? "Ay seç"}
     >
       <div className="date-picker-head">
-        <button type="button" aria-label="Əvvəlki il" onClick={() => shiftYear(-1)}>
+        <button
+          type="button"
+          aria-label="Əvvəlki il"
+          onClick={() => shiftYear(-1)}
+          disabled={Boolean(min && viewYear <= Number(min.slice(0, 4)))}
+        >
           <ChevronLeft size={16} />
         </button>
         <div className="date-picker-current is-year-only" aria-label="Göstərilən il">
@@ -270,7 +277,12 @@ export function MonthPicker({
             ))}
           </select>
         </div>
-        <button type="button" aria-label="Növbəti il" onClick={() => shiftYear(1)}>
+        <button
+          type="button"
+          aria-label="Növbəti il"
+          onClick={() => shiftYear(1)}
+          disabled={Boolean(max && viewYear >= Number(max.slice(0, 4)))}
+        >
           <ChevronRight size={16} />
         </button>
       </div>
@@ -278,11 +290,10 @@ export function MonthPicker({
       <div className="month-picker-grid">
         {monthShortNames.map((label, monthIndex) => {
           const monthValue = formatMonthValue(viewYear, monthIndex);
+          if (!isCalendarMonthAllowed(monthValue, min, max)) return null;
           const isSelected =
             selectedMonth?.year === viewYear && selectedMonth.month === monthIndex;
           const isToday = monthValue === todayMonth;
-          const isDisabled =
-            Boolean(min && monthValue < min) || Boolean(max && monthValue > max);
 
           return (
             <button
@@ -294,7 +305,6 @@ export function MonthPicker({
                 isSelected && "is-selected",
               )}
               onClick={() => selectMonth(monthIndex)}
-              disabled={isDisabled}
               aria-label={`${monthNames[monthIndex]} ${viewYear}`}
               aria-pressed={isSelected}
               aria-current={isToday ? "date" : undefined}
@@ -345,7 +355,9 @@ export function MonthPicker({
         aria-controls={isOpen ? popoverId : undefined}
         onClick={() => {
           const parsed = parseMonthValue(selectedValue);
-          if (!isOpen && parsed) setViewYear(parsed.year);
+          if (!isOpen) setViewYear(Number(clampCalendarMonth(
+            selectedValue && parsed ? selectedValue : currentBakuMonthValue(), min, max,
+          ).slice(0, 4)));
           setIsOpen((current) => !current);
         }}
       >
@@ -375,12 +387,4 @@ function formatMonthDisplay(value: string) {
   const parsed = parseMonthValue(value);
   if (!parsed) return value;
   return `${monthNames[parsed.month]} ${parsed.year}`;
-}
-
-function buildYearOptions(viewYear: number, min?: string, max?: string) {
-  const minYear = parseMonthValue(min)?.year ?? viewYear - 8;
-  const maxYear = parseMonthValue(max)?.year ?? viewYear + 8;
-  const start = Math.min(minYear, viewYear - 8);
-  const end = Math.max(maxYear, viewYear + 8);
-  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 }

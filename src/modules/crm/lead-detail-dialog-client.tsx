@@ -13,6 +13,7 @@ import {
   CircleUserRound,
   Clock3,
   History,
+  LoaderCircle,
   Pencil,
   Phone,
   Trash2,
@@ -57,6 +58,7 @@ export function LeadDetailDialogClient({
   sourceOptions,
   returnTo,
   canConvert = true,
+  canDelete = false,
   updateLeadAction,
   deleteLeadAction,
   open: controlledOpen,
@@ -69,6 +71,7 @@ export function LeadDetailDialogClient({
   sourceOptions: CrmData["sourceOptions"];
   returnTo: string;
   canConvert?: boolean;
+  canDelete?: boolean;
   updateLeadAction: (formData: FormData) => unknown | Promise<unknown>;
   deleteLeadAction: (formData: FormData) => unknown | Promise<unknown>;
   open?: boolean;
@@ -517,7 +520,7 @@ export function LeadDetailDialogClient({
         </div>
 
         <DialogFooter className="crm-dialog-actions">
-          <Button
+          {canDelete ? <Button
             className="crm-detail-delete-trigger"
             type="button"
             variant="ghost"
@@ -525,7 +528,7 @@ export function LeadDetailDialogClient({
           >
             <Trash2 data-icon="inline-start" />
             Müraciəti sil
-          </Button>
+          </Button> : null}
           <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
           <Button
             type="submit"
@@ -539,30 +542,48 @@ export function LeadDetailDialogClient({
 
         <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <DialogContent className="crm-modern-dialog crm-delete-dialog">
-            <DialogHeader>
-              <DialogTitle>Müraciəti silmək istəyirsiniz?</DialogTitle>
-              <DialogDescription>
-                <strong>{lead.name}</strong> üçün olan müraciət profili, tarixçə və açıq izləmə tapşırıqları silinəcək. Bu əməliyyatı geri qaytarmaq mümkün deyil.
-              </DialogDescription>
+            <DialogHeader className="crm-delete-header">
+              <span className="crm-delete-icon" aria-hidden="true"><Trash2 /></span>
+              <div>
+                <DialogTitle>Müraciəti silmək istəyirsiniz?</DialogTitle>
+                <DialogDescription visible>
+                  <strong>{lead.name}</strong> üçün olan müraciət silinəcək. Bu əməliyyatı geri qaytarmaq mümkün deyil.
+                </DialogDescription>
+              </div>
             </DialogHeader>
-            <form action={deleteLead}>
-              <Field>
-                <FieldLabel htmlFor={`lead-delete-reason-${lead.id}`}>Silinmə açıqlaması *</FieldLabel>
-                <Input
-                  id={`lead-delete-reason-${lead.id}`}
-                  name="reason"
-                  value={deleteReason}
-                  onChange={(event) => setDeleteReason(event.currentTarget.value)}
-                  placeholder="Müraciətin silinmə səbəbini yazın"
-                  required
-                  maxLength={500}
-                />
-              </Field>
+            <form action={deleteLead} className="crm-delete-form" autoComplete="off" aria-busy={deleting}>
+              <FieldGroup className="crm-delete-body">
+                <Field>
+                  <FieldLabel htmlFor={`lead-delete-reason-${lead.id}`}>
+                    Silinmə açıqlaması <span className="crm-delete-required" aria-hidden="true">*</span>
+                  </FieldLabel>
+                  <textarea
+                    id={`lead-delete-reason-${lead.id}`}
+                    name="reason"
+                    className="crm-delete-reason"
+                    value={deleteReason}
+                    onChange={(event) => setDeleteReason(event.currentTarget.value)}
+                    placeholder="Müraciətin silinmə səbəbini yazın"
+                    aria-describedby={`lead-delete-hint-${lead.id}`}
+                    autoComplete="off"
+                    rows={4}
+                    required
+                    maxLength={500}
+                  />
+                  <div className="crm-delete-field-footer">
+                    <FieldDescription id={`lead-delete-hint-${lead.id}`}>Səbəb audit tarixçəsində saxlanılır.</FieldDescription>
+                    <span aria-label={`${deleteReason.length} simvol, maksimum 500`}>{deleteReason.length}/500</span>
+                  </div>
+                </Field>
+              </FieldGroup>
               <input name="leadId" type="hidden" value={lead.id} />
               <input name="returnTo" type="hidden" value={returnTo} />
-              <DialogFooter className="crm-dialog-actions">
-                <DialogClose asChild><Button type="button" variant="outline">Ləğv et</Button></DialogClose>
-                <Button type="submit" variant="destructive" disabled={!deleteReason.trim() || deleting}><Trash2 data-icon="inline-start" />Bəli, sil</Button>
+              <DialogFooter className="crm-dialog-actions crm-delete-actions">
+                <DialogClose asChild><Button type="button" variant="outline" disabled={deleting}>Ləğv et</Button></DialogClose>
+                <Button type="submit" variant="destructive" disabled={!deleteReason.trim() || deleting}>
+                  {deleting ? <LoaderCircle className="crm-spin" data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
+                  {deleting ? "Silinir…" : "Bəli, sil"}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
