@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useRef, useState, useTransition, type ChangeEvent } from "react";
-import { Camera, Check, ImagePlus, LoaderCircle, X } from "lucide-react";
+import { Camera, Check, ImagePlus, LoaderCircle, X, CircleHelp } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { unwrapActionResult } from "@/lib/action-result";
 import { notifyCaughtError } from "@/lib/app-notifications";
@@ -68,6 +69,7 @@ export function ProfilePhotoEditor({
 
   return (
     <section className="profile-photo-card" aria-busy={pending}>
+      <Link href="/guide" className="profile-guide-button" aria-label="İş axını bələdçisi" title="İş axını bələdçisi"><CircleHelp size={19} /><span>Bələdçi</span></Link>
       <div className="profile-photo-current">
         {photoUrl ? <Image src={photoUrl} alt={`${fullName} profil şəkli`} fill sizes="112px" unoptimized /> : <span>{initials(fullName)}</span>}
       </div>

@@ -1,5 +1,5 @@
 .profile-page-stack { display: grid; gap: 20px; }
-.profile-photo-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 18px; align-items: center; padding: 22px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; }
+.profile-photo-card { position: relative; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 18px; align-items: center; padding: 22px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; }
 .profile-photo-current { position: relative; display: grid; width: 112px; height: 112px; overflow: hidden; place-items: center; color: #4c55bd; background: linear-gradient(145deg, #eef1ff, #f9efff); border: 4px solid #fff; border-radius: 36px; box-shadow: 0 12px 32px rgb(60 72 150 / 16%); }
 .profile-photo-current img { object-fit: cover; }
 .profile-photo-current span { font-size: 30px; font-weight: 800; }
@@ -18,3 +18,5 @@
 .profile-photo-notice { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin: 0; color: #4c55bd; font-size: 12px; font-weight: 700; }
 .profile-photo-notice svg { width: 15px; }
 @media (max-width: 720px) { .profile-photo-card, .profile-photo-editor { grid-template-columns: 1fr; } .profile-photo-current { width: 92px; height: 92px; } .profile-photo-editor-actions { grid-column: 1; } .profile-photo-crop-window { width: min(100%, 280px); } .profile-photo-controls label { grid-template-columns: 1fr; } }
+
+.profile-guide-button{position:absolute;right:16px;top:16px;z-index:2;display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--primary);font-size:12px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px #1725540a;transition:transform .15s ease,border-color .15s ease}.profile-guide-button:hover{transform:translateY(-1px);border-color:var(--primary)}.profile-photo-copy{padding-right:110px}@media(max-width:720px){.profile-guide-button{right:12px;top:12px}.profile-photo-copy{padding-right:0;padding-top:36px}}
