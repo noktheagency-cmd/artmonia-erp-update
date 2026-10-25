@@ -65,6 +65,22 @@ test("company sales count uses course_sales journal, not student registration", 
     );
 
     await client.query(`
+      insert into course_sales values
+        ('ffffffff-ffff-ffff-ffff-fffffffffff1', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', null, '2026-09-30', null, 'DIRECT');
+    `);
+    const campaignOwnerQuery = ownerSalesCountSql(
+      Prisma.sql`${ownerId}::uuid`,
+      Prisma.sql`date '2026-08-31' + interval '1 day'`,
+      Prisma.sql`date '2026-09-30' + interval '1 day'`,
+    );
+    const campaignOwnerSql = campaignOwnerQuery.text.replaceAll("erp.", "pg_temp.");
+    assert.equal(
+      Number((await client.query(`select ${campaignOwnerSql} as count`, campaignOwnerQuery.values)).rows[0].count),
+      3,
+      "date arithmetic parses and includes the campaign's final day without including the next day",
+    );
+
+    await client.query(`
       create temporary table leads (
         id uuid primary key,
         converted_student_id uuid

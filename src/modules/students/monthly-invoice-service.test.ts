@@ -25,6 +25,7 @@ test("prepayment anchors billing to the confirmed first lesson before activation
             originalFirstLessonAt: firstLessonAt,
             enrollments: [{
               id: "enrollment-1",
+              startDate: firstLessonAt,
               firstLessonAt,
               monthlyFee: 149,
               lessonsPerMonth: 8,
@@ -90,6 +91,7 @@ test("prepayment is rejected when no first lesson has been confirmed", async () 
         originalFirstLessonAt: null,
         enrollments: [{
           id: "enrollment-1",
+          startDate: utcDate("2026-08-01"),
           firstLessonAt: null,
           monthlyFee: 149,
           lessonsPerMonth: 8,

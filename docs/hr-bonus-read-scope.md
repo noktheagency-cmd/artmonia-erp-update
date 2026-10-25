@@ -14,6 +14,10 @@ Canlı DB-də şəkildəki sentyabr kampaniyasının yalnız bir uyğun iştirak
 
 `33` keçmiş etapların `reached_value` sahəsində saxlanıb. Sentyabr üzrə tələbə qeydiyyatlarının sayı Ayşəndə 33, Ləmanda 3-dür; bunlar avtomatik təsdiqli ödənişli satış sayı sayılmır. Yoxlanmış DB-də `course_sales` jurnalı boşdur və kampaniyalarda manual düzəliş yoxdur. Bu səbəbdən cari kodun canonical jurnal hesabı sıfırdır; keçmiş etap/bonus göstəricisi cari satış sayı ilə eyni mənbə deyil. Tarixi satışları jurnala keçirmək üçün ayrıca mənbə/uyğunluq yoxlaması və review edilmiş backfill lazımdır. Bu düzəliş zamanı DB-də kampaniya, satış, bonus və ödəniş qeydləri dəyişdirilməyib.
 
+## HR səhifəsinin açılma xətası
+
+Bonusun şəxsi satış sorğusunda son günü daxil etmək üçün `campaign.ends_at + interval '1 day'` hesablanır. Tarixə çevirmə bütün ifadəyə mötərizə ilə tətbiq edilməlidir: `(campaign.ends_at + interval '1 day')::date`. Mötərizəsiz variant intervalı tarixə çevirməyə çalışır və PostgreSQL `42846: cannot cast type interval to date` xətası ilə `/hr` səhifəsini dayandırır. Ortaq şəxsi satış SQL köməkçisində başlanğıc və bitmə ifadələrinin çevrilməsi düzəldilib; son günün daxil edilməsi və RBAC filtrləri saxlanıb. Dəyişiklik məlumat/maliyyə yazılışı və ya miqrasiya tələb etmir.
+
 ## İstifadəçi yoxlaması
 
 1. İki fərqli menecer hesabı ilə HR → Bonus bölməsini açın: hər hesab yalnız özünə təyin edilmiş kampaniyaları görməlidir. Kampaniyası olmayan hesabda boş vəziyyət görünməlidir.

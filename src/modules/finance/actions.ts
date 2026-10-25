@@ -7,6 +7,7 @@ import { lockPaymentStudent, replayPayment, assertAdmissionLeadActor } from "@/m
 import { revalidatePath, updateTag } from "next/cache";
 import type { Route } from "next";
 import { z } from "zod";
+import { monthlyPaymentInvoiceWhere } from "@/modules/students/monthly-payment-invoice-policy";
 import {
   FinanceCostCenter,
   FinanceFinancialClass,
@@ -876,7 +877,7 @@ async function allocateExistingPayment(
       studentId: input.studentId,
       status: { not: InvoiceStatus.VOID },
       balanceDue: { gt: 0 },
-      ...(input.scheduleType === "MONTHLY" ? { periodMonth: input.paymentMonth } : {}),
+      ...(input.scheduleType === "MONTHLY" ? monthlyPaymentInvoiceWhere(input.paymentMonth) : {}),
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     select: {
@@ -1135,7 +1136,7 @@ async function createPaymentAndAllocate(
           status: { not: InvoiceStatus.VOID },
           balanceDue: { gt: 0 },
           ...(input.scheduleType === "MONTHLY" && !allowPreBillingDeposit
-            ? { periodMonth: paymentMonth }
+            ? monthlyPaymentInvoiceWhere(paymentMonth)
             : {}),
         },
         orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],

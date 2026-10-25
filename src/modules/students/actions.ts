@@ -41,6 +41,7 @@ import {
   ensureStudentMonthlyInvoicesForPeriod,
 } from "@/modules/students/monthly-invoice-service";
 import { parseBillingMonthInput } from "@/modules/students/payment-billing-period";
+import { monthlyPaymentInvoiceWhere } from "./monthly-payment-invoice-policy";
 import {
   assertPaymentMonthMismatchAcknowledged,
   parsePaymentDateInput,
@@ -1653,7 +1654,7 @@ async function createPaymentAndAllocate(
           status: { not: InvoiceStatus.VOID },
           balanceDue: { gt: 0 },
           ...(input.scheduleType === "MONTHLY" && !allowPreBillingDeposit
-            ? { periodMonth: paymentMonth }
+            ? monthlyPaymentInvoiceWhere(paymentMonth)
             : {}),
         },
         orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],

@@ -36,7 +36,7 @@ export function CrmLeadsTable({
       <header className="crm-table-heading">
         <div>
           <h2>Müraciət siyahısı</h2>
-          <p>{data.metrics[0]?.value ?? data.listTotalCount} müraciət</p>
+          <p>{data.listTotalCount} müraciət</p>
         </div>
         {preview && onShowAll ? (
           <Button type="button" variant="outline" size="sm" onClick={onShowAll}>

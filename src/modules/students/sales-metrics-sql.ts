@@ -49,10 +49,11 @@ export function ownerSalesCountSql(
   ];
 
   if (from) {
-    conditions.push(Prisma.sql`cs.qualified_at >= ${from}::date`);
+    conditions.push(Prisma.sql`cs.qualified_at >= (${from})::date`);
   }
   if (until) {
-    conditions.push(Prisma.sql`cs.qualified_at < ${until}::date`);
+    // Bounds may contain date arithmetic; cast the whole expression, not its interval.
+    conditions.push(Prisma.sql`cs.qualified_at < (${until})::date`);
   }
 
   return Prisma.sql`(

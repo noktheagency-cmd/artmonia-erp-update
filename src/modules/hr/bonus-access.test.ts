@@ -75,6 +75,7 @@ test("personal sales SQL binds campaign and employee and counts the sale owner's
   assert.match(sql.sql, /cs\.cancelled_at is null/);
   assert.match(sql.sql, /sale_student\.is_test_data = false/);
   assert.match(sql.sql, /campaign\.ends_at \+ interval '1 day'/);
+  assert.match(sql.sql, /cs\.qualified_at < \(campaign\.ends_at \+ interval '1 day'\)::date/);
   assert.match(sql.sql, /Asia\/Baku/);
   assert.doesNotMatch(sql.sql, /student\.manager_id|department =/);
   assert.deepEqual(sql.values, ["campaign-a", "employee-a"]);

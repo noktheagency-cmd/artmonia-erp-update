@@ -11,6 +11,7 @@ import {
 } from "@/modules/students/payment-billing-period";
 import { resolveEnrollmentBillingTerms } from "@/modules/students/enrollment-billing-terms";
 import { PublicActionError } from "@/server/actions/public-action-error";
+import { nextBillingMonth } from "./monthly-payment-invoice-policy";
 
 type MissingMonthlyInvoiceRow = {
   studentId: string;
@@ -48,11 +49,12 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
       originalFirstLessonAt: true,
       enrollments: {
         where: {
-          status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+          status: EnrollmentStatus.ACTIVE,
         },
         orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
+          startDate: true,
           firstLessonAt: true,
           monthlyFee: true,
           lessonsPerMonth: true,
@@ -63,6 +65,14 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
   });
 
   if (!student) throw new PublicActionError("Tələbə tapılmadı");
+  // Stopped/paused accounts may settle existing invoices, but a receipt must
+  // never reopen their package or manufacture another monthly obligation.
+  if (student.billingPaused || student.lifecycleStatus === StudentLifecycleStatus.STOPPED
+    || student.lifecycleStatus === StudentLifecycleStatus.DECLINED
+    || student.lifecycleStatus === StudentLifecycleStatus.COMPLETED
+    || student.enrollments.length === 0) {
+    return startOfMonth(input.requestedPeriodMonth);
+  }
   let billingAnchorDate = student.billingAnchorDate;
 
   if (!billingAnchorDate) {
@@ -105,20 +115,23 @@ export async function ensureStudentMonthlyInvoicesForPeriod(
   if (!billingAnchorDate) {
     throw new PublicActionError("Ödəniş üçün təsdiqlənmiş ilk dərs tarixi yoxdur");
   }
-  if (student.enrollments.length === 0) {
-    throw new PublicActionError("Ödəniş üçün aktiv tədris paketi tapılmadı");
-  }
 
   const periodMonth = resolvePaymentBillingPeriod({
     requestedMonth: input.requestedPeriodMonth,
     billingAnchorDate,
   });
-  const [dueRule] = await tx.$queryRaw<Array<{dueDate:Date}>>(Prisma.sql`
-    select erp.student_payment_due_date(${input.studentId}::uuid,${periodMonth}::date) as "dueDate"
+  const [dueRule] = await tx.$queryRaw<Array<{ dueDate: Date; billable: boolean }>>(Prisma.sql`
+    select erp.student_payment_due_date(${input.studentId}::uuid,${periodMonth}::date) as "dueDate",
+      erp.student_is_billable_on_date(
+        ${input.studentId}::uuid,${billingDateForMonth(periodMonth, billingAnchorDate)}::date
+      ) as billable
   `);
+  if (dueRule?.billable === false) return periodMonth;
   const dueDate = dueRule?.dueDate ?? billingDateForMonth(periodMonth, billingAnchorDate);
 
   for (const enrollment of student.enrollments) {
+    // Explicit historical payments must not create invoices for a later package.
+    if (enrollment.startDate >= nextBillingMonth(periodMonth)) continue;
     const existing = await tx.invoice.findFirst({
       where: {
         studentId: input.studentId,
@@ -222,6 +235,7 @@ export async function ensureMissingStudentMonthlyInvoices(
         and s.billing_paused = false
         and s.is_test_data = false
         and s.billing_anchor_date is not null
+        and e.start_date <= ${input.throughDate}::date
     )
     select
       e.student_id::text as "studentId",
