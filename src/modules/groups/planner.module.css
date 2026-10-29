@@ -882,6 +882,21 @@
   padding-left: 4px;
 }
 
+.memberPaymentBlocked {
+  display: inline-flex;
+  width: fit-content;
+  margin: 4px 0 0;
+  padding: 3px 7px;
+  border: 1px solid #efc8c5;
+  border-radius: 6px;
+  background: #fff1f0;
+  color: #a8413d;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .slotReserve,
 .memberReserve {
   display: inline-flex;
@@ -2216,3 +2231,12 @@ button.historyStatus { cursor: pointer; }
 .guestVisits>a { color:#4354b5; font-size:12px; }
 
 .guestVisits .guestBadge { display:inline-flex; margin-left:8px; padding:3px 7px; border-radius:6px; background:#edf1ff; color:#4a57ad; font-size:10px; font-weight:500; white-space:nowrap; }
+.attendanceCorrection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  grid-column: 2 / -1;
+  flex-wrap: wrap;
+}
+
+.attendanceCorrection > :first-child { min-width: 130px; }

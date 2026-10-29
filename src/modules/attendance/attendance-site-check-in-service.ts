@@ -210,6 +210,7 @@ export async function processMobileAttendanceSiteCheckIn(
     await tx.$executeRaw(Prisma.sql`
       select pg_advisory_xact_lock(hashtextextended(${`${session.id}:${enrollment.id}`}, 0))
     `);
+    await tx.$queryRaw(Prisma.sql`select id from erp.students where id = ${student.id}::uuid for update`);
     const existingAttendance = await tx.attendanceRecord.findUnique({
       where: { sessionId_enrollmentId: { sessionId: session.id, enrollmentId: enrollment.id } },
       select: { id: true, status: true, markedAt: true },

@@ -519,6 +519,7 @@ export function PlannerWorkspace({
                       <strong>
                         {member.studentName}
                         {member.reserved ? <em className={styles.memberReserve}>Rezerv</em> : null}
+                        {member.paymentBlocked ? <em className={styles.memberPaymentBlocked}>Ödəniş edilməyib</em> : null}
                       </strong>
                       <small>{member.studentCode} · {member.program}</small>
                     </span>
@@ -603,6 +604,13 @@ export function PlannerWorkspace({
             openAssignment(enrollmentId);
           }}
           onOpenJournal={() => openAttendance(selectedSlot)}
+          onAttendanceSaved={async () => {
+            detailCacheRef.current.clear();
+            const result = unwrapActionResult(await getPlannerSlotDetailAction(selectedSlot.id));
+            detailCacheRef.current.set(result.slotId, result);
+            setLiveDetail(result);
+            router.refresh();
+          }}
         />
       ) : null}
 
@@ -1352,18 +1360,18 @@ function AttendanceDialog({
     patch: Partial<Pick<PlannerJournalMember, "attendanceStatus" | "note">>,
   ) {
     setRows((current) => current.map((row) => (
-      row.enrollmentId === enrollmentId ? { ...row, ...patch } : row
+      row.enrollmentId === enrollmentId && !row.paymentBlocked ? { ...row, ...patch } : row
     )));
   }
 
   function markAll(attendanceStatus: PlannerJournalMember["attendanceStatus"]) {
-    setRows((current) => current.map((row) => ({ ...row, attendanceStatus })));
+    setRows((current) => current.map((row) => row.paymentBlocked ? row : { ...row, attendanceStatus }));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    formData.set("items", JSON.stringify(rows.map((row) => ({
+    formData.set("items", JSON.stringify(rows.filter(row => !row.paymentBlocked).map((row) => ({
       enrollmentId: row.enrollmentId,
       status: row.attendanceStatus,
       note: row.note,
@@ -1422,11 +1430,12 @@ function AttendanceDialog({
                 <div className={styles.attendanceStudent}>
                   <strong>{row.studentName}</strong>
                   <small>{row.studentCode} · {row.program}</small>
+                  {row.paymentBlocked ? <span className={styles.memberPaymentBlocked}>Ödəniş edilməyib</span> : null}
                 </div>
                 <div className={styles.attendanceMarks}>
                   <button
                     type="button"
-                    disabled={attendanceDisabled}
+                    disabled={attendanceDisabled || row.paymentBlocked}
                     data-active={row.attendanceStatus === "present" || undefined}
                     data-state="present"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "present" })}
@@ -1436,7 +1445,7 @@ function AttendanceDialog({
                   </button>
                   <button
                     type="button"
-                    disabled={attendanceDisabled}
+                    disabled={attendanceDisabled || row.paymentBlocked}
                     data-active={row.attendanceStatus === "absent" || undefined}
                     data-state="absent"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "absent" })}
@@ -1446,7 +1455,7 @@ function AttendanceDialog({
                   </button>
                   <button
                     type="button"
-                    disabled={attendanceDisabled}
+                    disabled={attendanceDisabled || row.paymentBlocked}
                     data-active={row.attendanceStatus === "excused" || undefined}
                     data-state="excused"
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: "excused" })}
@@ -1456,7 +1465,7 @@ function AttendanceDialog({
                   </button>
                   <button
                     type="button"
-                    disabled={attendanceDisabled}
+                    disabled={attendanceDisabled || row.paymentBlocked}
                     className={styles.clearMark}
                     onClick={() => updateRow(row.enrollmentId, { attendanceStatus: null })}
                     aria-label={`${row.studentName}: qeydi təmizlə`}
@@ -1467,7 +1476,7 @@ function AttendanceDialog({
                 <input
                   className={styles.attendanceNote}
                   value={row.note}
-                  disabled={attendanceDisabled}
+                  disabled={attendanceDisabled || row.paymentBlocked}
                   onChange={(event) => updateRow(row.enrollmentId, { note: event.target.value })}
                   placeholder="Qeyd (istəyə bağlı)"
                   maxLength={500}
@@ -1483,7 +1492,7 @@ function AttendanceDialog({
           </div>
           <DialogFooter className={styles.attendanceFooter}>
             <Button type="button" variant="outline" onClick={onClose}>Bağla</Button>
-            <Button type="submit" disabled={pending || !rows.length || attendanceDisabled}>
+            <Button type="submit" disabled={pending || !rows.some(row => !row.paymentBlocked) || attendanceDisabled}>
               {pending ? "Saxlanılır..." : "Davamiyyəti saxla"}
             </Button>
           </DialogFooter>

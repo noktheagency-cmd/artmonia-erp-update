@@ -4,11 +4,36 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import type { ErpActor } from "@/server/auth/actor";
 import { singleLessonSchema } from "./single-lesson-policy";
-import { registerGuestStudent } from "./guest-registration-service";
+import { guestRegistrationSchema, registerGuestStudent } from "./guest-registration-service";
 import { assertGuestVisitAvailable } from "./guest-visit-scheduling";
 
 const ids = { idempotencyKey: randomUUID(), programId: randomUUID(), teacherId: randomUUID() };
 const input = { ...ids, fullName: "Synthetic guest", phone: "0501234567", guestDate: "2026-10-26", guestTime: "15:00", guestDuration: 60, guestPrice: "25" };
+test("direct guest registration accepts empty optional form selections", () => {
+  for (const empty of [undefined, "", "__empty__", "  "]) {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(input)) form.set(key, String(value));
+    if (empty !== undefined) {
+      for (const key of ["leadId", "educationLevel", "source", "email"]) form.set(key, empty);
+    }
+    const parsed = guestRegistrationSchema.parse(Object.fromEntries(form));
+    assert.equal(parsed.leadId, undefined);
+    assert.equal(parsed.educationLevel, undefined);
+    assert.equal(parsed.source, undefined);
+    assert.equal(parsed.email, undefined);
+  }
+});
+test("guest registration preserves CRM selection and rejects malformed lead IDs", () => {
+  const leadId = randomUUID();
+  assert.equal(guestRegistrationSchema.parse({ ...input, leadId }).leadId, leadId);
+  for (const invalid of ["not-a-uuid", "123"]) {
+    assert.equal(guestRegistrationSchema.safeParse({ ...input, leadId: invalid }).success, false);
+  }
+});
+test("empty lead selection uses direct student permission rather than CRM conversion", async () => {
+  const actor = { id: randomUUID(), permissions: new Map([["crm.lead.convert", "ALL"]]) } as ErpActor;
+  await assert.rejects(registerGuestStudent({} as Prisma.TransactionClient, { ...input, leadId: "__empty__" }, actor), /Missing permission: student.create/);
+});
 test("guest registration cannot bypass direct or CRM permissions", async () => {
   const actor = { id: randomUUID(), permissions: new Map() } as ErpActor;
   const tx = {} as Prisma.TransactionClient;

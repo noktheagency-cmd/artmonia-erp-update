@@ -232,11 +232,11 @@
   }
 
   .global-search-panel {
-    position: fixed;
-    top: var(--search-panel-top, 72px);
-    left: var(--search-panel-left, 12px);
+    position: absolute;
+    top: calc(100% + 9px);
+    left: 0;
     right: auto;
-    width: min(720px, var(--search-panel-width, calc(100vw - 24px)));
+    width: 100%;
     max-height: min(var(--search-available-height, 60dvh), calc(100dvh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 600px);
     grid-template-rows: auto auto minmax(0, 1fr);
   }

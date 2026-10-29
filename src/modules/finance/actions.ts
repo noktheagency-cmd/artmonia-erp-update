@@ -1486,6 +1486,7 @@ function buildFinanceRedirect(value: string | undefined, notice?: string) {
 
 function invalidateFinanceCaches() {
   revalidatePath("/finance");
+  revalidatePath("/groups");
   revalidatePath("/students");
   revalidatePath("/dashboard");
   updateTag(erpCacheTags.finance);

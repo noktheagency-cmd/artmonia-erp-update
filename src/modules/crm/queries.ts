@@ -794,11 +794,12 @@ function getCrmRawData(
         from erp.leads l
         where ${scopeSql}
           and l.converted_student_id is null
-          and l.next_action_type in (
+          and l.stage <> 'REGISTERED'::"erp"."LeadStage"
+          and (l.stage = 'CONTACTED'::"erp"."LeadStage" or l.next_action_type in (
             'CONSULTATION_REMINDER',
             'TRIAL_LESSON_REMINDER',
             'PAYMENT_REMINDER'
-          )
+          ))
       ), 0) as "reminderCount",
       coalesce((
         select count(*)::int
@@ -1406,7 +1407,7 @@ function buildCrmListWhereSql(input: {
     Prisma.sql`l.stage <> 'REGISTERED'::"erp"."LeadStage"`,
     // Konsultasiya/Sınaq kartı all-time say göstərir; onun siyahısı da eyni
     // mərhələ üzrə bütün açıq müraciətləri göstərməlidir, period filtri say fərqi yaratmasın.
-    buildCrmListDateSql(input.listDate) ?? (input.stageFilter === consultationTrialStage
+    buildCrmListDateSql(input.listDate) ?? (input.stageFilter === consultationTrialStage || input.stageFilter === "CONTACTED"
       ? Prisma.sql`true`
       : Prisma.sql`(
           (${periodSql})
@@ -1445,6 +1446,8 @@ function buildCrmListWhereSql(input: {
 
   if (input.stageFilter === consultationTrialStage) {
     conditions.push(Prisma.sql`l.stage in ('QUALIFIED'::"erp"."LeadStage", 'TRIAL_LESSON'::"erp"."LeadStage")`);
+  } else if (input.stageFilter === "CONTACTED") {
+    conditions.push(Prisma.sql`(l.stage = 'CONTACTED'::"erp"."LeadStage" or l.next_action_type in ('CONSULTATION_REMINDER', 'TRIAL_LESSON_REMINDER', 'PAYMENT_REMINDER'))`);
   } else if (input.stageFilter) {
     conditions.push(Prisma.sql`l.stage = ${input.stageFilter}::"erp"."LeadStage"`);
   }

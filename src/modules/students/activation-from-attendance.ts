@@ -19,7 +19,7 @@ import { PublicActionError } from "@/server/actions/public-action-error";
  */
 export async function assertFirstPeriodFullyPaidForAttendance(
   tx: Prisma.TransactionClient,
-  input: { studentId: string; enrollmentId: string },
+  input: { studentId: string; enrollmentId: string; lessonDate?: Date },
 ) {
   const student = await tx.student.findUnique({
     where: { id: input.studentId },
@@ -59,7 +59,7 @@ export async function assertFirstPeriodFullyPaidForAttendance(
 
   // Harden COMPLETE: status alone is not enough if payment rows drifted.
   const paid = await tx.payment.aggregate({
-    where: { courseSaleId: sale.id },
+    where: { courseSaleId: sale.id, ...(input.lessonDate ? { paidAt: { lte: input.lessonDate } } : {}) },
     _sum: { amount: true },
   });
   const paidAmount = paid._sum.amount ?? new Prisma.Decimal(0);
@@ -82,6 +82,7 @@ export async function activateStudentFromFirstPresent(
   await assertFirstPeriodFullyPaidForAttendance(tx, {
     studentId: input.studentId,
     enrollmentId: input.enrollmentId,
+    lessonDate: input.lessonDate,
   });
 
   const student = await tx.student.findUnique({

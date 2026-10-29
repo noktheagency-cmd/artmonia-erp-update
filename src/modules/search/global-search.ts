@@ -268,6 +268,7 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
           he.updated_at::text as "sortValue"
         from erp.hr_employees he
         where ${employeeScopeSql}
+          and he.archived_at is null
           and (
             he.full_name ilike ${search.rawPattern}
             or he.email ilike ${search.rawPattern}
@@ -336,6 +337,7 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
         from erp.class_slots slot_row
         left join erp.teachers slot_teacher on slot_teacher.id = slot_row.teacher_id
         where ${slotScopeSql}
+          and (slot_row.teacher_id is null or slot_teacher.is_active = true)
           and (
             slot_teacher.full_name ilike ${search.rawPattern}
             or slot_row.room ilike ${search.rawPattern}
@@ -369,7 +371,17 @@ async function searchAllKinds(actor: ErpActor, search: SearchContext) {
         where ${workshopScopeSql}
           and (
             workshop_row.title ilike ${search.rawPattern}
-            or workshop_row.instructor ilike ${search.rawPattern}
+            or exists (
+              select 1
+              from unnest(string_to_array(coalesce(workshop_row.instructor, ''), ',')) as instructor_name(value)
+              where btrim(instructor_name.value) ilike ${search.rawPattern}
+                and not exists (
+                  select 1
+                  from erp.teachers archived_teacher
+                  where archived_teacher.is_active = false
+                    and lower(btrim(archived_teacher.full_name)) = lower(btrim(instructor_name.value))
+                )
+            )
             or workshop_row.category ilike ${search.rawPattern}
             or workshop_row.room ilike ${search.rawPattern}
             or ${normalizedWorkshopTitle} like ${search.normalizedPattern}

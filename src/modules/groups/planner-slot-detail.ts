@@ -22,6 +22,7 @@ import {
   resolvePlannerAccessScope,
 } from "@/modules/groups/planner-scope";
 import { getPrisma } from "@/server/db/prisma";
+import { getUnpaidFirstLessonEnrollmentIds } from "@/modules/students/first-lesson-payment-gate";
 
 export type PlannerSlotDetailPayload = {
   slotId: string;
@@ -105,6 +106,9 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
     };
   }
 
+  const unpaidEnrollmentIds = await getUnpaidFirstLessonEnrollmentIds(
+    prisma, slot.assignments.map(assignment => assignment.enrollment.id), dateFromInput(today),
+  );
   const plannerSlot: Pick<
     PlannerSlot,
     "id" | "weekday" | "startTime" | "endTime" | "validFrom" | "teacherId" | "room" | "members"
@@ -126,6 +130,7 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
       // Do not label SLOT_WAITING students as "Rezerv" when their planned
       // first lesson date arrives; activation is attendance-driven.
       reserved: assignment.enrollment.student.freezeReserved,
+      paymentBlocked: unpaidEnrollmentIds.has(assignment.enrollment.id),
     })),
   };
 
@@ -244,6 +249,7 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
       select: {
         id: true,
         sessionDate: true,
+        status: true,
         startTime: true,
         endTime: true,
         attendance: {
@@ -270,6 +276,7 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
 
   const members: PlannerStudentDetail[] = canReadStudentDetails
     ? detailedAssignments.map((assignment) => ({
+        paymentBlocked: unpaidEnrollmentIds.has(assignment.enrollment.id),
         assignmentId: assignment.id,
         enrollmentId: assignment.enrollment.id,
         studentId: assignment.enrollment.student.id,
@@ -356,6 +363,7 @@ export async function getPlannerSlotDetail(slotId: string): Promise<PlannerSlotD
       .toSorted((left, right) => left.studentName.localeCompare(right.studentName, "az"));
     return {
       id: session?.id ?? `${plannerSlot.id}-${date}`,
+      canEdit: scopeFor(actor.permissions, "attendance.manage") === "ALL" && session?.status !== "CANCELLED" && session?.status !== "RESCHEDULED" && date <= today,
       date,
       dateLabel: formatDateAz(date),
       startTime: session?.startTime ?? plannerSlot.startTime,

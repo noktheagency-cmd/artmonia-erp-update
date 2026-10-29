@@ -81,7 +81,7 @@ export function DailyReport({data}:{data:DailyReportData}) {
  {title:"Görüş",icon:CalendarDays,tone:"violet",value:report.scheduled,unit:"bu dövrə planlı görüş",detail:report.attended+" baş tutdu",badge:report.noShow+" gəlmədi · "+report.rescheduled+" təxirə salındı",sections:[
   {kind:"appointments",label:"Görüş",count:report.scheduled,detail:report.attended+" baş tutdu"},
  ]},
- {title: "Satış və ödəniş", icon: Wallet, tone: "green", value: report.sales, unit: "bugünkü satış sayı", detail: moneyLabel(String(Number(report.salesAmount) + Number(report.payments))), badge: "gündəlik dövriyyə", sections: [
+ {title: "Satış və ödəniş", icon: Wallet, tone: "green", value: report.sales, unit: "bugünkü satış sayı", detail: moneyLabel(report.turnover), badge: "gündəlik dövriyyə", sections: [
     {kind:"sales",label:"Satış",count:report.sales,detail:moneyLabel(report.salesAmount),children:[
         {kind:"sales_new",label:"Yeni satış",count:report.crmNewSales,detail:moneyLabel(report.crmNewSalesAmount)},
         {kind:"sales_direct",label:"Birbaşa satış",count:report.directNewSales,detail:moneyLabel(report.directNewSalesAmount)},
@@ -187,13 +187,7 @@ export function DailyReport({data}:{data:DailyReportData}) {
   <div className="daily-report-period"><span><CalendarDays size={14}/>{dateLabel(report.from)}{report.from!==report.to?" — "+dateLabel(report.to):""}</span><span role="status">{pending?<><LoaderCircle size={14}/>Yüklənir…</>:"Ən çox 31 günlük aralıq"}</span></div>
   <p className="daily-report-history-note">Faktiki əlaqə və satış tarixçəsi yeni qeydlərdən başlayır. Köhnə qeydiyyatlar avtomatik satış sayılmır.</p>
   {error?<p className="daily-report-error" role="alert">{error}</p>:null}
-  <div className="daily-report-grid" aria-busy={pending}>{groups.map((group,index)=>{const Icon=group.icon;return <button type="button" className={"daily-report-card daily-report-"+group.tone} key={group.title} disabled={pending} onClick={()=>openGroup(index)} aria-haspopup="dialog" aria-label={group.title+" — detalları aç"}><span className="daily-report-card-top"><span className="daily-report-icon"><Icon size={19}/></span><ArrowUpRight size={17}/></span><span className="daily-report-card-title">{group.title}</span><span className="daily-report-main"><strong>{group.title === "Satış və ödəniş" ? (
-  <span className="sales-total-value">
-    {group.value} <span className="sales-total-currency">AZN</span>
-  </span>
-) : (
-  group.value
-)}</strong><span>{group.unit}</span></span><span className="daily-report-card-bottom"><strong>{group.detail}</strong><span>{group.badge}</span></span></button>;})}</div>
+  <div className="daily-report-grid" aria-busy={pending}>{groups.map((group,index)=>{const Icon=group.icon;return <button type="button" className={"daily-report-card daily-report-"+group.tone} key={group.title} disabled={pending} onClick={()=>openGroup(index)} aria-haspopup="dialog" aria-label={group.title+" — detalları aç"}><span className="daily-report-card-top"><span className="daily-report-icon"><Icon size={19}/></span><ArrowUpRight size={17}/></span><span className="daily-report-card-title">{group.title}</span><span className="daily-report-main"><strong>{group.value}</strong><span>{group.unit}</span></span><span className="daily-report-card-bottom"><strong>{group.detail}</strong><span>{group.badge}</span></span></button>;})}</div>
   <Dialog open={active!==null} onOpenChange={open=>{if(!open){setSelected(null);setOpenSection(null);}}}>
    <DialogContent className={"daily-report-dialog daily-report-"+(active?.tone??"blue")}>
     <DialogHeader>

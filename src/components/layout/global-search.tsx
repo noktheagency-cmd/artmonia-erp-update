@@ -247,9 +247,6 @@ export function GlobalSearch({
       const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
       const top = box.bottom + 9;
       root.style.setProperty("--search-available-height", `${Math.max(180, bottom - top - 16)}px`);
-      root.style.setProperty("--search-panel-top", `${top}px`);
-      root.style.setProperty("--search-panel-left", `${box.left}px`);
-      root.style.setProperty("--search-panel-width", `${Math.max(box.width, 320)}px`);
     };
     updateAvailableHeight();
     window.addEventListener("resize", updateAvailableHeight);

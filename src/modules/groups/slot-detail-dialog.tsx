@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FormSelect } from "@/components/ui/select";
+import { saveSlotAttendanceAction } from "./planner-actions";
+import { unwrapActionResult } from "@/lib/action-result";
+import { notifyCaughtError, notifySuccess } from "@/lib/app-notifications";
 import { cx } from "@/components/ui/cx";
 import {
   Dialog,
@@ -79,6 +83,7 @@ export function SlotDetailDialog({
   onAddStudent,
   onTransferStudent,
   onOpenJournal,
+  onAttendanceSaved,
 }: {
   slot: PlannerSlot;
   detail: SlotDetail;
@@ -93,6 +98,7 @@ export function SlotDetailDialog({
   onAddStudent: () => void;
   onTransferStudent: (enrollmentId: string) => void;
   onOpenJournal: () => void;
+  onAttendanceSaved: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<DetailTab>("overview");
   const journalDisabled = !journalCanEdit;
@@ -174,6 +180,8 @@ export function SlotDetailDialog({
               <DetailLoadingState label="Jurnal tarixçəsi yüklənir…" />
             ) : (
               <JournalHistory
+                slotId={slot.id}
+                onAttendanceSaved={onAttendanceSaved}
                 history={detail.journalHistory}
                 canManageAttendance={canManageAttendance}
                 journalDisabled={journalDisabled}
@@ -347,6 +355,7 @@ function StudentCard({
         <span className={styles.slotStudentIdentity}>
           <strong>{member.studentName}</strong>
           <small>{member.studentCode} · {member.program}</small>
+          {member.paymentBlocked ? <span className={styles.memberPaymentBlocked}>Ödəniş edilməyib</span> : null}
         </span>
         {canReadStudentDetails ? (
           <span className={styles.slotStudentContact}>
@@ -447,11 +456,15 @@ function InfoItem({
 }
 
 function JournalHistory({
+  slotId,
+  onAttendanceSaved,
   history,
   canManageAttendance,
   journalDisabled,
   onOpenJournal,
 }: {
+  slotId: string;
+  onAttendanceSaved: () => Promise<void>;
   history: PlannerWorkspaceData["slotDetail"]["journalHistory"];
   canManageAttendance: boolean;
   journalDisabled: boolean;
@@ -467,7 +480,7 @@ function JournalHistory({
   return (
     <section className={styles.slotJournalSection}>
       <div className={styles.slotSectionToolbar}>
-        <div><h3>Jurnal tarixçəsi</h3><p>Son 12 dərs tarix üzrə göstərilir. Əvvəlki günlər yalnız baxış üçündür.</p></div>
+        <div><h3>Jurnal tarixçəsi</h3><p>Son 12 dərs tarix üzrə göstərilir. Bütün davamiyyətə giriş icazəsi olan əməkdaş əvvəlki qeydləri də düzəldə bilər.</p></div>
         {canManageAttendance ? (
           <Button type="button" onClick={onOpenJournal} disabled={journalDisabled}>
             <BookOpenCheck data-icon="inline-start" /> Bugünkü jurnal
@@ -512,6 +525,9 @@ function JournalHistory({
                       {status === "present" ? "Gəldi" : status === "absent" ? "Gəlmədi" : status === "excused" ? "Üzrlü" : "Status yoxdur"}
                     </span>
                     <small className={styles.historyNote}>{record.note || "Qeyd yoxdur"}</small>
+                    {canManageAttendance && session.canEdit ? (
+                      <AttendanceCorrection key={`${session.id}-${record.enrollmentId}-${status}`} slotId={slotId} date={session.date} record={record} onSaved={onAttendanceSaved} />
+                    ) : null}
                   </div>
                 );
               })}
@@ -531,6 +547,35 @@ function JournalHistory({
       </div>
     </section>
   );
+}
+
+function AttendanceCorrection({ slotId, date, record, onSaved }: {
+  slotId: string;
+  date: string;
+  record: PlannerWorkspaceData["slotDetail"]["journalHistory"][number]["records"][number];
+  onSaved: () => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  return <form className={styles.attendanceCorrection} action={async form => {
+    setSaving(true);
+    try {
+      const status = String(form.get("status"));
+      const payload = new FormData();
+      payload.set("slotId", slotId);
+      payload.set("date", date);
+      payload.set("items", JSON.stringify([{ enrollmentId: record.enrollmentId, status: status === "unmarked" ? null : status, note: record.note }]));
+      unwrapActionResult(await saveSlotAttendanceAction(payload));
+      await onSaved();
+      notifySuccess("Davamiyyət yeniləndi");
+    } catch (error) { notifyCaughtError(error); }
+    finally { setSaving(false); }
+  }}>
+    <FormSelect name="status" aria-label={`${record.studentName} — ${date} davamiyyəti`} defaultValue={record.attendanceStatus ?? "unmarked"} disabled={saving} options={[
+      { value: "present", label: "Gəldi" }, { value: "absent", label: "Gəlmədi" },
+      { value: "excused", label: "Üzrlü" }, { value: "unmarked", label: "Status yoxdur" },
+    ]} />
+    <Button type="submit" disabled={saving}>{saving ? "Saxlanılır…" : "Yadda saxla"}</Button>
+  </form>;
 }
 
 function Avatar({ name, compact = false }: { name: string; compact?: boolean }) {

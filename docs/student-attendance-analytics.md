@@ -14,6 +14,10 @@ The Students overview includes the **Retention and Churn Rate** card and an Azer
 
 ## Attendance
 
+- Attendance managers with `attendance.manage: ALL` can correct past marks from the slot detail journal history; Admin and Super Admin have this grant by default. ASSIGNED teachers remain limited to today's own slots. Future dates and cancelled sessions are rejected on the server.
+- Changing or clearing a PRESENT mark reconciles activation in the same transaction. If no non-cancelled monthly PRESENT remains in the current admission cycle, an ACTIVE student returns to SLOT_WAITING, enrollments pause, and billing/payment schedules pause. Other real presence keeps ACTIVE unchanged; frozen and terminal statuses are preserved. Status history and audit entries are appended. Paid invoices, payments and allocations are retained. Existing first-lesson absence warnings use the corrected attendance; risk badges/panels recalculate from the updated marks (two consecutive absences: yellow; three or more: red).
+- Regression coverage for corrections and date permissions: `src/modules/students/attendance-correction-service.test.ts`, `src/modules/attendance/edit-policy.test.ts`.
+
 - Both `student.read` and `attendance.read` are required. ASSIGNED student access restricts records to the student's manager; ASSIGNED attendance access restricts records to the teacher linked to the actor. These restrictions intersect. No shared cache is used.
 - Default period: the current Baku calendar month through today. Custom periods are inclusive, at most 93 days, with no future dates. Comparison uses the immediately preceding equal number of calendar days.
 - Source: ended, non-cancelled `SlotSession` rows, with date-effective schedule assignments and enrollments. Existing attendance's teacher takes precedence over the slot's current teacher; unmarked rows use the current slot teacher. Sessions without an identifiable teacher are excluded. Standalone legacy `Lesson` reservations are not attendance journal records and are not included.

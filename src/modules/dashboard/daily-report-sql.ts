@@ -8,9 +8,20 @@ export function dailyReportCtes(w: Window) {
  new_leads as (select l.* from erp.leads l where l.created_at >= ${w.start} and l.created_at < ${w.end} ${owner(Prisma.sql`l.manager_id`, w.managerId)}),
  contacts as (select e.*, l.created_at as lead_created_at from erp.lead_contact_events e join erp.leads l on l.id=e.lead_id where e.occurred_at >= ${w.start} and e.occurred_at < ${w.end} ${owner(Prisma.sql`e.actor_id`, w.managerId)}),
  appointments as (select a.*, l.contact_id from erp.crm_appointments a join erp.leads l on l.id=a.lead_id where ((a.planned_at >= ${w.start} and a.planned_at < ${w.end}) or (a.created_at >= ${w.start} and a.created_at < ${w.end}) or (a.occurred_at >= ${w.start} and a.occurred_at < ${w.end})) ${owner(Prisma.sql`a.owner_id`, w.managerId)}),
- sales as (select x.* from erp.course_sales x join erp.students s on s.id=x.student_id where not s.is_test_data and x.qualified_at >= ${w.from}::date and x.qualified_at < ${w.nextDate}::date ${owner(Prisma.sql`x.owner_id`, w.managerId)}),
+ sales as (
+   select x.*, coalesce(cash.amount,0) received_amount
+   from erp.course_sales x join erp.students s on s.id=x.student_id
+   left join lateral (
+     select sum(p.amount) amount from erp.payments p
+     where p.course_sale_id=x.id and p.refunded_at is null
+       and p.receipt_purpose in ('ADMISSION','INITIAL_BALANCE')
+       and p.paid_at >= ${w.from}::date and p.paid_at < ${w.nextDate}::date
+   ) cash on true
+   where not s.is_test_data and x.qualified_at >= ${w.from}::date and x.qualified_at < ${w.nextDate}::date ${owner(Prisma.sql`x.owner_id`, w.managerId)}
+ ),
  cancellations as (select x.* from erp.course_sales x join erp.students s on s.id=x.student_id where not s.is_test_data and x.cancelled_at >= ${w.start} and x.cancelled_at < ${w.end} ${owner(Prisma.sql`x.owner_id`, w.managerId)}),
- receipts as (select p.id, p.student_id, p.amount, p.paid_at, p.receipt_purpose, x.cancelled_at as sale_cancelled_at, coalesce(x.owner_id,s.manager_id,p.created_by_id) owner_id from erp.payments p join erp.students s on s.id=p.student_id left join erp.course_sales x on x.id=p.course_sale_id where not s.is_test_data and p.refunded_at is null and p.paid_at >= ${w.from}::date and p.paid_at < ${w.nextDate}::date ${owner(Prisma.sql`coalesce(x.owner_id,s.manager_id,p.created_by_id)`, w.managerId)}),
+ receipts as (select p.id, p.student_id, p.amount, p.paid_at, p.receipt_purpose, p.schedule_type, p.course_sale_id, s.admission_tracking, x.cancelled_at as sale_cancelled_at, coalesce(x.owner_id,s.manager_id,p.created_by_id) owner_id from erp.payments p join erp.students s on s.id=p.student_id left join erp.course_sales x on x.id=p.course_sale_id where not s.is_test_data and p.refunded_at is null and p.paid_at >= ${w.from}::date and p.paid_at < ${w.nextDate}::date ${owner(Prisma.sql`coalesce(x.owner_id,s.manager_id,p.created_by_id)`, w.managerId)}),
+ monthly_receipts as (select * from receipts where schedule_type='MONTHLY' and (receipt_purpose='RENEWAL' or (receipt_purpose='UNCLASSIFIED' and course_sale_id is null and not admission_tracking))),
  workshop_receipts as (select p.* from erp.workshop_payments p where p.paid_at >= ${w.from}::date and p.paid_at < ${w.nextDate}::date ${owner(Prisma.sql`p.created_by_id`, w.managerId)}),
  work as (select x.* from erp.lead_work_items x where x.created_at < ${w.end} ${owner(Prisma.sql`x.owner_id`, w.managerId)}),
  lifecycle as (select h.* from erp.student_status_history h join erp.students s on s.id=h.student_id where not s.is_test_data and h.effective_at >= ${w.from}::date and h.effective_at < ${w.nextDate}::date and h.old_status is distinct from h.new_status ${owner(Prisma.sql`s.manager_id`, w.managerId)})
@@ -35,7 +46,7 @@ export function dailyReportSummarySql(w: Window) {
  (select count(*)::int from appointments where kind='CONSULTATION' and outcome='ATTENDED' and occurred_at >= ${w.start} and occurred_at < ${w.end}) consultations,
  (select count(*)::int from appointments where kind='TRIAL' and outcome='ATTENDED' and occurred_at >= ${w.start} and occurred_at < ${w.end}) trials,
  (select count(*)::int from sales where cancelled_at is null or cancelled_at >= ${w.end}) sales,
- (select coalesce(sum(initial_fee),0)::text from sales where cancelled_at is null or cancelled_at >= ${w.end}) as "salesAmount",
+ (select coalesce(sum(received_amount),0)::text from sales where cancelled_at is null or cancelled_at >= ${w.end}) as "salesAmount",
  (select count(*)::int from sales) as "originalSales",
  (select count(*)::int from sales where cancelled_at < ${w.end}) as "cancelledSales",
  (select count(*)::int from cancellations) as "cancellationEvents",
@@ -44,12 +55,13 @@ export function dailyReportSummarySql(w: Window) {
  (select count(*)::int from sales where route='CRM' and (cancelled_at is null or cancelled_at >= ${w.end})) as "crmSales",
  (select count(*)::int from sales where route='DIRECT' and (cancelled_at is null or cancelled_at >= ${w.end})) as "directSales",
   (select count(*)::int from sales where kind='NEW' and route='CRM' and (cancelled_at is null or cancelled_at >= ${w.end})) as "crmNewSales",
- (select coalesce(sum(initial_fee),0)::text from sales where kind='NEW' and route='CRM' and (cancelled_at is null or cancelled_at >= ${w.end})) as "crmNewSalesAmount",
+ (select coalesce(sum(received_amount),0)::text from sales where kind='NEW' and route='CRM' and (cancelled_at is null or cancelled_at >= ${w.end})) as "crmNewSalesAmount",
  (select count(*)::int from sales where kind='NEW' and route='DIRECT' and (cancelled_at is null or cancelled_at >= ${w.end})) as "directNewSales",
- (select coalesce(sum(initial_fee),0)::text from sales where kind='NEW' and route='DIRECT' and (cancelled_at is null or cancelled_at >= ${w.end})) as "directNewSalesAmount",
- (select coalesce(sum(initial_fee),0)::text from sales where kind='RETURN' and (cancelled_at is null or cancelled_at >= ${w.end})) as "returnSalesAmount",
- ((select count(*)::int from receipts where receipt_purpose <> 'ONE_OFF')+(select count(*)::int from workshop_receipts)) as "paymentCount",
- ((select coalesce(sum(amount),0) from receipts where receipt_purpose <> 'ONE_OFF')+(select coalesce(sum(amount),0) from workshop_receipts))::text payments,
+ (select coalesce(sum(received_amount),0)::text from sales where kind='NEW' and route='DIRECT' and (cancelled_at is null or cancelled_at >= ${w.end})) as "directNewSalesAmount",
+ (select coalesce(sum(received_amount),0)::text from sales where kind='RETURN' and (cancelled_at is null or cancelled_at >= ${w.end})) as "returnSalesAmount",
+ (select count(*)::int from monthly_receipts) as "paymentCount",
+ (select coalesce(sum(amount),0)::text from monthly_receipts) payments,
+ ((select coalesce(sum(amount),0) from receipts where receipt_purpose <> 'ONE_OFF')+(select coalesce(sum(amount),0) from workshop_receipts))::text turnover,
  (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='ADMISSION' and sale_cancelled_at is null) deposit,
  (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='INITIAL_BALANCE') balance,
  (select coalesce(sum(amount),0)::text from receipts where receipt_purpose='RENEWAL') renewal,
@@ -70,16 +82,16 @@ export function dailyReportSummarySql(w: Window) {
 export const dailyReportDetailKinds = ["leads","contacts","appointments","sales","sales_new","sales_direct","sales_return","payments","work","statuses"] as const;
 export type DetailKind = typeof dailyReportDetailKinds[number];
 export function dailyReportDetailsSql(w: Window, kind: DetailKind, offset: number) {
- const saleRows = (condition: Prisma.Sql) => Prisma.sql`select x.id,c.full_name name,x.qualified_at::timestamp at,x.initial_fee::text || ' AZN · ' || x.status description from sales x join erp.students s on s.id=x.student_id join erp.contacts c on c.id=s.contact_id where ${condition} and (x.cancelled_at is null or x.cancelled_at >= ${w.end})`;
+ const saleRows = (condition: Prisma.Sql) => Prisma.sql`select x.id,c.full_name name,x.qualified_at::timestamp at,x.received_amount::text || ' AZN · ' || x.status description from sales x join erp.students s on s.id=x.student_id join erp.contacts c on c.id=s.contact_id where ${condition} and (x.cancelled_at is null or x.cancelled_at >= ${w.end})`;
  const queries: Record<DetailKind, Prisma.Sql> = {
  leads: Prisma.sql`select l.id,c.full_name name,l.created_at at,'Yeni lead' description from new_leads l join erp.contacts c on c.id=l.contact_id`,
  contacts: Prisma.sql`select e.id,c.full_name name,e.occurred_at at, e.outcome || ' · ' || e.channel || ' · ' || u.full_name description from contacts e join erp.contacts c on c.id=e.contact_id join erp.users u on u.id=e.actor_id`,
  appointments: Prisma.sql`select a.id,c.full_name name,coalesce(a.occurred_at,a.planned_at) at,a.kind || ' · ' || a.outcome || ' · Plan: ' || to_char(a.planned_at at time zone 'Asia/Baku','DD.MM.YYYY HH24:MI') || coalesce(' · ' || t.full_name,'') || case when a.is_legacy then ' · Köhnə qeyd' else '' end || coalesce(' · ' || a.reason,'') description from appointments a join erp.contacts c on c.id=a.contact_id left join erp.teachers t on t.id=a.teacher_id where ((a.planned_at >= ${w.start} and a.planned_at < ${w.end}) or (a.occurred_at >= ${w.start} and a.occurred_at < ${w.end}))`,
- sales: Prisma.sql`select x.id,c.full_name name,x.qualified_at::timestamp at,x.initial_fee::text || ' AZN · ' || x.kind || ' · ' || x.route || ' · ' || x.status || ' · ' || u.full_name || coalesce(' · Ləğv: ' || x.cancellation_reason,'') description from sales x join erp.students s on s.id=x.student_id join erp.contacts c on c.id=s.contact_id join erp.users u on u.id=x.owner_id union all select x.id,c.full_name name,x.cancelled_at at,'Ləğv: ' || x.cancellation_reason || ' · İlk satış: ' || x.qualified_at::text description from cancellations x join erp.students s on s.id=x.student_id join erp.contacts c on c.id=s.contact_id where not exists(select 1 from sales a where a.id=x.id)`,
+ sales: Prisma.sql`select x.id,c.full_name name,x.qualified_at::timestamp at,x.received_amount::text || ' AZN · ' || x.kind || ' · ' || x.route || ' · ' || x.status || ' · ' || u.full_name || coalesce(' · Ləğv: ' || x.cancellation_reason,'') description from sales x join erp.students s on s.id=x.student_id join erp.contacts c on c.id=s.contact_id join erp.users u on u.id=x.owner_id union all select x.id,c.full_name name,x.cancelled_at at,'Ləğv: ' || x.cancellation_reason || ' · İlk satış: ' || x.qualified_at::text description from cancellations x join erp.students s on s.id=x.student_id join erp.contacts c on c.id=s.contact_id where not exists(select 1 from sales a where a.id=x.id)`,
  sales_new: saleRows(Prisma.sql`x.kind='NEW' and x.route='CRM'`),
  sales_direct: saleRows(Prisma.sql`x.kind='NEW' and x.route='DIRECT'`),
  sales_return: saleRows(Prisma.sql`x.kind='RETURN'`),
- payments: Prisma.sql`select p.id,c.full_name name,p.paid_at::timestamp at,p.amount::text || ' AZN · ' || p.receipt_purpose description from receipts p join erp.students s on s.id=p.student_id join erp.contacts c on c.id=s.contact_id where p.receipt_purpose <> 'ONE_OFF' union all select p.id,'Workshop' name,p.paid_at::timestamp at,p.amount::text || ' AZN · OTHER' description from workshop_receipts p`,
+ payments: Prisma.sql`select p.id,c.full_name name,p.paid_at::timestamp at,p.amount::text || ' AZN · ' || p.receipt_purpose description from monthly_receipts p join erp.students s on s.id=p.student_id join erp.contacts c on c.id=s.contact_id`,
  work: Prisma.sql`select x.id,c.full_name name,x.planned_at at,x.kind || ' · ' || case when x.completed_at < ${w.end} then 'Edildi' when x.cancelled_at < ${w.end} then coalesce(x.result,'Ləğv') when x.planned_at < ${w.end} then 'Gecikmiş' else 'Növbəti gün' end || coalesce(' · Nəticə: ' || x.result,'') description from work x join erp.leads l on l.id=x.lead_id join erp.contacts c on c.id=l.contact_id where (x.completed_at >= ${w.start} and x.completed_at < ${w.end}) or (x.cancelled_at >= ${w.start} and x.cancelled_at < ${w.end}) or ((x.completed_at is null or x.completed_at >= ${w.end}) and (x.cancelled_at is null or x.cancelled_at >= ${w.end}) and x.planned_at < ${w.tomorrowEnd})`,
  statuses: Prisma.sql`select h.id,c.full_name name,h.effective_at::timestamp at,h.old_status::text || ' → ' || h.new_status::text description from lifecycle h join erp.students s on s.id=h.student_id join erp.contacts c on c.id=s.contact_id where h.new_status in ('FROZEN','STOPPED')`,
  };

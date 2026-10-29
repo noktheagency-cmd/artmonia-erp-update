@@ -934,12 +934,12 @@ strong {
 }
 
 .global-search-panel {
-  position: fixed;
-  top: var(--search-panel-top, 72px);
-  left: var(--search-panel-left, 16px);
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 0;
   right: auto;
   z-index: 80;
-  width: min(720px, var(--search-panel-width, 640px));
+  width: 100%;
   display: grid;
   overflow: hidden;
   visibility: hidden;

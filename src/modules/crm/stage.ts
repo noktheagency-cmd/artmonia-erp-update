@@ -18,7 +18,7 @@ export const consultationTrialLabel = "Konsultasiya/Sınaq";
 
 export const leadStageLabels: Record<LeadStageValue, string> = {
   NEW: "Zəng gözləyir",
-  CONTACTED: "Əlaqə quruldu",
+  CONTACTED: "Xatırlatma",
   QUALIFIED: "Konsultasiya təyin olundu",
   TRIAL_LESSON: "Sınaq dərsi",
   TRIAL_CONSULTATION: "Ödəniş gözlənilir",

@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Banknote,
   BookOpen,
@@ -16,7 +15,7 @@ import {
   Undo2,
   UserRound,
 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { currentBakuMonthValue, MonthPicker, normalizeMonthValue } from "@/components/ui/month-picker";
@@ -242,7 +241,6 @@ const selectableStatusOptions = firstLessonPending
 
   return (
     <div className="student-actions-row">
-      <Link className={buttonVariants({variant:"outline"})} href={`/students/single-lessons?student=${student.id}`}>Birdəfəlik dərslər</Link>
       <StudentReminderDialog
         studentId={student.id}
         studentName={student.name}

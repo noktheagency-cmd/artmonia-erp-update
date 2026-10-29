@@ -50,7 +50,7 @@ export const cancelCourseSale=safeServerAction(async(form:FormData)=>{
   await tx.studentStatusHistory.create({data:{studentId:student.id,oldStatus:student.lifecycleStatus,newStatus:"DECLINED",effectiveAt,changedById:actor.id,reason:"Beh satışı ləğv edildi",note:reason}});
   await writeAuditLog(tx,{actorUserId:actor.id,action:"student.sale.cancel",entityType:"student",entityId:student.id,before:{saleId:id,status:fresh.status},after:{status:"CANCELLED",moneyRetained:total._sum.amount?.toString()??"0"},reason});
  });
- revalidatePath("/students");revalidatePath("/dashboard");revalidatePath("/finance");updateTag(erpCacheTags.students);updateTag(erpCacheTags.finance);
+ revalidatePath("/students");revalidatePath("/dashboard");revalidatePath("/finance");revalidatePath("/groups");updateTag(erpCacheTags.students);updateTag(erpCacheTags.finance);
 },"Satış ləğv edilmədi.");
 
 export const refundAdvanceSale = safeServerAction(async (form: FormData) => {
@@ -115,6 +115,7 @@ export const refundAdvanceSale = safeServerAction(async (form: FormData) => {
     });
   });
   revalidatePath("/students");
+  revalidatePath("/groups");
   revalidatePath("/dashboard");
   revalidatePath("/finance");
   updateTag(erpCacheTags.students);

@@ -12,6 +12,8 @@ Açıq tətbiq edilmiş tarix aralığı ciddi filtrdir: kritik prioritet və ko
 
 ## İstifadəçi yoxlaması
 
+“Xatırlatma” seçimi yeni müraciət və redaktə status siyahılarında `CONTACTED` kimi saxlanılır. Eyni adlı mərhələ kartı və siyahı filtri həm bu statusdakı açıq müraciətləri, həm də konsultasiya/sınaq/ödəniş xatırlatması olan açıq müraciətləri əhatə edir. Qeydiyyata alınmış və tələbəyə bağlanmış müraciətlər daxil deyil. Kartdan keçid bütün dövrü göstərir; ayrıca tətbiq edilmiş siyahı tarix aralığı saxlanarsa, həmin aralıq yenə nəticəni məhdudlaşdırır.
+
 1. CRM → Müraciət Siyahısı → “Gələn ay”: əvvəlki aylarda yaradılmış, gələn aya görüş/izləmə planı olan müraciət görünməlidir.
 2. “Növbəti həftə”: başlanğıc bazar ertəsi, bitmə bazar günü olmalıdır. Aylararası həftə də tam göstərilməlidir.
 3. “Tarix növü”nü və sərbəst aralığı dəyişib “Tətbiq et” seçin; axtarış/status/məsul filtri və səhifə yeniləməsi aralığı saxlamalıdır.

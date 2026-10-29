@@ -33,6 +33,8 @@ import {
 import { recalculateTeacherPayoutsForMonth } from "@/modules/hr/teacher-payroll";
 import { erpCacheTags } from "@/modules/shared/cache-tags";
 import { activateStudentFromFirstPresent } from "@/modules/students/activation-from-attendance";
+import { reconcileStudentAfterAttendanceCorrection } from "@/modules/students/attendance-correction-service";
+import { assertAttendanceEditDate } from "@/modules/attendance/edit-policy";
 import {
   clearStudentPaymentSchedules,
   restartStudentPaymentScheduleForActiveSlot,
@@ -41,6 +43,7 @@ import { isBillingPausedStatus } from "@/modules/students/lifecycle-service";
 import { PublicActionError, safeServerAction } from "@/server/actions/safe-action";
 import { requireMutationActor } from "@/server/auth/actor";
 import { getPrisma } from "@/server/db/prisma";
+import { assertFirstLessonAttendancePaymentAllowed, getUnpaidFirstLessonEnrollmentIds } from "@/modules/students/first-lesson-payment-gate";
 import { scopeFor } from "@/server/rbac/permissions";
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -88,7 +91,7 @@ const attendanceSchema = z.object({
   date: z.string().date(),
   items: z.string().transform((value, context) => {
     try {
-      return z.array(attendanceItemSchema).max(100).parse(JSON.parse(value));
+      return z.array(attendanceItemSchema).min(1).max(100).parse(JSON.parse(value));
     } catch {
       context.addIssue({ code: "custom", message: "Davamiyyət məlumatı düzgün deyil" });
       return z.NEVER;
@@ -468,9 +471,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
     throw new Error("Davamiyyət siyahısında eyni tələbə təkrar olunub");
   }
   const today = todayInBaku();
-  if (input.date !== today) {
-    throw new Error("Davamiyyət yalnız bugünkü dərs üçün yazıla bilər");
-  }
+  assertAttendanceEditDate(input.date, today, scopeFor(actor.permissions, "attendance.manage"));
   const date = dateFromInput(input.date);
   const prisma = getPrisma();
   const canManageAll = scopeFor(actor.permissions, "attendance.manage") === "ALL";
@@ -511,14 +512,16 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       where: {
         slotId: slot.id,
         enrollmentId: { in: input.items.map((item) => item.enrollmentId) },
-        enrollment: {
-          status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
-          student: {
-            lifecycleStatus: {
-              in: [StudentLifecycleStatus.ACTIVE, StudentLifecycleStatus.SLOT_WAITING],
+        ...(input.date < today && canManageAll ? {} : {
+          enrollment: {
+            status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED] },
+            student: {
+              lifecycleStatus: {
+                in: [StudentLifecycleStatus.ACTIVE, StudentLifecycleStatus.SLOT_WAITING],
+              },
             },
           },
-        },
+        }),
         validFrom: { lte: date },
         OR: [{ validTo: null }, { validTo: { gte: date } }],
       },
@@ -539,12 +542,21 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       assignments.map((item) => [item.enrollmentId, item]),
     );
 
+    // Serialize attendance edits and activation across every slot of each student.
+    const studentIds = [...new Set(assignments.map(item => item.enrollment.studentId))].sort();
+    await tx.$queryRaw(Prisma.sql`select id from erp.students where id in (${Prisma.join(studentIds.map(id => Prisma.sql`${id}::uuid`))}) order by id for update`);
+
+    const unpaidEnrollmentIds = await getUnpaidFirstLessonEnrollmentIds(
+      tx, assignments.map(assignment => assignment.enrollmentId), date,
+    );
+    assertFirstLessonAttendancePaymentAllowed(unpaidEnrollmentIds, input.items);
+
     const hasMarkedItem = input.items.some((item) => item.status !== null);
     let session = await tx.slotSession.findUnique({
       where: { slotId_sessionDate: { slotId: slot.id, sessionDate: date } },
     });
-    if (session?.status === "CANCELLED") {
-      throw new Error("Ləğv edilmiş dərsdə davamiyyət dəyişdirilə bilməz");
+    if (session?.status === "CANCELLED" || session?.status === "RESCHEDULED") {
+      throw new Error("Ləğv edilmiş və ya təxirə salınmış dərsdə davamiyyət dəyişdirilə bilməz");
     }
     if (!session && hasMarkedItem) {
       session = await tx.slotSession.create({
@@ -569,6 +581,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
             teacherId: true,
             status: true,
             source: true,
+            note: true,
           },
         })
       : [];
@@ -576,12 +589,18 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       previousRecords.map((record) => [record.enrollmentId, record]),
     );
 
+    const correctedStudentIds = new Set<string>();
     for (const item of input.items) {
+      if (unpaidEnrollmentIds.has(item.enrollmentId)) continue;
       if (!item.status) {
         if (session) {
           await tx.attendanceRecord.deleteMany({
             where: { sessionId: session.id, enrollmentId: item.enrollmentId },
           });
+        }
+        if (previousByEnrollment.get(item.enrollmentId)?.status === AttendanceMark.PRESENT) {
+          const assignment = assignmentByEnrollment.get(item.enrollmentId)!;
+          correctedStudentIds.add(assignment.enrollment.studentId);
         }
         continue;
       }
@@ -589,6 +608,7 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       const status = mapAttendanceInput(item.status);
       const previous = previousByEnrollment.get(item.enrollmentId);
       const assignment = assignmentByEnrollment.get(item.enrollmentId);
+      const recordTeacherId = input.date < today ? previous?.teacherId ?? slot.teacherId : slot.teacherId;
       if (status === AttendanceMark.PRESENT && assignment) {
         await activateStudentFromFirstPresent(tx, {
           actorId: actor.id,
@@ -607,14 +627,14 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
         create: {
           sessionId: session.id,
           enrollmentId: item.enrollmentId,
-          teacherId: slot.teacherId,
+          teacherId: recordTeacherId,
           status,
           source: AttendanceCaptureSource.MANUAL,
           note: item.note || null,
           markedById: actor.id,
         },
         update: {
-          teacherId: slot.teacherId,
+          teacherId: recordTeacherId,
           status,
           source: previous?.status === status
             ? previous.source
@@ -624,6 +644,13 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
           ...(previous?.status === status ? {} : { markedAt: new Date() }),
         },
       });
+      if (previous?.status === AttendanceMark.PRESENT && status !== AttendanceMark.PRESENT && assignment) {
+        correctedStudentIds.add(assignment.enrollment.studentId);
+      }
+    }
+
+    for (const studentId of correctedStudentIds) {
+      await reconcileStudentAfterAttendanceCorrection(tx, { actorId: actor.id, studentId, lessonDate: date });
     }
 
     await writeAuditLog(tx, {
@@ -631,12 +658,13 @@ async function saveSlotAttendanceActionImpl(formData: FormData) {
       action: "attendance.batch.update",
       entityType: "class_slot",
       entityId: slot.id,
+      before: { records: previousRecords },
       after: {
         slotId: slot.id,
         date: input.date,
         items: input.items,
       } as Prisma.InputJsonValue,
-      reason: "Bugünkü dərsin davamiyyəti yeniləndi",
+      reason: "Dərsin davamiyyəti yeniləndi",
     });
     return [...new Set([slot.teacherId, ...previousRecords.map((item) => item.teacherId)])];
   });
@@ -771,7 +799,7 @@ async function requirePlannerManager() {
 
 function revalidatePlanner(studentId?: string) {
   revalidatePath("/groups");
-  revalidatePath("/students");
+  revalidatePath("/students", "layout");
   revalidatePath("/dashboard");
   revalidatePath("/finance");
   revalidatePath("/hr");

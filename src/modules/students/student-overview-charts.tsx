@@ -62,7 +62,7 @@ export function StudentOverviewCharts({
         <AnalyticsHeading
           icon={Layers3}
           title="Təhsil proqramları"
-          description="Tələbələrin proqramlara paylanması"
+          description="Aktiv tələbələrin proqramlara paylanması"
           meta={`${programs.length} proqram`}
           tone="blue"
         />
@@ -182,7 +182,7 @@ function ProgramBars({
     <div className="students-program-scroll" tabIndex={0} aria-label="Bütün təhsil proqramları">
       <ul className="students-program-bars">
         {rows.map((item) => {
-          const width = Math.max(6, Math.round((item.count / maxCount) * 100));
+          const width = item.count > 0 ? Math.max(6, Math.round((item.count / maxCount) * 100)) : 0;
           return (
             <li className="students-program-row" key={item.name} title={`${item.name}: ${item.count} tələbə`}>
               <span className="students-program-label">{item.name}</span>

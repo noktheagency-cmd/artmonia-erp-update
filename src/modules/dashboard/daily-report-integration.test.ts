@@ -86,10 +86,26 @@ test("deposit qualifies once on paid date; balance and renewals add cash without
  await payment(tx,f,80,"2026-10-11","INITIAL_BALANCE");
  await payment(tx,f,100,"2026-10-11","RENEWAL");
  assert.equal(await tx.courseSale.count(),1);assert.equal((await tx.courseSale.findFirstOrThrow()).status,"COMPLETE");
- assert.equal((await totals(tx)).sales,1);assert.equal((await totals(tx)).deposit,"20.00");
- const t=await totals(tx,"2026-10-11");assert.equal(t.sales,0);assert.equal(t.balance,"80.00");assert.equal(t.renewal,"100.00");assert.equal(t.payments,"180.00");
+ const initial=await totals(tx);assert.equal(initial.sales,1);assert.equal(initial.deposit,"20.00");assert.equal(initial.salesAmount,"20.00");assert.equal(initial.paymentCount,0);assert.equal(initial.turnover,"20.00");
+ const t=await totals(tx,"2026-10-11");assert.equal(t.sales,0);assert.equal(t.balance,"80.00");assert.equal(t.renewal,"100.00");assert.equal(t.payments,"100.00");assert.equal(t.paymentCount,1);assert.equal(t.turnover,"180.00");
  await assert.rejects(()=>assertSalePaymentEditable(tx,p.id));
 }));
+test("partial admission reports collected cash without counting it as a monthly renewal",{skip:!url},()=>isolated(async(tx,f)=>{
+ await tx.enrollment.update({where:{id:f.enrollment.id},data:{monthlyFee:149}});
+ await payment(tx,f,100);
+ const t=await totals(tx);
+ assert.equal(t.sales,1);assert.equal(t.salesAmount,"100.00");assert.equal(t.paymentCount,0);assert.equal(t.payments,"0");assert.equal(t.turnover,"100.00");
+ for(const kind of ["sales","sales_new","sales_direct"] as const){
+  const details=await tx.$queryRaw<Array<{description:string}>>(dailyReportDetailsSql(window(),kind,0));
+  for(const detail of details){assert.match(detail.description,/100\.00 AZN/);assert.doesNotMatch(detail.description,/149\.00 AZN/);}
+ }
+ assert.equal((await tx.$queryRaw<unknown[]>(dailyReportDetailsSql(window(),"payments",0))).length,0);
+ // Later receipts must not rewrite a historical day's collected sales cash.
+ await payment(tx,f,49,"2026-10-11","INITIAL_BALANCE");
+ assert.equal((await totals(tx)).salesAmount,"100.00");
+ const next=await totals(tx,"2026-10-11");assert.equal(next.sales,0);assert.equal(next.payments,"0");assert.equal(next.turnover,"49.00");
+}));
+
 test("STOPPED return can qualify in slot waiting; freeze and completion returns cannot",{skip:!url},()=>isolated(async(tx,f)=>{
  await tx.student.update({where:{id:f.student.id},data:{admissionTracking:false}});
  await tx.studentStatusHistory.create({data:{studentId:f.student.id,oldStatus:"STOPPED",newStatus:"SLOT_WAITING",eventType:"REACTIVATED",effectiveAt:new Date("2026-10-10T00:00:00Z"),reason:"Synthetic return",changedById:f.user.id}});
@@ -112,15 +128,16 @@ test("cancellation removes the KPI at its effective cutoff and retains actual ca
  assert.equal((await totals(tx)).sales,1);
  const w=filteredDailyReportWindow({from:"2026-10-10",to:"2026-10-11"},new Date("2026-10-12T12:00:00Z"));
  const t=(await tx.$queryRaw<DailyReportTotals[]>(dailyReportSummarySql(w)))[0];
- assert.equal(t.sales,0);assert.equal(t.originalSales,1);assert.equal(t.cancelledSales,1);assert.equal(t.payments,"20.00");
+ assert.equal(t.sales,0);assert.equal(t.originalSales,1);assert.equal(t.cancelledSales,1);assert.equal(t.payments,"0");assert.equal(t.turnover,"20.00");
 }));
 test("payments, workshop money and unknown old money reconcile without inventing sales",{skip:!url},()=>isolated(async(tx,f)=>{
+ await tx.student.update({where:{id:f.student.id},data:{admissionTracking:false}});
  await tx.payment.create({data:{studentId:f.student.id,amount:"12.34",paidAt:new Date("2026-10-10T00:00:00Z"),paymentMonth:new Date("2026-10-01T00:00:00Z"),createdById:f.user.id}});
  await payment(tx,f,15,"2026-10-10","ONE_OFF");
  const event=await tx.workshopEvent.create({data:{title:"Synthetic workshop",eventDate:new Date("2026-10-10T00:00:00Z"),startTime:"12:00"}});
  const participant=await tx.workshopParticipant.create({data:{eventId:event.id,fullName:"Synthetic workshop guest"}});
  await tx.workshopPayment.create({data:{eventId:event.id,participantId:participant.id,amount:"25.66",paidAt:new Date("2026-10-10T00:00:00Z"),createdById:f.user.id}});
- const t=await totals(tx);assert.equal(t.sales,0);assert.equal(t.unclassified,"12.34");assert.equal(t.oneOff,"15.00");assert.equal(t.other,"25.66");assert.equal(t.payments,"38.00");
+ const t=await totals(tx);assert.equal(t.sales,0);assert.equal(t.unclassified,"12.34");assert.equal(t.oneOff,"15.00");assert.equal(t.other,"25.66");assert.equal(t.payments,"12.34");assert.equal(t.paymentCount,1);assert.equal(t.turnover,"38.00");
 }));
 test("assigned payment and admission access deny another manager and replay rejects changed money",{skip:!url},()=>isolated(async(tx,f)=>{
  const actor:ErpActor={id:f.other.id,authUserId:null,currentSessionId:null,fullName:"Synthetic actor",email:"synthetic@example.invalid",profilePhotoUrl:null,roles:[],permissions:new Map([["billing.payment.create","ASSIGNED"],["crm.lead.read","ALL"],["crm.lead.convert","ASSIGNED"]])};

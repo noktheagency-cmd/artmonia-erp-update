@@ -1,4 +1,5 @@
 import { guestOnlyStudentSql, regularInvoiceSql } from "./guest-lesson-sql";
+import { studentProgramDistributionSql, studentTeacherLoadSql } from "./student-distribution-sql";
 import { nameSearchSql } from "@/modules/shared/search-sql";
 import {
   AppRole,
@@ -1585,7 +1586,7 @@ type StudentCreateOptionsRawRow = {
 
 const getCachedStudentListRawData = unstable_cache(
   async (input: StudentListCacheInput) => getStudentListRawData(input),
-  ["student-list-data-v24-guest"],
+  ["student-list-data-v25-active-distributions"],
   {
     revalidate: 30,
     tags: [erpCacheTags.students],
@@ -2024,30 +2025,13 @@ async function getStudentOperationsOverview(
       coalesce((
         select jsonb_agg(jsonb_build_object('name', grouped.name, 'count', grouped.count) order by grouped.count desc, grouped.name asc)
         from (
-          select p.name, count(distinct e.student_id)::int as count
-          from erp.enrollments e
-          join erp.programs p on p.id = e.program_id
-          join erp.students s on s.id = e.student_id
-          where e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-            and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-          group by p.id, p.name
+          ${studentProgramDistributionSql()}
         ) grouped
       ), '[]'::jsonb) as programs,
       coalesce((
         select jsonb_agg(jsonb_build_object('name', grouped.name, 'count', grouped.count, 'capacity', grouped.capacity) order by grouped.utilization desc nulls last, grouped.count desc, grouped.name asc)
         from (
-          select
-            t.full_name as name,
-            (count(distinct e.student_id) filter (where s.id is not null))::int as count,
-            t.capacity,
-            case when t.capacity is not null and t.capacity > 0
-              then count(distinct e.student_id) filter (where s.id is not null)::numeric / t.capacity
-            end as utilization
-          from erp.teachers t
-          left join erp.enrollments e on e.teacher_id = t.id and e.status = 'ACTIVE'::"erp"."EnrollmentStatus"
-          left join erp.students s on s.id = e.student_id and s.lifecycle_status = 'ACTIVE'::"erp"."StudentLifecycleStatus"
-          where t.is_active = true
-          group by t.id, t.full_name, t.capacity
+          ${studentTeacherLoadSql()}
         ) grouped
       ), '[]'::jsonb) as teachers
     from student_finance

@@ -11,17 +11,18 @@ import { closeConvertedLeadFollowUp } from "@/modules/crm/work-service";
 import { writeAuditLog } from "@/modules/audit/audit-service";
 import { currentBakuDateValue } from "@/lib/baku-date";
 import { assertCreationDatesAllowed } from "@/modules/shared/creation-date-policy";
+import { optionalFormString } from "@/modules/shared/form-values";
 import { singleLessonSchema } from "./single-lesson-policy";
 import { resolveStudentEducationLevel } from "./education-level-service";
 import { assertGuestVisitAvailable } from "./guest-visit-scheduling";
 
-const optionalText = (max: number) => z.preprocess(v => v === "" ? undefined : v, z.string().trim().max(max).optional());
+const optionalText = (max: number) => z.preprocess(optionalFormString, z.string().trim().max(max).optional());
 export const guestRegistrationSchema = z.object({
   idempotencyKey: z.string().uuid(),
-  leadId: z.preprocess(v => v === "" ? undefined : v, z.string().uuid().optional()),
+  leadId: z.preprocess(optionalFormString, z.string().uuid().optional()),
   fullName: z.string().trim().min(2).max(120), phone: z.string().trim().min(5).max(40),
   source: optionalText(60), educationLevel: optionalText(80), notes: optionalText(500),
-  email: z.preprocess(v => v === "" ? undefined : v, z.string().email().max(320).optional()),
+  email: z.preprocess(optionalFormString, z.string().email().max(320).optional()),
   programId: z.string().uuid(), teacherId: z.string().uuid(),
   guestDate: z.string(), guestTime: z.string(), guestDuration: z.coerce.number(),
   guestPrice: z.string(), guestRoom: z.string().trim().max(80).default(""),

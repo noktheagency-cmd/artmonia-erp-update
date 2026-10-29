@@ -17,6 +17,7 @@ import {
   resolvePlannerAccessScope,
 } from "@/modules/groups/planner-scope";
 import { getPrisma } from "@/server/db/prisma";
+import { getUnpaidFirstLessonEnrollmentIds } from "@/modules/students/first-lesson-payment-gate";
 
 
 export type PlannerMember = {
@@ -27,6 +28,7 @@ export type PlannerMember = {
   studentName: string;
   program: string;
   reserved?: boolean;
+  paymentBlocked?: boolean;
 };
 
 export type PlannerSlot = {
@@ -92,6 +94,7 @@ export type PlannerStudentDetail = PlannerMember & {
 
 export type PlannerJournalHistoryItem = {
   id: string;
+  canEdit?: boolean;
   date: string;
   dateLabel: string;
   startTime: string;
@@ -158,7 +161,12 @@ export async function getPlannerWorkspaceData(input?: {
 
   const [slots, teachers, enrollments, guestLessons] = await Promise.all([
     prisma.classSlot.findMany({
-      where: slotScope,
+      where: {
+        AND: [
+          slotScope,
+          { OR: [{ teacherId: null }, { teacher: { isActive: true } }] },
+        ],
+      },
       take: 250,
       orderBy: [{ validFrom: "asc" }, { startTime: "asc" }, { weekday: "asc" }],
       select: {
@@ -262,6 +270,11 @@ export async function getPlannerWorkspaceData(input?: {
     }),
   ]);
 
+  const unpaidEnrollmentIds = await getUnpaidFirstLessonEnrollmentIds(
+    prisma,
+    slots.flatMap(slot => slot.assignments.map(assignment => assignment.enrollment.id)),
+    dateFromInput(today),
+  );
   const plannerSlots: PlannerSlot[] = slots.map((slot) => ({
     id: slot.id,
     weekday: slot.weekday,
@@ -285,6 +298,7 @@ export async function getPlannerWorkspaceData(input?: {
       // "Rezerv" is only for a seat-preserving freeze. SLOT_WAITING remains
       // "Slot gözləyir" until first-lesson attendance is marked PRESENT.
       reserved: assignment.enrollment.student.freezeReserved,
+      paymentBlocked: unpaidEnrollmentIds.has(assignment.enrollment.id),
     })),
   }));
   const selectedSlot = plannerSlots.find((slot) => slot.id === input?.slotId) ?? plannerSlots[0];
@@ -464,6 +478,7 @@ export async function getPlannerWorkspaceData(input?: {
           select: {
             id: true,
             sessionDate: true,
+            status: true,
             startTime: true,
             endTime: true,
             attendance: {
@@ -486,6 +501,7 @@ export async function getPlannerWorkspaceData(input?: {
   const journalMembers: PlannerJournalMember[] = journalAssignments.map((assignment) => {
     const attendance = attendanceByEnrollment.get(assignment.enrollment.id);
     return {
+      paymentBlocked: unpaidEnrollmentIds.has(assignment.enrollment.id),
       assignmentId: assignment.id,
       enrollmentId: assignment.enrollment.id,
       studentId: assignment.enrollment.student.id,
@@ -505,6 +521,7 @@ export async function getPlannerWorkspaceData(input?: {
 
   const slotDetailMembers: PlannerStudentDetail[] = canReadStudentDetails
     ? detailedAssignments.map((assignment) => ({
+        paymentBlocked: unpaidEnrollmentIds.has(assignment.enrollment.id),
         assignmentId: assignment.id,
         enrollmentId: assignment.enrollment.id,
         studentId: assignment.enrollment.student.id,
@@ -591,6 +608,7 @@ export async function getPlannerWorkspaceData(input?: {
       .toSorted((left, right) => left.studentName.localeCompare(right.studentName, "az"));
     return {
       id: session?.id ?? `${selectedSlotId}-${date}`,
+      canEdit: scopeFor(actor.permissions, "attendance.manage") === "ALL" && session?.status !== "CANCELLED" && session?.status !== "RESCHEDULED" && date <= today,
       date,
       dateLabel: formatDateAz(date),
       startTime: session?.startTime ?? selectedSlot?.startTime ?? "",
